@@ -37,7 +37,7 @@ A/B/C/D gas z       : -6, -2, +2, +6 cm relative to station centre
 MS z positions      : 300, 340, 530, 590, 810, 850 cm
 ```
 
-The grid is a current working point, not a frozen final optimization. `NA6PMWPCParam` keeps `Nx`, `Ny`, overlaps, chamber rotation and stagger spacing configurable.
+The grid is a current working point, not a frozen final optimization. `NA6PMWPCParam` keeps the acceptance/layout knobs (`Nx`, `Ny`, overlap, chamber size and stagger spacing) configurable; detailed chamber construction stays fixed in `NA6PMWPCChamber`.
 
 ## Run
 
@@ -70,7 +70,7 @@ plots/kinematics_<channel>.root
 
 The analysis contains parent |p|, parent pT, parent rapidity and daughter-muon |p|/pT distributions, and reports four-momentum closure of the forced two-body decay.
 
-`plotMWPCHitDensity.C` reads the actual `HitsMuonSpecModular.root` Geant4 sensitive-gas hits. It does not extrapolate tracks to nominal planes. Every stored chamber crossing is filled at `hit.getXIn(), hit.getYIn()` after subtracting the station centre.
+`plotMWPCHitDensity.C` reads the actual `HitsMuonSpec.root` Geant4 sensitive-gas hits. It does not extrapolate tracks to nominal planes. Every stored chamber crossing is filled at `hit.getXIn(), hit.getYIn()` after subtracting the station centre.
 
 For each station it writes:
 

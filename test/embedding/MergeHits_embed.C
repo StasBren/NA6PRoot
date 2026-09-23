@@ -4,15 +4,15 @@
 #include <TParticle.h>
 #include "NA6PMCEventHeader.h"
 #include "NA6PMCGenHeader.h"
-#include "NA6PMuonSpecModularHit.h"
+#include "NA6PMuonSpecHit.h"
 #include "NA6PVerTelHit.h"
 
 
 void MergeHits_embed(int bckEvent,
                      const char *fKS = "MCKine.root",
                      const char *fKB = "MCKine_bck.root",
-                     const char *fHSM = "HitsMuonSpecModular.root",
-                     const char *fHBM = "HitsMuonSpecModular_bck.root",
+                     const char *fHSM = "HitsMuonSpec.root",
+                     const char *fHBM = "HitsMuonSpec_bck.root",
                      const char *fHSV = "HitsVerTel.root",
                      const char *fHBV = "HitsVerTel_bck.root"
 		     )
@@ -30,7 +30,7 @@ void MergeHits_embed(int bckEvent,
   
   TFile* fHSigM = TFile::Open(fHSM);
   TFile* fHBkgM = TFile::Open(fHBM);
-  TFile* fHOutM = TFile::Open(Form("HitsMuonSpecModular_mix_%d.root", bckEvent), "RECREATE");
+  TFile* fHOutM = TFile::Open(Form("HitsMuonSpec_mix_%d.root", bckEvent), "RECREATE");
 
   TFile* fHSigV = TFile::Open(fHSV);
   TFile* fHBkgV = TFile::Open(fHBV);
@@ -40,11 +40,11 @@ void MergeHits_embed(int bckEvent,
   // Trees
   // ===============================
   TTree* tSigKin  = (TTree*)fKSig->Get("mckine");
-  TTree* tSigHitM = (TTree*)fHSigM->Get("hitsMuonSpecModular");
+  TTree* tSigHitM = (TTree*)fHSigM->Get("hitsMuonSpec");
   TTree* tSigHitV = (TTree*)fHSigV->Get("hitsVerTel");
 
   TTree* tBkgKin  = (TTree*)fKBkg->Get("mckine");
-  TTree* tBkgHitM = (TTree*)fHBkgM->Get("hitsMuonSpecModular");
+  TTree* tBkgHitM = (TTree*)fHBkgM->Get("hitsMuonSpec");
   TTree* tBkgHitV = (TTree*)fHBkgV->Get("hitsVerTel");
 
   // Clone structure ONLY
@@ -57,8 +57,8 @@ void MergeHits_embed(int bckEvent,
 
   fHOutM->cd();
   TTree* tOutHitM = tSigHitM->CloneTree(0); 
-  std::vector<NA6PMuonSpecModularHit>* mixHitsM = new std::vector<NA6PMuonSpecModularHit>();
-  tOutHitM->SetBranchAddress("MuonSpecModular", &mixHitsM);
+  std::vector<NA6PMuonSpecHit>* mixHitsM = new std::vector<NA6PMuonSpecHit>();
+  tOutHitM->SetBranchAddress("MuonSpec", &mixHitsM);
 
   fHOutV->cd();
   TTree* tOutHitV = tSigHitV->CloneTree(0);
@@ -80,13 +80,13 @@ void MergeHits_embed(int bckEvent,
   tBkgKin->SetBranchAddress("header", &bkgmcHead);
   tBkgKin->SetBranchAddress("tracks", &bkgmcArr);
 
-  std::vector<NA6PMuonSpecModularHit>* sigHitsM = nullptr;
-  std::vector<NA6PMuonSpecModularHit>* bkgHitsM = nullptr;
+  std::vector<NA6PMuonSpecHit>* sigHitsM = nullptr;
+  std::vector<NA6PMuonSpecHit>* bkgHitsM = nullptr;
   std::vector<NA6PVerTelHit>* sigHitsV = nullptr;
   std::vector<NA6PVerTelHit>* bkgHitsV = nullptr;
 
-  tSigHitM->SetBranchAddress("MuonSpecModular", &sigHitsM);
-  tBkgHitM->SetBranchAddress("MuonSpecModular", &bkgHitsM);
+  tSigHitM->SetBranchAddress("MuonSpec", &sigHitsM);
+  tBkgHitM->SetBranchAddress("MuonSpec", &bkgHitsM);
   tSigHitV->SetBranchAddress("VerTel", &sigHitsV);
   tBkgHitV->SetBranchAddress("VerTel", &bkgHitsV);
 

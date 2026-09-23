@@ -1,6 +1,6 @@
 # DiCE MWPC implementation handoff
 
-This branch (`feature/mwpc-dice`) replaces the placeholder modular muon-spectrometer planes with a detailed MWPC chamber geometry and a configurable six-station staggered layout. This document summarizes the current working point, implementation structure and validation status for review.
+This branch (`feature/mwpc-dice`) replaces the placeholder silicon muon-spectrometer planes with a detailed MWPC chamber geometry and a configurable six-station staggered layout. This document summarizes the current working point, implementation structure and validation status for review.
 
 ## Coordinate convention
 
@@ -56,19 +56,20 @@ q = 0,1,2,3 -> A,B,C,D
 ## Main implementation files
 
 `sim/include/NA6PMWPCParam.h`
+: User-facing acceptance/layout controls only; detailed MWPC construction constants are kept in `NA6PMWPCChamber`.
+
 : Configurable MWPC geometry/layout parameters: detailed chamber dimensions, rotation, gas mixture, station working areas, `Nx,Ny`, active overlaps, stagger spacing and MS0 narrow dimension.
 
 `sim/include/NA6PMWPCChamber.h`, `sim/src/NA6PMWPCChamber.cxx`
 : Detailed reusable chamber builder, including the layered mechanical/material model and Ar/CO2 sensitive gas.
 
-`sim/src/NA6PMuonSpecModular.cxx`
+`sim/src/NA6PMuonSpec.cxx`
 : Builds the six stations, places chambers on the regular X/Y grid, assigns A/B/C/D z offsets, rotates each detailed chamber as a rigid object, and keeps sequential sensitive-volume IDs.
 
 `base/include/NA6PLayoutParam.h`
 : Current MS station Z positions. MS1 is at 340 cm in this branch.
 
 `NA6PSim.cxx`
-: Geant4 application MT is disabled for this setup (`SetMTApplication(false)`); process-level parallelism is still available through `na6psim_parallel`.
 
 ## Validation
 
@@ -110,7 +111,7 @@ bash test/mwpc-dimuon-validation/run_validation.sh 20000 4
 
 This runs J/psi, omega and phi samples through the actual NA6PRoot/Geant4 geometry. The validation hook forces the signal parents to the dimuon channel for this test only.
 
-The direct-hit plots use the actual sensitive-gas entrance coordinates from `HitsMuonSpecModular.root`; no track extrapolation is used. Maps are approximately 1 cm x 1 cm and show the complete configured chamber grid with an outer margin.
+The direct-hit plots use the actual sensitive-gas entrance coordinates from `HitsMuonSpec.root`; no track extrapolation is used. Maps are approximately 1 cm x 1 cm and show the complete configured chamber grid with an outer margin.
 
 ## Isolated chamber test
 

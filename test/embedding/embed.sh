@@ -24,7 +24,7 @@ OUTFILESH=""
 OUTFILESK=""
 for ((i=0; i<NEVENTS_BCK; i++)); do
   OUTFILESK+=" MCKine_mix_${i}.root"
-  OUTFILESHM+=" HitsMuonSpecModular_mix_${i}.root"
+  OUTFILESHM+=" HitsMuonSpec_mix_${i}.root"
   OUTFILESHV+=" HitsVerTel_mix_${i}.root"
 done
 
@@ -42,16 +42,16 @@ else
 fi
 
 # ---- Hits file muons----
-if [ -f HitsMuonSpecModular_mix_all.root ]; then
-  read -p "HitsMuonSpecModular_mix_all.root exists. Delete and recreate? [y/N] " ans
+if [ -f HitsMuonSpec_mix_all.root ]; then
+  read -p "HitsMuonSpec_mix_all.root exists. Delete and recreate? [y/N] " ans
   if [[ $ans =~ ^[Yy]$ ]]; then
-    rm HitsMuonSpecModular_mix_all.root
-    hadd -j 4 HitsMuonSpecModular_mix_all.root $OUTFILESHM
+    rm HitsMuonSpec_mix_all.root
+    hadd -j 4 HitsMuonSpec_mix_all.root $OUTFILESHM
   else
     echo "Skipping Muon Hits merge."
   fi
 else
-  hadd -j 4 HitsMuonSpecModular_mix_all.root $OUTFILESHM
+  hadd -j 4 HitsMuonSpec_mix_all.root $OUTFILESHM
 fi
 
 # ---- Hits file vertex telescope ----

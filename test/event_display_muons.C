@@ -13,7 +13,7 @@
 #include <TEveSelection.h>
 #include <iostream>
 #include <TQObject.h>
-#include "NA6PMuonSpecModularHit.h"
+#include "NA6PMuonSpecHit.h"
 #include "NA6PMuonSpecCluster.h"
 #include "NA6PTrack.h"
 #include "NA6PMCTruthContainer.h"
@@ -31,7 +31,7 @@ std::vector<std::vector<TEvePointSet*>> gClusterEve;
 std::vector<std::vector<Color_t>> gClusterOrigColor;
 std::vector<std::vector<Float_t>> gClusterOrigSize;
 
-std::vector<std::unique_ptr<NA6PMuonSpecModularHit>> gAllHits;
+std::vector<std::unique_ptr<NA6PMuonSpecHit>> gAllHits;
 std::vector<std::unique_ptr<NA6PTrack>> gAllTracks;
 std::vector<std::unique_ptr<NA6PBaseCluster>> gAllClusters;
 std::vector<std::vector<const NA6PBaseCluster*>> gEventClusters;
@@ -74,7 +74,7 @@ class EvePicker : public TObject
 
       case EveObjType::Hit: {
         auto* hit =
-          static_cast<const NA6PMuonSpecModularHit*>(ud->ptr);
+          static_cast<const NA6PMuonSpecHit*>(ud->ptr);
         std::cout
           << "[HIT]\n"
           << "  X = " << hit->getX()
@@ -197,7 +197,7 @@ class EvePicker : public TObject
 void event_display_muons(int firstEv = 0, int nEv = 1,
                          const char* fgeo = "geometry.root",
                          const char* fkine = "MCKine.root",
-                         const char* fhits = "HitsMuonSpecModular.root",
+                         const char* fhits = "HitsMuonSpec.root",
                          const char* fclusters = "ClustersMuonSpec.root",
                          const char* ftracks = "TracksMuonSpec.root")
 {
@@ -278,11 +278,11 @@ void event_display_muons(int firstEv = 0, int nEv = 1,
 
   // Load hits
   TFile* f = TFile::Open(fhits);
-  TTree* t = (TTree*)f->Get("hitsMuonSpecModular");
+  TTree* t = (TTree*)f->Get("hitsMuonSpec");
 
-  std::vector<NA6PMuonSpecModularHit> msHits;
-  std::vector<NA6PMuonSpecModularHit>* msHitsPtr = &msHits;
-  t->SetBranchAddress("MuonSpecModular", &msHitsPtr);
+  std::vector<NA6PMuonSpecHit> msHits;
+  std::vector<NA6PMuonSpecHit>* msHitsPtr = &msHits;
+  t->SetBranchAddress("MuonSpec", &msHitsPtr);
 
   // Load clusters
   TFile* fc = TFile::Open(fclusters);
@@ -330,7 +330,7 @@ void event_display_muons(int firstEv = 0, int nEv = 1,
     for (auto& h : msHits) {
 
       gAllHits.emplace_back(
-        std::make_unique<NA6PMuonSpecModularHit>(h));
+        std::make_unique<NA6PMuonSpecHit>(h));
 
       auto* hitPtr = gAllHits.back().get();
 

@@ -19,7 +19,7 @@
 #include <TVector3.h>
 #include <TRandom3.h>
 #include "NA6PVerTelHit.h"
-#include "NA6PMuonSpecModularHit.h"
+#include "NA6PMuonSpecHit.h"
 #include "NA6PTrack.h"
 #include "NA6PBaseCluster.h"
 #include "NA6PFastTrackFitter.h"
@@ -108,7 +108,7 @@ void FillMeanAndRms(TH2F* hImpParVsP, TH1F* hImpParMean, TH1F* hImpParRms, TH1F*
   }
 }
 
-// Template function to run fast fit on hits - works with both NA6PVerTelHit and NA6PMuonSpecModularHit
+// Template function to run fast fit on hits - works with both NA6PVerTelHit and NA6PMuonSpecHit
 template <typename HitType>
 void runFastFitOnHitsTemplate(int firstEv = 0,
                               int lastEv = 99999999,
@@ -618,7 +618,7 @@ void runFastFitOnMuonSpecHits(int firstEv = 0,
                               int minHits = 6,
                               bool verbose = false)
 {
-  runFastFitOnHitsTemplate<NA6PMuonSpecModularHit>(firstEv, lastEv, cluresx, cluresy, dirSimu,
-                                                   "HitsMuonSpecModular.root", "hitsMuonSpecModular", "MuonSpecModular",
+  runFastFitOnHitsTemplate<NA6PMuonSpecHit>(firstEv, lastEv, cluresx, cluresy, dirSimu,
+                                                   "HitsMuonSpec.root", "hitsMuonSpec", "MuonSpec",
                                                    6, minHits, verbose, false);
 }

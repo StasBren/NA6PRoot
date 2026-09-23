@@ -18,8 +18,9 @@
 #include <TTree.h>
 
 #include "NA6PLayoutParam.h"
+#include "NA6PMWPCChamber.h"
 #include "NA6PMWPCParam.h"
-#include "NA6PMuonSpecModularHit.h"
+#include "NA6PMuonSpecHit.h"
 
 namespace
 {
@@ -56,10 +57,10 @@ std::array<double, 2> detectorGasSize(int station, const NA6PMWPCParam& p)
 {
   // The chamber model keeps prototype-local axes (short x, long y), while the
   // installed chamber is rotated by 90 deg into detector coordinates.
-  const double globalX = p.bodyY - 2. * p.innerFrameWidth;
+  const double globalX = p.bodyY - 2. * NA6PMWPCChamber::InnerFrameWidth;
   const double globalY = (station == 0 && p.useNarrowMS0)
                            ? p.ms0GasY
-                           : p.bodyX - 2. * p.innerFrameWidth;
+                           : p.bodyX - 2. * NA6PMWPCChamber::InnerFrameWidth;
   return {globalX, globalY};
 }
 
@@ -115,7 +116,7 @@ void plotMWPCHitDensity(const char* runDir = "test_runs/mwpc_dimuon/Jpsi",
   }
 
   const std::string kineName = std::string(runDir) + "/MCKine.root";
-  const std::string hitsName = std::string(runDir) + "/HitsMuonSpecModular.root";
+  const std::string hitsName = std::string(runDir) + "/HitsMuonSpec.root";
 
   std::unique_ptr<TFile> kineFile(TFile::Open(kineName.c_str(), "READ"));
   std::unique_ptr<TFile> hitsFile(TFile::Open(hitsName.c_str(), "READ"));
@@ -125,16 +126,16 @@ void plotMWPCHitDensity(const char* runDir = "test_runs/mwpc_dimuon/Jpsi",
   }
 
   auto* kineTree = dynamic_cast<TTree*>(kineFile->Get("mckine"));
-  auto* hitsTree = dynamic_cast<TTree*>(hitsFile->Get("hitsMuonSpecModular"));
+  auto* hitsTree = dynamic_cast<TTree*>(hitsFile->Get("hitsMuonSpec"));
   if (!kineTree || !hitsTree || kineTree->GetEntries() != hitsTree->GetEntries()) {
     std::cerr << "Missing trees or event-count mismatch.\n";
     return;
   }
 
   std::vector<TParticle>* tracks = nullptr;
-  std::vector<NA6PMuonSpecModularHit>* hits = nullptr;
+  std::vector<NA6PMuonSpecHit>* hits = nullptr;
   kineTree->SetBranchAddress("tracks", &tracks);
-  hitsTree->SetBranchAddress("MuonSpecModular", &hits);
+  hitsTree->SetBranchAddress("MuonSpec", &hits);
 
   const auto& p = NA6PMWPCParam::Instance();
   const auto& layout = NA6PLayoutParam::Instance();

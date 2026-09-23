@@ -24,7 +24,7 @@
 #include "NA6PVertex.h"
 #include "NA6PTrackerCA.h"
 #include "MagneticField.h"
-#include "NA6PMuonSpecModularHit.h"
+#include "NA6PMuonSpecHit.h"
 #include "NA6PRecoParam.h"
 #include <TDatabasePDG.h>
 #include <TParticlePDG.h>
@@ -70,10 +70,10 @@ void runMSTrackFinderCA(int firstEv = 0,
   std::vector<TParticle>* mcArr = nullptr;
   mcTree->SetBranchAddress("tracks", &mcArr);
 
-  TFile* fh = new TFile(Form("%s/HitsMuonSpecModular.root", dirSimu));
-  TTree* th = (TTree*)fh->Get("hitsMuonSpecModular");
-  std::vector<NA6PMuonSpecModularHit> msHits, *msHitsPtr = &msHits;
-  th->SetBranchAddress("MuonSpecModular", &msHitsPtr);
+  TFile* fh = new TFile(Form("%s/HitsMuonSpec.root", dirSimu));
+  TTree* th = (TTree*)fh->Get("hitsMuonSpec");
+  std::vector<NA6PMuonSpecHit> msHits, *msHitsPtr = &msHits;
+  th->SetBranchAddress("MuonSpec", &msHitsPtr);
 
   TFile* fc = new TFile(Form("%s/ClustersMuonSpec.root", dirSimu));
   printf("Open cluster file: %s\n", fc->GetName());

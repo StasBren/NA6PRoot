@@ -5,7 +5,7 @@
 #include <TStopwatch.h>
 #include "NA6PVerTelCluster.h"
 #include "NA6PMuonSpecCluster.h"
-#include "NA6PMuonSpecModularHit.h"
+#include "NA6PMuonSpecHit.h"
 #include "NA6PMCComposedLabel.h"
 #include "NA6PMCTruthContainer.h"
 #include "Propagator.h"
@@ -93,7 +93,7 @@ std::vector<NA6PMCComposedLabel>* msTrkLabels = nullptr;
 std::vector<NA6PMCComposedLabel>* matchTrkLabels = nullptr;
 std::vector<NA6PTrack>* msTrVec = nullptr;
 std::vector<NA6PMatch>* matchVec = nullptr;
-std::vector<NA6PMuonSpecModularHit>* msHitsVec = nullptr;
+std::vector<NA6PMuonSpecHit>* msHitsVec = nullptr;
 Long64_t nEntries = 0;
 
 void setupInputs(bool checkVTTracks, bool checkMSTracks, bool checkMatches, const char* dirSimu, const char* dirRec);
@@ -740,8 +740,8 @@ void setupInputs(bool checkVTTracks, bool checkMSTracks, bool checkMatches, cons
     msTrTree->SetBranchAddress("MuonSpec", &msTrVec);
     msTrTree->SetBranchAddress("MuonSpecMCTruth", &msTrkLabels);
 
-    fetchTree(Form("%s/HitsMuonSpecModular.root", dirSimu), "hitsMuonSpecModular", msHitsTree);
-    msHitsTree->SetBranchAddress("MuonSpecModular", &msHitsVec);
+    fetchTree(Form("%s/HitsMuonSpec.root", dirSimu), "hitsMuonSpec", msHitsTree);
+    msHitsTree->SetBranchAddress("MuonSpec", &msHitsVec);
   }
 
   if (checkMatches) {

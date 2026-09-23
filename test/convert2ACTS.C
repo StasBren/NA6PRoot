@@ -1,7 +1,6 @@
 #if !defined(__CINT__) || defined(__MAKECINT__)
 #include "NA6PVerTelHit.h"
 #include "NA6PMuonSpecHit.h"
-#include "NA6PMuonSpecModularHit.h"
 #include "NA6PMCGenHeader.h"
 #include "NA6PMCEventHeader.h"
 #include "ConfigurableParam.h"
@@ -114,7 +113,7 @@ void convert2ACTSImpl(int iev,
 void convert2ACTS(int iev,
                   const std::vector<TParticle>& mcParts,
                   const std::vector<NA6PVerTelHit>& vtHits,
-                  const std::vector<NA6PMuonSpecModularHit>& msHits,
+                  const std::vector<NA6PMuonSpecHit>& msHits,
                   const std::vector<SurfaceData>& actsSurfaces)
 {
   convert2ACTSImpl(iev, mcParts, vtHits, msHits, actsSurfaces);
@@ -132,7 +131,7 @@ void convert2ACTS(int iev,
 void convert2ACTS(const std::string& dirname = "./",
                   const std::string& fnameMCKin = "MCKine.root",
                   const std::string& fnameVTHits = "HitsVerTel.root",
-                  const std::string& fnameMSHits = "HitsMuonSpecModular.root",
+                  const std::string& fnameMSHits = "HitsMuonSpec.root",
                   const std::string& geometryFile = "geometry-map.json",
                   const std::string& confOpts = "",
                   bool useModularSpec = true)
@@ -157,8 +156,8 @@ void convert2ACTS(const std::string& dirname = "./",
   TChain* treeVTH = loadUserChain(fmt::format("{}{}", dirnameL, fnameVTHits).c_str(), "hitsVerTel");
 
   // Determina quale branch name usare
-  const char* msBranchName = useModularSpec ? "hitsMuonSpecModular" : "hitsMuonSpec";
-  const char* msTreeName = useModularSpec ? "MuonSpecModular" : "MuonSpec";
+  const char* msBranchName = useModularSpec ? "hitsMuonSpec" : "hitsMuonSpec";
+  const char* msTreeName = useModularSpec ? "MuonSpec" : "MuonSpec";
 
   TChain* treeMSH = loadUserChain(fmt::format("{}{}", dirnameL, fnameMSHits).c_str(), msBranchName);
 
@@ -173,7 +172,7 @@ void convert2ACTS(const std::string& dirname = "./",
   treeVTH->SetBranchAddress("VerTel", &vtHitsPtr);
 
   if (useModularSpec) {
-    std::vector<NA6PMuonSpecModularHit> msHits, *msHitsPtr = &msHits;
+    std::vector<NA6PMuonSpecHit> msHits, *msHitsPtr = &msHits;
     treeMSH->SetBranchAddress(msTreeName, &msHitsPtr);
 
     for (int iev = 0; iev < nent; iev++) {

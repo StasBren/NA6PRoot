@@ -14,7 +14,7 @@
 #include <iostream>
 #include <TQObject.h>
 #include "NA6PBaseCluster.h"
-#include "NA6PMuonSpecModularHit.h"
+#include "NA6PMuonSpecHit.h"
 #include "NA6PMuonSpecCluster.h"
 #include "NA6PVerTelHit.h"
 #include "NA6PVerTelCluster.h"
@@ -36,7 +36,7 @@ std::vector<std::vector<TEvePointSet*>> gClusterEve;
 std::vector<std::vector<Color_t>> gClusterOrigColor;
 std::vector<std::vector<Float_t>> gClusterOrigSize;
 
-std::vector<std::unique_ptr<NA6PMuonSpecModularHit>> gAllHitsM;
+std::vector<std::unique_ptr<NA6PMuonSpecHit>> gAllHitsM;
 std::vector<std::unique_ptr<NA6PVerTelHit>> gAllHitsV;
 std::vector<std::unique_ptr<NA6PTrack>> gAllTracksM;
 std::vector<std::unique_ptr<NA6PTrack>> gAllTracksV;
@@ -378,7 +378,7 @@ void event_display_full(int firstEv = 0, int nEv = 1,
                         const char* fgeo = "geometry.root",
                         const char* fini = "na6pLayout.ini",
                         const char* fkine = "MCKine.root",
-                        const char* fhitsM = "HitsMuonSpecModular.root",
+                        const char* fhitsM = "HitsMuonSpec.root",
                         const char* fclustersM = "ClustersMuonSpec.root",
                         const char* ftracksM = "TracksMuonSpec.root",
                         const char* fhitsV = "HitsVerTel.root",
@@ -474,13 +474,13 @@ void event_display_full(int firstEv = 0, int nEv = 1,
 
   // Load hits
   TFile* fM = TFile::Open(fhitsM);
-  TTree* tM = (TTree*)fM->Get("hitsMuonSpecModular");
+  TTree* tM = (TTree*)fM->Get("hitsMuonSpec");
   TFile* fV = TFile::Open(fhitsV);
   TTree* tV = (TTree*)fV->Get("hitsVerTel");
 
-  std::vector<NA6PMuonSpecModularHit> msHits;
-  std::vector<NA6PMuonSpecModularHit>* msHitsPtr = &msHits;
-  tM->SetBranchAddress("MuonSpecModular", &msHitsPtr);
+  std::vector<NA6PMuonSpecHit> msHits;
+  std::vector<NA6PMuonSpecHit>* msHitsPtr = &msHits;
+  tM->SetBranchAddress("MuonSpec", &msHitsPtr);
   std::vector<NA6PVerTelHit> vtHits;
   std::vector<NA6PVerTelHit>* vtHitsPtr = &vtHits;
   tV->SetBranchAddress("VerTel", &vtHitsPtr);

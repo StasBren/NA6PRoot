@@ -6,7 +6,7 @@ The test creates one complete MWPC chamber at the origin, shoots one controlled 
 
 ## Current production integration
 
-The same chamber builder is integrated into `NA6PMuonSpecModular`, which constructs the current provisional six-station staggered MWPC layout:
+The same chamber builder is integrated into `NA6PMuonSpec`, which constructs the current provisional six-station staggered MWPC layout:
 
 ```text
 MS0   4 x 8   = 32
@@ -122,4 +122,4 @@ Geant4
     -> events.csv / summary.txt
 ```
 
-The local `MWPCTestModule` remains test scaffolding only. Production geometry uses the same `NA6PMWPCChamber` builder through `NA6PMuonSpecModular`.
+The local `MWPCTestModule` remains test scaffolding only. Production geometry uses the same `NA6PMWPCChamber` builder through `NA6PMuonSpec`.

@@ -11,7 +11,7 @@
 #include "ConfigurableParam.h"
 #include <fairlogger/Logger.h>
 #include "NA6PVerTelReconstruction.h"
-#include "NA6PMuonSpecModularHit.h"
+#include "NA6PMuonSpecHit.h"
 #include "NA6PMuonSpecReconstruction.h"
 #endif
 
@@ -50,18 +50,18 @@ void convertHitsToRecPoints(bool simulateDeadVTRegions = true)
   }
 
   // Process MuonSpec hits
-  TFile* fhMS = TFile::Open("HitsMuonSpecModular.root");
+  TFile* fhMS = TFile::Open("HitsMuonSpec.root");
   if (!fhMS || fhMS->IsZombie()) {
-    LOGP(error, "Cannot open HitsMuonSpecModular.root");
+    LOGP(error, "Cannot open HitsMuonSpec.root");
     if (fhMS)
       delete fhMS;
   } else {
-    TTree* thMS = (TTree*)fhMS->Get("hitsMuonSpecModular");
+    TTree* thMS = (TTree*)fhMS->Get("hitsMuonSpec");
     if (!thMS) {
-      LOGP(error, "Cannot find tree 'hitsMuonSpecModular' in HitsMuonSpecModular.root");
+      LOGP(error, "Cannot find tree 'hitsMuonSpec' in HitsMuonSpec.root");
     } else {
-      std::vector<NA6PMuonSpecModularHit> msHits, *msHitsPtr = &msHits;
-      thMS->SetBranchAddress("MuonSpecModular", &msHitsPtr);
+      std::vector<NA6PMuonSpecHit> msHits, *msHitsPtr = &msHits;
+      thMS->SetBranchAddress("MuonSpec", &msHitsPtr);
       int nEvMS = thMS->GetEntriesFast();
 
       NA6PMuonSpecReconstruction* recMS = new NA6PMuonSpecReconstruction();
