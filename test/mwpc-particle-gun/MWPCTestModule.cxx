@@ -4,7 +4,6 @@
 
 #include "NA6PMCStack.h"
 #include "NA6PMWPCChamber.h"
-#include "NA6PMWPCParam.h"
 
 #include <TVirtualMC.h>
 #include <TGeoVolume.h>
@@ -19,12 +18,12 @@ MWPCTestModule::MWPCTestModule(int activeID) : NA6PModule("MWPCTest")
 
 void MWPCTestModule::createMaterials()
 {
-  const auto& p = NA6PMWPCParam::Instance();
-  NA6PMWPCChamber chamber(*this,
-                          {addName(p.medFR4),
-                           addName(p.medCopper),
-                           addName(p.medHoneycomb),
-                           addName(p.medGas)});
+  const NA6PMWPCChamber::Materials materials = {
+    addName("FR4"),
+    addName("Copper"),
+    addName("Honeycomb"),
+    addName("ArCO2")};
+  NA6PMWPCChamber chamber(*this, materials);
   chamber.createMaterials();
 }
 
@@ -34,12 +33,12 @@ void MWPCTestModule::createGeometry(TGeoVolume* world)
     throw std::runtime_error("MWPC particle-gun test requires a world volume");
   }
 
-  const auto& p = NA6PMWPCParam::Instance();
-  NA6PMWPCChamber chamber(*this,
-                          {addName(p.medFR4),
-                           addName(p.medCopper),
-                           addName(p.medHoneycomb),
-                           addName(p.medGas)});
+  const NA6PMWPCChamber::Materials materials = {
+    addName("FR4"),
+    addName("Copper"),
+    addName("Honeycomb"),
+    addName("ArCO2")};
+  NA6PMWPCChamber chamber(*this, materials);
 
   // One complete chamber, body centred at the origin. chamberID=0 is the
   // sensitive gas ID; localCopyID=0 is the passive chamber assembly ID.
