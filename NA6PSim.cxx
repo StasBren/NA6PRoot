@@ -134,6 +134,9 @@ int main(int argc, char** argv)
   }
 
   auto runConfig = new TG4RunConfiguration("geomRoot", "FTFP_BERT");
+  // NA6PMC does not implement TVirtualMCApplication::CloneForWorker(), so
+  // Geant4-VMC must keep the user application in single-thread mode.
+  runConfig->SetMTApplication(false);
   auto geant4 = new TGeant4("TGeant4", "Geant4 Monte Carlo Engine", runConfig, argc, argv);
 
   TVirtualMC::GetMC()->SetMagField(TGeoGlobalMagField::Instance()->GetField());
