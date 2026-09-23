@@ -100,6 +100,9 @@ int main(int argc, char** argv) {
   gas.SetComposition("ar", 70., "co2", 30.);
   gas.SetTemperature(293.15);
   gas.SetPressure(760.);
+  // Avoid rebuilding the microscopic collision table during the first
+  // avalanche when electrons exceed the default 40 eV range.
+  gas.SetMaxElectronEnergy(200.);
   gas.Initialise(true);
 
   // 2D analytic MWPC cell.
@@ -124,8 +127,11 @@ int main(int argc, char** argv) {
 
   const double xExtent =
       (cfg.halfNumberOfWires + 0.5) * cfg.wirePitchCm;
-  sensor.SetArea(-xExtent, cathodeMinusY, -0.1,
-                  xExtent, cathodePlusY, 0.1);
+  // The analytic field is translationally invariant along the wire
+  // (Garfield z = detector X). Keep a generous z range so diffusion along
+  // the wire cannot artificially terminate a trajectory.
+  sensor.SetArea(-xExtent, cathodeMinusY, -5.0,
+                  xExtent, cathodePlusY, 5.0);
 
   Garfield::AvalancheMicroscopic avalanche;
   avalanche.SetSensor(&sensor);
@@ -158,6 +164,10 @@ int main(int argc, char** argv) {
   const std::size_t nEndpoints = avalanche.GetNumberOfElectronEndpoints();
   const double wireRadius = 0.5 * cfg.wireDiameterCm;
   std::size_t endpointsOnWire = 0;
+  std::size_t nLeftDriftArea = 0;
+  std::size_t nLeftDriftMedium = 0;
+  std::size_t nAttached = 0;
+  std::size_t nOtherStatus = 0;
 
   double meanFinalX = 0.;
   double meanFinalY = 0.;
@@ -178,6 +188,16 @@ int main(int argc, char** argv) {
     const double r = std::hypot(x1 - wireX, y1);
     if (r < 1.5 * wireRadius) ++endpointsOnWire;
 
+    if (status == -1) {
+      ++nLeftDriftArea;
+    } else if (status == -5) {
+      ++nLeftDriftMedium;
+    } else if (status == -7) {
+      ++nAttached;
+    } else {
+      ++nOtherStatus;
+    }
+
     if (i < 8) {
       std::cout << "endpoint " << std::setw(4) << i
                 << " : (" << x1 << ", " << y1 << ", " << z1
@@ -196,6 +216,10 @@ int main(int argc, char** argv) {
             << "avalanche ions       : " << ni << "\n"
             << "electron endpoints   : " << nEndpoints << "\n"
             << "endpoints on wires   : " << endpointsOnWire << "\n"
+            << "status -5 (left medium): " << nLeftDriftMedium << "\n"
+            << "status -7 (attachment): " << nAttached << "\n"
+            << "status -1 (left area)  : " << nLeftDriftArea << "\n"
+            << "other endpoint status : " << nOtherStatus << "\n"
             << "mean final (x,y)     : (" << meanFinalX << ", "
             << meanFinalY << ") cm\n"
             << "====================================================\n";
