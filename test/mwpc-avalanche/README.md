@@ -24,21 +24,59 @@ the sandbox uses
 
 The MNP33 magnetic field +Y therefore maps to Garfield +x.
 
-## Phase-A starting geometry
+## Geometry is intentionally configurable
 
-The initial model follows the Prototype-3 operating point as a controlled
-starting configuration:
+The chamber/readout design is not frozen, so the microscopic model must not
+assume a single final cathode spacing or strip topology.
+
+The current default operating point is only a Prototype-3 reference:
 
 - Ar/CO2 = 70:30;
 - anode-wire diameter = 30 um;
 - wire pitch = 4 mm;
-- wire plane between grounded cathodes with 2 mm and 4 mm gaps;
+- wire plane between cathodes with 2 mm and 4 mm gaps;
 - anode voltage = +1.8 kV;
 - magnetic field = 0 T for the first smoke test.
 
-All of these are model parameters, not assumptions about the final chamber.
-In particular, later scans should include symmetric gaps and the actual MNP33
-field.
+The two wire-to-cathode gaps are independent runtime parameters. Examples:
+
+```bash
+# Prototype-3-like asymmetric configuration
+./mwpc_phase_a --gap-minus-mm 2 --gap-plus-mm 4
+
+# symmetric 3+3 mm
+./mwpc_phase_a --gap-minus-mm 3 --gap-plus-mm 3
+
+# symmetric 2.5+2.5 mm
+./mwpc_phase_a --gap-minus-mm 2.5 --gap-plus-mm 2.5
+```
+
+Wire pitch and diameter are configurable as well:
+
+```bash
+./mwpc_phase_a --pitch-mm 4 --wire-diam-um 30
+```
+
+This means Phase A can compare field, drift and avalanche behaviour for
+different gap choices without changing the source code.
+
+## Readout topology to be tested in Phase B
+
+The strip/readout design is also deliberately not frozen. Phase B will support
+at least two distinct configurations rather than baking one into the geometry:
+
+1. **two-sided readout** — signal pickup on both cathode sides, with the two
+   strip coordinates distributed between the two cathodes;
+2. **single-sided readout** — both strip-coordinate patterns are placed on one
+   readout cathode while the opposite cathode is not used for strip pickup.
+
+These will share the same Phase-A gas/wire transport model. The difference
+enters when strip electrodes, weighting fields, Shockley-Ramo induced signals,
+charge sharing and reconstruction are added.
+
+Keeping the gas geometry and readout topology separate is intentional: we want
+to be able to scan, for example, symmetric versus asymmetric wire placement
+independently of one-sided versus two-sided strip readout.
 
 ## Prerequisite
 
@@ -84,7 +122,8 @@ Useful options:
 
 ```bash
 ./mwpc_phase_a --hv 1800 --b 0
-./mwpc_phase_a --x0 0.10 --y0 0.30
+./mwpc_phase_a --gap-minus-mm 3 --gap-plus-mm 3
+./mwpc_phase_a --x0 0.10 --y0 0.20
 ```
 
 ## What this test proves — and what it does not
@@ -105,9 +144,10 @@ quantitatively.
 
 After the smoke test works:
 
-1. scan starting position across one 4 mm wire pitch at B = 0;
+1. scan starting position across one wire pitch at B = 0;
 2. scan HV and record the gain distribution;
-3. switch on a constant vertical MNP33 field and measure the arrival shift;
-4. replace a single starting electron by ionisation clusters from a muon track.
+3. scan the two cathode gaps, including symmetric and asymmetric cases;
+4. switch on a constant vertical MNP33 field and measure the arrival shift;
+5. replace a single starting electron by ionisation clusters from a muon track.
 
 Cathode-strip weighting fields and Shockley-Ramo signals belong to Phase B.
