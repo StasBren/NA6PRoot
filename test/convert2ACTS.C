@@ -109,16 +109,7 @@ void convert2ACTSImpl(int iev,
                       const std::vector<MSHitType>& msHits,
                       const std::vector<SurfaceData>& actsSurfaces);
 
-// Wrapper functions per entrambi i tipi
-void convert2ACTS(int iev,
-                  const std::vector<TParticle>& mcParts,
-                  const std::vector<NA6PVerTelHit>& vtHits,
-                  const std::vector<NA6PMuonSpecHit>& msHits,
-                  const std::vector<SurfaceData>& actsSurfaces)
-{
-  convert2ACTSImpl(iev, mcParts, vtHits, msHits, actsSurfaces);
-}
-
+// Wrapper for Muon Spectrometer hits
 void convert2ACTS(int iev,
                   const std::vector<TParticle>& mcParts,
                   const std::vector<NA6PVerTelHit>& vtHits,
@@ -133,8 +124,7 @@ void convert2ACTS(const std::string& dirname = "./",
                   const std::string& fnameVTHits = "HitsVerTel.root",
                   const std::string& fnameMSHits = "HitsMuonSpec.root",
                   const std::string& geometryFile = "geometry-map.json",
-                  const std::string& confOpts = "",
-                  bool useModularSpec = true)
+                  const std::string& confOpts = "")
 {
   auto actsSurfaces = extractSurfaceData(geometryFile);
 
@@ -155,11 +145,7 @@ void convert2ACTS(const std::string& dirname = "./",
   TChain* treeKin = loadUserChain(fmt::format("{}{}", dirnameL, fnameMCKin).c_str(), "mckine");
   TChain* treeVTH = loadUserChain(fmt::format("{}{}", dirnameL, fnameVTHits).c_str(), "hitsVerTel");
 
-  // Determina quale branch name usare
-  const char* msBranchName = useModularSpec ? "hitsMuonSpec" : "hitsMuonSpec";
-  const char* msTreeName = useModularSpec ? "MuonSpec" : "MuonSpec";
-
-  TChain* treeMSH = loadUserChain(fmt::format("{}{}", dirnameL, fnameMSHits).c_str(), msBranchName);
+  TChain* treeMSH = loadUserChain(fmt::format("{}{}", dirnameL, fnameMSHits).c_str(), "hitsMuonSpec");
 
   int nent = 0;
   if (!treeKin || !treeVTH || !treeMSH || !(nent = treeKin->GetEntries()) ||
@@ -171,32 +157,17 @@ void convert2ACTS(const std::string& dirname = "./",
   treeKin->SetBranchAddress("tracks", &mcPartsPtr);
   treeVTH->SetBranchAddress("VerTel", &vtHitsPtr);
 
-  if (useModularSpec) {
-    std::vector<NA6PMuonSpecHit> msHits, *msHitsPtr = &msHits;
-    treeMSH->SetBranchAddress(msTreeName, &msHitsPtr);
+  std::vector<NA6PMuonSpecHit> msHits, *msHitsPtr = &msHits;
+  treeMSH->SetBranchAddress("MuonSpec", &msHitsPtr);
 
-    for (int iev = 0; iev < nent; iev++) {
-      treeKin->GetEntry(iev);
-      treeVTH->GetEntry(iev);
-      treeMSH->GetEntry(iev);
-      LOGP(info, "Event#{} Vtx:[{:.2f},{:.2f},{:.2f}] {} Tracks ({} primaries), Hits: VT: {} MS: {}",
-           iev, mcHeader.getVX(), mcHeader.getVY(), mcHeader.getVZ(),
-           mcHeader.getNTracks(), mcHeader.getNPrimaries(), vtHits.size(), msHits.size());
-      convert2ACTS(iev, mcParts, vtHits, msHits, actsSurfaces);
-    }
-  } else {
-    std::vector<NA6PMuonSpecHit> msHits, *msHitsPtr = &msHits;
-    treeMSH->SetBranchAddress(msTreeName, &msHitsPtr);
-
-    for (int iev = 0; iev < nent; iev++) {
-      treeKin->GetEntry(iev);
-      treeVTH->GetEntry(iev);
-      treeMSH->GetEntry(iev);
-      LOGP(info, "Event#{} Vtx:[{:.2f},{:.2f},{:.2f}] {} Tracks ({} primaries), Hits: VT: {} MS: {}",
-           iev, mcHeader.getVX(), mcHeader.getVY(), mcHeader.getVZ(),
-           mcHeader.getNTracks(), mcHeader.getNPrimaries(), vtHits.size(), msHits.size());
-      convert2ACTS(iev, mcParts, vtHits, msHits, actsSurfaces);
-    }
+  for (int iev = 0; iev < nent; iev++) {
+    treeKin->GetEntry(iev);
+    treeVTH->GetEntry(iev);
+    treeMSH->GetEntry(iev);
+    LOGP(info, "Event#{} Vtx:[{:.2f},{:.2f},{:.2f}] {} Tracks ({} primaries), Hits: VT: {} MS: {}",
+         iev, mcHeader.getVX(), mcHeader.getVY(), mcHeader.getVZ(),
+         mcHeader.getNTracks(), mcHeader.getNPrimaries(), vtHits.size(), msHits.size());
+    convert2ACTS(iev, mcParts, vtHits, msHits, actsSurfaces);
   }
 }
 
