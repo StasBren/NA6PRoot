@@ -41,7 +41,6 @@ set(DICTIONARY_HEADERS
   NA6PVerTelSegmentation.h
   NA6PVerTelPreDigitContainer.h
   NA6PMuonSpecHit.h
-  NA6PMuonSpecModularHit.h
   GenMUONLMR.h
   NA6PSimMisc.h
   ) # Add all class headers requiring dictionary

@@ -28,6 +28,28 @@ constexpr double kMolarMassO = 15.9994;
 constexpr double kMolarMassSi = 28.0855;
 constexpr double kMolarMassAr = 39.948;
 constexpr double kMolarMassCu = 63.546;
+
+constexpr double kHoneycombEdgeWall = 0.1;
+constexpr double kReadoutEndMargin = 0.78;
+constexpr double kElectronicsPlaneOverhang = 6.8;
+constexpr double kDividerPlaneLengthMargin = 0.2;
+constexpr double kDividerPlaneOverhang = 4.0;
+constexpr double kDividerPlaneThickness = 0.2;
+constexpr double kOuterSkinFront = 0.015;
+constexpr double kHoneycombFront = 0.6;
+constexpr double kReadoutFR4 = 0.08;
+constexpr double kReadoutCopper = 0.0017;
+constexpr double kGasGap = 0.6;
+constexpr double kCoverFR4 = 0.015;
+constexpr double kCoverCopper = 0.0017;
+constexpr double kHoneycombBack = 0.6;
+constexpr double kOuterSkinBack = 0.015;
+constexpr bool kCoverCopperOnGasFace = false;
+constexpr bool kReadoutCopperOnElectronicsExtension = true;
+constexpr bool kIncludeDividerPlane = true;
+constexpr double kArgonMoleFraction = 0.7;
+constexpr double kGasTemperatureK = 293.15;
+constexpr double kGasPressurePa = 101325.0;
 }
 
 NA6PMWPCChamber::NA6PMWPCChamber(const NA6PModule& module, Materials materials,
@@ -61,7 +83,6 @@ bool NA6PMWPCChamber::overlaps(const Part& a, const Part& b)
 
 void NA6PMWPCChamber::createMaterials() const
 {
-  const auto& p = NA6PMWPCParam::Instance();
   auto& helper = NA6PTGeoHelper::instance();
   auto& matPool = helper.getMatPool();
 
@@ -92,16 +113,16 @@ void NA6PMWPCChamber::createMaterials() const
   }
 
   if (!matPool.count(mMaterials.gas)) {
-    requirePositive(p.argonMoleFraction, "argonMoleFraction");
-    requirePositive(p.gasTemperatureK, "gasTemperatureK");
-    requirePositive(p.gasPressurePa, "gasPressurePa");
-    if (p.argonMoleFraction >= 1.f) {
+    requirePositive(kArgonMoleFraction, "argonMoleFraction");
+    requirePositive(kGasTemperatureK, "gasTemperatureK");
+    requirePositive(kGasPressurePa, "gasPressurePa");
+    if (kArgonMoleFraction >= 1.f) {
       throw std::runtime_error("MWPC argonMoleFraction must be between 0 and 1");
     }
 
     // The chamber gas is a binary Ar/CO2 mixture. We configure the Ar mole
     // fraction and obtain the CO2 fraction from the remainder.
-    const double xAr = p.argonMoleFraction;
+    const double xAr = kArgonMoleFraction;
     const double xCO2 = 1. - xAr;
 
     const double mCO2 = kMolarMassC + 2. * kMolarMassO;
@@ -109,8 +130,8 @@ void NA6PMWPCChamber::createMaterials() const
 
     // Ideal-gas density. meanMolarMass is in g/mol, so the final factor
     // converts from g/m^3 to g/cm^3, which is what TGeo expects.
-    const double density = p.gasPressurePa * meanMolarMass /
-                           (8.31446261815324 * p.gasTemperatureK) * 1.e-6;
+    const double density = kGasPressurePa * meanMolarMass /
+                           (8.31446261815324 * kGasTemperatureK) * 1.e-6;
 
     // TGeoMixture is defined through elemental mass fractions rather than
     // molecular fractions. Convert 70/30 Ar/CO2 (or any configured ratio)
@@ -124,7 +145,7 @@ void NA6PMWPCChamber::createMaterials() const
     gas->DefineElement(1, kMolarMassC, 6., wC);
     gas->DefineElement(2, kMolarMassO, 8., wO);
     gas->SetState(TGeoMaterial::kMatStateGas);
-    gas->SetTemperature(p.gasTemperatureK);
+    gas->SetTemperature(kGasTemperatureK);
     matPool[mMaterials.gas] = gas;
   }
 
@@ -146,33 +167,33 @@ std::vector<NA6PMWPCChamber::Part> NA6PMWPCChamber::buildParts() const
   const double h = mBodyYOverride > 0. ? mBodyYOverride : p.bodyY;
   requirePositive(w, "bodyX");
   requirePositive(h, "bodyY");
-  requirePositive(p.innerFrameWidth, "innerFrameWidth");
-  requirePositive(p.honeycombEdgeWall, "honeycombEdgeWall");
-  requirePositive(p.readoutEndMargin, "readoutEndMargin", true);
-  requirePositive(p.electronicsPlaneOverhang, "electronicsPlaneOverhang", true);
-  requirePositive(p.dividerPlaneLengthMargin, "dividerPlaneLengthMargin", true);
-  requirePositive(p.dividerPlaneOverhang, "dividerPlaneOverhang", true);
-  requirePositive(p.dividerPlaneThickness, "dividerPlaneThickness");
+  requirePositive(NA6PMWPCChamber::InnerFrameWidth, "innerFrameWidth");
+  requirePositive(kHoneycombEdgeWall, "honeycombEdgeWall");
+  requirePositive(kReadoutEndMargin, "readoutEndMargin", true);
+  requirePositive(kElectronicsPlaneOverhang, "electronicsPlaneOverhang", true);
+  requirePositive(kDividerPlaneLengthMargin, "dividerPlaneLengthMargin", true);
+  requirePositive(kDividerPlaneOverhang, "dividerPlaneOverhang", true);
+  requirePositive(kDividerPlaneThickness, "dividerPlaneThickness");
 
-  requirePositive(p.outerSkinFront, "outerSkinFront");
-  requirePositive(p.honeycombFront, "honeycombFront");
-  requirePositive(p.readoutFR4, "readoutFR4");
-  requirePositive(p.readoutCopper, "readoutCopper", true);
-  requirePositive(p.gasGap, "gasGap");
-  requirePositive(p.coverFR4, "coverFR4");
-  requirePositive(p.coverCopper, "coverCopper", true);
-  requirePositive(p.honeycombBack, "honeycombBack");
-  requirePositive(p.outerSkinBack, "outerSkinBack");
+  requirePositive(kOuterSkinFront, "outerSkinFront");
+  requirePositive(kHoneycombFront, "honeycombFront");
+  requirePositive(kReadoutFR4, "readoutFR4");
+  requirePositive(kReadoutCopper, "readoutCopper", true);
+  requirePositive(kGasGap, "gasGap");
+  requirePositive(kCoverFR4, "coverFR4");
+  requirePositive(kCoverCopper, "coverCopper", true);
+  requirePositive(kHoneycombBack, "honeycombBack");
+  requirePositive(kOuterSkinBack, "outerSkinBack");
 
-  const double frame = p.innerFrameWidth;
-  const double wall = p.honeycombEdgeWall;
-  const double readoutW = w + p.electronicsPlaneOverhang;
-  const double readoutH = h - 2. * p.readoutEndMargin;
+  const double frame = NA6PMWPCChamber::InnerFrameWidth;
+  const double wall = kHoneycombEdgeWall;
+  const double readoutW = w + kElectronicsPlaneOverhang;
+  const double readoutH = h - 2. * kReadoutEndMargin;
   const double gasW = w - 2. * frame;
   const double gasH = h - 2. * frame;
 
   if (std::min({gasW, gasH, w - 2. * wall, h - 2. * wall, readoutH,
-                w - p.dividerPlaneLengthMargin}) <= 0.) {
+                w - kDividerPlaneLengthMargin}) <= 0.) {
     throw std::runtime_error("MWPC dimensions leave a non-positive derived box");
   }
   if (readoutH < gasH) {
@@ -180,20 +201,20 @@ std::vector<NA6PMWPCChamber::Part> NA6PMWPCChamber::buildParts() const
   }
 
   std::vector<std::pair<std::string, double>> stack = {
-    {"outerSkinFront", p.outerSkinFront},
-    {"honeycombFront", p.honeycombFront},
-    {"readoutFR4", p.readoutFR4},
-    {"readoutCopper", p.readoutCopper},
-    {"gasGap", p.gasGap}};
-  if (p.coverCopperOnGasFace) {
-    stack.emplace_back("coverCopper", p.coverCopper);
-    stack.emplace_back("coverFR4", p.coverFR4);
+    {"outerSkinFront", kOuterSkinFront},
+    {"honeycombFront", kHoneycombFront},
+    {"readoutFR4", kReadoutFR4},
+    {"readoutCopper", kReadoutCopper},
+    {"gasGap", kGasGap}};
+  if (kCoverCopperOnGasFace) {
+    stack.emplace_back("coverCopper", kCoverCopper);
+    stack.emplace_back("coverFR4", kCoverFR4);
   } else {
-    stack.emplace_back("coverFR4", p.coverFR4);
-    stack.emplace_back("coverCopper", p.coverCopper);
+    stack.emplace_back("coverFR4", kCoverFR4);
+    stack.emplace_back("coverCopper", kCoverCopper);
   }
-  stack.emplace_back("honeycombBack", p.honeycombBack);
-  stack.emplace_back("outerSkinBack", p.outerSkinBack);
+  stack.emplace_back("honeycombBack", kHoneycombBack);
+  stack.emplace_back("outerSkinBack", kOuterSkinBack);
 
   double depth = 0.;
   for (const auto& layer : stack) {
@@ -217,12 +238,12 @@ std::vector<NA6PMWPCChamber::Part> NA6PMWPCChamber::buildParts() const
   };
 
   add("OuterSkinFront", MaterialKind::FR4,
-      {w, h, p.outerSkinFront}, {0., 0., z.at("outerSkinFront")});
+      {w, h, kOuterSkinFront}, {0., 0., z.at("outerSkinFront")});
   add("OuterSkinBack", MaterialKind::FR4,
-      {w, h, p.outerSkinBack}, {0., 0., z.at("outerSkinBack")});
+      {w, h, kOuterSkinBack}, {0., 0., z.at("outerSkinBack")});
 
   const std::array<std::pair<const char*, double>, 2> honeycombLayers{{
-    {"Front", p.honeycombFront}, {"Back", p.honeycombBack}}};
+    {"Front", kHoneycombFront}, {"Back", kHoneycombBack}}};
   for (const auto& layer : honeycombLayers) {
     const std::string side = layer.first;
     const std::string key = side == "Front" ? "honeycombFront" : "honeycombBack";
@@ -241,39 +262,39 @@ std::vector<NA6PMWPCChamber::Part> NA6PMWPCChamber::buildParts() const
   }
 
   add("ElectronicsPlane", MaterialKind::FR4,
-      {readoutW, readoutH, p.readoutFR4},
-      {p.electronicsPlaneOverhang / 2., 0., z.at("readoutFR4")});
-  if (p.readoutCopper > 0.) {
-    const double copperW = p.readoutCopperOnElectronicsExtension ? readoutW : w;
-    const double copperX = p.readoutCopperOnElectronicsExtension ? p.electronicsPlaneOverhang / 2. : 0.;
+      {readoutW, readoutH, kReadoutFR4},
+      {kElectronicsPlaneOverhang / 2., 0., z.at("readoutFR4")});
+  if (kReadoutCopper > 0.) {
+    const double copperW = kReadoutCopperOnElectronicsExtension ? readoutW : w;
+    const double copperX = kReadoutCopperOnElectronicsExtension ? kElectronicsPlaneOverhang / 2. : 0.;
     add("ReadoutCopper", MaterialKind::Copper,
-        {copperW, readoutH, p.readoutCopper},
+        {copperW, readoutH, kReadoutCopper},
         {copperX, 0., z.at("readoutCopper")});
   }
 
   add("Gas", MaterialKind::Gas,
-      {gasW, gasH, p.gasGap}, {0., 0., z.at("gasGap")}, true);
+      {gasW, gasH, kGasGap}, {0., 0., z.at("gasGap")}, true);
   add("InnerFrameXMinus", MaterialKind::FR4,
-      {frame, h, p.gasGap}, {-(w - frame) / 2., 0., z.at("gasGap")});
+      {frame, h, kGasGap}, {-(w - frame) / 2., 0., z.at("gasGap")});
   add("InnerFrameXPlus", MaterialKind::FR4,
-      {frame, h, p.gasGap}, {+(w - frame) / 2., 0., z.at("gasGap")});
+      {frame, h, kGasGap}, {+(w - frame) / 2., 0., z.at("gasGap")});
   add("InnerFrameYMinus", MaterialKind::FR4,
-      {gasW, frame, p.gasGap}, {0., -(h - frame) / 2., z.at("gasGap")});
+      {gasW, frame, kGasGap}, {0., -(h - frame) / 2., z.at("gasGap")});
   add("InnerFrameYPlus", MaterialKind::FR4,
-      {gasW, frame, p.gasGap}, {0., +(h - frame) / 2., z.at("gasGap")});
+      {gasW, frame, kGasGap}, {0., +(h - frame) / 2., z.at("gasGap")});
 
   add("ChamberCover", MaterialKind::FR4,
-      {w, h, p.coverFR4}, {0., 0., z.at("coverFR4")});
-  if (p.coverCopper > 0.) {
+      {w, h, kCoverFR4}, {0., 0., z.at("coverFR4")});
+  if (kCoverCopper > 0.) {
     add("CoverCopper", MaterialKind::Copper,
-        {w, h, p.coverCopper}, {0., 0., z.at("coverCopper")});
+        {w, h, kCoverCopper}, {0., 0., z.at("coverCopper")});
   }
 
-  if (p.includeDividerPlane && p.dividerPlaneOverhang > 0.) {
+  if (kIncludeDividerPlane && kDividerPlaneOverhang > 0.) {
     add("DividerPlaneApproximation", MaterialKind::FR4,
-        {w - p.dividerPlaneLengthMargin, p.dividerPlaneOverhang, p.dividerPlaneThickness},
-        {0., -(h + p.dividerPlaneOverhang) / 2.,
-         z.at("gasGap") - p.gasGap / 2. + p.dividerPlaneThickness / 2.});
+        {w - kDividerPlaneLengthMargin, kDividerPlaneOverhang, kDividerPlaneThickness},
+        {0., -(h + kDividerPlaneOverhang) / 2.,
+         z.at("gasGap") - kGasGap / 2. + kDividerPlaneThickness / 2.});
   }
 
   validate(parts);

@@ -4,7 +4,7 @@
 #include <TTree.h>
 #include <TRandom3.h>
 #include <fairlogger/Logger.h>
-#include "NA6PMuonSpecModularHit.h"
+#include "NA6PMuonSpecHit.h"
 #include "NA6PTrackerCA.h"
 #include "NA6PVertexerTracklets.h"
 #include "NA6PMuonSpecReconstruction.h"
@@ -82,7 +82,7 @@ void NA6PMuonSpecReconstruction::setClusters(std::vector<NA6PMuonSpecCluster>& c
   }
 }
 
-void NA6PMuonSpecReconstruction::hitsToRecPoints(const std::vector<NA6PMuonSpecModularHit>& hits, int evID)
+void NA6PMuonSpecReconstruction::hitsToRecPoints(const std::vector<NA6PMuonSpecHit>& hits, int evID)
 {
   int nHits = hits.size();
   const auto& layout = NA6PLayoutParam::Instance();

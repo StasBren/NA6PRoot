@@ -12,7 +12,7 @@
 #include <TParticle.h>
 #include <TStopwatch.h>
 #include "NA6PVerTelHit.h"
-#include "NA6PMuonSpecModularHit.h"
+#include "NA6PMuonSpecHit.h"
 #include "MagneticField.h"
 #include "StringUtils.h"
 #include "NA6PVerTelReconstruction.h"
@@ -181,9 +181,9 @@ int main(int argc, char** argv)
       }
     }
     { // Muon Spectrometer hits -> clusters
-      TreeFromFile tfMS("HitsMuonSpecModular.root", "hitsMuonSpecModular");
-      std::vector<NA6PMuonSpecModularHit> msHits, *msHitsPtr = &msHits;
-      tfMS.getTree()->SetBranchAddress("MuonSpecModular", &msHitsPtr);
+      TreeFromFile tfMS("HitsMuonSpec.root", "hitsMuonSpec");
+      std::vector<NA6PMuonSpecHit> msHits, *msHitsPtr = &msHits;
+      tfMS.getTree()->SetBranchAddress("MuonSpec", &msHitsPtr);
       int nEvMS = tfMS.getTree()->GetEntriesFast();
 
       msrec->createClustersOutput();

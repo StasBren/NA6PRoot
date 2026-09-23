@@ -23,9 +23,6 @@
 #pragma link C++ class NA6PMuonSpecHit + ;
 #pragma link C++ class std::vector < NA6PMuonSpecHit> + ;
 
-#pragma link C++ class NA6PMuonSpecModularHit + ;
-#pragma link C++ class std::vector < NA6PMuonSpecModularHit> + ;
-
 #pragma link C++ struct VTPixID+;
 #pragma link C++ class NA6PVerTelDigit + ;
 #pragma link C++ class std::vector < NA6PVerTelDigit> + ;

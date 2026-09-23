@@ -62,12 +62,7 @@ struct NA6PLayoutParam : public na6p::conf::ConfigurableParamHelper<NA6PLayoutPa
   float shiftMS[3] = {0.f, 0.f, 0.f}; // MS global shift, added to posMSPlaneX,Y,Z
   float posMSPlaneX[MaxMSPlanes] = {};
   float posMSPlaneY[MaxMSPlanes] = {};
-  float msChipDX[MaxMSPlanes] = {20.f, 20.f, 120.f, 160.f, 210.f, 230.f};
-  float msChipDY[MaxMSPlanes] = {20.f, 20.f, 120.f, 160.f, 210.f, 230.f};
   float posMSPlaneZ[MaxMSPlanes] = {300.f, 340.f, 530.f, 590.f, 810.f, 850.f};
-  float thicknessMSPlane[MaxMSPlanes] = {0.06f, 0.06f, 0.06f, 0.06f, 0.06f, 0.06f};
-  float dimXMSPlane[MaxMSPlanes] = {160.f, 240.f, 240.f, 320.f, 420.f, 460.f}; // size in X of rectangular plane. or diameter if dimYMSPlane is 0
-  float dimYMSPlane[MaxMSPlanes] = {160.f, 240.f, 240.f, 320.f, 420.f, 460.f}; // size in Y if >0
   float dimXMSPlaneHole[MaxMSPlanes] = {5.f, 1.f, 1.f, 1.f, 1.f, 1.f};         // size in X of rectangular hole. or diameter if dimYMSPlaneHole is 0
   float dimYMSPlaneHole[MaxMSPlanes] = {5.f, 1.f, 1.f, 1.f, 1.f, 1.f};         // size in Y if >0
   std::string medMSPlane[MaxMSPlanes] = {"Silicon", "Silicon", "Silicon", "Silicon", "Silicon", "Silicon"};

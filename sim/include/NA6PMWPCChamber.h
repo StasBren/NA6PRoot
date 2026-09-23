@@ -14,6 +14,11 @@ class TGeoVolumeAssembly;
 class NA6PMWPCChamber
 {
  public:
+  // Expert detector-design constants. Changing these changes the physical MWPC
+  // definition and therefore intentionally requires a code change.
+  static constexpr double InnerFrameWidth = 1.0;
+  static constexpr double ChamberRotationZDeg = 90.0;
+
   struct Materials {
     std::string fr4;
     std::string copper;
@@ -27,9 +32,9 @@ class NA6PMWPCChamber
     double z = 0.;
   };
 
-  // Negative body overrides mean: use the values from NA6PMWPCParam.
-  // The override is useful for the present narrow-MS0 study while keeping
-  // exactly the same chamber construction code for all six stations.
+  // Negative body overrides mean: use the configurable maximum body size from
+  // NA6PMWPCParam. All detailed construction constants remain fixed here/in the
+  // implementation and are not serialized to na6pLayout.ini.
   NA6PMWPCChamber(const NA6PModule& module, Materials materials,
                   double bodyXOverride = -1., double bodyYOverride = -1.);
 

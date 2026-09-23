@@ -134,7 +134,6 @@ int main(int argc, char** argv)
   }
 
   auto runConfig = new TG4RunConfiguration("geomRoot", "FTFP_BERT");
-  runConfig->SetMTApplication(false);
   auto geant4 = new TGeant4("TGeant4", "Geant4 Monte Carlo Engine", runConfig, argc, argv);
 
   TVirtualMC::GetMC()->SetMagField(TGeoGlobalMagField::Instance()->GetField());
