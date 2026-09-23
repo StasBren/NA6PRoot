@@ -151,8 +151,8 @@ int main(int argc, char** argv) {
   avalanche.AvalancheElectron(cfg.x0Cm, cfg.y0Cm, cfg.z0Cm,
                               cfg.t0Ns, cfg.e0Ev);
 
-  unsigned int ne = 0;
-  unsigned int ni = 0;
+  int ne = 0;
+  int ni = 0;
   avalanche.GetAvalancheSize(ne, ni);
 
   const std::size_t nEndpoints = avalanche.GetNumberOfElectronEndpoints();
