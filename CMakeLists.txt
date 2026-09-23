@@ -118,6 +118,7 @@ target_include_directories(na6prec PRIVATE
 # Install instructions (optional)
 install(TARGETS na6psim na6prec RUNTIME DESTINATION bin)
 install(PROGRAMS scripts/na6psim_parallel.py DESTINATION bin RENAME na6psim_parallel)
+install(PROGRAMS scripts/na6prec_parallel.py DESTINATION bin RENAME na6prec_parallel)
 
 set(DATA_DIR ${CMAKE_SOURCE_DIR}/data)
 # Install all files in the data directory
@@ -149,4 +150,3 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/init.sh
 
 #target_compile_options(na6psim PUBLIC -ggdb -g -O0)
 #SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -ggdb -g")
-

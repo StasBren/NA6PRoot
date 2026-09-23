@@ -38,6 +38,9 @@ def parse_passthrough(args):
         if key in ("-n", "--nevents"):
             val, i = take_option_value(args, i)
             nevents = int(val)
+        elif arg.startswith("-n") and len(arg) > 2:
+            nevents = int(arg[2:])
+            i += 1
         elif key == "--configKeyValues":
             val, i = take_option_value(args, i)
             config_strings.append(val)
@@ -51,6 +54,9 @@ def parse_passthrough(args):
         elif key in ("-r", "--rnd-seed"):
             val, i = take_option_value(args, i)
             rnd_seed = int(val)
+        elif arg.startswith("-r") and len(arg) > 2:
+            rnd_seed = int(arg[2:])
+            i += 1
         elif key in ("--doDigitization", "-dig"):
             val, i = take_option_value(args, i)
             do_digitization = parse_bool(val)
@@ -297,4 +303,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

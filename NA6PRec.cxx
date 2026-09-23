@@ -7,10 +7,12 @@
 #include <TGeoGlobalMagField.h>
 #include <boost/program_options.hpp>
 #include <filesystem>
+#include <algorithm>
 #include <TTree.h>
 #include <TFile.h>
 #include <TParticle.h>
 #include <TStopwatch.h>
+#include <utility>
 #include "NA6PVerTelHit.h"
 #include "NA6PMuonSpecHit.h"
 #include "MagneticField.h"
@@ -85,7 +87,7 @@ int main(int argc, char** argv)
     add_option("disable-write-ini", bpo::value<bool>()->default_value(false)->implicit_value(true), "do not write reco parameters ini file");
     add_option("geometry,g", bpo::value<std::string>()->default_value("geometry.root"), "geometry file name");
     add_option("firstevent,f", bpo::value<int32_t>()->default_value(0), "first event");
-    add_option("lastevent,l", bpo::value<int32_t>()->default_value(-1), "last event");
+    add_option("lastevent,l", bpo::value<int32_t>()->default_value(-1), "last event (inclusive; -1 means end of file)");
     add_option("readMC", bpo::value<bool>()->default_value(true)->implicit_value(true), "read MC truth info");
     add_option("doHitsToRecPoints,hitcl", bpo::value<bool>()->default_value(true), "run hits->clusters");
     add_option("doDigitsToRecPoints,cl", bpo::value<bool>()->default_value(false), "run digits->clusters");
@@ -145,6 +147,12 @@ int main(int argc, char** argv)
   int firstEv = vm["firstevent"].as<int32_t>();
   int lastEv = vm["lastevent"].as<int32_t>();
 
+  const auto getEventRange = [firstEv, lastEv](int nEvents) {
+    const int first = std::clamp(firstEv, 0, nEvents);
+    const int last = lastEv < 0 ? nEvents - 1 : std::min(lastEv, nEvents - 1);
+    return std::pair<int, int>{first, last};
+  };
+
   if (!Propagator::loadField() || !Propagator::loadGeometry(vm["geometry"].as<std::string>())) {
     return -1;
   }
@@ -153,11 +161,17 @@ int main(int argc, char** argv)
     LOGP(info, "Will do digits to recpoints for VT instead of hits to recpoints");
   }
 
-  std::unique_ptr<NA6PVerTelReconstruction> vtrec = std::make_unique<NA6PVerTelReconstruction>();
-  vtrec->setReadMCTruth(readMC);
-  vtrec->setEnableTracksWithHoles(skipVTlays);
-  std::unique_ptr<NA6PMuonSpecReconstruction> msrec = std::make_unique<NA6PMuonSpecReconstruction>();
-  msrec->setReadMCTruth(readMC);
+  std::unique_ptr<NA6PVerTelReconstruction> vtrec;
+  if (doHitsToRecPoints || doDigitsToRecPoints || doTrackletVertex || doVTTracking) {
+    vtrec = std::make_unique<NA6PVerTelReconstruction>();
+    vtrec->setReadMCTruth(readMC);
+    vtrec->setEnableTracksWithHoles(skipVTlays);
+  }
+  std::unique_ptr<NA6PMuonSpecReconstruction> msrec;
+  if (doHitsToRecPoints || doMSTracking) {
+    msrec = std::make_unique<NA6PMuonSpecReconstruction>();
+    msrec->setReadMCTruth(readMC);
+  }
   std::unique_ptr<NA6PMatching> matching = std::make_unique<NA6PMatching>();
 
   if (doHitsToRecPoints) {
@@ -167,9 +181,10 @@ int main(int argc, char** argv)
         std::vector<NA6PVerTelHit> vtHits, *vtHitsPtr = &vtHits;
         tfVT.getTree()->SetBranchAddress("VerTel", &vtHitsPtr);
         int nEvVT = tfVT.getTree()->GetEntriesFast();
+        const auto [first, last] = getEventRange(nEvVT);
 
         vtrec->createClustersOutput();
-        for (int jEv = 0; jEv < nEvVT; jEv++) {
+        for (int jEv = first; jEv <= last; jEv++) {
           tfVT.getTree()->GetEvent(jEv);
           int nHits = vtHits.size();
           LOGP(info, "VerTel Event {} nHits= {}", jEv, nHits);
@@ -185,9 +200,10 @@ int main(int argc, char** argv)
       std::vector<NA6PMuonSpecHit> msHits, *msHitsPtr = &msHits;
       tfMS.getTree()->SetBranchAddress("MuonSpec", &msHitsPtr);
       int nEvMS = tfMS.getTree()->GetEntriesFast();
+      const auto [first, last] = getEventRange(nEvMS);
 
       msrec->createClustersOutput();
-      for (int jEv = 0; jEv < nEvMS; jEv++) {
+      for (int jEv = first; jEv <= last; jEv++) {
         tfMS.getTree()->GetEvent(jEv);
         int nHits = msHits.size();
         LOGP(info, "MuonSpec Event {} nHits= {}", jEv, nHits);
@@ -207,8 +223,9 @@ int main(int argc, char** argv)
     tfVT.getTree()->SetBranchAddress("VerTel", &vtDigitsPtr);
     tfVT.getTree()->SetBranchAddress("VerTelMCTruth", &vtDigMCLabelsPtr);
     int nEvVT = tfVT.getTree()->GetEntriesFast();
+    const auto [first, last] = getEventRange(nEvVT);
     vtrec->createClustersOutput();
-    for (int jEv = 0; jEv < nEvVT; jEv++) {
+    for (int jEv = first; jEv <= last; jEv++) {
       tfVT.getTree()->GetEvent(jEv);
       int nDigits = vtDigits.size();
       int nMClabels = vtDigMCLabels.getNElements();
@@ -257,10 +274,7 @@ int main(int argc, char** argv)
       LOGP(error, "No input trees for tracking stage");
       return -1;
     }
-    if (lastEv > nEv || lastEv < 0)
-      lastEv = nEv;
-    if (firstEv < 0)
-      firstEv = 0;
+    const auto [first, last] = getEventRange(nEv);
 
     if (doTrackletVertex)
       vtrec->initVertexer();
@@ -273,7 +287,7 @@ int main(int argc, char** argv)
     timer.Start();
 
     NA6PVertex pvert;
-    for (int jEv = firstEv; jEv < lastEv; jEv++) {
+    for (int jEv = first; jEv <= last; jEv++) {
       LOGP(info, "Process event {}", jEv);
       const double zvert = getPrimaryVertexZ(tfKine->getTree(), mcArr, jEv);
       pvert.setXYZ(0.f, 0.f, zvert);
@@ -342,16 +356,13 @@ int main(int argc, char** argv)
     int nEvVT = tfTVT.getTree()->GetEntries();
     int nEvMS = tfTMS.getTree()->GetEntries();
     int nEv = std::min(nEvVT, nEvMS);
-    if (lastEv > nEv || lastEv < 0)
-      lastEv = nEv;
-    if (firstEv < 0)
-      firstEv = 0;
+    const auto [first, last] = getEventRange(nEv);
 
     TStopwatch timer;
     timer.Start();
 
     NA6PVertex pvert;
-    for (int jEv = firstEv; jEv < lastEv; jEv++) {
+    for (int jEv = first; jEv <= last; jEv++) {
       LOGP(info, "Process event {}", jEv);
       const double zvert = getPrimaryVertexZ(tfKine->getTree(), mcArr, jEv);
       pvert.setXYZ(0.f, 0.f, zvert);
