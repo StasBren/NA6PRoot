@@ -56,20 +56,22 @@ q = 0,1,2,3 -> A,B,C,D
 ## Main implementation files
 
 `sim/include/NA6PMWPCParam.h`
-: User-facing acceptance/layout controls only; detailed MWPC construction constants are kept in `NA6PMWPCChamber`.
-
-: Configurable MWPC geometry/layout parameters: detailed chamber dimensions, rotation, gas mixture, station working areas, `Nx,Ny`, active overlaps, stagger spacing and MS0 narrow dimension.
+: User-facing acceptance/layout controls only: maximum chamber size, station working areas, `Nx,Ny`, active overlaps, stagger spacing and the MS0 narrow-dimension option. Detailed chamber-construction parameters are intentionally not configurable.
 
 `sim/include/NA6PMWPCChamber.h`, `sim/src/NA6PMWPCChamber.cxx`
-: Detailed reusable chamber builder, including the layered mechanical/material model and Ar/CO2 sensitive gas.
+: Detailed reusable chamber builder. The mechanical dimensions, layer thicknesses, materials, chamber rotation and Ar/CO2 gas definition are kept here as expert detector-design constants so that they cannot be unintentionally overridden by an old `na6pLayout.ini`.
 
 `sim/src/NA6PMuonSpec.cxx`
-: Builds the six stations, places chambers on the regular X/Y grid, assigns A/B/C/D z offsets, rotates each detailed chamber as a rigid object, and keeps sequential sensitive-volume IDs.
+: Canonical Muon Spectrometer implementation. Builds the six MWPC stations, places chambers on the regular X/Y grid, assigns the A/B/C/D z offsets, rotates each detailed chamber as a rigid object and keeps sequential sensitive-volume IDs.
+
+`sim/include/NA6PMuonSpecHit.h`
+: Hit class used by the MWPC Muon Spectrometer simulation and downstream reconstruction.
 
 `base/include/NA6PLayoutParam.h`
-: Current MS station Z positions. MS1 is at 340 cm in this branch.
+: Contains the general Muon Spectrometer placement parameters, including the station Z positions. The legacy silicon-plane size/thickness parameters are no longer used for the MWPC geometry.
 
 `NA6PSim.cxx`
+: Uses the standard Geant4-VMC run configuration; the temporary `SetMTApplication(false)` development setting has been removed.
 
 ## Validation
 
