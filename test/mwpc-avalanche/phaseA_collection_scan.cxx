@@ -3,7 +3,9 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
+#include <vector>
 
 #include "Garfield/AvalancheMicroscopic.hh"
 #include "Garfield/ComponentAnalyticField.hh"
@@ -28,6 +30,27 @@ int ReadIntArg(const int argc, char** argv, const std::string& key,
   return defaultValue;
 }
 
+std::string ReadStringArg(const int argc, char** argv, const std::string& key,
+                          const std::string& defaultValue) {
+  for (int i = 1; i + 1 < argc; ++i) {
+    if (argv[i] == key) return argv[i + 1];
+  }
+  return defaultValue;
+}
+
+std::vector<double> ParseMmListToCm(const std::string& csv) {
+  std::vector<double> values;
+  if (csv.empty()) return values;
+
+  std::stringstream ss(csv);
+  std::string token;
+  while (std::getline(ss, token, ',')) {
+    if (token.empty()) continue;
+    values.push_back(0.1 * std::stod(token));
+  }
+  return values;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -45,17 +68,47 @@ int main(int argc, char** argv) {
   const int nSteps = ReadIntArg(argc, argv, "--steps", 17);
   const double y0Cm =
       0.1 * ReadArg(argc, argv, "--y0-mm", 0.75 * 10. * gapPlusCm);
-  const std::string outName = "collection_scan.csv";
+  const std::string x0ListText =
+      ReadStringArg(argc, argv, "--x0-list-mm", "");
+  const std::string outName =
+      ReadStringArg(argc, argv, "--output", "collection_scan.csv");
 
   if (pitchCm <= 0. || wireDiameterCm <= 0. ||
       gapMinusCm <= 0. || gapPlusCm <= 0. ||
-      trials <= 0 || nSteps < 2) {
+      trials <= 0 || (x0ListText.empty() && nSteps < 2)) {
     std::cerr << "Invalid scan parameters.\n";
     return 2;
   }
   if (y0Cm <= -gapMinusCm || y0Cm >= gapPlusCm) {
     std::cerr << "Starting y0 is outside the gas gap.\n";
     return 2;
+  }
+
+  std::vector<double> x0ValuesCm;
+  try {
+    x0ValuesCm = ParseMmListToCm(x0ListText);
+  } catch (const std::exception& e) {
+    std::cerr << "Could not parse --x0-list-mm: " << e.what() << "\n";
+    return 2;
+  }
+
+  if (!x0ValuesCm.empty()) {
+    const double halfPitch = 0.5 * pitchCm;
+    for (const double x0 : x0ValuesCm) {
+      if (x0 < -halfPitch || x0 > halfPitch) {
+        std::cerr << "Requested x0 = " << 10. * x0
+                  << " mm lies outside the central wire cell [-p/2,+p/2].\n";
+        return 2;
+      }
+    }
+  } else {
+    const double xMin = -0.5 * pitchCm;
+    const double xMax = +0.5 * pitchCm;
+    x0ValuesCm.reserve(nSteps);
+    for (int ix = 0; ix < nSteps; ++ix) {
+      const double f = static_cast<double>(ix) / (nSteps - 1);
+      x0ValuesCm.push_back(xMin + f * (xMax - xMin));
+    }
   }
 
   Garfield::MediumMagboltz gas;
@@ -96,15 +149,15 @@ int main(int argc, char** argv) {
             << "pitch = " << 10. * pitchCm << " mm, y0 = "
             << 10. * y0Cm << " mm, trials/x = " << trials
             << ", B_y = " << bTesla << " T\n"
+            << "scan mode = "
+            << (x0ListText.empty() ? "uniform across one pitch"
+                                   : "explicit x0 list")
+            << "\n"
             << "x0_mm    wire-1    wire0    wire+1    attach    other\n";
 
-  const double xMin = -0.5 * pitchCm;
-  const double xMax = +0.5 * pitchCm;
   const double wireRadius = 0.5 * wireDiameterCm;
 
-  for (int ix = 0; ix < nSteps; ++ix) {
-    const double f = static_cast<double>(ix) / (nSteps - 1);
-    const double x0 = xMin + f * (xMax - xMin);
+  for (const double x0 : x0ValuesCm) {
 
     int nM1 = 0, n0 = 0, nP1 = 0;
     int nAttach = 0, nLeftArea = 0, nOther = 0;
