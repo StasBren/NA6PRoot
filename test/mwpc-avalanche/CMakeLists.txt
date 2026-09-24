@@ -11,3 +11,6 @@ target_compile_features(mwpc_phase_a PRIVATE cxx_std_17)
 add_executable(mwpc_phase_a_collection phaseA_collection_scan.cxx)
 target_link_libraries(mwpc_phase_a_collection PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_phase_a_collection PRIVATE cxx_std_17)
+
+add_executable(mwpc_phase_a_coordinates phaseA_coordinate_test.cxx)
+target_compile_features(mwpc_phase_a_coordinates PRIVATE cxx_std_17)
