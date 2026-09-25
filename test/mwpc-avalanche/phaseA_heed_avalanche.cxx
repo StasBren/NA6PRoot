@@ -31,6 +31,14 @@ int ReadIntArg(const int argc, char** argv, const std::string& key,
   return defaultValue;
 }
 
+std::string ReadStringArg(const int argc, char** argv, const std::string& key,
+                          const std::string& defaultValue) {
+  for (int i = 1; i + 1 < argc; ++i) {
+    if (argv[i] == key) return argv[i + 1];
+  }
+  return defaultValue;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -50,6 +58,8 @@ int main(int argc, char** argv) {
   const int tracks = ReadIntArg(argc, argv, "--tracks", 3);
   const int maxPrintedSeeds =
       ReadIntArg(argc, argv, "--print-seeds", 8);
+  const std::string outputPrefix =
+      ReadStringArg(argc, argv, "--output-prefix", "heed_avalanche");
 
   if (pitchCm <= 0. || wireDiameterCm <= 0. ||
       gapMinusCm <= 0. || gapPlusCm <= 0. ||
@@ -98,16 +108,21 @@ int main(int argc, char** argv) {
   const double wireRadius = 0.5 * wireDiameterCm;
   constexpr unsigned int avalancheLimit = 200000;
 
-  std::ofstream trackOut("heed_avalanche_track_summary.csv");
+  const std::string trackFile = outputPrefix + "_track_summary.csv";
+  const std::string seedFile = outputPrefix + "_seed_summary.csv";
+
+  std::ofstream trackOut(trackFile);
   trackOut << "track,clusters,primary_electrons,energy_loss_eV,"
+              "seed_to_m1,seed_to_0,seed_to_p1,seed_multi_wire,seed_zero,"
               "avalanche_electrons,wire_m1_charge_e,wire_0_charge_e,"
               "wire_p1_charge_e,attached_endpoints,other_endpoints,"
               "active_wires,total_collected_e,total_collected_fC,"
               "mean_collected_time_ns\n";
 
-  std::ofstream seedOut("heed_avalanche_seed_summary.csv");
+  std::ofstream seedOut(seedFile);
   seedOut << "track,seed,seed_u_mm,seed_v_mm,seed_w_mm,"
              "avalanche_electrons,avalanche_ions,collected_e,"
+             "wire_m1_charge_e,wire_0_charge_e,wire_p1_charge_e,"
              "attached_endpoints,other_endpoints,mean_collected_time_ns\n";
 
   std::cout << std::fixed << std::setprecision(4);
@@ -137,6 +152,8 @@ int main(int argc, char** argv) {
 
     long long totalAvalancheElectrons = 0;
     long long qM1 = 0, q0 = 0, qP1 = 0;
+    int seedToM1 = 0, seedTo0 = 0, seedToP1 = 0;
+    int seedMultiWire = 0, seedZero = 0;
     long long nAttachedEndpoints = 0;
     long long nOtherEndpoints = 0;
     long long totalCollected = 0;
@@ -178,6 +195,7 @@ int main(int argc, char** argv) {
         int seedCollected = 0;
         int seedAttached = 0;
         int seedOther = 0;
+        long long seedQM1 = 0, seedQ0 = 0, seedQP1 = 0;
         double seedTimeSum = 0.;
         int seedTimed = 0;
 
@@ -199,10 +217,18 @@ int main(int argc, char** argv) {
             ++totalCollected;
             activeWires.insert(nearest);
 
-            if (nearest == -1) ++qM1;
-            else if (nearest == 0) ++q0;
-            else if (nearest == +1) ++qP1;
-            else ++nOtherEndpoints;
+            if (nearest == -1) {
+              ++qM1;
+              ++seedQM1;
+            } else if (nearest == 0) {
+              ++q0;
+              ++seedQ0;
+            } else if (nearest == +1) {
+              ++qP1;
+              ++seedQP1;
+            } else {
+              ++nOtherEndpoints;
+            }
 
             if (t1 >= te) {
               const double dt = t1 - te;
@@ -220,14 +246,32 @@ int main(int argc, char** argv) {
           }
         }
 
+        const int seedWireCount =
+            (seedQM1 > 0 ? 1 : 0) +
+            (seedQ0 > 0 ? 1 : 0) +
+            (seedQP1 > 0 ? 1 : 0);
+        if (seedWireCount == 0) {
+          ++seedZero;
+        } else if (seedWireCount > 1) {
+          ++seedMultiWire;
+        } else if (seedQM1 > 0) {
+          ++seedToM1;
+        } else if (seedQ0 > 0) {
+          ++seedTo0;
+        } else if (seedQP1 > 0) {
+          ++seedToP1;
+        }
+
         const double seedMeanTime =
             seedTimed > 0 ? seedTimeSum / seedTimed : 0.;
 
         seedOut << itrack << "," << seedIndex << ","
                 << 10. * xe << "," << 10. * ye << "," << 10. * ze << ","
                 << ne << "," << ni << ","
-                << seedCollected << "," << seedAttached << ","
-                << seedOther << "," << seedMeanTime << "\n";
+                << seedCollected << ","
+                << seedQM1 << "," << seedQ0 << "," << seedQP1 << ","
+                << seedAttached << "," << seedOther << ","
+                << seedMeanTime << "\n";
 
         if (itrack < 3 && seedIndex < maxPrintedSeeds) {
           std::cout << "track " << itrack
@@ -254,6 +298,8 @@ int main(int argc, char** argv) {
 
     trackOut << itrack << "," << nClusters << ","
              << nPrimaryElectrons << "," << energyLossEv << ","
+             << seedToM1 << "," << seedTo0 << "," << seedToP1 << ","
+             << seedMultiWire << "," << seedZero << ","
              << totalAvalancheElectrons << ","
              << qM1 << "," << q0 << "," << qP1 << ","
              << nAttachedEndpoints << "," << nOtherEndpoints << ","
@@ -264,6 +310,10 @@ int main(int argc, char** argv) {
               << " clusters=" << nClusters
               << ", primary e-=" << nPrimaryElectrons
               << ", dE=" << energyLossEv << " eV"
+              << ", seed wire[-1,0,+1]=[" << seedToM1 << ","
+              << seedTo0 << "," << seedToP1 << "]"
+              << ", seed multi=" << seedMultiWire
+              << ", seed zero=" << seedZero
               << ", avalanche e-=" << totalAvalancheElectrons
               << ", wire charge[-1,0,+1]=[" << qM1 << ","
               << q0 << "," << qP1 << "] e-"
@@ -274,7 +324,6 @@ int main(int argc, char** argv) {
               << ", <arrival dt>=" << meanCollectedTime << " ns\n\n";
   }
 
-  std::cout << "Wrote heed_avalanche_track_summary.csv and "
-               "heed_avalanche_seed_summary.csv\n";
+  std::cout << "Wrote " << trackFile << " and " << seedFile << "\n";
   return 0;
 }
