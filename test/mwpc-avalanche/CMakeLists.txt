@@ -18,3 +18,7 @@ target_compile_features(mwpc_phase_a_coordinates PRIVATE cxx_std_17)
 add_executable(mwpc_phase_a_gain phaseA_gain_fluctuations.cxx)
 target_link_libraries(mwpc_phase_a_gain PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_phase_a_gain PRIVATE cxx_std_17)
+
+add_executable(mwpc_phase_a_magnetic phaseA_magnetic_drift.cxx)
+target_link_libraries(mwpc_phase_a_magnetic PRIVATE Garfield::Garfield)
+target_compile_features(mwpc_phase_a_magnetic PRIVATE cxx_std_17)
