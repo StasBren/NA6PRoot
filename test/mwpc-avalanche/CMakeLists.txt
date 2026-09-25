@@ -26,3 +26,7 @@ target_compile_features(mwpc_phase_a_magnetic PRIVATE cxx_std_17)
 add_executable(mwpc_phase_a_heed phaseA_heed_muon.cxx)
 target_link_libraries(mwpc_phase_a_heed PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_phase_a_heed PRIVATE cxx_std_17)
+
+add_executable(mwpc_phase_a_heed_avalanche phaseA_heed_avalanche.cxx)
+target_link_libraries(mwpc_phase_a_heed_avalanche PRIVATE Garfield::Garfield)
+target_compile_features(mwpc_phase_a_heed_avalanche PRIVATE cxx_std_17)
