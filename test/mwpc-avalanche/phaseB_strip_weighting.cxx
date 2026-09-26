@@ -128,6 +128,10 @@ int main(int argc, char** argv) {
     // smin/smax define its extent in Garfield z (= local w).
     weighting.AddStripOnPlaneY('x', planeY, wMin, wMax,
                                label, wireToCathodeGapCm);
+    // Explicitly activate the strip weighting field. AddStripOnPlaneY defines
+    // the electrode geometry; AddReadout tells ComponentAnalyticField to
+    // prepare the weighting field/potential for this label.
+    weighting.AddReadout(label);
     labels.push_back(label);
   }
 
@@ -152,7 +156,8 @@ int main(int argc, char** argv) {
             << 10. * vEvalCm << ") mm\n"
             << "number of strips    : " << (2 * halfStrips + 1) << "\n\n"
             << "This is a weighting-field smoke test only; no avalanche or VMM"
-               " response is included.\n\n"
+               " response is included.\n"
+            << "Each strip has been registered with AddReadout(label).\n\n"
             << "w[mm]    phi(strip0)    sum(phi)    central/sum\n";
 
   for (int iw = 0; iw < scanSteps; ++iw) {
