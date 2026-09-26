@@ -3,6 +3,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -73,8 +74,9 @@ int main(int argc, char** argv) {
       0.1 * ReadArg(argc, argv, "--scan-half-range-mm", 8.0);
   const double uEvalCm =
       0.1 * ReadArg(argc, argv, "--u-mm", 0.0);
-  const double vEvalCm =
-      0.1 * ReadArg(argc, argv, "--v-mm", 0.0);
+  const double vEvalMm =
+      ReadArg(argc, argv, "--v-mm",
+              std::numeric_limits<double>::quiet_NaN());
   const std::string side =
       ReadStringArg(argc, argv, "--side", "plus");
   const std::string outName =
@@ -97,23 +99,35 @@ int main(int argc, char** argv) {
   const double wireToCathodeGapCm =
       side == "plus" ? gapPlusCm : gapMinusCm;
 
-  // ComponentAnalyticField still requires a valid electrostatic cell before
-  // it can prepare weighting fields. The strip itself is a weighting
-  // electrode and does not count as a field-cell element. Reproduce the
-  // Phase-A wire/cathode cell here, then attach the ideal strip weighting
-  // electrodes to the selected cathode.
+  // The analytic strip weighting field implemented by
+  // ComponentAnalyticField is the solution between two infinite parallel
+  // grounded planes, except for the selected strip which is set to unit
+  // weighting potential. For this Phase-B0 smoke test we therefore build a
+  // dedicated weighting component spanning only the wire plane (v = 0) and
+  // the selected readout cathode (v = planeY). It is intentionally separate
+  // from the real MWPC drift-field component used in Phase A.
   //
-  // The physical voltages below set up a valid MWPC cell. The strip weighting
-  // potential itself is calculated separately at unit weighting voltage and
-  // is independent of the 1.8 kV operating voltage.
-  Garfield::ComponentAnalyticField weighting;
+  // Important consequence: the strip weighting potential is exactly zero on
+  // the opposite grounded boundary v = 0. Therefore evaluating at --v-mm 0
+  // must return zero. If --v-mm is omitted, evaluate halfway through the gap.
+  const double vEvalCm =
+      std::isfinite(vEvalMm) ? 0.1 * vEvalMm : 0.5 * planeY;
 
-  constexpr int halfNumberOfWires = 4;
-  for (int i = -halfNumberOfWires; i <= halfNumberOfWires; ++i) {
-    weighting.AddWire(i * wirePitchCm, 0., wireDiameterCm, hv, "");
+  const double lo = std::min(0.0, planeY);
+  const double hi = std::max(0.0, planeY);
+  if (!(vEvalCm > lo && vEvalCm < hi)) {
+    std::cerr
+        << "Evaluation point v = " << 10. * vEvalCm
+        << " mm lies on/outside the weighting gap (" << 10. * lo
+        << ", " << 10. * hi << ") mm.\n"
+        << "For this smoke test choose a point strictly between the wire "
+           "plane and the readout cathode, or omit --v-mm to use mid-gap.\n";
+    return 2;
   }
-  weighting.AddPlaneY(-gapMinusCm, 0., "");
-  weighting.AddPlaneY(+gapPlusCm, 0., "");
+
+  Garfield::ComponentAnalyticField weighting;
+  weighting.AddPlaneY(0., 0., "");
+  weighting.AddPlaneY(planeY, 0., "");
 
   std::vector<std::string> labels;
   labels.reserve(2 * halfStrips + 1);
@@ -128,10 +142,6 @@ int main(int argc, char** argv) {
     // smin/smax define its extent in Garfield z (= local w).
     weighting.AddStripOnPlaneY('x', planeY, wMin, wMax,
                                label, wireToCathodeGapCm);
-    // Explicitly activate the strip weighting field. AddStripOnPlaneY defines
-    // the electrode geometry; AddReadout tells ComponentAnalyticField to
-    // prepare the weighting field/potential for this label.
-    weighting.AddReadout(label);
     labels.push_back(label);
   }
 
@@ -146,18 +156,21 @@ int main(int argc, char** argv) {
   std::cout << "\n=== PHASE B0 STRIP WEIGHTING-POTENTIAL PROFILE ===\n"
             << "readout side        : " << side << "\n"
             << "wire -> cathode gap : " << 10. * wireToCathodeGapCm << " mm\n"
-            << "wire pitch          : " << 10. * wirePitchCm << " mm\n"
-            << "wire diameter       : " << 1.e4 * wireDiameterCm << " um\n"
-            << "anode voltage       : " << hv << " V\n"
+            << "Phase-A reference   : wire pitch " << 10. * wirePitchCm
+            << " mm, diameter " << 1.e4 * wireDiameterCm
+            << " um, HV " << hv << " V\n"
             << "strip pitch         : " << 10. * stripPitchCm << " mm\n"
             << "strip width         : " << 10. * stripWidthCm << " mm\n"
             << "strip orientation   : along local u, segmented in local w\n"
-            << "evaluation plane    : (u,v)=(" << 10. * uEvalCm << ", "
-            << 10. * vEvalCm << ") mm\n"
+            << "evaluation point    : (u,v)=(" << 10. * uEvalCm << ", "
+            << 10. * vEvalCm << ") mm"
+            << "  [|v|/gap = "
+            << std::abs(vEvalCm) / wireToCathodeGapCm << "]\n"
             << "number of strips    : " << (2 * halfStrips + 1) << "\n\n"
             << "This is a weighting-field smoke test only; no avalanche or VMM"
                " response is included.\n"
-            << "Each strip has been registered with AddReadout(label).\n\n"
+            << "The analytic weighting model uses the wire plane as the "
+               "opposite grounded boundary.\n\n"
             << "w[mm]    phi(strip0)    sum(phi)    central/sum\n";
 
   for (int iw = 0; iw < scanSteps; ++iw) {
@@ -193,9 +206,9 @@ int main(int argc, char** argv) {
     }
   }
 
-  // Also print the weighting-potential distribution over strips for an
-  // avalanche centred at w = 0 on the wire plane.
-  std::cout << "\nWeighting-potential sharing for a point at w = 0:\n"
+  // Also print the weighting-potential distribution over strips at the
+  // chosen evaluation depth for a point centred at w = 0.
+  std::cout << "\nWeighting-potential sharing at the chosen v for w = 0:\n"
             << "strip    center_w[mm]    phi_w    normalized\n";
 
   std::vector<double> phiAtZero;
