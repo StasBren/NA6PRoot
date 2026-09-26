@@ -126,8 +126,19 @@ int main(int argc, char** argv) {
   }
 
   Garfield::ComponentAnalyticField weighting;
-  weighting.AddPlaneY(0., 0., "");
-  weighting.AddPlaneY(planeY, 0., "");
+
+  // ComponentAnalyticField must have a non-degenerate electrostatic cell
+  // before it can prepare weighting fields. The voltages used here are only
+  // auxiliary values for setting up that cell; they do NOT define the strip
+  // weighting potential. Garfield calculates the strip weighting field
+  // separately with the selected strip at unit weighting potential.
+  //
+  // This follows the Garfield++ strip-weighting examples: two parallel
+  // planes at different auxiliary voltages, with the strip placed on one of
+  // them. A 1 V difference is sufficient because this component is not used
+  // for the real drift field.
+  weighting.AddPlaneY(0., 1., "weighting_back");
+  weighting.AddPlaneY(planeY, 0., "weighting_front");
 
   std::vector<std::string> labels;
   labels.reserve(2 * halfStrips + 1);
@@ -170,7 +181,9 @@ int main(int argc, char** argv) {
             << "This is a weighting-field smoke test only; no avalanche or VMM"
                " response is included.\n"
             << "The analytic weighting model uses the wire plane as the "
-               "opposite grounded boundary.\n\n"
+               "opposite boundary.\n"
+            << "Auxiliary cell voltages: 1 V at v=0 and 0 V at the readout "
+               "cathode; these do not set the strip weighting voltage.\n\n"
             << "w[mm]    phi(strip0)    sum(phi)    central/sum\n";
 
   for (int iw = 0; iw < scanSteps; ++iw) {
