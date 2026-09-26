@@ -56,6 +56,11 @@ int main(int argc, char** argv) {
       0.1 * ReadArg(argc, argv, "--gap-minus-mm", 2.0);
   const double gapPlusCm =
       0.1 * ReadArg(argc, argv, "--gap-plus-mm", 4.0);
+  const double wirePitchCm =
+      0.1 * ReadArg(argc, argv, "--wire-pitch-mm", 4.0);
+  const double wireDiameterCm =
+      1.e-4 * ReadArg(argc, argv, "--wire-diam-um", 30.0);
+  const double hv = ReadArg(argc, argv, "--hv", 1800.0);
   const double stripPitchCm =
       0.1 * ReadArg(argc, argv, "--strip-pitch-mm", 1.7);
   const double stripWidthCm =
@@ -76,6 +81,7 @@ int main(int argc, char** argv) {
       ReadStringArg(argc, argv, "--output", "phaseB_strip_weighting.csv");
 
   if (gapMinusCm <= 0. || gapPlusCm <= 0. ||
+      wirePitchCm <= 0. || wireDiameterCm <= 0. ||
       stripPitchCm <= 0. || stripWidthCm <= 0. ||
       stripWidthCm > stripPitchCm ||
       halfStrips < 1 || scanSteps < 2 || scanHalfRangeCm <= 0.) {
@@ -91,11 +97,23 @@ int main(int argc, char** argv) {
   const double wireToCathodeGapCm =
       side == "plus" ? gapPlusCm : gapMinusCm;
 
-  // This component is used only for weighting potentials, not for the
-  // physical drift field. We intentionally use the analytic strip solution
-  // with the wire-to-readout-cathode distance supplied explicitly.
+  // ComponentAnalyticField still requires a valid electrostatic cell before
+  // it can prepare weighting fields. The strip itself is a weighting
+  // electrode and does not count as a field-cell element. Reproduce the
+  // Phase-A wire/cathode cell here, then attach the ideal strip weighting
+  // electrodes to the selected cathode.
+  //
+  // The physical voltages below set up a valid MWPC cell. The strip weighting
+  // potential itself is calculated separately at unit weighting voltage and
+  // is independent of the 1.8 kV operating voltage.
   Garfield::ComponentAnalyticField weighting;
-  weighting.AddPlaneY(planeY, 0., "");
+
+  constexpr int halfNumberOfWires = 4;
+  for (int i = -halfNumberOfWires; i <= halfNumberOfWires; ++i) {
+    weighting.AddWire(i * wirePitchCm, 0., wireDiameterCm, hv, "");
+  }
+  weighting.AddPlaneY(-gapMinusCm, 0., "");
+  weighting.AddPlaneY(+gapPlusCm, 0., "");
 
   std::vector<std::string> labels;
   labels.reserve(2 * halfStrips + 1);
@@ -124,6 +142,9 @@ int main(int argc, char** argv) {
   std::cout << "\n=== PHASE B0 STRIP WEIGHTING-POTENTIAL PROFILE ===\n"
             << "readout side        : " << side << "\n"
             << "wire -> cathode gap : " << 10. * wireToCathodeGapCm << " mm\n"
+            << "wire pitch          : " << 10. * wirePitchCm << " mm\n"
+            << "wire diameter       : " << 1.e4 * wireDiameterCm << " um\n"
+            << "anode voltage       : " << hv << " V\n"
             << "strip pitch         : " << 10. * stripPitchCm << " mm\n"
             << "strip width         : " << 10. * stripWidthCm << " mm\n"
             << "strip orientation   : along local u, segmented in local w\n"
