@@ -88,6 +88,12 @@ int main(int argc, char** argv) {
       ReadArg(argc, argv, "--dt-ns", 50.0);
   const double tMaxUs =
       ReadArg(argc, argv, "--tmax-us", 100.0);
+  // Negative value keeps Garfield's geometry-based automatic step limit.
+  // Positive values are interpreted in mm and converted to cm below.
+  const double maxStepMm =
+      ReadArg(argc, argv, "--max-step-mm", -1.0);
+  const int signalAveragingOrder =
+      ReadIntArg(argc, argv, "--signal-averaging-order", 2);
   const std::string mobilityFile =
       ReadStringArg(argc, argv, "--ion-mobility",
                     "IonMobility_Ar+_Ar.txt");
@@ -99,7 +105,7 @@ int main(int argc, char** argv) {
       wirePitchCm <= 0. || wireDiameterCm <= 0. ||
       stripPitchCm <= 0. || stripWidthCm <= 0. ||
       stripWidthCm > stripPitchCm || halfStrips < 1 ||
-      dtNs <= 0. || tMaxUs <= 0.) {
+      dtNs <= 0. || tMaxUs <= 0. || signalAveragingOrder < 1) {
     std::cerr << "Invalid Phase-B1 single-ion parameters.\n";
     return 2;
   }
@@ -208,8 +214,13 @@ int main(int argc, char** argv) {
   Garfield::DriftLineRKF ion(&sensor);
   ion.EnableSignalCalculation(true);
   ion.UseWeightingPotential(true);
-  ion.SetSignalAveragingOrder(2);
-  ion.SetMaximumStepSize();
+  ion.SetSignalAveragingOrder(
+      static_cast<std::size_t>(signalAveragingOrder));
+  if (maxStepMm > 0.) {
+    ion.SetMaximumStepSize(0.1 * maxStepMm);  // mm -> cm
+  } else {
+    ion.SetMaximumStepSize();
+  }
 
   const bool ok = ion.DriftIon(u0Cm, v0Cm, w0Cm, 0.);
 
@@ -225,6 +236,8 @@ int main(int argc, char** argv) {
       outputPrefix + "_waveforms.csv";
   const std::string summaryFile =
       outputPrefix + "_summary.csv";
+  const std::string driftLineFile =
+      outputPrefix + "_driftline.csv";
 
   std::ofstream waveOut(waveformFile);
   waveOut << "time_ns";
@@ -245,6 +258,31 @@ int main(int argc, char** argv) {
       peakAbs[j] = std::max(peakAbs[j], std::abs(current));
     }
     waveOut << "\n";
+  }
+
+  std::ofstream driftOut(driftLineFile);
+  driftOut << "index,u_mm,v_mm,w_mm,time_ns,step_mm,dt_ns\n";
+  const std::size_t nDriftPoints = ion.GetNumberOfDriftLinePoints();
+  double pu = 0., pv = 0., pw = 0., pt = 0.;
+  for (std::size_t ip = 0; ip < nDriftPoints; ++ip) {
+    double du = 0., dv = 0., dw = 0., tt = 0.;
+    ion.GetDriftLinePoint(ip, du, dv, dw, tt);
+    double dsMm = 0.;
+    double dtns = 0.;
+    if (ip > 0) {
+      const double dx = du - pu;
+      const double dy = dv - pv;
+      const double dz = dw - pw;
+      dsMm = 10. * std::sqrt(dx * dx + dy * dy + dz * dz);
+      dtns = tt - pt;
+    }
+    driftOut << ip << "," << 10. * du << "," << 10. * dv << ","
+             << 10. * dw << "," << tt << "," << dsMm << "," << dtns
+             << "\n";
+    pu = du;
+    pv = dv;
+    pw = dw;
+    pt = tt;
   }
 
   std::ofstream sumOut(summaryFile);
@@ -273,7 +311,15 @@ int main(int argc, char** argv) {
             << "   success=" << (ok ? "yes" : "no") << "\n"
             << "ion drift time       : " << t1 << " ns\n"
             << "signal window        : 0 .. " << tMaxUs
-            << " us, dt=" << dtNs << " ns\n\n"
+            << " us, dt=" << dtNs << " ns\n"
+            << "RKF max step         : ";
+  if (maxStepMm > 0.) {
+    std::cout << maxStepMm << " mm (explicit)\n";
+  } else {
+    std::cout << "Garfield automatic geometry limit\n";
+  }
+  std::cout << "signal avg. order    : " << signalAveragingOrder << "\n"
+            << "drift-line points    : " << nDriftPoints << "\n\n"
             << "strip   center_w[mm]   Q_signal[fC]   |I|_peak[fC/ns]"
                "   q*dphi[fC]\n";
 
@@ -308,7 +354,8 @@ int main(int argc, char** argv) {
   }
 
   std::cout << "\nWrote " << waveformFile
-            << " and " << summaryFile << "\n"
+            << ", " << summaryFile
+            << " and " << driftLineFile << "\n"
             << "Garfield signal unit: fC/ns; integrated values above are fC.\n"
             << "===========================================================\n";
 
