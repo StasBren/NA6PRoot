@@ -236,9 +236,16 @@ def draw_field_background(
         step_u = max(1, len(us) // 120)
         step_v = max(1, len(vs) // 90)
 
+        # Matplotlib requires x/y arrays to be exactly equally spaced.
+        # The Garfield grid is generated uniformly, but text serialisation can
+        # introduce tiny decimal round-off differences. Reconstruct ideal
+        # regular coordinate vectors without altering the field samples.
+        u_stream = np.linspace(us[0], us[-1], len(us))
+        v_stream = np.linspace(vs[0], vs[-1], len(vs))
+
         ax.streamplot(
-            us[::step_u],
-            vs[::step_v],
+            u_stream[::step_u],
+            v_stream[::step_v],
             exn[::step_v, ::step_u],
             eyn[::step_v, ::step_u],
             density=stream_density,
