@@ -26,23 +26,41 @@ COMMON=(
   --b 0
   --momentum-gev 10
   --sample-mode balanced
-  --max-electrons 40
-  --max-per-cluster 3
+  --max-electrons 24
+  --max-per-cluster 4
   --rng-seed 12345
   --max-path-points 250
+  --field-u-steps 721
+  --field-v-steps 361
 )
 
 echo
 echo "=== Near-wire event: u0 = 0.4 mm, visible wires 0 and 4 mm ==="
 "$EXE" "${COMMON[@]}"   --u0-mm 0.4   --output-prefix heed_nearwire
 
-python3 "$RENDERER"   --prefix heed_nearwire   --output heed_nearwire.gif
+python3 "$RENDERER" \
+  --prefix heed_nearwire \
+  --output heed_nearwire.gif \
+  --background stream \
+  --u-min-mm -1.0 \
+  --u-max-mm 1.5 \
+  --v-min-mm 0.0 \
+  --v-max-mm 4.1 \
+  --stream-density 0.78
 
 echo
 echo "=== Midpoint event: u0 = 2.0 mm, visible wires 0 and 4 mm ==="
 "$EXE" "${COMMON[@]}"   --u0-mm 2.0   --output-prefix heed_midpoint
 
-python3 "$RENDERER"   --prefix heed_midpoint   --output heed_midpoint.gif
+python3 "$RENDERER" \
+  --prefix heed_midpoint \
+  --output heed_midpoint.gif \
+  --background stream \
+  --u-min-mm -0.5 \
+  --u-max-mm 4.5 \
+  --v-min-mm 0.0 \
+  --v-max-mm 4.1 \
+  --stream-density 0.78
 
 echo
 echo "=== Angled event: theta = 20 deg toward +u, u0 = 0.4 mm ==="
