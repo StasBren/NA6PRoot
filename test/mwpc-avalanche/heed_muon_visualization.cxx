@@ -11,6 +11,7 @@
 
 #include "Garfield/AvalancheMicroscopic.hh"
 #include "Garfield/ComponentAnalyticField.hh"
+#include "Garfield/Medium.hh"
 #include "Garfield/MediumMagboltz.hh"
 #include "Garfield/Sensor.hh"
 #include "Garfield/TrackHeed.hh"
@@ -178,6 +179,10 @@ int main(int argc, char** argv) {
       ReadIntArg(argc, argv, "--rng-seed", 12345);
   const int maxPathPoints =
       ReadIntArg(argc, argv, "--max-path-points", 250);
+  const int fieldUSteps =
+      ReadIntArg(argc, argv, "--field-u-steps", 321);
+  const int fieldVSteps =
+      ReadIntArg(argc, argv, "--field-v-steps", 241);
   const std::string sampleMode =
       ReadStringArg(argc, argv, "--sample-mode", "balanced");
   const std::string prefix =
@@ -187,7 +192,8 @@ int main(int argc, char** argv) {
       gapMinusCm <= 0. || gapPlusCm <= 0. ||
       momentumEv <= 0. || std::abs(thetaDeg) >= 80. ||
       maxVisualElectrons <= 0 ||
-      maxPerCluster <= 0 || maxPathPoints < 2) {
+      maxPerCluster <= 0 || maxPathPoints < 2 ||
+      fieldUSteps < 3 || fieldVSteps < 3) {
     std::cerr << "Invalid input parameters.\n";
     return 2;
   }
@@ -265,11 +271,13 @@ int main(int argc, char** argv) {
   const std::string clusterName = prefix + "_clusters.csv";
   const std::string electronName = prefix + "_electrons.csv";
   const std::string pathName = prefix + "_paths.csv";
+  const std::string fieldName = prefix + "_field.csv";
 
   std::ofstream metaOut(metaName);
   std::ofstream clusterOut(clusterName);
+  std::ofstream fieldOut(fieldName);
 
-  if (!metaOut || !clusterOut) {
+  if (!metaOut || !clusterOut || !fieldOut) {
     std::cerr << "Could not open metadata/cluster output files.\n";
     return 3;
   }
@@ -301,6 +309,36 @@ int main(int argc, char** argv) {
           << "rng_seed=" << rngSeed << "\n";
 
   clusterOut << "cluster,u_mm,v_mm,w_mm,t_ns,electrons,energy_transfer_eV\n";
+
+  // Export the actual Garfield analytic electrostatic field on a regular
+  // u-v grid. The Python renderer uses the potential values for optional
+  // equipotential contours, so the background corresponds to the same field
+  // that transports the electrons.
+  fieldOut << "u_mm,v_mm,ex_Vcm,ey_Vcm,ez_Vcm,E_Vcm,potential_V,status\n";
+  for (int iv = 0; iv < fieldVSteps; ++iv) {
+    const double fv =
+        static_cast<double>(iv) / static_cast<double>(fieldVSteps - 1);
+    const double v =
+        -gapMinusCm + fv * (gapMinusCm + gapPlusCm);
+
+    for (int iu = 0; iu < fieldUSteps; ++iu) {
+      const double fu =
+          static_cast<double>(iu) / static_cast<double>(fieldUSteps - 1);
+      const double u =
+          -uExtent + 2. * uExtent * fu;
+
+      double ex = 0., ey = 0., ez = 0., potential = 0.;
+      Garfield::Medium* medium = nullptr;
+      int status = 0;
+      field.ElectricField(
+          u, v, 0., ex, ey, ez, potential, medium, status);
+      const double emag = std::sqrt(ex * ex + ey * ey + ez * ez);
+
+      fieldOut << 10. * u << "," << 10. * v << ","
+               << ex << "," << ey << "," << ez << ","
+               << emag << "," << potential << "," << status << "\n";
+    }
+  }
 
   int nClusters = 0;
   int nConduction = 0;
@@ -473,7 +511,8 @@ int main(int argc, char** argv) {
             << "  " << metaName << "\n"
             << "  " << clusterName << "\n"
             << "  " << electronName << "\n"
-            << "  " << pathName << "\n";
+            << "  " << pathName << "\n"
+            << "  " << fieldName << "\n";
 
   return 0;
 }
