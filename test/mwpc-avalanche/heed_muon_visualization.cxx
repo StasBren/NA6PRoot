@@ -314,6 +314,7 @@ int main(int argc, char** argv) {
   // u-v grid. The Python renderer uses the potential values for optional
   // equipotential contours, so the background corresponds to the same field
   // that transports the electrons.
+  fieldOut << std::setprecision(12);
   fieldOut << "u_mm,v_mm,ex_Vcm,ey_Vcm,ez_Vcm,E_Vcm,potential_V,status\n";
   for (int iv = 0; iv < fieldVSteps; ++iv) {
     const double fv =
