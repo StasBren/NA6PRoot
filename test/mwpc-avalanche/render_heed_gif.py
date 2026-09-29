@@ -204,17 +204,23 @@ def render_frame(
             sizes = [18.0 + 7.0 * math.sqrt(max(1, i(r, "electrons"))) for r in shown]
             ax.scatter(xs, ys, s=sizes, alpha=0.85, zorder=7, label="Heed clusters")
 
-        # Show conduction-electron starting positions only for clusters already revealed.
+        # Show only the presentation-selected conduction-electron seeds.
+        # This keeps a single large Heed cluster from becoming an opaque
+        # orange cloud while preserving the full cluster multiplicity through
+        # the blue marker size.
         shown_clusters = {i(r, "cluster") for r in shown}
-        eseeds = [r for r in electrons if i(r, "cluster") in shown_clusters]
+        eseeds = [
+            r for r in electrons
+            if i(r, "cluster") in shown_clusters and i(r, "drifted") == 1
+        ]
         if eseeds:
             ax.scatter(
                 [f(r, "u_mm") for r in eseeds],
                 [f(r, "v_mm") for r in eseeds],
-                s=9,
-                alpha=0.45,
+                s=10,
+                alpha=0.55,
                 zorder=6,
-                label="conduction e⁻ seeds",
+                label="selected conduction e⁻ seeds",
             )
         stage = "2  Heed ionisation clusters"
 
@@ -302,6 +308,7 @@ def render_frame(
         f"Heed: {n_clusters} clusters, {n_e} conduction e⁻, "
         f"ΣΔE = {dE / 1000.0:.2f} keV\n"
         f"Garfield trajectories shown: {n_vis}\n"
+        f"sampling: {meta.get('sample_mode', 'unknown')}   |   "
         f"displayed wires: {left_wire:g} and {right_wire:g} mm"
     )
     ax.text(
