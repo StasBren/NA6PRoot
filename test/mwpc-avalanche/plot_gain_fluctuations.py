@@ -6,15 +6,17 @@ mwpc_phase_a_gain.
 The plotted gain proxy is:
     G_eff = number of avalanche electrons collected on an anode wire
 
+The histogram is normalised to the total number of positive-gain events, so
+each bin shows the fraction of positive-gain trials in that gain interval.
+Zero-collected events are reported separately because they mix pre-avalanche
+loss/attachment with multiplication statistics.
+
 This is intentionally a Phase-A response diagnostic, not a calibrated detector
-gain measurement. Zero-collected events are reported separately because they
-mix pre-avalanche loss/attachment with true multiplication statistics.
+gain measurement.
 """
 
 import argparse
 import csv
-import math
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -66,50 +68,82 @@ def main():
     mean_pos = np.mean(positive)
     median_pos = np.median(positive)
     q10_pos, q90_pos = np.quantile(positive, [0.10, 0.90])
-    xmax = np.percentile(positive, args.upper_percentile)
-    xmax = max(xmax, 1.0)
+    xmax = max(np.percentile(positive, args.upper_percentile), 1.0)
 
+    # Keep the high-gain tail out of the visible range for readability, but
+    # normalise with respect to ALL positive-gain events. Therefore the sum of
+    # the visible bin fractions is slightly below one when the upper tail is
+    # truncated.
     shown = positive[positive <= xmax]
+    weights = np.full(
+        shown.shape, 1.0 / float(len(positive)), dtype=float
+    )
 
-    fig, ax = plt.subplots(figsize=(9.0, 5.6))
+    fig, ax = plt.subplots(figsize=(11.2, 5.8))
+
     ax.hist(
         shown,
         bins=args.bins,
         range=(0, xmax),
+        weights=weights,
         histtype="stepfilled",
         alpha=0.72,
         label="Positive collected gain",
     )
 
-    ax.axvline(mean_pos, linestyle="--", linewidth=1.8,
-               label=f"Positive mean = {mean_pos:.0f}")
-    ax.axvline(median_pos, linestyle=":", linewidth=2.0,
-               label=f"Positive median = {median_pos:.0f}")
+    ax.axvline(
+        mean_pos,
+        linestyle="--",
+        linewidth=1.8,
+        label=f"Positive mean = {mean_pos:.0f}",
+    )
+    ax.axvline(
+        median_pos,
+        linestyle=":",
+        linewidth=2.0,
+        label=f"Positive median = {median_pos:.0f}",
+    )
 
     ax.set_xlabel("Collected avalanche electrons per initial electron")
-    ax.set_ylabel("Events")
+    ax.set_ylabel("Fraction of positive-gain events per bin")
     ax.set_title("Single-electron avalanche gain fluctuations")
     ax.grid(alpha=0.18)
-    ax.legend()
+
+    # Reserve a clean right-hand margin for annotations so that neither the
+    # legend nor the numerical summary covers the histogram.
+    fig.subplots_adjust(right=0.72)
+
+    ax.legend(
+        loc="upper left",
+        bbox_to_anchor=(1.02, 1.00),
+        borderaxespad=0.0,
+        frameon=False,
+    )
 
     note = (
         f"N = {n}\n"
         f"all-event mean = {mean_all:.0f}\n"
         f"all-event σ/mean = {cv_all:.2f}\n"
-        f"zero-collected fraction = {100.0 * zero_fraction:.1f}%\n"
-        f"positive 10–90% interval = {q10_pos:.0f}–{q90_pos:.0f}\n"
-        f"x-axis truncated at {args.upper_percentile:g}th percentile"
+        f"zero-collected fraction = {100.0 * zero_fraction:.1f}%\n\n"
+        f"positive-gain events:\n"
+        f"mean = {mean_pos:.0f}\n"
+        f"median = {median_pos:.0f}\n"
+        f"10–90% interval = {q10_pos:.0f}–{q90_pos:.0f}\n\n"
+        f"x-axis truncated at\n"
+        f"{args.upper_percentile:g}th percentile"
     )
     ax.text(
-        0.985, 0.965, note,
+        1.02,
+        0.68,
+        note,
         transform=ax.transAxes,
-        ha="right", va="top",
+        ha="left",
+        va="top",
         fontsize=9.5,
-        bbox=dict(boxstyle="round,pad=0.4", alpha=0.9),
+        bbox=dict(boxstyle="round,pad=0.45", facecolor="white", alpha=0.95),
     )
 
-    fig.tight_layout()
-    fig.savefig(args.output, dpi=220)
+    fig.savefig(args.output, dpi=220, bbox_inches="tight")
     plt.close(fig)
 
     print(f"Events                    : {n}")
