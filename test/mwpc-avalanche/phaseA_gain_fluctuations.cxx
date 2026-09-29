@@ -64,6 +64,8 @@ int main(int argc, char** argv) {
   const double hv = ReadArg(argc, argv, "--hv", 1800.0);
   const double bTesla = ReadArg(argc, argv, "--b", 0.0);
   const int events = ReadIntArg(argc, argv, "--events", 1000);
+  const int progressEvery =
+      ReadIntArg(argc, argv, "--progress-every", 100);
   const double x0Cm =
       0.1 * ReadArg(argc, argv, "--x0-mm", 1.0);
   const double y0Cm =
@@ -72,7 +74,8 @@ int main(int argc, char** argv) {
       ReadStringArg(argc, argv, "--output", "gain_fluctuations.csv");
 
   if (pitchCm <= 0. || wireDiameterCm <= 0. ||
-      gapMinusCm <= 0. || gapPlusCm <= 0. || events <= 0) {
+      gapMinusCm <= 0. || gapPlusCm <= 0. || events <= 0 ||
+      progressEvery < 0) {
     std::cerr << "Invalid input parameters.\n";
     return 2;
   }
@@ -136,6 +139,7 @@ int main(int argc, char** argv) {
             << 10. * gapPlusCm << " mm\n"
             << "anode voltage       : " << hv << " V\n"
             << "detector B_y        : " << bTesla << " T\n"
+            << "progress every      : " << progressEvery << " events\n"
             << "-----------------------------------------------\n";
 
   for (int event = 0; event < events; ++event) {
@@ -210,6 +214,19 @@ int main(int argc, char** argv) {
                 << "  attached=" << std::setw(5) << nAttached
                 << "  other=" << std::setw(4) << nOther
                 << "  <t>=" << std::setw(8) << meanT << " ns\n";
+    }
+
+    if (progressEvery > 0 &&
+        (event + 1) % progressEvery == 0 &&
+        event + 1 < events) {
+      const double pct =
+          100. * static_cast<double>(event + 1) /
+          static_cast<double>(events);
+      std::cout << "progress           : "
+                << (event + 1) << "/" << events
+                << " (" << std::setprecision(1) << pct << "%)\n"
+                << std::setprecision(3)
+                << std::flush;
     }
   }
 
