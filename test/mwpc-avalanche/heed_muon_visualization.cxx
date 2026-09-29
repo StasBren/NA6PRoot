@@ -160,6 +160,13 @@ int main(int argc, char** argv) {
   const double hv = ReadArg(argc, argv, "--hv", 1800.0);
   const double bTesla = ReadArg(argc, argv, "--b", 0.0);
   const double u0Cm = 0.1 * ReadArg(argc, argv, "--u0-mm", 1.0);
+  // Incident-angle convention:
+  //   theta = 0 deg : normal incidence along local -v.
+  //   theta > 0     : tilt away from -v.
+  //   phi = 0 deg   : tilt in the +u direction (visible in the u-v GIF).
+  //   phi = 90 deg  : tilt in the +w direction (along the anode wires).
+  const double thetaDeg = ReadArg(argc, argv, "--theta-deg", 0.0);
+  const double phiDeg = ReadArg(argc, argv, "--phi-deg", 0.0);
   const double momentumEv =
       1.e9 * ReadArg(argc, argv, "--momentum-gev", 10.0);
 
@@ -178,7 +185,8 @@ int main(int argc, char** argv) {
 
   if (pitchCm <= 0. || wireDiameterCm <= 0. ||
       gapMinusCm <= 0. || gapPlusCm <= 0. ||
-      momentumEv <= 0. || maxVisualElectrons <= 0 ||
+      momentumEv <= 0. || std::abs(thetaDeg) >= 80. ||
+      maxVisualElectrons <= 0 ||
       maxPerCluster <= 0 || maxPathPoints < 2) {
     std::cerr << "Invalid input parameters.\n";
     return 2;
@@ -235,8 +243,23 @@ int main(int argc, char** argv) {
 
   const double marginCm = std::min(0.01, 0.05 * gapPlusCm);
   const double vStartCm = gapPlusCm - marginCm;
+
+  const double pi = std::acos(-1.0);
+  const double theta = thetaDeg * pi / 180.;
+  const double phi = phiDeg * pi / 180.;
+  const double dirU = std::sin(theta) * std::cos(phi);
+  const double dirV = -std::cos(theta);
+  const double dirW = std::sin(theta) * std::sin(phi);
+
+  // Expected intercept at the lower cathode, useful for rendering the
+  // projected muon line. Heed itself is still given the direction cosines.
+  const double vEndCm = -gapMinusCm;
+  const double flightToLowerCm = (vStartCm - vEndCm) / std::cos(theta);
+  const double uEndCm = u0Cm + flightToLowerCm * dirU;
+  const double wEndCm = flightToLowerCm * dirW;
+
   heed.NewTrack(u0Cm, vStartCm, 0., 0.,
-                0., -1., 0.);
+                dirU, dirV, dirW);
 
   const std::string metaName = prefix + "_meta.txt";
   const std::string clusterName = prefix + "_clusters.csv";
@@ -262,9 +285,17 @@ int main(int argc, char** argv) {
           << "anode_voltage_V=" << hv << "\n"
           << "B_T=" << bTesla << "\n"
           << "muon_u_mm=" << 10. * u0Cm << "\n"
+          << "muon_u_start_mm=" << 10. * u0Cm << "\n"
+          << "muon_u_end_mm=" << 10. * uEndCm << "\n"
           << "muon_v_start_mm=" << 10. * vStartCm << "\n"
-          << "muon_v_end_mm=" << -10. * gapMinusCm << "\n"
-          << "muon_w_mm=0\n"
+          << "muon_v_end_mm=" << 10. * vEndCm << "\n"
+          << "muon_w_start_mm=0\n"
+          << "muon_w_end_mm=" << 10. * wEndCm << "\n"
+          << "theta_deg=" << thetaDeg << "\n"
+          << "phi_deg=" << phiDeg << "\n"
+          << "dir_u=" << dirU << "\n"
+          << "dir_v=" << dirV << "\n"
+          << "dir_w=" << dirW << "\n"
           << "sample_mode=" << sampleMode << "\n"
           << "max_per_cluster=" << maxPerCluster << "\n"
           << "rng_seed=" << rngSeed << "\n";
@@ -426,6 +457,12 @@ int main(int argc, char** argv) {
             << "anode voltage        : " << hv << " V\n"
             << "B                    : " << bTesla << " T\n"
             << "muon start u         : " << 10. * u0Cm << " mm\n"
+            << "incident theta       : " << thetaDeg
+            << " deg from local -v\n"
+            << "incident phi         : " << phiDeg
+            << " deg (0 -> +u, 90 -> +w)\n"
+            << "projected lower hit  : u=" << 10. * uEndCm
+            << " mm, w=" << 10. * wEndCm << " mm\n"
             << "clusters             : " << nClusters << "\n"
             << "conduction electrons : " << nConduction << "\n"
             << "sampling mode        : " << sampleMode << "\n"
