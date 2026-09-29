@@ -2,12 +2,13 @@
 set -euo pipefail
 
 # Generate three presentation GIFs from the same detector configuration:
-#   1) a normal-incidence muon close to one wire;
-#   2) a normal-incidence muon exactly at the midpoint between two wires;
+#   1) normal incidence close to one wire;
+#   2) normal incidence at the midpoint between two wires;
 #   3) a 20-degree muon tilted in the local u-v plane.
 #
-# These are illustrative single events, not a controlled event-by-event
-# comparison of identical microscopic ionisation histories.
+# The electric-field streamlines are seeded only in a narrow band around the
+# actual muon / Heed-cluster region. The same renderer therefore adapts to all
+# three geometries without filling the whole chamber with irrelevant lines.
 
 EXE="./build/mwpc_heed_visualization"
 RENDERER="render_heed_gif.py"
@@ -34,42 +35,61 @@ COMMON=(
   --field-v-steps 361
 )
 
+RENDER_COMMON=(
+  --background stream
+  --v-min-mm 0.0
+  --v-max-mm 4.1
+  --stream-density 0.70
+  --stream-focus track
+  --stream-seeds 11
+  --stream-band-mm 0.22
+  --muon-frames 18
+  --cluster-frames 24
+  --drift-frames 70
+  --hold-frames 18
+  --fps 18
+)
+
 echo
-echo "=== Near-wire event: u0 = 0.4 mm, visible wires 0 and 4 mm ==="
-"$EXE" "${COMMON[@]}"   --u0-mm 0.4   --output-prefix heed_nearwire
+echo "=== Near-wire event: u0 = 0.4 mm ==="
+"$EXE" "${COMMON[@]}" \
+  --u0-mm 0.4 \
+  --output-prefix heed_nearwire
 
 python3 "$RENDERER" \
   --prefix heed_nearwire \
   --output heed_nearwire.gif \
-  --background stream \
-  --u-min-mm -1.0 \
-  --u-max-mm 1.5 \
-  --v-min-mm 0.0 \
-  --v-max-mm 4.1 \
-  --stream-density 0.70 \
-  --stream-focus track \
-  --stream-seeds 11 \
-  --stream-band-mm 0.22
+  --u-min-mm -0.8 \
+  --u-max-mm 1.6 \
+  "${RENDER_COMMON[@]}"
 
 echo
-echo "=== Midpoint event: u0 = 2.0 mm, visible wires 0 and 4 mm ==="
-"$EXE" "${COMMON[@]}"   --u0-mm 2.0   --output-prefix heed_midpoint
+echo "=== Midpoint event: u0 = 2.0 mm ==="
+"$EXE" "${COMMON[@]}" \
+  --u0-mm 2.0 \
+  --output-prefix heed_midpoint
 
 python3 "$RENDERER" \
   --prefix heed_midpoint \
   --output heed_midpoint.gif \
-  --background stream \
   --u-min-mm -0.5 \
   --u-max-mm 4.5 \
-  --v-min-mm 0.0 \
-  --v-max-mm 4.1 \
-  --stream-density 0.78
+  "${RENDER_COMMON[@]}"
 
 echo
 echo "=== Angled event: theta = 20 deg toward +u, u0 = 0.4 mm ==="
-"$EXE" "${COMMON[@]}"   --u0-mm 0.4   --theta-deg 20   --phi-deg 0   --output-prefix heed_angle20
+"$EXE" "${COMMON[@]}" \
+  --u0-mm 0.4 \
+  --theta-deg 20 \
+  --phi-deg 0 \
+  --output-prefix heed_angle20
 
-python3 "$RENDERER"   --prefix heed_angle20   --output heed_angle20.gif
+python3 "$RENDERER" \
+  --prefix heed_angle20 \
+  --output heed_angle20.gif \
+  --u-min-mm -0.5 \
+  --u-max-mm 4.5 \
+  "${RENDER_COMMON[@]}"
 
 echo
 echo "Created:"
