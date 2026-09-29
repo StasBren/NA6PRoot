@@ -291,7 +291,7 @@ def render_frame(out_path, tcut, meta, field, paths,
         f"branches started by frame = {born}\n"
         + ("WARNING: avalanche size limit reached\n"
            if size_limit_reached else "")
-        f"Δt = {dt:.3f} ns"
+        + f"Δt = {dt:.3f} ns"
         + (f"\nshown path radius ≤ {path_radius_mm:g} mm"
            if path_radius_mm is not None else "")
     )
