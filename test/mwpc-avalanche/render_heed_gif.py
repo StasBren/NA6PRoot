@@ -87,6 +87,24 @@ def status_name(status):
     return names.get(status, "collected / other")
 
 
+def visible_wire_positions(meta):
+    """Return the two anode wires bracketing the displayed muon track."""
+    pitch = float(meta["wire_pitch_mm"])
+    u0 = float(meta["muon_u_mm"])
+
+    left_index = math.floor(u0 / pitch)
+    left = left_index * pitch
+    right = (left_index + 1) * pitch
+
+    # If numerical roundoff puts a point infinitesimally below a wire,
+    # snap it to the expected cell boundary.
+    if abs(u0 - right) < 1.0e-9:
+        left = right
+        right = left + pitch
+
+    return left, right
+
+
 def draw_geometry(ax, meta):
     pitch = float(meta["wire_pitch_mm"])
     diameter_mm = float(meta["wire_diameter_um"]) * 1.0e-3
@@ -97,10 +115,12 @@ def draw_geometry(ax, meta):
     ax.axhline(+gap_plus, lw=3, alpha=0.8)
     ax.axhline(-gap_minus, lw=3, alpha=0.8)
 
-    # Anode wires. Show several neighbouring wires for context.
-    for k in range(-4, 5):
-        x = k * pitch
-        radius = max(0.07, 0.5 * diameter_mm)
+    # Presentation view: show only the two wires relevant to this cell.
+    # The Garfield field calculation itself still contains the full 9-wire
+    # local array; this is only a visual simplification.
+    left_wire, right_wire = visible_wire_positions(meta)
+    radius = max(0.07, 0.5 * diameter_mm)
+    for x in (left_wire, right_wire):
         ax.add_patch(Circle((x, 0.0), radius, zorder=5))
 
     ax.text(
@@ -155,8 +175,9 @@ def render_frame(
     v_start = float(meta["muon_v_start_mm"])
     v_end = float(meta["muon_v_end_mm"])
 
-    xmax = max(2.6 * pitch, 6.0)
-    ax.set_xlim(-xmax, xmax)
+    left_wire, right_wire = visible_wire_positions(meta)
+    margin = max(0.35 * pitch, 1.0)
+    ax.set_xlim(left_wire - margin, right_wire + margin)
     ax.set_ylim(-gap_minus - 0.7, gap_plus + 0.7)
     ax.set_xlabel("u  — across anode wires [mm]")
     ax.set_ylabel("v  — chamber normal [mm]")
@@ -280,7 +301,8 @@ def render_frame(
         f"Ar/CO₂ 70/30   |   μ⁻ {float(meta['momentum_GeV']):g} GeV/c\n"
         f"Heed: {n_clusters} clusters, {n_e} conduction e⁻, "
         f"ΣΔE = {dE / 1000.0:.2f} keV\n"
-        f"Garfield trajectories shown: {n_vis}"
+        f"Garfield trajectories shown: {n_vis}\n"
+        f"displayed wires: {left_wire:g} and {right_wire:g} mm"
     )
     ax.text(
         0.015,
