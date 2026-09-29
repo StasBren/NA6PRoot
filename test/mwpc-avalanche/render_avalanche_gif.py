@@ -308,12 +308,20 @@ def render_frame(out_path, tcut, meta, field, paths,
         + (f"\nshown path radius ≤ {path_radius_mm:g} mm"
            if path_radius_mm is not None else "")
     )
+    # Keep the numerical summary outside the physics panel, directly below
+    # the legend in the right-hand margin. This avoids covering the avalanche.
     ax.text(
-        0.015, 0.02, info,
+        1.02, 0.72, info,
         transform=ax.transAxes,
-        ha="left", va="bottom",
+        ha="left", va="top",
         fontsize=9.5,
-        bbox=dict(boxstyle="round,pad=0.35", alpha=0.92),
+        clip_on=False,
+        bbox=dict(
+            boxstyle="round,pad=0.35",
+            facecolor="white",
+            edgecolor="0.35",
+            alpha=0.96,
+        ),
         zorder=30,
     )
 
@@ -341,12 +349,21 @@ def render_frame(out_path, tcut, meta, field, paths,
         h2.append(h)
         l2.append(lab)
     if h2:
-        ax.legend(h2, l2, loc="upper left",
-                  bbox_to_anchor=(1.01, 1.0),
-                  frameon=False, fontsize=8.5)
+        ax.legend(
+            h2, l2,
+            loc="upper left",
+            bbox_to_anchor=(1.02, 1.0),
+            frameon=False,
+            fontsize=8.5,
+            borderaxespad=0.0,
+        )
 
     ax.grid(alpha=0.12)
-    fig.tight_layout()
+
+    # Reserve a fixed right-hand information column for legend + summary.
+    # Do not use tight_layout here because it can pull the axes back toward
+    # the outside artists and reduce the visual separation.
+    fig.subplots_adjust(left=0.11, right=0.72, top=0.90, bottom=0.13)
     fig.savefig(out_path, dpi=130, bbox_inches="tight")
     plt.close(fig)
 
