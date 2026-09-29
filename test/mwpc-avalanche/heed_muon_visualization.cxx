@@ -4,8 +4,10 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <limits>
+#include <random>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 #include "Garfield/AvalancheMicroscopic.hh"
 #include "Garfield/ComponentAnalyticField.hh"
@@ -39,6 +41,97 @@ std::string ReadStringArg(const int argc, char** argv, const std::string& key,
   return defaultValue;
 }
 
+struct ElectronSeed {
+  int electronId = -1;
+  int clusterId = -1;
+  double x = 0.;
+  double y = 0.;
+  double z = 0.;
+  double t = 0.;
+  double heedEnergy = 0.;
+  double dx = 0.;
+  double dy = 0.;
+  double dz = 0.;
+};
+
+std::vector<int> SelectFirst(const int n, const int maxShow) {
+  std::vector<int> out;
+  const int nTake = std::min(n, maxShow);
+  out.reserve(nTake);
+  for (int i = 0; i < nTake; ++i) out.push_back(i);
+  return out;
+}
+
+std::vector<int> SelectRandom(const int n, const int maxShow,
+                              const unsigned int seed) {
+  std::vector<int> out(n);
+  for (int i = 0; i < n; ++i) out[i] = i;
+  std::mt19937 rng(seed);
+  std::shuffle(out.begin(), out.end(), rng);
+  if (static_cast<int>(out.size()) > maxShow) out.resize(maxShow);
+  return out;
+}
+
+std::vector<int> SelectBalanced(
+    const std::vector<ElectronSeed>& seeds,
+    const int maxShow,
+    const int maxPerCluster,
+    const unsigned int rngSeed) {
+  std::unordered_map<int, std::vector<int>> byCluster;
+  std::vector<int> clusterOrder;
+
+  for (int i = 0; i < static_cast<int>(seeds.size()); ++i) {
+    const int cid = seeds[i].clusterId;
+    if (byCluster.find(cid) == byCluster.end()) {
+      clusterOrder.push_back(cid);
+    }
+    byCluster[cid].push_back(i);
+  }
+
+  std::mt19937 rng(rngSeed);
+  for (auto& kv : byCluster) {
+    std::shuffle(kv.second.begin(), kv.second.end(), rng);
+  }
+
+  std::vector<int> selected;
+  selected.reserve(std::min<int>(maxShow, seeds.size()));
+
+  // Round-robin over clusters. This avoids one large ionisation cluster
+  // monopolising the presentation sample.
+  for (int round = 0; round < maxPerCluster; ++round) {
+    bool added = false;
+    for (const int cid : clusterOrder) {
+      auto& indices = byCluster[cid];
+      if (round >= static_cast<int>(indices.size())) continue;
+      selected.push_back(indices[round]);
+      added = true;
+      if (static_cast<int>(selected.size()) >= maxShow) return selected;
+    }
+    if (!added) break;
+  }
+
+  // If the per-cluster cap leaves unused display slots, fill them from the
+  // remaining electrons without biasing toward early clusters.
+  if (static_cast<int>(selected.size()) < maxShow) {
+    std::vector<char> already(seeds.size(), 0);
+    for (const int idx : selected) already[idx] = 1;
+
+    std::vector<int> leftovers;
+    leftovers.reserve(seeds.size() - selected.size());
+    for (int i = 0; i < static_cast<int>(seeds.size()); ++i) {
+      if (!already[i]) leftovers.push_back(i);
+    }
+    std::shuffle(leftovers.begin(), leftovers.end(), rng);
+
+    for (const int idx : leftovers) {
+      selected.push_back(idx);
+      if (static_cast<int>(selected.size()) >= maxShow) break;
+    }
+  }
+
+  return selected;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -50,9 +143,8 @@ int main(int argc, char** argv) {
   // This executable is meant for VISUALISATION, not detector production.
   // It generates ONE Heed muon event and stores:
   //   - Heed ionisation-cluster positions,
-  //   - individual low-energy conduction-electron seed positions,
-  //   - the actual microscopic Garfield drift-line points for a configurable
-  //     subset of those electrons.
+  //   - all individual low-energy conduction-electron seed positions,
+  //   - actual microscopic Garfield drift-line points for a balanced subset.
   //
   // Avalanche multiplication is deliberately not included here. The goal is
   // to make the Heed -> microscopic transport handoff visible first.
@@ -73,20 +165,32 @@ int main(int argc, char** argv) {
 
   const int maxVisualElectrons =
       ReadIntArg(argc, argv, "--max-electrons", 40);
+  const int maxPerCluster =
+      ReadIntArg(argc, argv, "--max-per-cluster", 3);
+  const int rngSeed =
+      ReadIntArg(argc, argv, "--rng-seed", 12345);
   const int maxPathPoints =
       ReadIntArg(argc, argv, "--max-path-points", 250);
+  const std::string sampleMode =
+      ReadStringArg(argc, argv, "--sample-mode", "balanced");
   const std::string prefix =
       ReadStringArg(argc, argv, "--output-prefix", "heed_vis");
 
   if (pitchCm <= 0. || wireDiameterCm <= 0. ||
       gapMinusCm <= 0. || gapPlusCm <= 0. ||
       momentumEv <= 0. || maxVisualElectrons <= 0 ||
-      maxPathPoints < 2) {
+      maxPerCluster <= 0 || maxPathPoints < 2) {
     std::cerr << "Invalid input parameters.\n";
     return 2;
   }
   if (u0Cm < -0.5 * pitchCm || u0Cm > 0.5 * pitchCm) {
     std::cerr << "Starting u is outside the central wire cell [-p/2,+p/2].\n";
+    return 2;
+  }
+  if (sampleMode != "balanced" &&
+      sampleMode != "random" &&
+      sampleMode != "first") {
+    std::cerr << "--sample-mode must be balanced, random, or first.\n";
     return 2;
   }
 
@@ -141,11 +245,9 @@ int main(int argc, char** argv) {
 
   std::ofstream metaOut(metaName);
   std::ofstream clusterOut(clusterName);
-  std::ofstream electronOut(electronName);
-  std::ofstream pathOut(pathName);
 
-  if (!metaOut || !clusterOut || !electronOut || !pathOut) {
-    std::cerr << "Could not open one or more output files.\n";
+  if (!metaOut || !clusterOut) {
+    std::cerr << "Could not open metadata/cluster output files.\n";
     return 3;
   }
 
@@ -162,36 +264,24 @@ int main(int argc, char** argv) {
           << "muon_u_mm=" << 10. * u0Cm << "\n"
           << "muon_v_start_mm=" << 10. * vStartCm << "\n"
           << "muon_v_end_mm=" << -10. * gapMinusCm << "\n"
-          << "muon_w_mm=0\n";
+          << "muon_w_mm=0\n"
+          << "sample_mode=" << sampleMode << "\n"
+          << "max_per_cluster=" << maxPerCluster << "\n"
+          << "rng_seed=" << rngSeed << "\n";
 
   clusterOut << "cluster,u_mm,v_mm,w_mm,t_ns,electrons,energy_transfer_eV\n";
-  electronOut << "electron,cluster,u_mm,v_mm,w_mm,t_ns,heed_energy_eV,"
-                 "heed_dx,heed_dy,heed_dz,drifted\n";
-  pathOut << "electron,cluster,point,u_mm,v_mm,w_mm,t_ns,status\n";
 
   int nClusters = 0;
   int nConduction = 0;
-  int nVisual = 0;
   double totalEnergyEv = 0.;
+  std::vector<ElectronSeed> seeds;
 
   double xc = 0., yc = 0., zc = 0., tc = 0.;
   double ec = 0., extra = 0.;
   int nc = 0;
 
-  std::cout << std::fixed << std::setprecision(4);
-  std::cout << "\n=== HEED / GARFIELD MUON VISUALISATION EVENT ===\n"
-            << "particle            : mu-\n"
-            << "momentum            : " << momentumEv * 1.e-9 << " GeV/c\n"
-            << "gas                 : Ar/CO2 70/30\n"
-            << "wire pitch          : " << 10. * pitchCm << " mm\n"
-            << "gas gap             : " << 10. * gapMinusCm << " + "
-            << 10. * gapPlusCm << " mm\n"
-            << "anode voltage       : " << hv << " V\n"
-            << "B                   : " << bTesla << " T\n"
-            << "muon start u        : " << 10. * u0Cm << " mm\n"
-            << "max drifted e-      : " << maxVisualElectrons << "\n"
-            << "max stored path pts : " << maxPathPoints << " / electron\n\n";
-
+  // First pass: let Heed generate the complete event and store all
+  // conduction-electron seed positions. No Garfield drift yet.
   while (heed.GetCluster(xc, yc, zc, tc, nc, ec, extra)) {
     const int clusterId = nClusters++;
     totalEnergyEv += ec;
@@ -201,8 +291,6 @@ int main(int argc, char** argv) {
                << tc << "," << nc << "," << ec << "\n";
 
     for (int ie = 0; ie < nc; ++ie) {
-      const int electronId = nConduction++;
-
       double xe = 0., ye = 0., ze = 0., te = 0.;
       double ee = 0., dxe = 0., dye = 0., dze = 0.;
       if (!heed.GetElectron(ie, xe, ye, ze, te,
@@ -210,70 +298,139 @@ int main(int argc, char** argv) {
         continue;
       }
 
-      const bool doDrift = nVisual < maxVisualElectrons;
-      electronOut << electronId << "," << clusterId << ","
-                  << 10. * xe << "," << 10. * ye << "," << 10. * ze << ","
-                  << te << "," << ee << ","
-                  << dxe << "," << dye << "," << dze << ","
-                  << (doDrift ? 1 : 0) << "\n";
-
-      if (!doDrift) continue;
-      ++nVisual;
-
-      // For low-energy conduction electrons returned after Heed delta-electron
-      // transport, position/time are the meaningful handoff. We start the
-      // microscopic Garfield drift at 0.1 eV with zero direction; Garfield
-      // then randomises the initial direction and follows individual gas
-      // collisions.
-      Garfield::AvalancheMicroscopic drift;
-      drift.SetSensor(&sensor);
-      drift.EnableDriftLines();
-      const bool ok = drift.DriftElectron(xe, ye, ze, te, 0.1, 0., 0., 0.);
-
-      if (!ok || drift.GetNumberOfElectronEndpoints() < 1) continue;
-
-      double xa = 0., ya = 0., za = 0., ta = 0., ea = 0.;
-      double x1 = 0., y1 = 0., z1 = 0., t1 = 0., e1 = 0.;
-      int status = 0;
-      drift.GetElectronEndpoint(0, xa, ya, za, ta, ea,
-                                x1, y1, z1, t1, e1, status);
-
-      const std::size_t nPoints =
-          drift.GetNumberOfElectronDriftLinePoints(0);
-      if (nPoints == 0) continue;
-
-      const std::size_t stride =
-          std::max<std::size_t>(1, (nPoints + maxPathPoints - 1) /
-                                      maxPathPoints);
-
-      int storedPoint = 0;
-      for (std::size_t ip = 0; ip < nPoints; ip += stride) {
-        double x = 0., y = 0., z = 0., t = 0.;
-        drift.GetElectronDriftLinePoint(x, y, z, t, ip, 0);
-        pathOut << electronId << "," << clusterId << "," << storedPoint++ << ","
-                << 10. * x << "," << 10. * y << "," << 10. * z << ","
-                << t << "," << status << "\n";
-      }
-
-      // Make sure the physical endpoint is represented even if the stride did
-      // not land exactly on the final stored point.
-      double xl = 0., yl = 0., zl = 0., tl = 0.;
-      drift.GetElectronDriftLinePoint(
-          xl, yl, zl, tl, nPoints - 1, 0);
-      pathOut << electronId << "," << clusterId << "," << storedPoint << ","
-              << 10. * xl << "," << 10. * yl << "," << 10. * zl << ","
-              << tl << "," << status << "\n";
+      ElectronSeed seed;
+      seed.electronId = nConduction++;
+      seed.clusterId = clusterId;
+      seed.x = xe;
+      seed.y = ye;
+      seed.z = ze;
+      seed.t = te;
+      seed.heedEnergy = ee;
+      seed.dx = dxe;
+      seed.dy = dye;
+      seed.dz = dze;
+      seeds.push_back(seed);
     }
+  }
+
+  // Choose the subset for presentation AFTER seeing the whole Heed event.
+  // This is the key change relative to the first visualiser: a large early
+  // cluster can no longer monopolise the displayed Garfield trajectories.
+  std::vector<int> selected;
+  if (sampleMode == "balanced") {
+    selected = SelectBalanced(
+        seeds, maxVisualElectrons, maxPerCluster,
+        static_cast<unsigned int>(rngSeed));
+  } else if (sampleMode == "random") {
+    selected = SelectRandom(
+        static_cast<int>(seeds.size()), maxVisualElectrons,
+        static_cast<unsigned int>(rngSeed));
+  } else {
+    selected = SelectFirst(
+        static_cast<int>(seeds.size()), maxVisualElectrons);
+  }
+
+  std::vector<char> isSelected(seeds.size(), 0);
+  for (const int idx : selected) {
+    if (idx >= 0 && idx < static_cast<int>(isSelected.size())) {
+      isSelected[idx] = 1;
+    }
+  }
+
+  std::ofstream electronOut(electronName);
+  std::ofstream pathOut(pathName);
+  if (!electronOut || !pathOut) {
+    std::cerr << "Could not open electron/path output files.\n";
+    return 3;
+  }
+
+  electronOut << "electron,cluster,u_mm,v_mm,w_mm,t_ns,heed_energy_eV,"
+                 "heed_dx,heed_dy,heed_dz,drifted\n";
+  pathOut << "electron,cluster,point,u_mm,v_mm,w_mm,t_ns,status\n";
+
+  for (int idx = 0; idx < static_cast<int>(seeds.size()); ++idx) {
+    const auto& seed = seeds[idx];
+    electronOut << seed.electronId << "," << seed.clusterId << ","
+                << 10. * seed.x << "," << 10. * seed.y << "," << 10. * seed.z
+                << "," << seed.t << "," << seed.heedEnergy << ","
+                << seed.dx << "," << seed.dy << "," << seed.dz << ","
+                << (isSelected[idx] ? 1 : 0) << "\n";
+  }
+
+  // Second pass: Garfield microscopic drift only for the selected,
+  // presentation-friendly subset.
+  int nVisualWithPath = 0;
+  for (const int idx : selected) {
+    if (idx < 0 || idx >= static_cast<int>(seeds.size())) continue;
+    const auto& seed = seeds[idx];
+
+    Garfield::AvalancheMicroscopic drift;
+    drift.SetSensor(&sensor);
+    drift.EnableDriftLines();
+
+    const bool ok = drift.DriftElectron(
+        seed.x, seed.y, seed.z, seed.t,
+        0.1, 0., 0., 0.);
+
+    if (!ok || drift.GetNumberOfElectronEndpoints() < 1) continue;
+
+    double xa = 0., ya = 0., za = 0., ta = 0., ea = 0.;
+    double x1 = 0., y1 = 0., z1 = 0., t1 = 0., e1 = 0.;
+    int status = 0;
+    drift.GetElectronEndpoint(0, xa, ya, za, ta, ea,
+                              x1, y1, z1, t1, e1, status);
+
+    const std::size_t nPoints =
+        drift.GetNumberOfElectronDriftLinePoints(0);
+    if (nPoints == 0) continue;
+
+    const std::size_t stride =
+        std::max<std::size_t>(
+            1, (nPoints + maxPathPoints - 1) / maxPathPoints);
+
+    int storedPoint = 0;
+    for (std::size_t ip = 0; ip < nPoints; ip += stride) {
+      double x = 0., y = 0., z = 0., t = 0.;
+      drift.GetElectronDriftLinePoint(x, y, z, t, ip, 0);
+      pathOut << seed.electronId << "," << seed.clusterId << ","
+              << storedPoint++ << ","
+              << 10. * x << "," << 10. * y << "," << 10. * z << ","
+              << t << "," << status << "\n";
+    }
+
+    double xl = 0., yl = 0., zl = 0., tl = 0.;
+    drift.GetElectronDriftLinePoint(
+        xl, yl, zl, tl, nPoints - 1, 0);
+    pathOut << seed.electronId << "," << seed.clusterId << ","
+            << storedPoint << ","
+            << 10. * xl << "," << 10. * yl << "," << 10. * zl << ","
+            << tl << "," << status << "\n";
+
+    ++nVisualWithPath;
   }
 
   metaOut << "n_clusters=" << nClusters << "\n"
           << "n_conduction_electrons=" << nConduction << "\n"
-          << "n_visualised_electrons=" << nVisual << "\n"
+          << "n_selected_electrons=" << selected.size() << "\n"
+          << "n_visualised_electrons=" << nVisualWithPath << "\n"
           << "total_energy_transfer_eV=" << totalEnergyEv << "\n";
 
-  std::cout << "clusters             : " << nClusters << "\n"
+  std::cout << std::fixed << std::setprecision(4);
+  std::cout << "\n=== HEED / GARFIELD MUON VISUALISATION EVENT ===\n"
+            << "particle             : mu-\n"
+            << "momentum             : " << momentumEv * 1.e-9 << " GeV/c\n"
+            << "gas                  : Ar/CO2 70/30\n"
+            << "wire pitch           : " << 10. * pitchCm << " mm\n"
+            << "gas gap              : " << 10. * gapMinusCm << " + "
+            << 10. * gapPlusCm << " mm\n"
+            << "anode voltage        : " << hv << " V\n"
+            << "B                    : " << bTesla << " T\n"
+            << "muon start u         : " << 10. * u0Cm << " mm\n"
+            << "clusters             : " << nClusters << "\n"
             << "conduction electrons : " << nConduction << "\n"
-            << "drifted for GIF      : " << nVisual << "\n"
+            << "sampling mode        : " << sampleMode << "\n"
+            << "selected e-          : " << selected.size() << "\n"
+            << "Garfield paths       : " << nVisualWithPath << "\n"
             << "total dE             : " << totalEnergyEv << " eV\n\n"
             << "Wrote:\n"
             << "  " << metaName << "\n"
