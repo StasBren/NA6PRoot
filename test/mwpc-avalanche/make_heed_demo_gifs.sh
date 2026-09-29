@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Generate two presentation GIFs from the same detector configuration:
-#   1) a muon close to one wire;
-#   2) a muon exactly at the midpoint between two wires.
+# Generate three presentation GIFs from the same detector configuration:
+#   1) a normal-incidence muon close to one wire;
+#   2) a normal-incidence muon exactly at the midpoint between two wires;
+#   3) a 20-degree muon tilted in the local u-v plane.
 #
 # These are illustrative single events, not a controlled event-by-event
 # comparison of identical microscopic ionisation histories.
@@ -44,6 +45,13 @@ echo "=== Midpoint event: u0 = 2.0 mm, visible wires 0 and 4 mm ==="
 python3 "$RENDERER"   --prefix heed_midpoint   --output heed_midpoint.gif
 
 echo
+echo "=== Angled event: theta = 20 deg toward +u, u0 = 0.4 mm ==="
+"$EXE" "${COMMON[@]}"   --u0-mm 0.4   --theta-deg 20   --phi-deg 0   --output-prefix heed_angle20
+
+python3 "$RENDERER"   --prefix heed_angle20   --output heed_angle20.gif
+
+echo
 echo "Created:"
 echo "  heed_nearwire.gif"
 echo "  heed_midpoint.gif"
+echo "  heed_angle20.gif"
