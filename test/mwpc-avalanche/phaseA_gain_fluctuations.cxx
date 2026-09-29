@@ -31,6 +31,14 @@ int ReadIntArg(const int argc, char** argv, const std::string& key,
   return defaultValue;
 }
 
+std::string ReadStringArg(const int argc, char** argv, const std::string& key,
+                          const std::string& defaultValue) {
+  for (int i = 1; i + 1 < argc; ++i) {
+    if (argv[i] == key) return argv[i + 1];
+  }
+  return defaultValue;
+}
+
 double Quantile(std::vector<int> values, const double q) {
   if (values.empty()) return 0.;
   std::sort(values.begin(), values.end());
@@ -60,6 +68,8 @@ int main(int argc, char** argv) {
       0.1 * ReadArg(argc, argv, "--x0-mm", 1.0);
   const double y0Cm =
       0.1 * ReadArg(argc, argv, "--y0-mm", 0.75 * 10. * gapPlusCm);
+  const std::string outputName =
+      ReadStringArg(argc, argv, "--output", "gain_fluctuations.csv");
 
   if (pitchCm <= 0. || wireDiameterCm <= 0. ||
       gapMinusCm <= 0. || gapPlusCm <= 0. || events <= 0) {
@@ -101,12 +111,14 @@ int main(int argc, char** argv) {
   const double wireRadius = 0.5 * wireDiameterCm;
   constexpr unsigned int avalancheLimit = 200000;
 
-  std::ofstream out("gain_fluctuations.csv");
+  std::ofstream out(outputName);
   out << "event,avalanche_electrons,avalanche_ions,collected_on_wire,"
          "attached,other_endpoints,mean_collection_time_ns\n";
 
   std::vector<int> collectedValues;
+  std::vector<int> positiveCollectedValues;
   collectedValues.reserve(events);
+  positiveCollectedValues.reserve(events);
 
   double sumGain = 0.;
   double sumGain2 = 0.;
@@ -182,6 +194,7 @@ int main(int argc, char** argv) {
     const double meanT = nTimed > 0 ? sumT / nTimed : 0.;
 
     collectedValues.push_back(nCollected);
+    if (nCollected > 0) positiveCollectedValues.push_back(nCollected);
     sumGain += static_cast<double>(nCollected);
     sumGain2 += static_cast<double>(nCollected) *
                 static_cast<double>(nCollected);
@@ -209,6 +222,13 @@ int main(int argc, char** argv) {
   const double sigma = std::sqrt(std::max(0., variance));
   const double cv = mean > 0. ? sigma / mean : 0.;
 
+  double positiveMean = 0.;
+  if (!positiveCollectedValues.empty()) {
+    positiveMean = std::accumulate(positiveCollectedValues.begin(),
+                                   positiveCollectedValues.end(), 0.0) /
+                   static_cast<double>(positiveCollectedValues.size());
+  }
+
   std::cout << "-----------------------------------------------\n"
             << "effective gain = electrons collected on anode wire\n"
             << "mean gain           : " << mean << "\n"
@@ -219,8 +239,15 @@ int main(int argc, char** argv) {
             << "90% quantile        : " << Quantile(collectedValues, 0.90) << "\n"
             << "zero-collected frac : "
             << static_cast<double>(zeroCollected) / events << "\n"
+            << "positive-gain mean  : " << positiveMean << "\n"
+            << "positive median     : "
+            << Quantile(positiveCollectedValues, 0.50) << "\n"
+            << "positive 10% q      : "
+            << Quantile(positiveCollectedValues, 0.10) << "\n"
+            << "positive 90% q      : "
+            << Quantile(positiveCollectedValues, 0.90) << "\n"
             << "size-limit-like evt : " << sizeLimitLike << "\n"
-            << "wrote               : gain_fluctuations.csv\n"
+            << "wrote               : " << outputName << "\n"
             << "===============================================\n";
 
   return 0;
