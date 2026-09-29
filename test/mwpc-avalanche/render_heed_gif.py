@@ -152,6 +152,7 @@ def crop_field(field, xmin, xmax, ymin, ymax):
 
 def draw_field_background(
     ax,
+    meta,
     field,
     background,
     xmin,
@@ -200,24 +201,53 @@ def draw_field_background(
     if background in ("stream", "both"):
         # Streamlines show the ELECTRIC-FIELD direction. Electron drift is
         # opposite the arrows because electrons carry negative charge.
-        exm = np.ma.masked_where(~valid, ex)
-        eym = np.ma.masked_where(~valid, ey)
+        #
+        # For presentation, normalise the field vectors before streamplot.
+        # This preserves field-line geometry while preventing the enormous
+        # near-wire field magnitude from dominating the numerical integration.
+        stream_valid = valid.copy()
 
-        # streamplot expects a reasonably regular grid. Downsample only if the
-        # exported field grid is very dense; this keeps the figure readable.
-        step_u = max(1, len(us) // 90)
-        step_v = max(1, len(vs) // 70)
+        pitch = float(meta["wire_pitch_mm"])
+        wire_radius_mm = 0.5 * float(meta["wire_diameter_um"]) * 1.e-3
+        mask_radius_mm = max(0.045, 2.5 * wire_radius_mm)
+
+        kmin = math.floor(xmin / pitch) - 1
+        kmax = math.ceil(xmax / pitch) + 1
+        for k in range(kmin, kmax + 1):
+            uw = k * pitch
+            r2 = (U - uw) ** 2 + V ** 2
+            stream_valid &= r2 > mask_radius_mm ** 2
+
+        emag = np.hypot(ex, ey)
+        stream_valid &= np.isfinite(emag) & (emag > 0.)
+
+        exn = np.ma.masked_where(
+            ~stream_valid,
+            ex / np.where(emag > 0., emag, 1.),
+        )
+        eyn = np.ma.masked_where(
+            ~stream_valid,
+            ey / np.where(emag > 0., emag, 1.),
+        )
+
+        # A lower density than the first version makes the physical structure
+        # easier to read: near-uniform field in the upper gap, bending only
+        # as trajectories approach the two neighbouring anodes.
+        step_u = max(1, len(us) // 120)
+        step_v = max(1, len(vs) // 90)
 
         ax.streamplot(
             us[::step_u],
             vs[::step_v],
-            exm[::step_v, ::step_u],
-            eym[::step_v, ::step_u],
+            exn[::step_v, ::step_u],
+            eyn[::step_v, ::step_u],
             density=stream_density,
-            linewidth=0.65,
-            arrowsize=0.65,
-            minlength=0.15,
-            maxlength=6.0,
+            linewidth=0.55,
+            arrowsize=0.50,
+            minlength=0.30,
+            maxlength=5.0,
+            integration_direction="both",
+            broken_streamlines=True,
             zorder=1,
         )
 
@@ -296,6 +326,7 @@ def render_frame(
 
     draw_field_background(
         ax,
+        meta,
         field,
         background,
         xmin,
@@ -313,22 +344,22 @@ def render_frame(
 
     if background in ("stream", "both"):
         ax.text(
-            0.985,
+            0.015,
             0.985,
             "Garfield E-field lines  (electron drift opposite arrows)",
             transform=ax.transAxes,
-            ha="right",
+            ha="left",
             va="top",
             fontsize=9,
             alpha=0.8,
         )
     elif background == "contours":
         ax.text(
-            0.985,
+            0.015,
             0.985,
             "Garfield equipotential contours",
             transform=ax.transAxes,
-            ha="right",
+            ha="left",
             va="top",
             fontsize=9,
             alpha=0.8,
@@ -531,14 +562,20 @@ def render_frame(
         f"theta = {float(meta.get('theta_deg', 0.0)):g}°"
     )
     ax.text(
-        0.015,
-        0.015,
+        1.02,
+        0.67,
         info,
         transform=ax.transAxes,
         ha="left",
-        va="bottom",
-        fontsize=10,
-        bbox=dict(boxstyle="round,pad=0.4", alpha=0.9),
+        va="top",
+        fontsize=9.5,
+        clip_on=False,
+        bbox=dict(
+            boxstyle="round,pad=0.4",
+            facecolor="white",
+            edgecolor="0.35",
+            alpha=0.96,
+        ),
         zorder=20,
     )
     ax.text(
@@ -567,14 +604,19 @@ def render_frame(
         ax.legend(
             h2,
             l2,
-            loc="upper right",
-            framealpha=0.9,
+            loc="upper left",
+            bbox_to_anchor=(1.02, 1.0),
+            framealpha=0.95,
             fontsize=9,
+            borderaxespad=0.0,
         )
 
     ax.grid(alpha=0.12)
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=120)
+
+    # Reserve a stable right-hand column for legend + numerical summary.
+    # Keeping these outside the axes prevents them from covering the drift.
+    fig.subplots_adjust(left=0.09, right=0.75, top=0.92, bottom=0.12)
+    fig.savefig(out_path, dpi=120, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -628,7 +670,7 @@ def main():
     parser.add_argument(
         "--stream-density",
         type=float,
-        default=1.25,
+        default=0.78,
         help="Density of Garfield E-field streamlines",
     )
 
