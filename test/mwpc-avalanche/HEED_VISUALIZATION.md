@@ -57,7 +57,10 @@ cmake --build build -j4
   --b 0 \
   --u0-mm 1.0 \
   --momentum-gev 10 \
+  --sample-mode balanced \
   --max-electrons 40 \
+  --max-per-cluster 3 \
+  --rng-seed 12345 \
   --max-path-points 250 \
   --output-prefix heed_vis
 ```
@@ -72,6 +75,12 @@ heed_vis_paths.csv
 ```
 
 The path file contains actual Garfield microscopic drift-line points.
+
+By default, the displayed electrons are selected in `balanced` mode after the
+complete Heed event has been generated. The selector samples electrons across
+many clusters instead of taking only the first electrons from the first large
+cluster. The full Heed cluster/electron event is still written to CSV; only the
+subset sent to Garfield for the presentation trajectories is reduced.
 
 ## Install the Python plotting dependencies
 
@@ -167,3 +176,31 @@ individual gas collisions.
 
 Those are deliberate boundaries: this animation is meant to illustrate the
 validated Phase-A Heed -> drift handoff cleanly.
+
+
+## Presentation comparison: near-wire vs midpoint
+
+The renderer now shows only the two anode wires bracketing the displayed muon.
+This affects only the figure; the Garfield field component still contains the
+same nine-wire local array.
+
+The quickest way to generate the two recommended presentation GIFs is:
+
+```bash
+bash make_heed_demo_gifs.sh
+```
+
+This produces:
+
+```text
+heed_nearwire.gif
+heed_midpoint.gif
+```
+
+The near-wire example uses `u0 = 0.4 mm`. The midpoint example uses
+`u0 = 2.0 mm` for the 4 mm pitch reference cell, i.e. halfway between the
+wires at 0 and 4 mm.
+
+These are two independent stochastic Heed events. They are intended as
+illustrative animations, not as a controlled quantitative comparison of two
+identical ionisation histories.
