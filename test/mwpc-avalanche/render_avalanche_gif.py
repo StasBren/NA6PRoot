@@ -121,7 +121,8 @@ def clip_paths_near_wire(paths, wire_u, radius_mm):
     return clipped
 
 
-def draw_background(ax, meta, field, background, half_width, v_half_window):
+def draw_background(ax, meta, field, background, half_width,
+                    v_half_window, v_min_mm, v_max_mm):
     us, vs, potential, ex, ey, status = field
 
     seed_u = float(meta["seed_u_mm"])
@@ -132,12 +133,23 @@ def draw_background(ax, meta, field, background, half_width, v_half_window):
     xmin = wire_u - half_width
     xmax = wire_u + half_width
 
-    if v_half_window is None:
+    if v_min_mm is not None or v_max_mm is not None:
+        requested_ymin = (-half_width if v_min_mm is None else v_min_mm)
+        requested_ymax = (+half_width if v_max_mm is None else v_max_mm)
+        ymin = max(float(vs.min()), requested_ymin)
+        ymax = min(float(vs.max()), requested_ymax)
+    elif v_half_window is None:
         ymin = max(float(vs.min()), -half_width)
         ymax = min(float(vs.max()), +half_width)
     else:
         ymin = max(float(vs.min()), -v_half_window)
         ymax = min(float(vs.max()), +v_half_window)
+
+    if ymin >= ymax:
+        raise RuntimeError(
+            f"Invalid vertical display range: ymin={ymin:g} mm, "
+            f"ymax={ymax:g} mm"
+        )
 
     U, V = np.meshgrid(us, vs)
 
@@ -210,11 +222,12 @@ def draw_background(ax, meta, field, background, half_width, v_half_window):
 
 def render_frame(out_path, tcut, meta, field, paths,
                  background, half_width, v_half_window,
-                 path_radius_mm):
+                 v_min_mm, v_max_mm, path_radius_mm):
     fig, ax = plt.subplots(figsize=(10.0, 6.0))
 
     wire_u, xmin, xmax, ymin, ymax = draw_background(
-        ax, meta, field, background, half_width, v_half_window
+        ax, meta, field, background, half_width,
+        v_half_window, v_min_mm, v_max_mm
     )
 
     seed_u = float(meta["seed_u_mm"])
@@ -348,7 +361,16 @@ def main():
         default="contours",
     )
     parser.add_argument("--half-width-mm", type=float, default=1.25)
-    parser.add_argument("--v-half-window-mm", type=float, default=None)
+    parser.add_argument(
+        "--v-half-window-mm", type=float, default=None,
+        help="Symmetric vertical half-window around the wire; ignored when "
+             "--v-min-mm or --v-max-mm is supplied")
+    parser.add_argument(
+        "--v-min-mm", type=float, default=None,
+        help="Explicit lower v-axis limit [mm]; useful for upper-half-plane close-ups")
+    parser.add_argument(
+        "--v-max-mm", type=float, default=None,
+        help="Explicit upper v-axis limit [mm]; useful for upper-half-plane close-ups")
     parser.add_argument(
         "--path-radius-mm", type=float, default=None,
         help="Show only trajectory points within this radius of the nearest anode wire")
@@ -436,6 +458,8 @@ def main():
                 args.background,
                 args.half_width_mm,
                 args.v_half_window_mm,
+                args.v_min_mm,
+                args.v_max_mm,
                 args.path_radius_mm,
             )
             frame_paths.append(out)
