@@ -26,8 +26,8 @@ COMMON=(
   --b 0
   --momentum-gev 10
   --sample-mode balanced
-  --max-electrons 24
-  --max-per-cluster 4
+  --max-electrons 60
+  --max-per-cluster 8
   --rng-seed 12345
   --max-path-points 250
   --field-u-steps 721
@@ -46,7 +46,10 @@ python3 "$RENDERER" \
   --u-max-mm 1.5 \
   --v-min-mm 0.0 \
   --v-max-mm 4.1 \
-  --stream-density 0.78
+  --stream-density 0.70 \
+  --stream-focus track \
+  --stream-seeds 11 \
+  --stream-band-mm 0.22
 
 echo
 echo "=== Midpoint event: u0 = 2.0 mm, visible wires 0 and 4 mm ==="
