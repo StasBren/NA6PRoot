@@ -76,7 +76,7 @@ int main(int argc, char** argv) {
   const int avalancheLimit =
       ReadIntArg(argc, argv, "--avalanche-limit", 5000);
   const int maxLines =
-      ReadIntArg(argc, argv, "--max-lines", 1500);
+      ReadIntArg(argc, argv, "--max-lines", 0);
   const int maxPointsPerLine =
       ReadIntArg(argc, argv, "--max-points-per-line", 120);
 
@@ -93,7 +93,7 @@ int main(int argc, char** argv) {
   if (pitchCm <= 0. || wireDiameterCm <= 0. ||
       gapMinusCm <= 0. || gapPlusCm <= 0. ||
       e0Ev <= 0. || halfNumberOfWires < 1 ||
-      avalancheLimit <= 0 || maxLines <= 0 ||
+      avalancheLimit <= 0 || maxLines < 0 ||
       maxPointsPerLine < 2 || fieldHalfWidthCm <= 0. ||
       fieldUSteps < 3 || fieldVSteps < 3) {
     std::cerr << "Invalid input parameters.\n";
@@ -183,16 +183,25 @@ int main(int argc, char** argv) {
   // Select drift-line indices evenly across the complete avalanche if the
   // event contains more trajectories than we want to render.
   std::vector<std::size_t> linesToStore;
+  const bool storeAllLines = (maxLines == 0);
   const std::size_t nStore =
-      std::min<std::size_t>(nEndpoints,
-                            static_cast<std::size_t>(maxLines));
+      storeAllLines
+          ? nEndpoints
+          : std::min<std::size_t>(
+                nEndpoints, static_cast<std::size_t>(maxLines));
   linesToStore.reserve(nStore);
 
-  if (nEndpoints <= static_cast<std::size_t>(maxLines)) {
+  if (storeAllLines ||
+      nEndpoints <= static_cast<std::size_t>(maxLines)) {
     for (std::size_t i = 0; i < nEndpoints; ++i) {
       linesToStore.push_back(i);
     }
+  } else if (nStore == 1) {
+    linesToStore.push_back(0);
   } else {
+    // This mode is useful only for lightweight previews. For a physically
+    // continuous presentation GIF prefer --max-lines 0, which stores every
+    // avalanche-electron trajectory and avoids hiding parent branches.
     for (std::size_t k = 0; k < nStore; ++k) {
       const double x =
           static_cast<double>(k) *
@@ -290,6 +299,10 @@ int main(int argc, char** argv) {
             << tl << "," << status << "\n";
   }
 
+  const bool sizeLimitReached =
+      ne >= avalancheLimit ||
+      nEndpoints >= static_cast<std::size_t>(avalancheLimit);
+
   const std::string metaFile = prefix + "_meta.txt";
   std::ofstream metaOut(metaFile);
   metaOut << std::setprecision(12)
@@ -307,6 +320,8 @@ int main(int argc, char** argv) {
           << "avalanche_ok=" << (ok ? 1 : 0) << "\n"
           << "avalanche_electrons=" << ne << "\n"
           << "avalanche_ions=" << ni << "\n"
+          << "avalanche_size_limit=" << avalancheLimit << "\n"
+          << "size_limit_reached=" << (sizeLimitReached ? 1 : 0) << "\n"
           << "electron_endpoints=" << nEndpoints << "\n"
           << "stored_drift_lines=" << linesToStore.size() << "\n"
           << "near_wire_endpoints=" << nNearWire << "\n"
@@ -328,12 +343,19 @@ int main(int argc, char** argv) {
             << "B                 : " << bTesla << " T\n"
             << "avalanche e-      : " << ne << "\n"
             << "avalanche ions    : " << ni << "\n"
+            << "size limit        : " << avalancheLimit << "\n"
+            << "limit reached     : "
+            << (sizeLimitReached ? "YES" : "no") << "\n"
             << "electron paths    : " << nEndpoints << "\n"
             << "stored paths      : " << linesToStore.size() << "\n"
             << "near-wire ends    : " << nNearWire << "\n"
             << "attached ends     : " << nAttached << "\n"
             << "other ends        : " << nOther << "\n"
             << "time span         : " << (tMax - tMin) << " ns\n\n"
+            << (sizeLimitReached
+                    ? "WARNING: avalanche hit the configured size limit; "
+                      "rerun before using this event as a complete avalanche.\n\n"
+                    : "")
             << "Wrote:\n"
             << "  " << metaFile << "\n"
             << "  " << fieldFile << "\n"
