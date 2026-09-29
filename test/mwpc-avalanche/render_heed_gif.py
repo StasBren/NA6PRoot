@@ -88,21 +88,23 @@ def status_name(status):
 
 
 def visible_wire_positions(meta):
-    """Return the two anode wires bracketing the displayed muon track."""
+    """Return only the wires bracketing the projected muon path in u."""
     pitch = float(meta["wire_pitch_mm"])
-    u0 = float(meta["muon_u_mm"])
+    u_start = float(meta.get("muon_u_start_mm", meta["muon_u_mm"]))
+    u_end = float(meta.get("muon_u_end_mm", u_start))
 
-    left_index = math.floor(u0 / pitch)
-    left = left_index * pitch
-    right = (left_index + 1) * pitch
+    umin = min(u_start, u_end)
+    umax = max(u_start, u_end)
 
-    # If numerical roundoff puts a point infinitesimally below a wire,
-    # snap it to the expected cell boundary.
-    if abs(u0 - right) < 1.0e-9:
-        left = right
-        right = left + pitch
+    left_index = math.floor(umin / pitch)
+    right_index = math.ceil(umax / pitch)
 
-    return left, right
+    # A normal-incidence track entirely inside one cell should still show
+    # both bounding wires.
+    if right_index == left_index:
+        right_index += 1
+
+    return [k * pitch for k in range(left_index, right_index + 1)]
 
 
 def draw_geometry(ax, meta):
@@ -118,9 +120,9 @@ def draw_geometry(ax, meta):
     # Presentation view: show only the two wires relevant to this cell.
     # The Garfield field calculation itself still contains the full 9-wire
     # local array; this is only a visual simplification.
-    left_wire, right_wire = visible_wire_positions(meta)
+    wires = visible_wire_positions(meta)
     radius = max(0.07, 0.5 * diameter_mm)
-    for x in (left_wire, right_wire):
+    for x in wires:
         ax.add_patch(Circle((x, 0.0), radius, zorder=5))
 
     ax.text(
@@ -171,11 +173,14 @@ def render_frame(
     pitch = float(meta["wire_pitch_mm"])
     gap_minus = float(meta["gap_minus_mm"])
     gap_plus = float(meta["gap_plus_mm"])
-    u0 = float(meta["muon_u_mm"])
+    u_start = float(meta.get("muon_u_start_mm", meta["muon_u_mm"]))
+    u_end = float(meta.get("muon_u_end_mm", u_start))
     v_start = float(meta["muon_v_start_mm"])
     v_end = float(meta["muon_v_end_mm"])
 
-    left_wire, right_wire = visible_wire_positions(meta)
+    wires = visible_wire_positions(meta)
+    left_wire = min(wires)
+    right_wire = max(wires)
     margin = max(0.35 * pitch, 1.0)
     ax.set_xlim(left_wire - margin, right_wire + margin)
     ax.set_ylim(-gap_minus - 0.7, gap_plus + 0.7)
@@ -187,13 +192,14 @@ def render_frame(
     if frame < n_muon:
         frac = frame / max(1, n_muon - 1)
         v_now = v_start + frac * (v_end - v_start)
-        ax.plot([u0, u0], [v_start, v_now], lw=2.5, label="muon track")
-        ax.scatter([u0], [v_now], s=60, marker="v", zorder=8)
+        u_now = u_start + frac * (u_end - u_start)
+        ax.plot([u_start, u_now], [v_start, v_now], lw=2.5, label="muon track")
+        ax.scatter([u_now], [v_now], s=60, marker="v", zorder=8)
         stage = "1  Muon crossing"
 
     # Stage 2: freeze complete muon track and reveal Heed clusters.
     elif frame < n_muon + n_cluster:
-        ax.plot([u0, u0], [v_start, v_end], lw=2.0, alpha=0.8, label="muon track")
+        ax.plot([u_start, u_end], [v_start, v_end], lw=2.0, alpha=0.8, label="muon track")
         frac = (frame - n_muon) / max(1, n_cluster - 1)
         nshow = max(1, int(math.ceil(frac * len(clusters))))
 
@@ -226,7 +232,7 @@ def render_frame(
 
     # Stage 3: reveal real Garfield microscopic trajectories in physical time.
     else:
-        ax.plot([u0, u0], [v_start, v_end], lw=1.5, alpha=0.35, label="muon track")
+        ax.plot([u_start, u_end], [v_start, v_end], lw=1.5, alpha=0.35, label="muon track")
 
         if clusters:
             ax.scatter(
@@ -309,7 +315,8 @@ def render_frame(
         f"ΣΔE = {dE / 1000.0:.2f} keV\n"
         f"Garfield trajectories shown: {n_vis}\n"
         f"sampling: {meta.get('sample_mode', 'unknown')}   |   "
-        f"displayed wires: {left_wire:g} and {right_wire:g} mm"
+        f"theta = {float(meta.get('theta_deg', 0.0)):g}°   |   "
+        f"displayed wires: " + ", ".join(f"{x:g}" for x in wires) + " mm"
     )
     ax.text(
         0.015,
