@@ -150,9 +150,98 @@ def crop_field(field, xmin, xmax, ymin, ymax):
     return u2, v2, p2, ex2, ey2, s2
 
 
+def make_track_focused_seed_points(
+    meta,
+    clusters,
+    xmin,
+    xmax,
+    ymin,
+    ymax,
+    n_along,
+    band_mm,
+):
+    """Seed field lines in a narrow band around the actual muon/cluster path.
+
+    This adapts automatically to:
+      - midpoint tracks,
+      - tracks close to one wire,
+      - angled tracks.
+
+    The longitudinal range follows the Heed cluster region when available;
+    otherwise it falls back to the visible part of the nominal muon segment.
+    """
+    u0 = float(meta.get("muon_u_start_mm", meta["muon_u_mm"]))
+    u1 = float(meta.get("muon_u_end_mm", u0))
+    v0 = float(meta["muon_v_start_mm"])
+    v1 = float(meta["muon_v_end_mm"])
+
+    dv = v1 - v0
+    du = u1 - u0
+    length = math.hypot(du, dv)
+    if length <= 0.:
+        return np.empty((0, 2))
+
+    # Unit normal to the projected muon track in the u-v plane.
+    nu = -dv / length
+    nv = +du / length
+
+    clusters_in_view = [
+        r for r in clusters
+        if xmin <= f(r, "u_mm") <= xmax
+        and ymin <= f(r, "v_mm") <= ymax
+    ]
+
+    if len(clusters_in_view) >= 2:
+        v_cluster = np.array([f(r, "v_mm") for r in clusters_in_view])
+        lo = max(ymin, float(np.min(v_cluster)) - 0.08 * (ymax - ymin))
+        hi = min(ymax, float(np.max(v_cluster)) + 0.08 * (ymax - ymin))
+    else:
+        lo = max(ymin, min(v0, v1))
+        hi = min(ymax, max(v0, v1))
+
+    if hi <= lo:
+        return np.empty((0, 2))
+
+    # Avoid starting exactly on the plot boundary/cathode where streamplot can
+    # terminate immediately.
+    eps_v = 0.01 * max(hi - lo, 1.e-6)
+    lo += eps_v
+    hi -= eps_v
+    if hi <= lo:
+        return np.empty((0, 2))
+
+    n_along = max(2, int(n_along))
+    v_samples = np.linspace(lo, hi, n_along)
+
+    # Five parallel seed bands give enough context around the track without
+    # filling the whole chamber with irrelevant field lines.
+    offsets = np.array([-1.0, -0.5, 0.0, 0.5, 1.0]) * band_mm
+
+    seeds = []
+    for vv in v_samples:
+        # Parametric interpolation of u at this v. Our allowed theta keeps the
+        # track safely non-horizontal in the u-v projection.
+        frac = (vv - v0) / dv if abs(dv) > 1.e-12 else 0.0
+        uu = u0 + frac * du
+
+        for off in offsets:
+            us = uu + off * nu
+            vs = vv + off * nv
+            if xmin < us < xmax and ymin < vs < ymax:
+                seeds.append((us, vs))
+
+    if not seeds:
+        return np.empty((0, 2))
+
+    # streamplot dislikes duplicate start points.
+    seeds = np.unique(np.round(np.asarray(seeds), 6), axis=0)
+    return seeds
+
+
 def draw_field_background(
     ax,
     meta,
+    clusters,
     field,
     background,
     xmin,
@@ -161,6 +250,9 @@ def draw_field_background(
     ymax,
     contour_levels,
     stream_density,
+    stream_focus,
+    stream_seeds,
+    stream_band_mm,
 ):
     sub = crop_field(field, xmin, xmax, ymin, ymax)
     if sub is None or background == "none":
@@ -243,19 +335,38 @@ def draw_field_background(
         u_stream = np.linspace(us[0], us[-1], len(us))
         v_stream = np.linspace(vs[0], vs[-1], len(vs))
 
+        stream_kwargs = dict(
+            density=stream_density,
+            linewidth=0.65,
+            color="0.55",
+            arrowsize=0.48,
+            minlength=0.20,
+            maxlength=6.0,
+            integration_direction="both",
+            broken_streamlines=True,
+            zorder=1,
+        )
+
+        if stream_focus == "track":
+            start_points = make_track_focused_seed_points(
+                meta,
+                clusters,
+                xmin,
+                xmax,
+                ymin,
+                ymax,
+                stream_seeds,
+                stream_band_mm,
+            )
+            if len(start_points):
+                stream_kwargs["start_points"] = start_points
+
         ax.streamplot(
             u_stream[::step_u],
             v_stream[::step_v],
             exn[::step_v, ::step_u],
             eyn[::step_v, ::step_u],
-            density=stream_density,
-            linewidth=0.55,
-            arrowsize=0.50,
-            minlength=0.30,
-            maxlength=5.0,
-            integration_direction="both",
-            broken_streamlines=True,
-            zorder=1,
+            **stream_kwargs,
         )
 
 
@@ -303,8 +414,11 @@ def render_frame(
     v_max_mm,
     contour_levels,
     stream_density,
+    stream_focus,
+    stream_seeds,
+    stream_band_mm,
 ):
-    fig, ax = plt.subplots(figsize=(12.8, 7.2))
+    fig, ax = plt.subplots(figsize=(15.5, 7.2))
 
     pitch = float(meta["wire_pitch_mm"])
     gap_minus = float(meta["gap_minus_mm"])
@@ -334,6 +448,7 @@ def render_frame(
     draw_field_background(
         ax,
         meta,
+        clusters,
         field,
         background,
         xmin,
@@ -342,6 +457,9 @@ def render_frame(
         ymax,
         contour_levels,
         stream_density,
+        stream_focus,
+        stream_seeds,
+        stream_band_mm,
     )
     wires = draw_geometry(ax, meta, xmin, xmax)
 
@@ -622,7 +740,7 @@ def render_frame(
 
     # Reserve a stable right-hand column for legend + numerical summary.
     # Keeping these outside the axes prevents them from covering the drift.
-    fig.subplots_adjust(left=0.09, right=0.75, top=0.92, bottom=0.12)
+    fig.subplots_adjust(left=0.07, right=0.79, top=0.92, bottom=0.12)
     fig.savefig(out_path, dpi=120, bbox_inches="tight")
     plt.close(fig)
 
@@ -679,6 +797,25 @@ def main():
         type=float,
         default=0.78,
         help="Density of Garfield E-field streamlines",
+    )
+
+    parser.add_argument(
+        "--stream-focus",
+        choices=["track", "global"],
+        default="track",
+        help="Seed E-field lines around the actual muon/cluster path or across the full view",
+    )
+    parser.add_argument(
+        "--stream-seeds",
+        type=int,
+        default=11,
+        help="Number of longitudinal seed positions along the muon/cluster region",
+    )
+    parser.add_argument(
+        "--stream-band-mm",
+        type=float,
+        default=0.22,
+        help="Half-width of the E-field-line seed band around the projected muon track [mm]",
     )
 
     parser.add_argument("--keep-frames", action="store_true")
@@ -745,6 +882,9 @@ def main():
                 args.v_max_mm,
                 args.contour_levels,
                 args.stream_density,
+                args.stream_focus,
+                args.stream_seeds,
+                args.stream_band_mm,
             )
             frame_paths.append(out)
 
