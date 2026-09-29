@@ -92,6 +92,37 @@ def nearest_wire(seed_u, pitch):
     return round(seed_u / pitch) * pitch
 
 
+def clip_paths_near_wire(paths, wire_u, radius_mm):
+    """Keep only the part of each trajectory inside a circle around the wire.
+
+    One point immediately before first entry is retained when available so the
+    approach to the avalanche region remains visually continuous. Trajectories
+    that never enter the requested radius are omitted entirely.
+    """
+    if radius_mm is None:
+        return paths
+
+    clipped = {}
+    r2max = radius_mm * radius_mm
+
+    for eid, pts in paths.items():
+        inside_indices = [
+            j for j, p in enumerate(pts)
+            if (p["u"] - wire_u) ** 2 + p["v"] ** 2 <= r2max
+        ]
+        if not inside_indices:
+            continue
+
+        first = inside_indices[0]
+        last = inside_indices[-1]
+
+        # Keep one point just before entry to make the incoming segment visible.
+        first_keep = max(0, first - 1)
+        clipped[eid] = pts[first_keep:last + 1]
+
+    return clipped
+
+
 def draw_background(ax, meta, field, background, half_width, v_half_window):
     us, vs, potential, ex, ey, status = field
 
@@ -180,7 +211,8 @@ def draw_background(ax, meta, field, background, half_width, v_half_window):
 
 
 def render_frame(out_path, tcut, meta, field, paths,
-                 background, half_width, v_half_window):
+                 background, half_width, v_half_window,
+                 path_radius_mm):
     fig, ax = plt.subplots(figsize=(10.0, 6.0))
 
     wire_u, xmin, xmax, ymin, ymax = draw_background(
@@ -189,8 +221,12 @@ def render_frame(out_path, tcut, meta, field, paths,
 
     seed_u = float(meta["seed_u_mm"])
     seed_v = float(meta["seed_v_mm"])
-    ax.scatter([seed_u], [seed_v], s=35, marker="x",
-               zorder=25, label="initial electron")
+
+    # For an ultra-tight avalanche view the original seed can be far outside
+    # the plotted region. Only draw it if it actually lies in the frame.
+    if xmin <= seed_u <= xmax and ymin <= seed_v <= ymax:
+        ax.scatter([seed_u], [seed_v], s=35, marker="x",
+                   zorder=25, label="initial electron")
 
     current_u = []
     current_v = []
@@ -254,7 +290,9 @@ def render_frame(out_path, tcut, meta, field, paths,
         f"avalanche size = {total_e} e⁻\n"
         f"stored trajectories = {stored}\n"
         f"branches started by frame = {born}\n"
-        f"Δt = {dt:.2f} ns"
+        f"Δt = {dt:.3f} ns"
+        + (f"\nshown path radius ≤ {path_radius_mm:g} mm"
+           if path_radius_mm is not None else "")
     )
     ax.text(
         0.015, 0.02, info,
@@ -310,6 +348,12 @@ def main():
     )
     parser.add_argument("--half-width-mm", type=float, default=1.25)
     parser.add_argument("--v-half-window-mm", type=float, default=None)
+    parser.add_argument(
+        "--path-radius-mm", type=float, default=None,
+        help="Show only trajectory points within this radius of the nearest anode wire")
+    parser.add_argument(
+        "--late-time-power", type=float, default=1.7,
+        help=">1 concentrates more animation frames near the late avalanche")
     parser.add_argument("--frames", type=int, default=80)
     parser.add_argument("--hold-frames", type=int, default=18)
     parser.add_argument("--fps", type=float, default=18.0)
@@ -324,20 +368,30 @@ def main():
     field = load_field_grid(field_rows)
     paths = group_paths(path_rows)
 
+    seed_u = float(meta["seed_u_mm"])
+    pitch = float(meta["wire_pitch_mm"])
+    wire_u = nearest_wire(seed_u, pitch)
+
+    # For the close-up avalanche movie, discard the long pre-avalanche drift
+    # and keep only trajectory portions close to the selected anode wire.
+    paths = clip_paths_near_wire(paths, wire_u, args.path_radius_mm)
+
     if not paths:
         raise RuntimeError(
-            "No microscopic avalanche paths were stored. "
-            "Check the C++ run output."
+            "No microscopic avalanche paths remain in the requested view. "
+            "Increase --path-radius-mm or check the C++ run output."
         )
 
     all_times = [p["t"] for pts in paths.values() for p in pts]
     tmin = min(all_times)
     tmax = max(all_times)
 
-    # Use a slightly nonlinear time scan: more frames near the late avalanche
-    # where multiplication becomes visually rapid.
+    # Start the movie only when a stored trajectory reaches the requested
+    # near-wire region. Use a nonlinear time scan with dense sampling near the
+    # late avalanche, where multiplication becomes visually rapid.
     x = np.linspace(0.0, 1.0, args.frames)
-    fractions = 1.0 - (1.0 - x) ** 1.7
+    power = max(1.0, args.late_time_power)
+    fractions = 1.0 - (1.0 - x) ** power
     times = tmin + fractions * (tmax - tmin)
 
     if args.keep_frames:
@@ -361,6 +415,7 @@ def main():
                 args.background,
                 args.half_width_mm,
                 args.v_half_window_mm,
+                args.path_radius_mm,
             )
             frame_paths.append(out)
 
