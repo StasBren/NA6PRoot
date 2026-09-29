@@ -82,6 +82,8 @@ int main(int argc, char** argv) {
 
   const double fieldHalfWidthCm =
       0.1 * ReadArg(argc, argv, "--field-half-width-mm", 3.0);
+  const double fieldVHalfWidthCm =
+      0.1 * ReadArg(argc, argv, "--field-v-half-width-mm", 0.0);
   const int fieldUSteps =
       ReadIntArg(argc, argv, "--field-u-steps", 181);
   const int fieldVSteps =
@@ -95,6 +97,7 @@ int main(int argc, char** argv) {
       e0Ev <= 0. || halfNumberOfWires < 1 ||
       avalancheLimit <= 0 || maxLines < 0 ||
       maxPointsPerLine < 2 || fieldHalfWidthCm <= 0. ||
+      fieldVHalfWidthCm < 0. ||
       fieldUSteps < 3 || fieldVSteps < 3) {
     std::cerr << "Invalid input parameters.\n";
     return 2;
@@ -135,11 +138,20 @@ int main(int argc, char** argv) {
   std::ofstream fieldOut(fieldFile);
   fieldOut << "u_mm,v_mm,ex_Vcm,ey_Vcm,ez_Vcm,E_Vcm,potential_V,status\n";
 
+  const double fieldVMin =
+      fieldVHalfWidthCm > 0.
+          ? std::max(-gapMinusCm, -fieldVHalfWidthCm)
+          : -gapMinusCm;
+  const double fieldVMax =
+      fieldVHalfWidthCm > 0.
+          ? std::min(+gapPlusCm, +fieldVHalfWidthCm)
+          : +gapPlusCm;
+
   for (int iv = 0; iv < fieldVSteps; ++iv) {
     const double fv =
         static_cast<double>(iv) / static_cast<double>(fieldVSteps - 1);
     const double v =
-        -gapMinusCm + fv * (gapMinusCm + gapPlusCm);
+        fieldVMin + fv * (fieldVMax - fieldVMin);
 
     for (int iu = 0; iu < fieldUSteps; ++iu) {
       const double fu =
@@ -317,6 +329,9 @@ int main(int argc, char** argv) {
           << "seed_v_mm=" << 10. * v0Cm << "\n"
           << "seed_w_mm=" << 10. * w0Cm << "\n"
           << "seed_energy_eV=" << e0Ev << "\n"
+          << "field_half_width_mm=" << 10. * fieldHalfWidthCm << "\n"
+          << "field_v_min_mm=" << 10. * fieldVMin << "\n"
+          << "field_v_max_mm=" << 10. * fieldVMax << "\n"
           << "avalanche_ok=" << (ok ? 1 : 0) << "\n"
           << "avalanche_electrons=" << ne << "\n"
           << "avalanche_ions=" << ni << "\n"
