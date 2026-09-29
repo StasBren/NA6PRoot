@@ -347,6 +347,11 @@ def draw_field_background(
             zorder=1,
         )
 
+        u_plot = u_stream[::step_u]
+        v_plot = v_stream[::step_v]
+        ex_plot = exn[::step_v, ::step_u]
+        ey_plot = eyn[::step_v, ::step_u]
+
         if stream_focus == "track":
             start_points = make_track_focused_seed_points(
                 meta,
@@ -358,14 +363,31 @@ def draw_field_background(
                 stream_seeds,
                 stream_band_mm,
             )
+
+            if len(start_points):
+                # streamplot validates start points against the ACTUAL grid
+                # passed to it. After downsampling, that grid can end slightly
+                # inside the requested display limits. Filter against those
+                # true boundaries to avoid "starting point outside data
+                # boundaries" errors for clusters close to a cathode/edge.
+                eps_u = max(1.e-9, 1.e-7 * max(u_plot[-1] - u_plot[0], 1.))
+                eps_v = max(1.e-9, 1.e-7 * max(v_plot[-1] - v_plot[0], 1.))
+                inside = (
+                    (start_points[:, 0] > u_plot[0] + eps_u)
+                    & (start_points[:, 0] < u_plot[-1] - eps_u)
+                    & (start_points[:, 1] > v_plot[0] + eps_v)
+                    & (start_points[:, 1] < v_plot[-1] - eps_v)
+                )
+                start_points = start_points[inside]
+
             if len(start_points):
                 stream_kwargs["start_points"] = start_points
 
         ax.streamplot(
-            u_stream[::step_u],
-            v_stream[::step_v],
-            exn[::step_v, ::step_u],
-            eyn[::step_v, ::step_u],
+            u_plot,
+            v_plot,
+            ex_plot,
+            ey_plot,
             **stream_kwargs,
         )
 
