@@ -93,11 +93,12 @@ def nearest_wire(seed_u, pitch):
 
 
 def clip_paths_near_wire(paths, wire_u, radius_mm):
-    """Keep only the part of each trajectory inside a circle around the wire.
+    """Keep only trajectory points inside a circle around the wire.
 
-    One point immediately before first entry is retained when available so the
-    approach to the avalanche region remains visually continuous. Trajectories
-    that never enter the requested radius are omitted entirely.
+    Trajectories that never enter the requested radius are omitted entirely.
+    Unlike the earlier renderer, no pre-entry point is retained: this avoids
+    showing long disconnected approach segments in an ultra-tight avalanche
+    close-up.
     """
     if radius_mm is None:
         return paths
@@ -115,10 +116,7 @@ def clip_paths_near_wire(paths, wire_u, radius_mm):
 
         first = inside_indices[0]
         last = inside_indices[-1]
-
-        # Keep one point just before entry to make the incoming segment visible.
-        first_keep = max(0, first - 1)
-        clipped[eid] = pts[first_keep:last + 1]
+        clipped[eid] = pts[first:last + 1]
 
     return clipped
 
@@ -277,6 +275,7 @@ def render_frame(out_path, tcut, meta, field, paths,
 
     total_e = int(float(meta["avalanche_electrons"]))
     stored = int(float(meta["stored_drift_lines"]))
+    size_limit_reached = int(float(meta.get("size_limit_reached", 0)))
     t0 = float(meta["t_min_ns"])
     dt = tcut - t0
 
@@ -290,6 +289,8 @@ def render_frame(out_path, tcut, meta, field, paths,
         f"avalanche size = {total_e} e⁻\n"
         f"stored trajectories = {stored}\n"
         f"branches started by frame = {born}\n"
+        + ("WARNING: avalanche size limit reached\n"
+           if size_limit_reached else "")
         f"Δt = {dt:.3f} ns"
         + (f"\nshown path radius ≤ {path_radius_mm:g} mm"
            if path_radius_mm is not None else "")
@@ -354,6 +355,12 @@ def main():
     parser.add_argument(
         "--late-time-power", type=float, default=1.7,
         help=">1 concentrates more animation frames near the late avalanche")
+    parser.add_argument(
+        "--start-at-multiplication", action="store_true",
+        help="Start shortly before the first secondary avalanche-electron trajectory appears")
+    parser.add_argument(
+        "--pre-roll-frac", type=float, default=0.08,
+        help="Fraction of the post-multiplication time span shown before the first secondary appears")
     parser.add_argument("--frames", type=int, default=80)
     parser.add_argument("--hold-frames", type=int, default=18)
     parser.add_argument("--fps", type=float, default=18.0)
@@ -386,9 +393,23 @@ def main():
     tmin = min(all_times)
     tmax = max(all_times)
 
-    # Start the movie only when a stored trajectory reaches the requested
-    # near-wire region. Use a nonlinear time scan with dense sampling near the
-    # late avalanche, where multiplication becomes visually rapid.
+    if args.start_at_multiplication and len(paths) > 1:
+        birth_times = sorted(
+            pts[0]["t"] for pts in paths.values() if pts
+        )
+        first_birth = birth_times[0]
+        eps = max(1.e-9, 1.e-6 * max(1.0, abs(tmax - tmin)))
+        secondary_births = [
+            t for t in birth_times if t > first_birth + eps
+        ]
+        if secondary_births:
+            first_secondary = min(secondary_births)
+            remaining = max(tmax - first_secondary, eps)
+            tmin = max(first_birth,
+                       first_secondary - args.pre_roll_frac * remaining)
+
+    # Use a nonlinear time scan with dense sampling near the late avalanche,
+    # where multiplication becomes visually rapid.
     x = np.linspace(0.0, 1.0, args.frames)
     power = max(1.0, args.late_time_power)
     fractions = 1.0 - (1.0 - x) ** power
