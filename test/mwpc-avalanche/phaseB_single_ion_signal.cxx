@@ -248,6 +248,8 @@ int main(int argc, char** argv) {
       outputPrefix + "_driftline.csv";
   const std::string ramoCheckFile =
       outputPrefix + "_ramo_check.csv";
+  const std::string weightingSharingFile =
+      outputPrefix + "_weighting_sharing.csv";
 
   std::ofstream waveOut(waveformFile);
   waveOut << "time_ns";
@@ -290,6 +292,17 @@ int main(int argc, char** argv) {
 
   std::ofstream driftOut(driftLineFile);
   driftOut << "index,u_mm,v_mm,w_mm,time_ns,step_mm,dt_ns\n";
+
+  std::ofstream sharingOut(weightingSharingFile);
+  sharingOut << "index,time_ns,u_mm,v_mm,w_mm";
+  for (const auto& label : labels) {
+    sharingOut << "," << label << "_phi";
+  }
+  sharingOut << ",sum_phi";
+  for (const auto& label : labels) {
+    sharingOut << "," << label << "_fraction";
+  }
+  sharingOut << "\n";
   for (std::size_t ip = 0; ip < driftPoints.size(); ++ip) {
     double dsMm = 0.;
     double dtns = 0.;
@@ -305,6 +318,27 @@ int main(int argc, char** argv) {
              << 10. * driftPoints[ip].v << ","
              << 10. * driftPoints[ip].w << ","
              << driftPoints[ip].t << "," << dsMm << "," << dtns << "\n";
+
+    std::vector<double> phiValues;
+    phiValues.reserve(labels.size());
+    double sumPhi = 0.;
+    for (const auto& label : labels) {
+      const double phi = weighting.WeightingPotential(
+          driftPoints[ip].u, driftPoints[ip].v, driftPoints[ip].w, label);
+      phiValues.push_back(phi);
+      sumPhi += phi;
+    }
+
+    sharingOut << ip << "," << driftPoints[ip].t << ","
+               << 10. * driftPoints[ip].u << ","
+               << 10. * driftPoints[ip].v << ","
+               << 10. * driftPoints[ip].w;
+    for (const double phi : phiValues) sharingOut << "," << phi;
+    sharingOut << "," << sumPhi;
+    for (const double phi : phiValues) {
+      sharingOut << "," << (sumPhi > 0. ? phi / sumPhi : 0.);
+    }
+    sharingOut << "\n";
   }
 
   // ------------------------------------------------------------------
@@ -451,7 +485,8 @@ int main(int argc, char** argv) {
   std::cout << "\nWrote " << waveformFile
             << ", " << summaryFile
             << ", " << driftLineFile
-            << " and " << ramoCheckFile << "\n"
+            << ", " << ramoCheckFile
+            << " and " << weightingSharingFile << "\n"
             << "Garfield signal unit: fC/ns; integrated values above are fC.\n"
             << "Direct Ramo check uses Garfield WeightingField independently "
                "of GetIonSignal.\n"
