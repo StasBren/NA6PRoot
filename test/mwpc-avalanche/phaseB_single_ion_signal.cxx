@@ -100,6 +100,8 @@ int main(int argc, char** argv) {
   const std::string outputPrefix =
       ReadStringArg(argc, argv, "--output-prefix",
                     "phaseB_single_ion");
+  const std::string verifyStrip =
+      ReadStringArg(argc, argv, "--verify-strip", "strip_0");
 
   if (gapMinusCm <= 0. || gapPlusCm <= 0. ||
       wirePitchCm <= 0. || wireDiameterCm <= 0. ||
@@ -186,6 +188,12 @@ int main(int argc, char** argv) {
     labels.push_back(label);
   }
 
+  if (std::find(labels.begin(), labels.end(), verifyStrip) == labels.end()) {
+    std::cerr << "--verify-strip label '" << verifyStrip
+              << "' is not among the configured readout strips.\n";
+    return 2;
+  }
+
   // ------------------------------------------------------------------
   // 3) Sensor: use the physical field for transport and weighting
   //    component for Shockley-Ramo signal calculation.
@@ -238,6 +246,8 @@ int main(int argc, char** argv) {
       outputPrefix + "_summary.csv";
   const std::string driftLineFile =
       outputPrefix + "_driftline.csv";
+  const std::string ramoCheckFile =
+      outputPrefix + "_ramo_check.csv";
 
   std::ofstream waveOut(waveformFile);
   waveOut << "time_ns";
@@ -260,37 +270,121 @@ int main(int argc, char** argv) {
     waveOut << "\n";
   }
 
+  // Cache the drift line so it can be used both for the ordinary drift-line
+  // CSV and for an independent local Shockley-Ramo diagnostic.
+  struct DriftPoint {
+    double u = 0.;
+    double v = 0.;
+    double w = 0.;
+    double t = 0.;
+  };
+
+  const std::size_t nDriftPoints = ion.GetNumberOfDriftLinePoints();
+  std::vector<DriftPoint> driftPoints;
+  driftPoints.reserve(nDriftPoints);
+  for (std::size_t ip = 0; ip < nDriftPoints; ++ip) {
+    DriftPoint p;
+    ion.GetDriftLinePoint(ip, p.u, p.v, p.w, p.t);
+    driftPoints.push_back(p);
+  }
+
   std::ofstream driftOut(driftLineFile);
   driftOut << "index,u_mm,v_mm,w_mm,time_ns,step_mm,dt_ns\n";
-  const std::size_t nDriftPoints = ion.GetNumberOfDriftLinePoints();
-  double pu = 0., pv = 0., pw = 0., pt = 0.;
-  for (std::size_t ip = 0; ip < nDriftPoints; ++ip) {
-    double du = 0., dv = 0., dw = 0., tt = 0.;
-    ion.GetDriftLinePoint(ip, du, dv, dw, tt);
+  for (std::size_t ip = 0; ip < driftPoints.size(); ++ip) {
     double dsMm = 0.;
     double dtns = 0.;
     if (ip > 0) {
-      const double dx = du - pu;
-      const double dy = dv - pv;
-      const double dz = dw - pw;
+      const double dx = driftPoints[ip].u - driftPoints[ip - 1].u;
+      const double dy = driftPoints[ip].v - driftPoints[ip - 1].v;
+      const double dz = driftPoints[ip].w - driftPoints[ip - 1].w;
       dsMm = 10. * std::sqrt(dx * dx + dy * dy + dz * dz);
-      dtns = tt - pt;
+      dtns = driftPoints[ip].t - driftPoints[ip - 1].t;
     }
-    driftOut << ip << "," << 10. * du << "," << 10. * dv << ","
-             << 10. * dw << "," << tt << "," << dsMm << "," << dtns
-             << "\n";
-    pu = du;
-    pv = dv;
-    pw = dw;
-    pt = tt;
+
+    driftOut << ip << "," << 10. * driftPoints[ip].u << ","
+             << 10. * driftPoints[ip].v << ","
+             << 10. * driftPoints[ip].w << ","
+             << driftPoints[ip].t << "," << dsMm << "," << dtns << "\n";
+  }
+
+  // ------------------------------------------------------------------
+  // 6) Direct Shockley-Ramo verification on each RKF trajectory segment.
+  //
+  // This is independent of Sensor::GetIonSignal:
+  //   - query the real drift field directly from driftField,
+  //   - query the weighting field directly from weighting,
+  //   - estimate v from consecutive trajectory points,
+  //   - form i = -q v . Ew at the segment midpoint.
+  //
+  // The minus sign matches the signal-current convention used here:
+  // Q_ind = q [phi_w(final) - phi_w(initial)].
+  // Since Ew = -grad(phi_w), dQ_ind/dt = -q v.Ew.
+  // ------------------------------------------------------------------
+  constexpr double elementaryChargeFc = 1.602176634e-4;
+
+  std::ofstream ramoOut(ramoCheckFile);
+  ramoOut
+      << "segment,t_mid_ns,u_mid_mm,v_mid_mm,w_mid_mm,"
+      << "vx_cm_per_ns,vy_cm_per_ns,vz_cm_per_ns,speed_mm_per_us,"
+      << "Ereal_x_V_per_cm,Ereal_y_V_per_cm,Ereal_z_V_per_cm,"
+      << "Ereal_mag_V_per_cm,field_status,"
+      << "Ew_x_per_cm,Ew_y_per_cm,Ew_z_per_cm,Ew_mag_per_cm,"
+      << "phi_start,phi_end,"
+      << "i_ramo_field_fC_per_ns,i_dphi_fC_per_ns\n";
+
+  for (std::size_t ip = 1; ip < driftPoints.size(); ++ip) {
+    const auto& a = driftPoints[ip - 1];
+    const auto& b = driftPoints[ip];
+    const double dt = b.t - a.t;
+    if (dt <= 0.) continue;
+
+    const double um = 0.5 * (a.u + b.u);
+    const double vm = 0.5 * (a.v + b.v);
+    const double wm = 0.5 * (a.w + b.w);
+    const double tm = 0.5 * (a.t + b.t);
+
+    const double vx = (b.u - a.u) / dt;
+    const double vy = (b.v - a.v) / dt;
+    const double vz = (b.w - a.w) / dt;
+    const double speedMmPerUs =
+        10000. * std::sqrt(vx * vx + vy * vy + vz * vz);
+
+    double ex = 0., ey = 0., ez = 0.;
+    Garfield::Medium* medium = nullptr;
+    int fieldStatus = 0;
+    driftField.ElectricField(um, vm, wm, ex, ey, ez, medium, fieldStatus);
+    const double eMag = std::sqrt(ex * ex + ey * ey + ez * ez);
+
+    double wx = 0., wy = 0., wz = 0.;
+    weighting.WeightingField(um, vm, wm, wx, wy, wz, verifyStrip);
+    const double ewMag = std::sqrt(wx * wx + wy * wy + wz * wz);
+
+    const double phiA =
+        weighting.WeightingPotential(a.u, a.v, a.w, verifyStrip);
+    const double phiB =
+        weighting.WeightingPotential(b.u, b.v, b.w, verifyStrip);
+
+    // q [fC] * v [cm/ns] * Ew [1/cm] = fC/ns.
+    const double iRamoField =
+        -elementaryChargeFc * (vx * wx + vy * wy + vz * wz);
+    const double iFromDeltaPhi =
+        elementaryChargeFc * (phiB - phiA) / dt;
+
+    ramoOut << (ip - 1) << "," << tm << ","
+            << 10. * um << "," << 10. * vm << "," << 10. * wm << ","
+            << vx << "," << vy << "," << vz << ","
+            << speedMmPerUs << ","
+            << ex << "," << ey << "," << ez << "," << eMag << ","
+            << fieldStatus << ","
+            << wx << "," << wy << "," << wz << "," << ewMag << ","
+            << phiA << "," << phiB << ","
+            << iRamoField << "," << iFromDeltaPhi << "\n";
   }
 
   std::ofstream sumOut(summaryFile);
   sumOut << "strip,center_w_mm,integrated_ion_signal_fC,"
             "peak_abs_current_fC_per_ns,phi_start,phi_end,"
             "ramo_delta_phi_fC\n";
-
-  constexpr double elementaryChargeFc = 1.602176634e-4;
 
   std::cout << std::fixed << std::setprecision(7);
   std::cout << "\n=== PHASE B1a: SINGLE-ION SHOCKLEY-RAMO SIGNAL ===\n"
@@ -319,7 +413,8 @@ int main(int argc, char** argv) {
     std::cout << "Garfield automatic geometry limit\n";
   }
   std::cout << "signal avg. order    : " << signalAveragingOrder << "\n"
-            << "drift-line points    : " << nDriftPoints << "\n\n"
+            << "drift-line points    : " << nDriftPoints << "\n"
+            << "direct Ramo check    : " << verifyStrip << "\n\n"
             << "strip   center_w[mm]   Q_signal[fC]   |I|_peak[fC/ns]"
                "   q*dphi[fC]\n";
 
@@ -355,8 +450,11 @@ int main(int argc, char** argv) {
 
   std::cout << "\nWrote " << waveformFile
             << ", " << summaryFile
-            << " and " << driftLineFile << "\n"
+            << ", " << driftLineFile
+            << " and " << ramoCheckFile << "\n"
             << "Garfield signal unit: fC/ns; integrated values above are fC.\n"
+            << "Direct Ramo check uses Garfield WeightingField independently "
+               "of GetIonSignal.\n"
             << "===========================================================\n";
 
   return ok ? 0 : 4;
