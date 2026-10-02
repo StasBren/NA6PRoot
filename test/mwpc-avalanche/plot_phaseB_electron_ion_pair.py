@@ -85,6 +85,17 @@ def main():
     te_ns = e["time_ns"].to_numpy(dtype=float)
     ie = e[e_col].to_numpy(dtype=float)
 
+    peak_e = float(np.max(np.abs(ie))) if len(ie) else 0.0
+    if peak_e > 0.0:
+        active = np.flatnonzero(np.abs(ie) > peak_e * 1.0e-5)
+        if len(active):
+            i_last = min(len(te_ns) - 1, int(active[-1]) + 2)
+            electron_zoom_max_ns = max(float(te_ns[i_last]), 0.005)
+        else:
+            electron_zoom_max_ns = float(te_ns[-1])
+    else:
+        electron_zoom_max_ns = float(te_ns[-1])
+
     ti_us = i["time_ns"].to_numpy(dtype=float) / 1000.0
     ii = i[i_col].to_numpy(dtype=float)
 
@@ -111,9 +122,10 @@ def main():
 
     # Prompt electron on its own fine time scale.
     ax_e.plot(te_ns, ie, linewidth=1.7)
+    ax_e.set_xlim(0.0, electron_zoom_max_ns)
     ax_e.set_xlabel("time [ns]")
     ax_e.set_ylabel("electron current [fC/ns]")
-    ax_e.set_title(f"{args.strip}: prompt electron")
+    ax_e.set_title(f"{args.strip}: prompt electron (auto-zoom)")
     ax_e.grid(alpha=0.25)
 
     # Slow positive-ion component.
@@ -160,6 +172,8 @@ def main():
     plt.close(fig)
 
     print(f"Strip                  : {args.strip}")
+    print(f"electron |I| peak      : {peak_e:.9e} fC/ns")
+    print(f"electron zoom max      : {electron_zoom_max_ns:.6g} ns")
     print(f"phi_start              : {float(row['phi_start']):.9g}")
     print(f"Qe expected            : {q_e_expected:.9e} fC")
     print(f"Qi expected            : {q_i_expected:.9e} fC")
