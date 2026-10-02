@@ -278,63 +278,47 @@ def main():
 
     # ------------------------------------------------------------------
     # 2) Signal composition versus observation time.
-    # Top: absolute accumulated component magnitudes.
-    # Bottom: the same information as a clean electron-vs-ion fraction.
+    # For presentation/interpretation we show only the physically transparent
+    # fractions; the absolute electron curve sits orders of magnitude below
+    # the ion curve and adds little visually.
     # ------------------------------------------------------------------
-    fig, axes = plt.subplots(2, 1, figsize=(9.5, 8.0), sharex=True)
-    ax0, ax1 = axes
+    fig, ax = plt.subplots(figsize=(9.5, 5.8))
 
-    ax0.loglog(
-        result["window_ns"],
-        result["sum_abs_Qe_fC"],
-        marker="o",
-        label="electron component",
-    )
-    ax0.loglog(
-        result["window_ns"],
-        result["sum_abs_Qi_fC"],
-        marker="o",
-        label="positive-ion component",
-    )
-    ax0.loglog(
-        result["window_ns"],
-        result["sum_abs_Qtotal_fC"],
-        marker="o",
-        label="combined e + ion signal",
-    )
-    ax0.set_ylabel("sum over strips |Q_k(T)| [fC]")
-    ax0.set_title("Accumulated induced signal: electrons, ions, and total")
-    ax0.legend()
-
-    ax1.semilogx(
+    ax.semilogx(
         result["window_ns"],
         100.0 * result["electron_component_fraction"],
         marker="o",
-        label="electron fraction",
+        label="electron contribution",
     )
-    ax1.semilogx(
+    ax.semilogx(
         result["window_ns"],
         100.0 * result["ion_component_fraction"],
         marker="o",
-        label="ion fraction",
+        label="positive-ion contribution",
     )
-    ax1.set_ylim(0.0, 102.0)
-    ax1.set_xlabel("observation window T [ns]")
-    ax1.set_ylabel("component fraction [%]")
-    ax1.set_title("Who supplies the accumulated induced charge?")
-    ax1.legend()
-
-    fig.suptitle("Stage B: electron + ion signal composition")
+    ax.set_ylim(0.0, 102.0)
+    ax.set_xlabel("observation window T [ns]")
+    ax.set_ylabel("fraction of accumulated induced charge [%]")
+    ax.set_title(
+        "Stage B: composition of the accumulated induced signal"
+    )
+    ax.legend()
     fig.tight_layout()
     fig.savefig(str(out) + "_signal_composition_vs_time.png", dpi=200)
     plt.close(fig)
 
     # ------------------------------------------------------------------
     # 3) Spatial sharing at two early windows.
-    # This is the resolution-relevant result: do e and i encode the same
-    # strip pattern, and what does the total 3-strip cluster look like?
+    # Use side-by-side bars instead of overlapping curves so that electron,
+    # ion, and total profiles remain visible even when they are almost equal.
+    # Restrict to the five strips carrying essentially all of the signal.
     # ------------------------------------------------------------------
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5.2), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5.4), sharey=True)
+
+    selected = np.isin(strip_ids, [-2, -1, 0, 1, 2])
+    selected_ids = strip_ids[selected]
+    xcat = np.arange(len(selected_ids), dtype=float)
+    bar_width = 0.25
 
     for ax, T in zip(axes, sharing_windows):
         if T not in profiles:
@@ -361,34 +345,39 @@ def main():
         else:
             prof = profiles[T]
 
-        ax.plot(
-            centers,
-            100.0 * prof["fe"],
-            marker="o",
-            linestyle="--",
+        fe = 100.0 * prof["fe"][selected]
+        fi = 100.0 * prof["fi"][selected]
+        ft = 100.0 * prof["ft"][selected]
+
+        ax.bar(
+            xcat - bar_width,
+            fe,
+            width=bar_width,
             label="electron",
         )
-        ax.plot(
-            centers,
-            100.0 * prof["fi"],
-            marker="o",
-            linestyle=":",
+        ax.bar(
+            xcat,
+            fi,
+            width=bar_width,
             label="positive ion",
         )
-        ax.plot(
-            centers,
-            100.0 * prof["ft"],
-            marker="o",
-            linewidth=2.0,
+        ax.bar(
+            xcat + bar_width,
+            ft,
+            width=bar_width,
             label="total e + ion",
         )
-        ax.set_xlabel("strip center w [mm]")
+        ax.set_xticks(xcat)
+        ax.set_xticklabels([str(int(i)) for i in selected_ids])
+        ax.set_xlabel("strip index")
         ax.set_title(f"T = {T:g} ns")
 
-    axes[0].set_ylabel("|Q_k(T)| / sum_j |Q_j(T)| [%]")
+    axes[0].set_ylabel(
+        "|Q_k(T)| / sum_j |Q_j(T)| [%]"
+    )
     axes[0].legend()
     fig.suptitle(
-        "Stage B: spatial strip sharing in the early signal window"
+        "Stage B: early spatial sharing — electron, ion, and total"
     )
     fig.tight_layout()
     fig.savefig(str(out) + "_early_spatial_sharing.png", dpi=200)
