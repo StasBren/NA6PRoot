@@ -22,7 +22,7 @@ def parse_args():
     p = argparse.ArgumentParser(
         description=(
             "Animate one positive ion in physical detector time together with "
-            "weighting-potential sharing and induced currents on neighbouring strips."
+            "induced currents and cumulative induced charge on neighbouring strips."
         )
     )
     p.add_argument(
@@ -78,11 +78,8 @@ def main():
     prefix = Path(args.prefix)
     drift_file = Path(str(prefix) + "_driftline.csv")
     wave_file = Path(str(prefix) + "_waveforms.csv")
-    sharing_file = Path(str(prefix) + "_weighting_sharing.csv")
-
     drift = pd.read_csv(drift_file)
     wave = pd.read_csv(wave_file)
-    sharing = pd.read_csv(sharing_file)
 
     ks = np.arange(-args.shown_half_strips, args.shown_half_strips + 1)
     labels = [strip_label(int(k)) for k in ks]
@@ -90,19 +87,12 @@ def main():
     for label in labels:
         if f"{label}_fC_per_ns" not in wave.columns:
             raise KeyError(f"Missing waveform column {label}_fC_per_ns")
-        if f"{label}_fraction" not in sharing.columns:
-            raise KeyError(
-                f"Missing sharing column {label}_fraction. "
-                "Re-run mwpc_phase_b_single_ion with the updated C++ code."
-            )
 
     td_ns = drift["time_ns"].to_numpy(dtype=float)
     vd_mm = drift["v_mm"].to_numpy(dtype=float)
     wd_mm = drift["w_mm"].to_numpy(dtype=float)
 
     tw_ns = wave["time_ns"].to_numpy(dtype=float)
-    ts_ns = sharing["time_ns"].to_numpy(dtype=float)
-
     t0_ns = max(float(td_ns[0]), 0.0)
     t1_ns = float(td_ns[-1])
     if t1_ns <= t0_ns:
@@ -123,25 +113,19 @@ def main():
             wave[f"{label}_fC_per_ns"].to_numpy(dtype=float),
         )
 
-    frame_fractions = np.zeros((n_frames, len(labels)))
-    for j, label in enumerate(labels):
-        frame_fractions[:, j] = np.interp(
-            frame_t_ns,
-            ts_ns,
-            sharing[f"{label}_fraction"].to_numpy(dtype=float),
-        )
-
-    # Renormalize over only the shown strips so the bar panel is a local sharing
-    # picture. With +/-2 strips this differs negligibly from the full sum except
-    # very near the wire plane.
-    shown_sum = frame_fractions.sum(axis=1)
-    good = shown_sum > 0
-    frame_fractions[good] /= shown_sum[good, None]
+    # Cumulative induced charge on each shown strip.
+    # This is the detector-level quantity Q_k(t) = integral_0^t I_k(t') dt'.
+    dt_wave_ns = float(np.median(np.diff(tw_ns)))
+    q_cum = {}
+    frame_q = {}
+    for label in labels:
+        current = wave[f"{label}_fC_per_ns"].to_numpy(dtype=float)
+        q_cum[label] = np.cumsum(current) * dt_wave_ns
+        frame_q[label] = np.interp(frame_t_ns, tw_ns, q_cum[label])
 
     central_current = wave["strip_0_fC_per_ns"].to_numpy(dtype=float)
-    dt_wave_ns = float(np.median(np.diff(tw_ns)))
-    q0_cum = np.cumsum(central_current) * dt_wave_ns
-    frame_q0 = np.interp(frame_t_ns, tw_ns, q0_cum)
+    q0_cum = q_cum["strip_0"]
+    frame_q0 = frame_q["strip_0"]
 
     physical_mask = (tw_ns >= t0_ns) & (tw_ns <= t1_ns + 0.5 * dt_wave_ns)
     tw_plot_us = tw_ns[physical_mask] / 1000.0
@@ -149,7 +133,7 @@ def main():
     fig = plt.figure(figsize=(12, 7))
     gs = fig.add_gridspec(2, 2, width_ratios=(1.0, 1.35), height_ratios=(1.0, 0.85))
     ax_geom = fig.add_subplot(gs[0, 0])
-    ax_share = fig.add_subplot(gs[1, 0])
+    ax_qbars = fig.add_subplot(gs[1, 0])
     ax_current = fig.add_subplot(gs[0, 1])
     ax_q = fig.add_subplot(gs[1, 1], sharex=ax_current)
 
@@ -185,7 +169,7 @@ def main():
             ),
             args.strip_width_mm,
             cathode_thickness,
-            alpha=0.15,
+            alpha=0.18,
             linewidth=1.0,
         )
         ax_geom.add_patch(rect)
@@ -216,19 +200,28 @@ def main():
 
     ax_geom.set_xlabel("w [mm]")
     ax_geom.set_ylabel("v [mm]")
-    ax_geom.set_title("Ion position and strip sensitivity")
+    ax_geom.set_title("Ion position and readout strips")
     ax_geom.grid(alpha=0.25)
 
     # --------------------------------------------------------------
-    # Weighting-potential sharing panel.
+    # Cumulative induced charge on neighbouring strips.
     # --------------------------------------------------------------
-    bars = ax_share.bar(ks, frame_fractions[0])
-    ax_share.set_ylim(0.0, 1.0)
-    ax_share.set_xticks(ks)
-    ax_share.set_xlabel("strip index k")
-    ax_share.set_ylabel(r"$\phi_{w,k}/\sum_j\phi_{w,j}$")
-    ax_share.set_title("Instantaneous weighting-potential sharing")
-    ax_share.grid(axis="y", alpha=0.25)
+    qbar_values0 = np.array([frame_q[label][0] for label in labels], dtype=float)
+    bars = ax_qbars.bar(ks, qbar_values0)
+
+    all_q_values = np.concatenate(
+        [np.asarray(frame_q[label], dtype=float) for label in labels]
+    )
+    qmin = float(np.min(all_q_values))
+    qmax = float(np.max(all_q_values))
+    qspan = max(qmax - qmin, max(abs(qmin), abs(qmax)) * 0.1, 1e-30)
+    ax_qbars.set_ylim(qmin - 0.10 * qspan, qmax + 0.10 * qspan)
+    ax_qbars.axhline(0.0, linewidth=0.8)
+    ax_qbars.set_xticks(ks)
+    ax_qbars.set_xlabel("strip index k")
+    ax_qbars.set_ylabel(r"$Q_k(t)$ [fC]")
+    ax_qbars.set_title("Cumulative induced charge on neighbouring strips")
+    ax_qbars.grid(axis="y", alpha=0.25)
 
     # --------------------------------------------------------------
     # Neighbour-strip current panel.
@@ -281,7 +274,7 @@ def main():
     ax_q.grid(alpha=0.25)
 
     fig.suptitle(
-        "Single positive ion: physical-time drift, strip sharing and induced currents",
+        "Single positive ion: drift, induced currents and strip charges",
         fontsize=14,
     )
     fig.tight_layout()
@@ -292,12 +285,8 @@ def main():
         ion_marker.set_data([frame_w[frame]], [frame_v[frame]])
         trail.set_data(frame_w[: frame + 1], frame_v[: frame + 1])
 
-        fractions = frame_fractions[frame]
-        for rect, bar, frac in zip(strip_rects, bars, fractions):
-            # Geometry strip intensity and bar height encode the same
-            # instantaneous normalized weighting-potential share.
-            rect.set_alpha(0.10 + 0.85 * float(frac))
-            bar.set_height(float(frac))
+        for bar, label in zip(bars, labels):
+            bar.set_height(float(frame_q[label][frame]))
 
         for label in labels:
             current_markers[label].set_data(
@@ -308,17 +297,15 @@ def main():
         q_marker.set_data([t_us], [frame_q0[frame]])
         q_cursor.set_xdata([t_us, t_us])
 
-        central_fraction = frame_fractions[frame, args.shown_half_strips]
         time_text.set_text(
             f"physical time = {t_us:.2f} us\n"
             f"v = {frame_v[frame]:.3f} mm\n"
-            f"central sharing = {central_fraction:.3f}"
+            f"Q0 = {frame_q0[frame]:.3e} fC"
         )
 
         return (
             ion_marker,
             trail,
-            *strip_rects,
             *bars,
             *current_markers.values(),
             current_cursor,
@@ -349,7 +336,6 @@ def main():
 
     print(f"Driftline        : {drift_file}")
     print(f"Waveforms        : {wave_file}")
-    print(f"Weighting sharing: {sharing_file}")
     print(f"Physical drift   : {physical_duration_us:.6f} us")
     print(f"Shown strips     : {int(ks[0])} .. {int(ks[-1])}")
     print(f"GIF duration     : {args.duration_s:.3f} s")
