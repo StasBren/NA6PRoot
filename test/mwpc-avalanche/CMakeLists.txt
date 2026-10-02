@@ -51,6 +51,10 @@ add_executable(mwpc_phase_b_electron_ion_cloud phaseB_electron_ion_cloud_signal.
 target_link_libraries(mwpc_phase_b_electron_ion_cloud PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_phase_b_electron_ion_cloud PRIVATE cxx_std_17)
 
+add_executable(mwpc_phase_b_real_avalanche phaseB_real_avalanche_signal.cxx)
+target_link_libraries(mwpc_phase_b_real_avalanche PRIVATE Garfield::Garfield)
+target_compile_features(mwpc_phase_b_real_avalanche PRIVATE cxx_std_17)
+
 add_executable(mwpc_heed_visualization heed_muon_visualization.cxx)
 target_link_libraries(mwpc_heed_visualization PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_heed_visualization PRIVATE cxx_std_17)
