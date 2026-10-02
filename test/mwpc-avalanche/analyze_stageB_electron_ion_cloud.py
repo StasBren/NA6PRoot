@@ -376,7 +376,7 @@ def main():
         )
     ax.axhline(0.0, linewidth=0.8)
     ax.set_xlabel("strip center w [mm]")
-    ax.set_ylabel("Q_e+k(T) + Q_i,k(T) [fC]")
+    ax.set_ylabel("Q_e,k(T) + Q_i,k(T) [fC]")
     ax.set_title(
         "Stage B: electron + ion signed induced charge vs integration window"
     )
