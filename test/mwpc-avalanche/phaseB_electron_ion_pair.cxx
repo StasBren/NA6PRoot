@@ -324,6 +324,8 @@ int main(int argc, char** argv) {
   std::vector<std::vector<double>> electronFine(
       labels.size(), std::vector<double>(nElectronBins, 0.));
   std::vector<double> qElectronFine(labels.size(), 0.);
+  std::vector<double> planeElectronFine(nElectronBins, 0.);
+  double qPlaneElectronFine = 0.;
 
   for (int ibin = 0; ibin < nElectronBins; ++ibin) {
     for (std::size_t j = 0; j < labels.size(); ++j) {
@@ -332,6 +334,9 @@ int main(int argc, char** argv) {
       electronFine[j][ibin] = current;
       qElectronFine[j] += current * electronDtNs;
     }
+    planeElectronFine[ibin] =
+        sensor.GetElectronSignal(planeReadoutLabel, ibin);
+    qPlaneElectronFine += planeElectronFine[ibin] * electronDtNs;
   }
 
   const std::string electronWaveFile =
@@ -347,8 +352,7 @@ int main(int argc, char** argv) {
     for (std::size_t j = 0; j < labels.size(); ++j) {
       eWaveOut << "," << electronFine[j][ibin];
     }
-    eWaveOut << "," << sensor.GetElectronSignal(planeReadoutLabel, ibin)
-             << "\n";
+    eWaveOut << "," << planeElectronFine[ibin] << "\n";
   }
 
   WriteDriftLine(outputPrefix + "_electron_driftline.csv",
@@ -374,6 +378,7 @@ int main(int argc, char** argv) {
   std::vector<std::vector<double>> ionOnly(
       labels.size(), std::vector<double>(nIonBins, 0.));
   std::vector<double> qIonOnly(labels.size(), 0.);
+  std::vector<double> planeIonOnly(nIonBins, 0.);
 
   for (int ibin = 0; ibin < nIonBins; ++ibin) {
     for (std::size_t j = 0; j < labels.size(); ++j) {
@@ -382,6 +387,8 @@ int main(int argc, char** argv) {
       ionOnly[j][ibin] = current;
       qIonOnly[j] += current * ionDtNs;
     }
+    planeIonOnly[ibin] =
+        sensor.GetIonSignal(planeReadoutLabel, ibin);
   }
 
   const std::string ionWaveFile =
@@ -397,8 +404,7 @@ int main(int argc, char** argv) {
     for (std::size_t j = 0; j < labels.size(); ++j) {
       iWaveOut << "," << ionOnly[j][ibin];
     }
-    iWaveOut << "," << sensor.GetIonSignal(planeReadoutLabel, ibin)
-             << "\n";
+    iWaveOut << "," << planeIonOnly[ibin] << "\n";
   }
 
   WriteDriftLine(outputPrefix + "_ion_driftline.csv",
@@ -444,6 +450,9 @@ int main(int argc, char** argv) {
   std::vector<double> qIonCoarse(labels.size(), 0.);
   std::vector<double> qTotalCoarse(labels.size(), 0.);
   double maxLinearityResidual = 0.;
+  double qPlaneElectronCoarse = 0.;
+  double qPlaneIonCoarse = 0.;
+  double qPlaneTotalCoarse = 0.;
 
   for (int ibin = 0; ibin < nIonBins; ++ibin) {
     cWaveOut << (ibin + 0.5) * ionDtNs;
@@ -463,11 +472,20 @@ int main(int argc, char** argv) {
       maxLinearityResidual =
           std::max(maxLinearityResidual, std::abs(it - ie - ii));
     }
+    const double planeIe =
+        sensor.GetElectronSignal(planeReadoutLabel, ibin);
+    const double planeIi =
+        sensor.GetIonSignal(planeReadoutLabel, ibin);
+    const double planeIt =
+        sensor.GetSignal(planeReadoutLabel, ibin);
     cWaveOut
-        << "," << sensor.GetElectronSignal(planeReadoutLabel, ibin)
-        << "," << sensor.GetIonSignal(planeReadoutLabel, ibin)
-        << "," << sensor.GetSignal(planeReadoutLabel, ibin)
+        << "," << planeIe
+        << "," << planeIi
+        << "," << planeIt
         << "\n";
+    qPlaneElectronCoarse += planeIe * ionDtNs;
+    qPlaneIonCoarse += planeIi * ionDtNs;
+    qPlaneTotalCoarse += planeIt * ionDtNs;
   }
 
   // ------------------------------------------------------------------
@@ -567,26 +585,6 @@ int main(int argc, char** argv) {
       +elementaryChargeFc * (phiPlaneIonEnd - phiPlaneStart);
   const double qPlaneTotalExpected =
       qPlaneElectronExpected + qPlaneIonExpected;
-
-  double qPlaneElectronFine = 0.;
-  for (int ibin = 0; ibin < nElectronBins; ++ibin) {
-    qPlaneElectronFine +=
-        sensor.GetElectronSignal(planeReadoutLabel, ibin) * electronDtNs;
-  }
-
-  // The sensor currently contains the combined coarse run, so integrate its
-  // plane components on the coarse grid as an independent linearity check.
-  double qPlaneElectronCoarse = 0.;
-  double qPlaneIonCoarse = 0.;
-  double qPlaneTotalCoarse = 0.;
-  for (int ibin = 0; ibin < nIonBins; ++ibin) {
-    qPlaneElectronCoarse +=
-        sensor.GetElectronSignal(planeReadoutLabel, ibin) * ionDtNs;
-    qPlaneIonCoarse +=
-        sensor.GetIonSignal(planeReadoutLabel, ibin) * ionDtNs;
-    qPlaneTotalCoarse +=
-        sensor.GetSignal(planeReadoutLabel, ibin) * ionDtNs;
-  }
 
   const std::string planeSummaryFile =
       outputPrefix + "_plane_control_summary.csv";
