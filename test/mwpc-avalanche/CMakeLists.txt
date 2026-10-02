@@ -39,6 +39,10 @@ add_executable(mwpc_phase_b_single_ion phaseB_single_ion_signal.cxx)
 target_link_libraries(mwpc_phase_b_single_ion PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_phase_b_single_ion PRIVATE cxx_std_17)
 
+add_executable(mwpc_phase_b_electron_ion_pair phaseB_electron_ion_pair.cxx)
+target_link_libraries(mwpc_phase_b_electron_ion_pair PRIVATE Garfield::Garfield)
+target_compile_features(mwpc_phase_b_electron_ion_pair PRIVATE cxx_std_17)
+
 add_executable(mwpc_phase_b_ion_cloud phaseB_ion_cloud_signal.cxx)
 target_link_libraries(mwpc_phase_b_ion_cloud PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_phase_b_ion_cloud PRIVATE cxx_std_17)
