@@ -115,7 +115,7 @@ int main(int argc, char** argv) {
       sigmaUUm < 0. || sigmaVUm < 0. || sigmaWUm < 0. ||
       dtNs <= 0. || tMaxUs <= 0. || maxStepMm <= 0. ||
       signalAveragingOrder < 1) {
-    std::cerr << "Invalid Phase-B1b ion-cloud parameters.\n";
+    std::cerr << "Invalid Stage-B ion-cloud parameters.\n";
     return 2;
   }
 
@@ -333,7 +333,7 @@ int main(int argc, char** argv) {
             "fraction_of_abs_integrated_charge\n";
 
   std::cout << std::scientific << std::setprecision(6);
-  std::cout << "\n=== PHASE B1b: COMPACT AVALANCHE-ION CLOUD ===\n"
+  std::cout << "\n=== STAGE B: SYNTHETIC AVALANCHE-ION CLOUD ===\n"
             << "side                    : " << side << "\n"
             << "gas                     : Ar/CO2 70:30\n"
             << "ion mobility model      : " << mobilityFile
