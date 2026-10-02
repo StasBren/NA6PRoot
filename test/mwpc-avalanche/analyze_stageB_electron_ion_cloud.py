@@ -14,15 +14,24 @@ For the windows used in this study (50 ns and above), the electron pulse has
 already ended, so Q_e,k(T) is simply the full prompt-electron induced charge.
 
 This script deliberately applies NO frontend electronics, shaping, threshold,
-ADC, or VMM model.  It compares:
-  * raw electron and ion peak-current spatial profiles;
-  * finite-window charge sharing for the full e+i signal;
-  * cluster RMS versus observation time;
-  * optionally, the previous ions-only baseline.
+ADC, or VMM model.
 
-The raw "prompt total" peak-current profile uses I_e(t) plus the first ion
-current bin.  Since the electron pulse is ps-scale while the ion current varies
-on much longer timescales, this is a controlled early-time approximation.
+Important limitation of the SYNTHETIC electron cloud:
+all electrons are created at t=0 with the same user-chosen initial energy and a
+radially inward initial direction.  Therefore the absolute ps-scale electron
+peak current is NOT a physical prediction of an avalanche.  It is extremely
+sensitive to this artificial initial condition and to the electron time binning.
+
+Robust observables in this synthetic e+i step are instead:
+  * the full prompt-electron induced charge (Shockley-Ramo endpoint quantity);
+  * finite-window charge sharing Q_e(T) + Q_i(T) for T well above the electron
+    drift time;
+  * cluster RMS versus observation time;
+  * comparison to the ions-only baseline.
+
+The raw electron waveform is retained only as a diagnostic.  A quantitative
+electron peak-current prediction requires a real microscopic avalanche with
+physical creation times and secondary-electron kinematics.
 """
 
 import argparse
@@ -335,32 +344,57 @@ def main():
     result.to_csv(str(out) + "_summary.csv", index=False)
 
     # ------------------------------------------------------------
-    # 1) Raw peak-current component profiles.
+    # 1) Stage-B component spatial diagnostics.
+    #
+    # Do NOT present the synthetic electron raw peak as a physical avalanche
+    # observable.  Instead show:
+    #   - ion peak-current profile (well-defined in the current ion model);
+    #   - full prompt-electron induced-charge profile (endpoint-robust).
     # ------------------------------------------------------------
-    fig, ax = plt.subplots(figsize=(9.5, 5.8))
-    ax.plot(
-        centers, peak_e, marker="o", label="electron peak |I|"
+    qe_centroid, qe_rms = weighted_centroid_rms(
+        centers, np.abs(q_e_full)
     )
-    ax.plot(
-        centers, peak_i, marker="o", label="ion peak |I|"
-    )
-    ax.plot(
+
+    fig, axes = plt.subplots(2, 1, figsize=(9.5, 8.5), sharex=True)
+    ax0, ax1 = axes
+
+    ax0.plot(
         centers,
-        peak_prompt_total,
+        peak_i,
         marker="o",
-        label="prompt total |I_e + I_i(t~0)|",
+        label="ion peak |I|",
     )
-    ax.set_xlabel("strip center w [mm]")
-    ax.set_ylabel("peak induced current [fC/ns]")
-    ax.set_title(
-        "Stage B: raw peak-current spatial profiles\n"
-        f"RMS e={e_peak_rms:.3f} mm, "
-        f"i={i_peak_rms:.3f} mm, "
-        f"prompt total={t_peak_rms:.3f} mm"
+    ax0.set_ylabel("ion peak induced current [fC/ns]")
+    ax0.set_title(
+        "Ion peak-current spatial profile "
+        f"(RMS = {i_peak_rms:.3f} mm)"
     )
-    ax.legend()
+    ax0.legend()
+
+    ax1.plot(
+        centers,
+        q_e_full,
+        marker="o",
+        label="full prompt-electron Q",
+    )
+    ax1.axhline(0.0, linewidth=0.8)
+    ax1.set_xlabel("strip center w [mm]")
+    ax1.set_ylabel("electron induced charge [fC]")
+    ax1.set_title(
+        "Prompt-electron induced-charge spatial profile "
+        f"(abs-weight RMS = {qe_rms:.3f} mm)"
+    )
+    ax1.legend()
+
+    fig.suptitle(
+        "Stage B: reliable component spatial diagnostics "
+        "(synthetic e+i cloud)"
+    )
     fig.tight_layout()
-    fig.savefig(str(out) + "_peak_current_profiles.png", dpi=200)
+    fig.savefig(
+        str(out) + "_component_spatial_diagnostics.png",
+        dpi=200,
+    )
     plt.close(fig)
 
     # ------------------------------------------------------------
@@ -431,10 +465,10 @@ def main():
             label="previous ions-only baseline",
         )
     ax.axhline(
-        t_peak_rms,
+        i_peak_rms,
         linestyle=":",
         linewidth=1.2,
-        label=f"prompt-total peak-current RMS = {t_peak_rms:.3f} mm",
+        label=f"ion peak-current RMS = {i_peak_rms:.3f} mm",
     )
     ax.set_xlabel("integration window T [ns]")
     ax.set_ylabel("|Q|-weighted cluster RMS [mm]")
@@ -447,7 +481,40 @@ def main():
     plt.close(fig)
 
     # ------------------------------------------------------------
-    # 5) Full-charge component profile.
+    # 5) How important is the prompt-electron charge as the observation
+    #    window grows?
+    # ------------------------------------------------------------
+    electron_abs_fraction = []
+    for T in windows:
+        qe = profiles[T]["qe"]
+        qi = profiles[T]["qi"]
+        denom = np.sum(np.abs(qe)) + np.sum(np.abs(qi))
+        electron_abs_fraction.append(
+            np.sum(np.abs(qe)) / denom if denom > 0 else np.nan
+        )
+
+    fig, ax = plt.subplots(figsize=(9.5, 5.8))
+    ax.semilogx(
+        windows,
+        electron_abs_fraction,
+        marker="o",
+    )
+    ax.set_xlabel("integration window T [ns]")
+    ax.set_ylabel(
+        "sum |Q_e,k| / (sum |Q_e,k| + sum |Q_i,k|)"
+    )
+    ax.set_title(
+        "Stage B: relative prompt-electron charge contribution vs time"
+    )
+    fig.tight_layout()
+    fig.savefig(
+        str(out) + "_electron_charge_fraction_vs_time.png",
+        dpi=200,
+    )
+    plt.close(fig)
+
+    # ------------------------------------------------------------
+    # 6) Full-charge component profile.
     # ------------------------------------------------------------
     Tfull = ion_full_window_ns
     q_i_full = profiles[Tfull]["qi"]
@@ -472,9 +539,12 @@ def main():
     print(f"electron waveform window      : {electron_window_ns:.6g} ns")
     print(f"ion waveform dt               : {i_dt:.6g} ns")
     print(f"ion waveform full window      : {ion_full_window_ns:.6g} ns")
-    print(f"electron peak-profile RMS     : {e_peak_rms:.6f} mm")
     print(f"ion peak-profile RMS          : {i_peak_rms:.6f} mm")
-    print(f"prompt-total peak RMS         : {t_peak_rms:.6f} mm")
+    print(f"electron charge-profile RMS   : {qe_rms:.6f} mm")
+    print(
+        "electron raw peak current     : diagnostic only; not interpreted "
+        "physically in the synthetic cloud"
+    )
     if baseline_times is not None:
         print(f"ions-only baseline            : {ions_only_prefix}")
 
@@ -492,10 +562,11 @@ def main():
     print("\nWrote:")
     for suffix in [
         "_summary.csv",
-        "_peak_current_profiles.png",
+        "_component_spatial_diagnostics.png",
         "_signed_Q_profiles.png",
         "_abs_Q_sharing.png",
         "_cluster_rms_comparison.png",
+        "_electron_charge_fraction_vs_time.png",
         "_full_charge_components.png",
     ]:
         print(" ", str(out) + suffix)
