@@ -93,8 +93,17 @@ void ConfigureElectronDrift(Garfield::DriftLineRKF& drift,
       static_cast<std::size_t>(averagingOrder));
 
   // This test is deliberately ONE electron + ONE positive ion.
-  // Disable electron multiplication and the automatically generated ion tail.
-  drift.EnableAvalanche(false);
+  //
+  // Important Garfield++ detail:
+  // for DriftLineRKF electron signals, the signal weight is tied to the
+  // electron population along the drift line. Disabling avalanche calculation
+  // altogether can leave that population unavailable for ComputeSignal.
+  // Therefore keep the electron-avalanche machinery enabled but force the
+  // multiplication factor to exactly one. This gives one drifting electron
+  // with no multiplication. Disable the automatically generated ion tail
+  // because the positive ion is drifted explicitly as a separate particle.
+  drift.EnableAvalanche(true);
+  drift.SetGainFluctuationsFixed(1.0);
   drift.EnableIonTail(false);
   drift.SetMaximumStepSize();
 }
