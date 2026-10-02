@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -118,6 +119,10 @@ int main(int argc, char** argv) {
 
   const int avalancheLimit =
       ReadIntArg(argc, argv, "--avalanche-limit", 50000);
+  const int minAvalancheIons =
+      ReadIntArg(argc, argv, "--min-avalanche-ions", 1);
+  const int maxAvalancheAttempts =
+      ReadIntArg(argc, argv, "--max-avalanche-attempts", 20);
 
   const double electronDtNs =
       ReadArg(argc, argv, "--electron-dt-ns", 0.02);
@@ -145,7 +150,8 @@ int main(int argc, char** argv) {
       stripPitchCm <= 0. || stripWidthCm <= 0. ||
       stripWidthCm > stripPitchCm || halfStrips < 1 ||
       seedDistanceMm <= 0. || seedEnergyEv <= 0. ||
-      avalancheLimit < 1 ||
+      avalancheLimit < 1 || minAvalancheIons < 0 ||
+      maxAvalancheAttempts < 1 ||
       electronDtNs <= 0. || electronTmaxNs <= 0. ||
       ionDtNs <= 0. || ionTmaxUs <= 0. ||
       maxIonStepMm <= 0. || signalAveragingOrder < 1) {
@@ -244,28 +250,61 @@ int main(int argc, char** argv) {
       static_cast<int>(std::ceil(electronTmaxNs / electronDtNs));
   sensor.SetTimeWindow(0., electronDtNs, nElectronBins);
 
-  gIonBirths.clear();
-
-  Garfield::AvalancheMicroscopic avalanche(&sensor);
-  avalanche.EnableAvalancheSizeLimit(
-      static_cast<unsigned int>(avalancheLimit));
-  avalanche.EnableSignalCalculation(true);
-  avalanche.UseWeightingPotential(true);
-  avalanche.SetUserHandleIonisation(RecordIonisation);
-
-  // Zero direction is intentional: Garfield samples a random initial
-  // direction for a gas electron when the supplied vector has zero norm.
-  const bool avalancheOk =
-      avalanche.AvalancheElectron(
-          seedUCm, seedVCm, seedWCm, 0.,
-          seedEnergyEv, 0., 0., 0.);
-
+  // A single seed electron has a sizable probability to produce zero gain
+  // in this MWPC configuration.  For this intermediate Stage-B study we want
+  // one NON-ZERO microscopic avalanche to inspect, so we may reject zero/small
+  // trials.  This is explicitly a conditioned example, not an unbiased event
+  // sample; the unbiased gain distribution remains the Stage-A ensemble test.
+  std::unique_ptr<Garfield::AvalancheMicroscopic> avalanche;
+  bool avalancheOk = false;
   int nElectrons = 0;
   int nIonsGarfield = 0;
-  avalanche.GetAvalancheSize(nElectrons, nIonsGarfield);
+  int acceptedAttempt = 0;
+
+  for (int attempt = 1; attempt <= maxAvalancheAttempts; ++attempt) {
+    sensor.ClearSignal();
+    gIonBirths.clear();
+
+    avalanche = std::make_unique<Garfield::AvalancheMicroscopic>(&sensor);
+    avalanche->EnableAvalancheSizeLimit(
+        static_cast<unsigned int>(avalancheLimit));
+    avalanche->EnableSignalCalculation(true);
+    avalanche->UseWeightingPotential(true);
+    avalanche->SetUserHandleIonisation(RecordIonisation);
+
+    // Zero direction is intentional: Garfield samples a random initial
+    // direction for a gas electron when the supplied vector has zero norm.
+    const bool ok =
+        avalanche->AvalancheElectron(
+            seedUCm, seedVCm, seedWCm, 0.,
+            seedEnergyEv, 0., 0., 0.);
+
+    avalanche->GetAvalancheSize(nElectrons, nIonsGarfield);
+
+    std::cout
+        << "avalanche attempt " << attempt
+        << " : ok=" << (ok ? "yes" : "no")
+        << "  e=" << nElectrons
+        << "  ions=" << nIonsGarfield
+        << "  recorded births=" << gIonBirths.size() << "\n";
+
+    if (ok && nIonsGarfield >= minAvalancheIons) {
+      avalancheOk = true;
+      acceptedAttempt = attempt;
+      break;
+    }
+  }
+
+  if (!avalancheOk) {
+    std::cerr
+        << "FAIL: no avalanche with at least " << minAvalancheIons
+        << " ions found in " << maxAvalancheAttempts
+        << " attempts.\n";
+    return 5;
+  }
 
   const std::size_t nElectronEndpoints =
-      avalanche.GetNumberOfElectronEndpoints();
+      avalanche->GetNumberOfElectronEndpoints();
 
   std::vector<double> qElectron(labels.size(), 0.);
   std::vector<double> qElectronRamo(labels.size(), 0.);
@@ -280,7 +319,7 @@ int main(int argc, char** argv) {
     double u0 = 0., v0 = 0., w0 = 0., t0 = 0., e0 = 0.;
     double u1 = 0., v1 = 0., w1 = 0., t1 = 0., e1 = 0.;
     int status = 0;
-    avalanche.GetElectronEndpoint(
+    avalanche->GetElectronEndpoint(
         ie, u0, v0, w0, t0, e0,
         u1, v1, w1, t1, e1, status);
 
@@ -333,7 +372,7 @@ int main(int argc, char** argv) {
     double u0 = 0., v0 = 0., w0 = 0., t0 = 0., e0 = 0.;
     double u1 = 0., v1 = 0., w1 = 0., t1 = 0., e1 = 0.;
     int status = 0;
-    avalanche.GetElectronEndpoint(
+    avalanche->GetElectronEndpoint(
         ie, u0, v0, w0, t0, e0,
         u1, v1, w1, t1, e1, status);
     endpointOut
@@ -482,6 +521,10 @@ int main(int argc, char** argv) {
       << "strip pitch / width        : "
       << 10. * stripPitchCm << " / "
       << 10. * stripWidthCm << " mm\n"
+      << "conditioned non-zero study : min ions = "
+      << minAvalancheIons << "\n"
+      << "accepted avalanche attempt : "
+      << acceptedAttempt << " / " << maxAvalancheAttempts << "\n"
       << "avalanche success          : "
       << (avalancheOk ? "yes" : "no") << "\n"
       << "Garfield avalanche e / ions: "
@@ -542,7 +585,8 @@ int main(int argc, char** argv) {
       << "successful_ion_drifts,"
       << "electron_start_min_ns,electron_start_max_ns,"
       << "electron_end_max_ns,ion_birth_sigma_w_mm,"
-      << "ion_end_max_ns,avalanche_limit\n";
+      << "ion_end_max_ns,avalanche_limit,"
+      << "min_avalanche_ions,accepted_attempt,max_avalanche_attempts\n";
   eventOut
       << (avalancheOk ? 1 : 0) << ","
       << nElectrons << "," << nIonsGarfield << ","
@@ -553,7 +597,10 @@ int main(int argc, char** argv) {
       << maxElectronEndTimeNs << ","
       << sigmaIonBirthWMm << ","
       << maxIonEndTimeNs << ","
-      << avalancheLimit << "\n";
+      << avalancheLimit << ","
+      << minAvalancheIons << ","
+      << acceptedAttempt << ","
+      << maxAvalancheAttempts << "\n";
 
   if (nElectrons >= avalancheLimit) {
     std::cout
