@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "Garfield/AvalancheMicroscopic.hh"
 #include "Garfield/ComponentAnalyticField.hh"
 #include "Garfield/DriftLineRKF.hh"
 #include "Garfield/MediumMagboltz.hh"
@@ -64,6 +65,21 @@ std::vector<DriftPoint> ExtractDriftLine(const Garfield::DriftLineRKF& drift) {
   return points;
 }
 
+std::vector<DriftPoint> ExtractElectronDriftLine(
+    const Garfield::AvalancheMicroscopic& drift) {
+  std::vector<DriftPoint> points;
+  if (drift.GetNumberOfElectronEndpoints() == 0) return points;
+
+  const std::size_t n = drift.GetNumberOfElectronDriftLinePoints(0);
+  points.reserve(n);
+  for (std::size_t i = 0; i < n; ++i) {
+    DriftPoint p;
+    drift.GetElectronDriftLinePoint(p.u, p.v, p.w, p.t, i, 0);
+    points.push_back(p);
+  }
+  return points;
+}
+
 void WriteDriftLine(const std::string& filename,
                     const std::vector<DriftPoint>& points) {
   std::ofstream out(filename);
@@ -85,27 +101,15 @@ void WriteDriftLine(const std::string& filename,
   }
 }
 
-void ConfigureElectronDrift(Garfield::DriftLineRKF& drift,
-                            const int averagingOrder) {
+void ConfigureElectronDrift(Garfield::AvalancheMicroscopic& drift) {
+  // Microscopic tracking is used for the electron because the pair is created
+  // only a few microns from the anode-wire surface, where the macroscopic RKF
+  // drift-line integrator can fail. DriftElectron follows only the seed
+  // electron (no secondary-electron transport), which is exactly what we want
+  // for this controlled one-electron + one-ion building block.
   drift.EnableSignalCalculation(true);
   drift.UseWeightingPotential(true);
-  drift.SetSignalAveragingOrder(
-      static_cast<std::size_t>(averagingOrder));
-
-  // This test is deliberately ONE electron + ONE positive ion.
-  //
-  // Important Garfield++ detail:
-  // for DriftLineRKF electron signals, the signal weight is tied to the
-  // electron population along the drift line. Disabling avalanche calculation
-  // altogether can leave that population unavailable for ComputeSignal.
-  // Therefore keep the electron-avalanche machinery enabled but force the
-  // multiplication factor to exactly one. This gives one drifting electron
-  // with no multiplication. Disable the automatically generated ion tail
-  // because the positive ion is drifted explicitly as a separate particle.
-  drift.EnableAvalanche(true);
-  drift.SetGainFluctuationsFixed(1.0);
-  drift.EnableIonTail(false);
-  drift.SetMaximumStepSize();
+  drift.EnableDriftLines(true);
 }
 
 void ConfigureIonDrift(Garfield::DriftLineRKF& drift,
@@ -154,6 +158,8 @@ int main(int argc, char** argv) {
   const double defaultOffsetMm = 0.5 * 10. * wireDiameterCm + 0.005;
   const double pairOffsetMm =
       ReadArg(argc, argv, "--pair-offset-mm", defaultOffsetMm);
+  const double electronEnergyEv =
+      ReadArg(argc, argv, "--electron-energy-ev", 0.1);
 
   // Two time resolutions:
   //  - fine electron window resolves the prompt electron pulse;
@@ -180,6 +186,7 @@ int main(int argc, char** argv) {
       wirePitchCm <= 0. || wireDiameterCm <= 0. ||
       stripPitchCm <= 0. || stripWidthCm <= 0. ||
       stripWidthCm > stripPitchCm || halfStrips < 1 ||
+      electronEnergyEv <= 0. ||
       electronDtNs <= 0. || electronTmaxNs <= 0. ||
       ionDtNs <= 0. || tMaxUs <= 0. ||
       signalAveragingOrder < 1) {
@@ -280,16 +287,26 @@ int main(int argc, char** argv) {
   // ------------------------------------------------------------------
   sensor.SetTimeWindow(0., electronDtNs, nElectronBins);
 
-  Garfield::DriftLineRKF electron(&sensor);
-  ConfigureElectronDrift(electron, signalAveragingOrder);
+  Garfield::AvalancheMicroscopic electron(&sensor);
+  ConfigureElectronDrift(electron);
 
+  // Point the initial electron direction toward the anode wire. Subsequent
+  // motion is microscopic and includes collisions in the gas.
+  const double electronDirectionV = -sign;
   const bool electronOk =
-      electron.DriftElectron(u0Cm, v0Cm, w0Cm, 0.);
+      electron.DriftElectron(u0Cm, v0Cm, w0Cm, 0.,
+                             electronEnergyEv,
+                             0., electronDirectionV, 0.);
 
-  double ue = 0., ve = 0., we = 0., te = 0.;
-  int electronStatus = 0;
-  electron.GetEndPoint(ue, ve, we, te, electronStatus);
-  const auto electronPoints = ExtractDriftLine(electron);
+  double ue = u0Cm, ve = v0Cm, we = w0Cm, te = 0.;
+  double eStart = electronEnergyEv, eEnd = electronEnergyEv;
+  int electronStatus = -3;
+  if (electron.GetNumberOfElectronEndpoints() > 0) {
+    double us = 0., vs = 0., ws = 0., ts = 0.;
+    electron.GetElectronEndpoint(0, us, vs, ws, ts, eStart,
+                                 ue, ve, we, te, eEnd, electronStatus);
+  }
+  const auto electronPoints = ExtractElectronDriftLine(electron);
 
   std::vector<std::vector<double>> electronFine(
       labels.size(), std::vector<double>(nElectronBins, 0.));
@@ -383,10 +400,12 @@ int main(int argc, char** argv) {
   sensor.ClearSignal();
   sensor.SetTimeWindow(0., ionDtNs, nIonBins);
 
-  Garfield::DriftLineRKF electronCombined(&sensor);
-  ConfigureElectronDrift(electronCombined, signalAveragingOrder);
+  Garfield::AvalancheMicroscopic electronCombined(&sensor);
+  ConfigureElectronDrift(electronCombined);
   const bool electronCombinedOk =
-      electronCombined.DriftElectron(u0Cm, v0Cm, w0Cm, 0.);
+      electronCombined.DriftElectron(u0Cm, v0Cm, w0Cm, 0.,
+                                     electronEnergyEv,
+                                     0., electronDirectionV, 0.);
 
   Garfield::DriftLineRKF ionCombined(&sensor);
   ConfigureIonDrift(ionCombined, signalAveragingOrder);
@@ -454,6 +473,7 @@ int main(int argc, char** argv) {
       << "anode voltage           : " << hv << " V\n"
       << "strip pitch / width     : " << 10. * stripPitchCm
       << " / " << 10. * stripWidthCm << " mm\n"
+      << "electron initial energy : " << electronEnergyEv << " eV\n"
       << "electron fine window    : 0 .. " << electronTmaxNs
       << " ns, dt=" << electronDtNs << " ns\n"
       << "ion/combined window     : 0 .. " << tMaxUs
