@@ -39,16 +39,26 @@ void RecordIonisation(const double x, const double y, const double z,
 
 double ReadArg(const int argc, char** argv, const std::string& key,
                const double defaultValue) {
-  for (int i = 1; i + 1 < argc; ++i) {
-    if (argv[i] == key) return std::atof(argv[i + 1]);
+  const std::string prefix = key + "=";
+  for (int i = 1; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg == key && i + 1 < argc) return std::atof(argv[i + 1]);
+    if (arg.rfind(prefix, 0) == 0) {
+      return std::atof(arg.substr(prefix.size()).c_str());
+    }
   }
   return defaultValue;
 }
 
 int ReadIntArg(const int argc, char** argv, const std::string& key,
                const int defaultValue) {
-  for (int i = 1; i + 1 < argc; ++i) {
-    if (argv[i] == key) return std::atoi(argv[i + 1]);
+  const std::string prefix = key + "=";
+  for (int i = 1; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg == key && i + 1 < argc) return std::atoi(argv[i + 1]);
+    if (arg.rfind(prefix, 0) == 0) {
+      return std::atoi(arg.substr(prefix.size()).c_str());
+    }
   }
   return defaultValue;
 }
@@ -56,8 +66,13 @@ int ReadIntArg(const int argc, char** argv, const std::string& key,
 std::string ReadStringArg(const int argc, char** argv,
                           const std::string& key,
                           const std::string& defaultValue) {
-  for (int i = 1; i + 1 < argc; ++i) {
-    if (argv[i] == key) return argv[i + 1];
+  const std::string prefix = key + "=";
+  for (int i = 1; i < argc; ++i) {
+    const std::string arg = argv[i];
+    if (arg == key && i + 1 < argc) return argv[i + 1];
+    if (arg.rfind(prefix, 0) == 0) {
+      return arg.substr(prefix.size());
+    }
   }
   return defaultValue;
 }
