@@ -181,14 +181,6 @@ int main(int argc, char** argv) {
     return 2;
   }
 
-  // Deterministic Garfield random-number stream for reproducible scans.
-  // Using the same seed at different w positions is especially useful here:
-  // the ideal chamber field is translationally invariant along w, so the same
-  // microscopic avalanche history is shifted relative to the readout strips.
-  Garfield::RandomEngineRoot randomEngine(
-      static_cast<unsigned int>(randomSeed));
-  Garfield::Random::SetEngine(randomEngine);
-
   // ------------------------------------------------------------------
   // 1) Physical MWPC field and gas.
   // ------------------------------------------------------------------
@@ -254,6 +246,13 @@ int main(int argc, char** argv) {
                  +uExtent, +gapPlusCm, +wExtent);
 
   constexpr double elementaryChargeFc = 1.602176634e-4;
+
+  // Reset the Garfield random-number stream immediately before the
+  // microscopic avalanche.  This makes --random-seed reproducible independent
+  // of gas/geometry initialisation and matches the ensemble-resolution runner.
+  Garfield::RandomEngineRoot randomEngine(
+      static_cast<unsigned int>(randomSeed));
+  Garfield::Random::SetEngine(randomEngine);
 
   // ------------------------------------------------------------------
   // 3) REAL microscopic Garfield electron avalanche.
