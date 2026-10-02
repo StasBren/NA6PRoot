@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot a Phase-B1b scan over the synthetic avalanche width sigma_w.
+"""Plot a Stage-B scan over the synthetic avalanche width sigma_w.
 
 Expected input prefixes are produced by mwpc_phase_b_ion_cloud, for example:
   phaseB_sigmaw_005
@@ -103,7 +103,7 @@ def main():
                  marker="o", label=f"sigma_w = {r['sigma_mm']:.2f} mm")
     plt.xlabel("Strip center w [mm]")
     plt.ylabel("|Integrated charge| fraction [%]")
-    plt.title("Phase B1b: charge sharing vs synthetic avalanche width")
+    plt.title("Stage B: charge sharing vs synthetic avalanche width")
     plt.legend()
     plt.tight_layout()
     plt.savefig(args.output_prefix + "_charge_sharing.png", dpi=200)
@@ -119,7 +119,7 @@ def main():
     plt.plot(sigmas, peak_rms, marker="o", label="Peak-current RMS")
     plt.xlabel("Input cloud sigma_w [mm]")
     plt.ylabel("Strip-profile RMS width [mm]")
-    plt.title("Phase B1b: input cloud width -> readout-cluster width")
+    plt.title("Stage B: input cloud width -> readout-cluster width")
     plt.legend()
     plt.tight_layout()
     plt.savefig(args.output_prefix + "_cluster_width.png", dpi=200)
@@ -132,7 +132,7 @@ def main():
     plt.plot(sigmas, central, marker="o")
     plt.xlabel("Input cloud sigma_w [mm]")
     plt.ylabel("Central-strip share of |integrated charge| [%]")
-    plt.title("Phase B1b: central-strip charge fraction")
+    plt.title("Stage B: central-strip charge fraction")
     plt.tight_layout()
     plt.savefig(args.output_prefix + "_central_fraction.png", dpi=200)
     plt.close()
@@ -146,7 +146,7 @@ def main():
     plt.plot(sigmas, w1, marker="o", label="Ion endpoints")
     plt.xlabel("Requested sigma_w [mm]")
     plt.ylabel("Measured sigma(w) [mm]")
-    plt.title("Phase B1b: cloud width along the wire")
+    plt.title("Stage B: cloud width along the wire")
     plt.legend()
     plt.tight_layout()
     plt.savefig(args.output_prefix + "_w_width_check.png", dpi=200)
