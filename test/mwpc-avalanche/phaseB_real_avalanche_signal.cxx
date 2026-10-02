@@ -13,6 +13,8 @@
 #include "Garfield/DriftLineRKF.hh"
 #include "Garfield/Medium.hh"
 #include "Garfield/MediumMagboltz.hh"
+#include "Garfield/Random.hh"
+#include "Garfield/RandomEngineRoot.hh"
 #include "Garfield/Sensor.hh"
 
 namespace {
@@ -123,6 +125,8 @@ int main(int argc, char** argv) {
       ReadIntArg(argc, argv, "--min-avalanche-ions", 1);
   const int maxAvalancheAttempts =
       ReadIntArg(argc, argv, "--max-avalanche-attempts", 20);
+  const int randomSeed =
+      ReadIntArg(argc, argv, "--random-seed", 12345);
 
   const double electronDtNs =
       ReadArg(argc, argv, "--electron-dt-ns", 0.02);
@@ -151,7 +155,7 @@ int main(int argc, char** argv) {
       stripWidthCm > stripPitchCm || halfStrips < 1 ||
       seedDistanceMm <= 0. || seedEnergyEv <= 0. ||
       avalancheLimit < 1 || minAvalancheIons < 0 ||
-      maxAvalancheAttempts < 1 ||
+      maxAvalancheAttempts < 1 || randomSeed < 0 ||
       electronDtNs <= 0. || electronTmaxNs <= 0. ||
       ionDtNs <= 0. || ionTmaxUs <= 0. ||
       maxIonStepMm <= 0. || signalAveragingOrder < 1) {
@@ -176,6 +180,14 @@ int main(int argc, char** argv) {
                  "selected gas gap.\n";
     return 2;
   }
+
+  // Deterministic Garfield random-number stream for reproducible scans.
+  // Using the same seed at different w positions is especially useful here:
+  // the ideal chamber field is translationally invariant along w, so the same
+  // microscopic avalanche history is shifted relative to the readout strips.
+  Garfield::RandomEngineRoot randomEngine(
+      static_cast<unsigned int>(randomSeed));
+  Garfield::Random::SetEngine(randomEngine);
 
   // ------------------------------------------------------------------
   // 1) Physical MWPC field and gas.
@@ -521,6 +533,7 @@ int main(int argc, char** argv) {
       << "strip pitch / width        : "
       << 10. * stripPitchCm << " / "
       << 10. * stripWidthCm << " mm\n"
+      << "Garfield random seed       : " << randomSeed << "\n"
       << "conditioned non-zero study : min ions = "
       << minAvalancheIons << "\n"
       << "accepted avalanche attempt : "
@@ -586,7 +599,8 @@ int main(int argc, char** argv) {
       << "electron_start_min_ns,electron_start_max_ns,"
       << "electron_end_max_ns,ion_birth_sigma_w_mm,"
       << "ion_end_max_ns,avalanche_limit,"
-      << "min_avalanche_ions,accepted_attempt,max_avalanche_attempts\n";
+      << "min_avalanche_ions,accepted_attempt,max_avalanche_attempts,"
+      << "random_seed,seed_w_mm\n";
   eventOut
       << (avalancheOk ? 1 : 0) << ","
       << nElectrons << "," << nIonsGarfield << ","
@@ -600,7 +614,9 @@ int main(int argc, char** argv) {
       << avalancheLimit << ","
       << minAvalancheIons << ","
       << acceptedAttempt << ","
-      << maxAvalancheAttempts << "\n";
+      << maxAvalancheAttempts << ","
+      << randomSeed << ","
+      << 10. * seedWCm << "\n";
 
   if (nElectrons >= avalancheLimit) {
     std::cout
