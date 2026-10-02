@@ -10,6 +10,8 @@ The script compares finite-window Q_k(T) on strips -1, 0, +1.
 """
 
 import argparse
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
@@ -53,9 +55,26 @@ def label(k):
 def main():
     args = parse_args()
 
-    fast = pd.read_csv(args.ensemble)
-    e = pd.read_csv(args.full_prefix + "_electron_waveforms.csv")
-    i = pd.read_csv(args.full_prefix + "_ion_waveforms.csv")
+    ensemble_path = Path(args.ensemble)
+    electron_path = Path(args.full_prefix + "_electron_waveforms.csv")
+    ion_path = Path(args.full_prefix + "_ion_waveforms.csv")
+
+    missing = [
+        str(p)
+        for p in (ensemble_path, electron_path, ion_path)
+        if not p.exists()
+    ]
+    if missing:
+        raise FileNotFoundError(
+            "Validation prerequisites are missing: "
+            + ", ".join(missing)
+            + ". Run both the full-avalanche and truncated-ensemble "
+              "validation commands before this script."
+        )
+
+    fast = pd.read_csv(ensemble_path)
+    e = pd.read_csv(electron_path)
+    i = pd.read_csv(ion_path)
 
     te = e["time_ns"].to_numpy(dtype=float)
     ti = i["time_ns"].to_numpy(dtype=float)
