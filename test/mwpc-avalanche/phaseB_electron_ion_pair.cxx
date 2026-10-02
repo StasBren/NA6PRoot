@@ -165,9 +165,9 @@ int main(int argc, char** argv) {
   //  - fine electron window resolves the prompt electron pulse;
   //  - coarse window follows the slow ion for the full drift.
   const double electronDtNs =
-      ReadArg(argc, argv, "--electron-dt-ns", 0.02);
+      ReadArg(argc, argv, "--electron-dt-ns", 0.001);
   const double electronTmaxNs =
-      ReadArg(argc, argv, "--electron-tmax-ns", 20.0);
+      ReadArg(argc, argv, "--electron-tmax-ns", 0.10);
   const double ionDtNs =
       ReadArg(argc, argv, "--ion-dt-ns", 50.0);
   const double tMaxUs =
@@ -199,6 +199,8 @@ int main(int argc, char** argv) {
   }
 
   const double planeY = side == "plus" ? gapPlusCm : -gapMinusCm;
+  const std::string planeReadoutLabel =
+      side == "plus" ? "cathode_plus" : "cathode_minus";
   const double gapCm = std::abs(planeY);
   const double sign = side == "plus" ? +1. : -1.;
   const double v0Cm = sign * 0.1 * pairOffsetMm;
@@ -268,6 +270,17 @@ int main(int argc, char** argv) {
     sensor.AddElectrode(&weighting, label);
   }
 
+  // Wire-aware control observable.
+  //
+  // ComponentAnalyticField's analytic strip weighting formula is a
+  // plane-condenser solution and does not impose the perpendicular anode-wire
+  // surface as a boundary. The weighting field of the COMPLETE cathode plane,
+  // however, is computed by the same analytic cell that contains the actual
+  // anode wires. We therefore record it as a control for the near-wire
+  // electron signal. On the anode-wire surface its weighting potential must
+  // approach zero.
+  sensor.AddElectrode(&driftField, planeReadoutLabel);
+
   const double xExtent =
       (halfNumberOfWires + 0.5) * wirePitchCm;
   const double zExtent =
@@ -328,13 +341,14 @@ int main(int argc, char** argv) {
   for (const auto& label : labels) {
     eWaveOut << "," << label << "_electron_fC_per_ns";
   }
-  eWaveOut << "\n";
+  eWaveOut << ",readout_plane_electron_fC_per_ns\n";
   for (int ibin = 0; ibin < nElectronBins; ++ibin) {
     eWaveOut << (ibin + 0.5) * electronDtNs;
     for (std::size_t j = 0; j < labels.size(); ++j) {
       eWaveOut << "," << electronFine[j][ibin];
     }
-    eWaveOut << "\n";
+    eWaveOut << "," << sensor.GetElectronSignal(planeReadoutLabel, ibin)
+             << "\n";
   }
 
   WriteDriftLine(outputPrefix + "_electron_driftline.csv",
@@ -377,13 +391,14 @@ int main(int argc, char** argv) {
   for (const auto& label : labels) {
     iWaveOut << "," << label << "_ion_fC_per_ns";
   }
-  iWaveOut << "\n";
+  iWaveOut << ",readout_plane_ion_fC_per_ns\n";
   for (int ibin = 0; ibin < nIonBins; ++ibin) {
     iWaveOut << (ibin + 0.5) * ionDtNs;
     for (std::size_t j = 0; j < labels.size(); ++j) {
       iWaveOut << "," << ionOnly[j][ibin];
     }
-    iWaveOut << "\n";
+    iWaveOut << "," << sensor.GetIonSignal(planeReadoutLabel, ibin)
+             << "\n";
   }
 
   WriteDriftLine(outputPrefix + "_ion_driftline.csv",
@@ -421,7 +436,9 @@ int main(int argc, char** argv) {
              << "," << label << "_ion_fC_per_ns"
              << "," << label << "_total_fC_per_ns";
   }
-  cWaveOut << "\n";
+  cWaveOut << ",readout_plane_electron_fC_per_ns"
+           << ",readout_plane_ion_fC_per_ns"
+           << ",readout_plane_total_fC_per_ns\n";
 
   std::vector<double> qElectronCoarse(labels.size(), 0.);
   std::vector<double> qIonCoarse(labels.size(), 0.);
@@ -446,7 +463,11 @@ int main(int argc, char** argv) {
       maxLinearityResidual =
           std::max(maxLinearityResidual, std::abs(it - ie - ii));
     }
-    cWaveOut << "\n";
+    cWaveOut
+        << "," << sensor.GetElectronSignal(planeReadoutLabel, ibin)
+        << "," << sensor.GetIonSignal(planeReadoutLabel, ibin)
+        << "," << sensor.GetSignal(planeReadoutLabel, ibin)
+        << "\n";
   }
 
   // ------------------------------------------------------------------
@@ -531,6 +552,72 @@ int main(int argc, char** argv) {
               << std::setw(16) << qTotalCoarse[j] << "\n";
   }
 
+  // Wire-aware complete-cathode control. Unlike the strip approximation,
+  // this weighting potential contains the actual anode-wire boundary.
+  const double phiPlaneStart =
+      driftField.WeightingPotential(u0Cm, v0Cm, w0Cm, planeReadoutLabel);
+  const double phiPlaneElectronEnd =
+      driftField.WeightingPotential(ue, ve, we, planeReadoutLabel);
+  const double phiPlaneIonEnd =
+      driftField.WeightingPotential(ui, vi, wi, planeReadoutLabel);
+
+  const double qPlaneElectronExpected =
+      -elementaryChargeFc * (phiPlaneElectronEnd - phiPlaneStart);
+  const double qPlaneIonExpected =
+      +elementaryChargeFc * (phiPlaneIonEnd - phiPlaneStart);
+  const double qPlaneTotalExpected =
+      qPlaneElectronExpected + qPlaneIonExpected;
+
+  double qPlaneElectronFine = 0.;
+  for (int ibin = 0; ibin < nElectronBins; ++ibin) {
+    qPlaneElectronFine +=
+        sensor.GetElectronSignal(planeReadoutLabel, ibin) * electronDtNs;
+  }
+
+  // The sensor currently contains the combined coarse run, so integrate its
+  // plane components on the coarse grid as an independent linearity check.
+  double qPlaneElectronCoarse = 0.;
+  double qPlaneIonCoarse = 0.;
+  double qPlaneTotalCoarse = 0.;
+  for (int ibin = 0; ibin < nIonBins; ++ibin) {
+    qPlaneElectronCoarse +=
+        sensor.GetElectronSignal(planeReadoutLabel, ibin) * ionDtNs;
+    qPlaneIonCoarse +=
+        sensor.GetIonSignal(planeReadoutLabel, ibin) * ionDtNs;
+    qPlaneTotalCoarse +=
+        sensor.GetSignal(planeReadoutLabel, ibin) * ionDtNs;
+  }
+
+  const std::string planeSummaryFile =
+      outputPrefix + "_plane_control_summary.csv";
+  std::ofstream planeSummaryOut(planeSummaryFile);
+  planeSummaryOut
+      << "label,phi_start,phi_electron_end,phi_ion_end,"
+      << "q_electron_expected_fC,q_ion_expected_fC,q_total_expected_fC,"
+      << "q_electron_fine_fC,q_electron_coarse_fC,"
+      << "q_ion_coarse_fC,q_total_coarse_fC\n";
+  planeSummaryOut
+      << planeReadoutLabel << ","
+      << phiPlaneStart << "," << phiPlaneElectronEnd << ","
+      << phiPlaneIonEnd << ","
+      << qPlaneElectronExpected << "," << qPlaneIonExpected << ","
+      << qPlaneTotalExpected << ","
+      << qPlaneElectronFine << "," << qPlaneElectronCoarse << ","
+      << qPlaneIonCoarse << "," << qPlaneTotalCoarse << "\n";
+
+  std::cout
+      << "\nWIRE-AWARE COMPLETE-CATHODE CONTROL (" << planeReadoutLabel
+      << ")\n"
+      << "  phi(start)          = " << phiPlaneStart << "\n"
+      << "  phi(electron end)   = " << phiPlaneElectronEnd
+      << "   [should approach 0 on anode wire]\n"
+      << "  phi(ion end)        = " << phiPlaneIonEnd
+      << "   [should approach 1 on selected cathode]\n"
+      << "  Qe expected         = " << qPlaneElectronExpected << " fC\n"
+      << "  Qi expected         = " << qPlaneIonExpected << " fC\n"
+      << "  Qtotal expected     = " << qPlaneTotalExpected << " fC\n"
+      << "  Qtotal Garfield     = " << qPlaneTotalCoarse << " fC\n";
+
   if (te > electronTmaxNs) {
     std::cout
         << "\nWARNING: electron drift time exceeds the fine signal window. "
@@ -550,6 +637,7 @@ int main(int argc, char** argv) {
       << "  " << outputPrefix << "_electron_driftline.csv\n"
       << "  " << outputPrefix << "_ion_driftline.csv\n"
       << "  " << summaryFile << "\n"
+      << "  " << planeSummaryFile << "\n"
       << "\nInterpretation target:\n"
       << "  electron = prompt component; ion = slow component;\n"
       << "  total signal must equal their linear sum.\n"
