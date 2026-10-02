@@ -252,6 +252,9 @@ def main():
     i_times = i["time_ns"].to_numpy(dtype=float)
     i_current = i[i_col].to_numpy(dtype=float)
 
+    electron_source_dt = infer_dt_ns(e_times)
+    ion_source_dt = infer_dt_ns(i_times)
+
     tmax_ns = choose_tmax_ns(
         i_times,
         i_current,
@@ -462,10 +465,19 @@ def main():
     print("\n=== VMM-LIKE THIRD-ORDER SHAPER ===")
     print(f"electrode              : {args.electrode}")
     print(f"gain                   : {args.gain_mv_per_fc:g} mV/fC")
+    print(f"electron source dt     : {electron_source_dt:g} ns")
+    print(f"ion source dt          : {ion_source_dt:g} ns")
     print(f"common shaping dt      : {args.dt_ns:g} ns")
     print(f"analysis window        : 0 .. {tmax_ns / 1000.0:.6g} us")
     print(f"electron input charge  : {q_e_input:.9e} fC")
     print(f"ion input charge       : {q_i_input:.9e} fC")
+    if ion_source_dt > float(np.min(tps)) / 5.0:
+        print(
+            "\nWARNING: ion waveform is too coarsely sampled for the "
+            "shortest requested peaking time. For 25 ns shaping, rerun the "
+            "pair simulation with --ion-dt-ns 2 (or at most about 5 ns)."
+        )
+
     print(
         "\nNOTE: third-order semi-Gaussian proxy matched to documented "
         "VMM peaking times; not exact DDF circuit simulation."
