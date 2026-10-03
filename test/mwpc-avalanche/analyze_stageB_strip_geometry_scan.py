@@ -92,6 +92,7 @@ def geometry_summary(mean_df, fit_xi_max):
                 "center_total_abs_signal_fC":
                     float(center["total_abs_signal_all_fC"]),
                 "asymmetry_slope_per_xi": slope,
+                "asymmetry_slope_per_mm": slope / pitch if np.isfinite(slope) else np.nan,
                 "asymmetry_intercept": intercept,
             }
         )
@@ -184,9 +185,17 @@ def main():
     heatmap(
         summary,
         "asymmetry_slope_per_xi",
-        "Stage B2: sub-strip position sensitivity at alpha = 0",
+        "Stage B2: normalized sub-strip position sensitivity at alpha = 0",
         "d[(A_+1-A_-1)/A_3] / d(w0/p)",
         args.output_prefix + "_position_sensitivity_heatmap.png",
+    )
+
+    heatmap(
+        summary,
+        "asymmetry_slope_per_mm",
+        "Stage B2: physical position sensitivity at alpha = 0",
+        "d[(A_+1-A_-1)/A_3] / dw [1/mm]",
+        args.output_prefix + "_position_sensitivity_per_mm_heatmap.png",
     )
 
     h3 = summary.copy()
@@ -199,6 +208,83 @@ def main():
         args.output_prefix + "_three_strip_capture_heatmap.png",
     )
 
+    # --------------------------------------------------------------
+    # 4) Compact design trade-off view.
+    #
+    # x: physical position sensitivity per mm
+    # y: neighbour sharing at the strip centre
+    # marker size/color: three-strip capture
+    #
+    # A useful geometry should not maximize one axis blindly; it should retain
+    # appreciable neighbour sharing and position sensitivity while keeping most
+    # of the early signal inside a compact 3-strip cluster.
+    # --------------------------------------------------------------
+    fig, ax = plt.subplots(figsize=(9.2, 6.5))
+
+    x = summary["asymmetry_slope_per_mm"].to_numpy(dtype=float)
+    y = 100.0 * summary["center_neighbor_fraction"].to_numpy(dtype=float)
+    capture = 100.0 * summary["mean_three_strip_capture_fraction"].to_numpy(dtype=float)
+
+    sizes = 35.0 + 18.0 * (capture - np.nanmin(capture))
+    sc = ax.scatter(
+        x,
+        y,
+        s=sizes,
+        c=capture,
+        alpha=0.85,
+    )
+
+    for _, r in summary.iterrows():
+        ax.annotate(
+            f"p={r['strip_pitch_mm']:g}, s={r['strip_width_mm']:g}",
+            (
+                r["asymmetry_slope_per_mm"],
+                100.0 * r["center_neighbor_fraction"],
+            ),
+            xytext=(4, 4),
+            textcoords="offset points",
+            fontsize=7,
+        )
+
+    baseline = summary[
+        np.isclose(summary["strip_pitch_mm"], args.baseline_pitch_mm)
+        & np.isclose(summary["strip_width_mm"], args.baseline_width_mm)
+    ]
+    if not baseline.empty:
+        b = baseline.iloc[0]
+        ax.scatter(
+            [b["asymmetry_slope_per_mm"]],
+            [100.0 * b["center_neighbor_fraction"]],
+            s=180,
+            facecolors="none",
+            edgecolors="black",
+            linewidths=1.5,
+            label=(
+                f"baseline p={args.baseline_pitch_mm:g} mm, "
+                f"s={args.baseline_width_mm:g} mm"
+            ),
+        )
+        ax.legend()
+
+    cbar = fig.colorbar(sc, ax=ax)
+    cbar.set_label("mean three-strip capture [%]")
+
+    ax.set_xlabel(
+        "physical left-right sensitivity  d[(A_+1-A_-1)/A_3]/dw  [1/mm]"
+    )
+    ax.set_ylabel("neighbour sharing at xi=0 [%]")
+    ax.set_title("Stage B2: geometry trade-off at alpha = 0")
+    ax.grid(alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(
+        args.output_prefix + "_geometry_tradeoff.png",
+        dpi=200,
+    )
+    plt.close(fig)
+
+    # --------------------------------------------------------------
+    # 5) Baseline response curve, useful as a bridge from previous slides.
+    # --------------------------------------------------------------
     distances = (
         (mean_df["strip_pitch_mm"] - args.baseline_pitch_mm) ** 2
         + (mean_df["strip_width_mm"] - args.baseline_width_mm) ** 2
@@ -257,7 +343,8 @@ def main():
         "no reconstruction algorithm is assumed."
     )
     print("\ncenter_neighbor_fraction: adjacent-strip sharing at xi=0")
-    print("asymmetry_slope_per_xi: local left-right position sensitivity")
+    print("asymmetry_slope_per_xi: sensitivity per fraction of one strip pitch")
+    print("asymmetry_slope_per_mm: physical sensitivity per millimetre")
     print("mean_three_strip_capture_fraction: signal retained in a 3-strip cluster")
 
     display = summary.copy()
@@ -273,6 +360,7 @@ def main():
                 "fill_factor",
                 "center_neighbor_fraction",
                 "asymmetry_slope_per_xi",
+                "asymmetry_slope_per_mm",
                 "mean_three_strip_capture_fraction",
             ]
         ].to_string(index=False)
@@ -283,7 +371,9 @@ def main():
     print(" ", args.output_prefix + "_geometry_summary.csv")
     print(" ", args.output_prefix + "_neighbor_sharing_heatmap.png")
     print(" ", args.output_prefix + "_position_sensitivity_heatmap.png")
+    print(" ", args.output_prefix + "_position_sensitivity_per_mm_heatmap.png")
     print(" ", args.output_prefix + "_three_strip_capture_heatmap.png")
+    print(" ", args.output_prefix + "_geometry_tradeoff.png")
     print(" ", args.output_prefix + "_baseline_response_curve.png")
 
 
