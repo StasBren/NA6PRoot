@@ -59,6 +59,10 @@ add_executable(mwpc_phase_b_resolution_ensemble phaseB_resolution_ensemble.cxx)
 target_link_libraries(mwpc_phase_b_resolution_ensemble PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_phase_b_resolution_ensemble PRIVATE cxx_std_17)
 
+add_executable(mwpc_phase_b_strip_geometry_scan phaseB_strip_geometry_scan.cxx)
+target_link_libraries(mwpc_phase_b_strip_geometry_scan PRIVATE Garfield::Garfield)
+target_compile_features(mwpc_phase_b_strip_geometry_scan PRIVATE cxx_std_17)
+
 add_executable(mwpc_heed_visualization heed_muon_visualization.cxx)
 target_link_libraries(mwpc_heed_visualization PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_heed_visualization PRIVATE cxx_std_17)
