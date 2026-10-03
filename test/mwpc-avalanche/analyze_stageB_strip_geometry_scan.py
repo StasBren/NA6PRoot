@@ -13,7 +13,7 @@ We focus on signal-formation observables rather than a final resolution number:
 3) Three-strip capture:
       F_3 = sum_{k=-1}^{1} A_k / sum_all_strips A_k
 
-The baseline p = 1.7 mm, width = 1.7 mm response is plotted explicitly.
+The reference sandbox point p = 1.7 mm, width = 1.7 mm is plotted explicitly.
 """
 
 import argparse
@@ -178,23 +178,23 @@ def main():
         h1,
         "center_neighbor_percent",
         "Stage B2: neighbour sharing for a centered avalanche",
-        "(A_-1 + A_+1) / A_3 [%]",
+        r"$F_{\mathrm{neigh}}=(A_{-1}+A_{+1})/A_3$ [%]",
         args.output_prefix + "_neighbor_sharing_heatmap.png",
     )
 
     heatmap(
         summary,
         "asymmetry_slope_per_xi",
-        "Stage B2: normalized sub-strip position sensitivity at alpha = 0",
-        "d[(A_+1-A_-1)/A_3] / d(w0/p)",
+        r"Stage B2: normalized sub-strip position sensitivity at $\alpha=0$",
+        r"$dR/d\xi$,  $R=(A_{+1}-A_{-1})/A_3$",
         args.output_prefix + "_position_sensitivity_heatmap.png",
     )
 
     heatmap(
         summary,
         "asymmetry_slope_per_mm",
-        "Stage B2: physical position sensitivity at alpha = 0",
-        "d[(A_+1-A_-1)/A_3] / dw [1/mm]",
+        r"Stage B2: physical position sensitivity at $\alpha=0$",
+        r"$dR/dw$ [mm$^{-1}$],  $R=(A_{+1}-A_{-1})/A_3$",
         args.output_prefix + "_position_sensitivity_per_mm_heatmap.png",
     )
 
@@ -203,7 +203,7 @@ def main():
     heatmap(
         h3,
         "capture_percent",
-        "Stage B2: fraction of early signal contained in strips -1,0,+1",
+        r"Stage B2: fraction of early signal contained in strips $-1,0,+1$",
         "mean three-strip capture [%]",
         args.output_prefix + "_three_strip_capture_heatmap.png",
     )
@@ -236,7 +236,7 @@ def main():
 
     for _, r in summary.iterrows():
         ax.annotate(
-            f"p={r['strip_pitch_mm']:g}, s={r['strip_width_mm']:g}",
+            rf"$p={r['strip_pitch_mm']:g},\ s={r['strip_width_mm']:g}$",
             (
                 r["asymmetry_slope_per_mm"],
                 100.0 * r["center_neighbor_fraction"],
@@ -260,8 +260,8 @@ def main():
             edgecolors="black",
             linewidths=1.5,
             label=(
-                f"baseline p={args.baseline_pitch_mm:g} mm, "
-                f"s={args.baseline_width_mm:g} mm"
+                rf"reference $p={args.baseline_pitch_mm:g}$ mm, "
+                rf"$s={args.baseline_width_mm:g}$ mm"
             ),
         )
         ax.legend()
@@ -270,10 +270,11 @@ def main():
     cbar.set_label("mean three-strip capture [%]")
 
     ax.set_xlabel(
-        "physical left-right sensitivity  d[(A_+1-A_-1)/A_3]/dw  [1/mm]"
+        r"physical left-right sensitivity  $dR/dw$ [mm$^{-1}$], "
+        r"$R=(A_{+1}-A_{-1})/A_3$"
     )
-    ax.set_ylabel("neighbour sharing at xi=0 [%]")
-    ax.set_title("Stage B2: geometry trade-off at alpha = 0")
+    ax.set_ylabel(r"neighbour sharing at $\xi=0$ [%]")
+    ax.set_title(r"Stage B2: geometry trade-off at $\alpha=0$")
     ax.grid(alpha=0.25)
     fig.tight_layout()
     fig.savefig(
@@ -283,7 +284,7 @@ def main():
     plt.close(fig)
 
     # --------------------------------------------------------------
-    # 5) Baseline response curve, useful as a bridge from previous slides.
+    # 5) Reference response curve, useful as a bridge from previous slides.
     # --------------------------------------------------------------
     distances = (
         (mean_df["strip_pitch_mm"] - args.baseline_pitch_mm) ** 2
@@ -309,24 +310,24 @@ def main():
         base["xi"],
         100.0 * base["A_strip_-1_fC"] / a3,
         marker="o",
-        label="strip -1",
+        label=r"strip $-1$",
     )
     ax.plot(
         base["xi"],
         100.0 * base["A_strip_0_fC"] / a3,
         marker="o",
-        label="strip 0",
+        label=r"strip $0$",
     )
     ax.plot(
         base["xi"],
         100.0 * base["A_strip_1_fC"] / a3,
         marker="o",
-        label="strip +1",
+        label=r"strip $+1$",
     )
-    ax.set_xlabel("normalized true position xi = w0 / pitch")
-    ax.set_ylabel("fraction of 3-strip early signal [%]")
+    ax.set_xlabel(r"normalized true position $\xi=w_0/p$")
+    ax.set_ylabel("fraction of three-strip early signal [%]")
     ax.set_title(
-        f"Stage B2: baseline spatial response, p={bp:g} mm, s={bw:g} mm"
+        rf"Stage B2: reference spatial response, $p={bp:g}$ mm, $s={bw:g}$ mm"
     )
     ax.legend()
     ax.grid(alpha=0.25)
