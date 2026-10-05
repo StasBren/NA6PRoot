@@ -487,7 +487,10 @@ int main(int argc, char** argv) {
       << "three_strip_capture_fraction,neighbor_fraction_three_strip,"
       << "central_fraction_three_strip,left_right_asymmetry";
 
-  for (int k = -2; k <= 2; ++k) {
+  // Export every strip included in the weighting model.  Earlier versions
+  // wrote only k=-2..+2, which was enough for the first diagnostics but
+  // artificially truncated a proposal-aligned cluster-CoG study.
+  for (const int k : stripIds) {
     out << ",Q_strip_" << k << "_fC"
         << ",A_strip_" << k << "_fC";
   }
@@ -627,7 +630,7 @@ int main(int argc, char** argv) {
               << centralFraction << ","
               << asymmetry;
 
-          for (int k = -2; k <= 2; ++k) {
+          for (const int k : stripIds) {
             const std::size_t j = indexOf(k);
             out << "," << q[j] << "," << a[j];
           }
@@ -647,6 +650,9 @@ int main(int argc, char** argv) {
       << "      This intentionally isolates the ideal periodic readout "
          "geometry from avalanche statistics.\n"
       << "NOTE: x_alpha = w cos(alpha) - u sin(alpha).\n"
+      << "NOTE: all modeled strip amplitudes are exported so that "
+         "cluster-CoG convergence can be studied without a fixed 5-strip "
+         "truncation.\n"
       << "NOTE: one ideal strip family only; no second stereo family, "
          "threshold, electronics shaping, or finite PCB geometry yet.\n"
       << "============================================================\n";
