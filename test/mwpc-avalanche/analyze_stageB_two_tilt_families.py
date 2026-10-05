@@ -466,14 +466,14 @@ def main():
     ax.axvline(0., linewidth=0.9)
     ax.set_xlabel(
         r"local projected coordinate "
-        r"$eta_{m local}=x_{m local}/p$"
+        r"$\\eta_{\\mathrm{local}}=x_{\\mathrm{local}}/p$"
     )
     ax.set_ylabel(
         r"local asymmetry "
-        r"$R=(A_{m right}-A_{m left})/A_3$"
+        r"$R=(A_{\\mathrm{right}}-A_{\\mathrm{left}})/A_3$"
     )
     ax.set_title(
-        rf"Stage B3b: +$alpha$ and -$alpha$ families share the same local response"
+        rf"Stage B3b: +$\\alpha$ and -$\\alpha$ families share the same local response"
     )
     ax.grid(alpha=0.25)
     ax.legend()
