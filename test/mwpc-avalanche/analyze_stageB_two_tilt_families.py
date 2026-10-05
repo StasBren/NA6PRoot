@@ -522,8 +522,8 @@ def main():
     axu.grid(alpha=0.25)
 
     fig.suptitle(
-        rf"Stage B3b: ideal two-family 2D reconstruction, "
-        rf"$	analpha=pm{args.tan_alpha:g}$"
+        f"Stage B3b: ideal two-family 2D reconstruction, "
+        f"tan α = ±{args.tan_alpha:g}"
     )
     fig.tight_layout(rect=(0., 0., 1., 0.93))
     fig.savefig(
