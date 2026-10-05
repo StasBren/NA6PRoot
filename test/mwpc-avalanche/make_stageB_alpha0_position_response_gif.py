@@ -302,7 +302,7 @@ def main():
     ax_bars.set_xlabel("strip index")
     ax_bars.set_ylabel(r"$A_k/A_3$ [%]")
     ax_bars.set_title(
-        r"Early signal sharing: $A_k=|Q_k(T_{m obs})|$, "
+        r"Early signal sharing: $A_k=|Q_k(T_{\rm obs})|$, "
         r"$A_3=A_{-1}+A_0+A_{+1}$"
     )
     ax_bars.grid(axis="y", alpha=0.22)
