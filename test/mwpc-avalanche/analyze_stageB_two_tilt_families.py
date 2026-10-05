@@ -465,15 +465,13 @@ def main():
     ax.axhline(0., linewidth=0.9)
     ax.axvline(0., linewidth=0.9)
     ax.set_xlabel(
-        r"local projected coordinate "
-        r"$\\eta_{\\mathrm{local}}=x_{\\mathrm{local}}/p$"
+        "local projected coordinate η_local = x_local / p"
     )
     ax.set_ylabel(
-        r"local asymmetry "
-        r"$R=(A_{\\mathrm{right}}-A_{\\mathrm{left}})/A_3$"
+        "local asymmetry R = (A_right - A_left) / A3"
     )
     ax.set_title(
-        rf"Stage B3b: +$\\alpha$ and -$\\alpha$ families share the same local response"
+        "Stage B3b: +α and -α families share the same local response"
     )
     ax.grid(alpha=0.25)
     ax.legend()
@@ -501,8 +499,8 @@ def main():
     axw.set_xlabel(r"true $w$ [mm]")
     axw.set_ylabel(r"reconstructed $w$ [mm]")
     axw.set_title(
-        rf"$w$: bias={1.e3*mw['bias']:+.1f} $mu$m, "
-        rf"$sigma={1.e3*mw['sigma']:.1f}$ $mu$m"
+        f"w: bias={1.e3*mw['bias']:+.1f} μm, "
+        f"σ={1.e3*mw['sigma']:.1f} μm"
     )
     axw.grid(alpha=0.25)
 
@@ -518,8 +516,8 @@ def main():
     axu.set_xlabel(r"true $u$ [mm]")
     axu.set_ylabel(r"reconstructed $u$ [mm]")
     axu.set_title(
-        rf"$u$: bias={1.e3*mu['bias']:+.1f} $mu$m, "
-        rf"$sigma={1.e3*mu['sigma']:.1f}$ $mu$m"
+        f"u: bias={1.e3*mu['bias']:+.1f} μm, "
+        f"σ={1.e3*mu['sigma']:.1f} μm"
     )
     axu.grid(alpha=0.25)
 
