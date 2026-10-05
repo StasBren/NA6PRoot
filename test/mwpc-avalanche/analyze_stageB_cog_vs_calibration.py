@@ -4,13 +4,28 @@ import argparse
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import re
 import numpy as np
 import pandas as pd
 
 from analyze_stageB_two_tilt_families import (
-    A_COLS, STRIP_IDS, add_local_measurement,
+    add_local_measurement,
     calibration_curve, invert_asymmetry, nearest_value,
 )
+
+def discover_amplitude_columns(df):
+    found = []
+    pat = re.compile(r"^A_strip_(-?\\d+)_fC$")
+    for col in df.columns:
+        m = pat.match(col)
+        if m:
+            found.append((int(m.group(1)), col))
+    found.sort(key=lambda x: x[0])
+    if not found:
+        raise RuntimeError("No A_strip_k_fC columns found in input CSV.")
+    strip_ids = np.array([k for k, _ in found], dtype=int)
+    amp_cols = [col for _, col in found]
+    return strip_ids, amp_cols
 
 
 def metrics(residual):
@@ -31,6 +46,10 @@ def main():
 
     df = pd.read_csv(args.input)
     t = nearest_value(df["tan_alpha"].unique(), args.tan_alpha)
+    strip_ids, amp_cols = discover_amplitude_columns(df)
+
+    # The shared helper currently expects at least the central five columns,
+    # which remain present in the expanded CSV.
     fam = add_local_measurement(
         df[np.isclose(df["tan_alpha"], t)].copy(),
         args.strip_pitch_mm,
@@ -51,12 +70,27 @@ def main():
     x_center = val["local_center_strip"].to_numpy(dtype=float) * p
     val["x_cog3_mm"] = x_center + p * val["local_asymmetry"]
 
-    # CoG over all five strip amplitudes stored by the present CSV.
-    amps = val[A_COLS].to_numpy(dtype=float)
-    x_strip = STRIP_IDS.astype(float) * p
+    # CoG over the central five strips, kept for direct comparison with the
+    # earlier study.
+    ids5 = np.array([-2, -1, 0, 1, 2], dtype=int)
+    cols5 = [f"A_strip_{k}_fC" for k in ids5]
+    missing5 = [col for col in cols5 if col not in val.columns]
+    if missing5:
+        raise RuntimeError(f"Missing central-five amplitude columns: {missing5}")
+    amps5 = val[cols5].to_numpy(dtype=float)
+    x5 = ids5.astype(float) * p
     val["x_cog5_mm"] = (
-        np.sum(amps * x_strip[None, :], axis=1) /
-        np.sum(amps, axis=1)
+        np.sum(amps5 * x5[None, :], axis=1) /
+        np.sum(amps5, axis=1)
+    )
+
+    # Proposal-aligned cluster CoG using every strip exported by the current
+    # simulation.  With --half-strips 7 this is a 15-strip centroid.
+    amps_all = val[amp_cols].to_numpy(dtype=float)
+    x_all = strip_ids.astype(float) * p
+    val["x_cog_cluster_mm"] = (
+        np.sum(amps_all * x_all[None, :], axis=1) /
+        np.sum(amps_all, axis=1)
     )
 
     # Existing calibrated R -> local position estimator.
@@ -70,8 +104,9 @@ def main():
     truth = val["projected_x_mm"].to_numpy(dtype=float)
     methods = {
         "3-strip CoG": val["x_cog3_mm"].to_numpy(),
-        "stored 5-strip CoG": val["x_cog5_mm"].to_numpy(),
-        "calibrated R": val["x_calibrated_mm"].to_numpy(),
+        "5-strip CoG": val["x_cog5_mm"].to_numpy(),
+        "cluster CoG": val["x_cog_cluster_mm"].to_numpy(),
+        "calibrated 3-strip R": val["x_calibrated_mm"].to_numpy(),
     }
 
     rows = []
@@ -132,6 +167,10 @@ def main():
     print(f"selected family : tan(alpha) = {t:+g}")
     print(f"strip pitch     : {p:g} mm")
     print(f"validation rows : {len(val)}")
+    print(
+        f"exported strips : {strip_ids[0]} .. {strip_ids[-1]} "
+        f"({len(strip_ids)} strips)"
+    )
     print("\nResidual metrics:")
     for row in rows:
         print(
@@ -145,8 +184,9 @@ def main():
         "R=(A_right-A_left)/A3."
     )
     print(
-        "The five-strip CoG is still truncated because the current "
-        "CSV stores only strips -2..+2."
+        "The cluster CoG uses every strip exported by the simulation. "
+        "Repeat with a larger --half-strips value if a convergence check "
+        "of the far tails is needed."
     )
 
 
