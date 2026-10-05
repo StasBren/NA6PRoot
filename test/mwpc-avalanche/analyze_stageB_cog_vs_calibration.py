@@ -93,6 +93,23 @@ def main():
         np.sum(amps_all, axis=1)
     )
 
+    # How much of the total early signal is captured by a compact window
+    # around the strongest strip?  This explains why 3-strip and 5-strip
+    # centroids behave differently.
+    imax_all = np.argmax(amps_all, axis=1)
+    sum_all = np.sum(amps_all, axis=1)
+    sum3_local = np.zeros(len(val), dtype=float)
+    sum5_local = np.zeros(len(val), dtype=float)
+    for i, j in enumerate(imax_all):
+        sum3_local[i] = np.sum(
+            amps_all[i, max(0, j - 1):min(amps_all.shape[1], j + 2)]
+        )
+        sum5_local[i] = np.sum(
+            amps_all[i, max(0, j - 2):min(amps_all.shape[1], j + 3)]
+        )
+    val["capture3_fraction"] = sum3_local / sum_all
+    val["capture5_fraction"] = sum5_local / sum_all
+
     # Existing calibrated R -> local position estimator.
     eta_cal, clipped = invert_asymmetry(
         val["local_asymmetry"].to_numpy(dtype=float),
@@ -163,6 +180,119 @@ def main():
     fig.savefig(args.output_prefix + "_residuals_vs_position.png", dpi=200)
     plt.close(fig)
 
+    # ------------------------------------------------------------
+    # Presentation plot A: mean local response, no event cloud.
+    # This is the cleanest way to show the intra-pitch bias.
+    # ------------------------------------------------------------
+    # Use the geometrically nearest strip centre, independent of which strip
+    # happened to be strongest in a fluctuating microscopic avalanche.
+    k_ref = np.floor(truth / p + 0.5)
+    x_ref = k_ref * p
+    eta_true_cell = (truth - x_ref) / p
+
+    pres = pd.DataFrame({
+        "eta_true": eta_true_cell,
+        "eta_cog3": (val["x_cog3_mm"].to_numpy() - x_ref) / p,
+        "eta_cog5": (val["x_cog5_mm"].to_numpy() - x_ref) / p,
+        "eta_cluster": (val["x_cog_cluster_mm"].to_numpy() - x_ref) / p,
+    })
+    edges = np.linspace(-0.5, 0.5, 17)
+    pres["bin"] = pd.cut(
+        pres["eta_true"], bins=edges, include_lowest=True, labels=False
+    )
+    mean_resp = (
+        pres.dropna(subset=["bin"])
+        .groupby("bin", as_index=False)
+        .agg(
+            eta_true=("eta_true", "mean"),
+            eta_cog3=("eta_cog3", "mean"),
+            eta_cog5=("eta_cog5", "mean"),
+            eta_cluster=("eta_cluster", "mean"),
+            count=("eta_true", "size"),
+        )
+    )
+
+    fig, ax = plt.subplots(figsize=(8.4, 6.0))
+    q = np.linspace(-0.5, 0.5, 200)
+    ax.plot(q, q, "--", color="black", linewidth=1.6, label="ideal")
+    ax.plot(
+        mean_resp["eta_true"], mean_resp["eta_cog3"],
+        marker="o", linewidth=2.0, label="3-strip CoG"
+    )
+    ax.plot(
+        mean_resp["eta_true"], mean_resp["eta_cog5"],
+        marker="o", linewidth=2.0, label="5-strip CoG"
+    )
+    ax.plot(
+        mean_resp["eta_true"], mean_resp["eta_cluster"],
+        marker="o", linewidth=2.0, label="full exported cluster CoG"
+    )
+    ax.set_xlabel("true local position within one strip pitch")
+    ax.set_ylabel("mean reconstructed local position")
+    ax.set_title("Stage B3b: using more of the induced cluster removes CoG non-linearity")
+    ax.grid(alpha=0.25)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(
+        args.output_prefix + "_presentation_mean_response.png", dpi=200
+    )
+    plt.close(fig)
+
+    # ------------------------------------------------------------
+    # Presentation plot B: intrinsic spread of the estimators.
+    # Keep calibration out of the main comparison; it remains a diagnostic.
+    # ------------------------------------------------------------
+    main_names = ["3-strip CoG", "5-strip CoG", "cluster CoG"]
+    sigma_values = []
+    for name in main_names:
+        row = next(item for item in rows if item["method"] == name)
+        sigma_values.append(row["sigma_um"])
+
+    fig, ax = plt.subplots(figsize=(7.6, 5.6))
+    bars = ax.bar(main_names, sigma_values)
+    for bar, value in zip(bars, sigma_values):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2.,
+            value + max(sigma_values) * 0.025,
+            f"{value:.1f}",
+            ha="center", va="bottom"
+        )
+    ax.set_ylabel("event-to-event spread sigma [um]")
+    ax.set_title("Stage B3b: projected-coordinate resolution from cluster CoG")
+    ax.set_ylim(0., max(sigma_values) * 1.18)
+    ax.grid(axis="y", alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(
+        args.output_prefix + "_presentation_resolution.png", dpi=200
+    )
+    plt.close(fig)
+
+    # ------------------------------------------------------------
+    # Presentation plot C: why five strips are already almost the full cluster.
+    # ------------------------------------------------------------
+    capture3 = 100. * float(np.mean(val["capture3_fraction"]))
+    capture5 = 100. * float(np.mean(val["capture5_fraction"]))
+    fig, ax = plt.subplots(figsize=(7.2, 5.4))
+    labels = ["3 strips", "5 strips", "all exported strips"]
+    capture = [capture3, capture5, 100.0]
+    bars = ax.bar(labels, capture)
+    for bar, value in zip(bars, capture):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2.,
+            value + 0.12,
+            f"{value:.2f}%",
+            ha="center", va="bottom"
+        )
+    ax.set_ylabel("mean fraction of early induced signal [%]")
+    ax.set_title("Stage B3b: signal contained around the strongest strip")
+    ax.set_ylim(90., 100.8)
+    ax.grid(axis="y", alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(
+        args.output_prefix + "_presentation_signal_capture.png", dpi=200
+    )
+    plt.close(fig)
+
     print("\n=== STAGE B3b: CoG VS CALIBRATED ESTIMATOR ===")
     print(f"selected family : tan(alpha) = {t:+g}")
     print(f"strip pitch     : {p:g} mm")
@@ -188,6 +318,14 @@ def main():
         "Repeat with a larger --half-strips value if a convergence check "
         "of the far tails is needed."
     )
+    print(
+        f"Mean compact-cluster capture: 3 strips={capture3:.2f}%, "
+        f"5 strips={capture5:.2f}%."
+    )
+    print("Presentation figures:")
+    print(" ", args.output_prefix + "_presentation_mean_response.png")
+    print(" ", args.output_prefix + "_presentation_resolution.png")
+    print(" ", args.output_prefix + "_presentation_signal_capture.png")
 
 
 if __name__ == "__main__":
