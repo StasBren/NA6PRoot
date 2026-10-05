@@ -15,7 +15,7 @@ from analyze_stageB_two_tilt_families import (
 
 def discover_amplitude_columns(df):
     found = []
-    pat = re.compile(r"^A_strip_(-?\\d+)_fC$")
+    pat = re.compile(r"^A_strip_(-?[0-9]+)_fC$")
     for col in df.columns:
         m = pat.match(col)
         if m:
