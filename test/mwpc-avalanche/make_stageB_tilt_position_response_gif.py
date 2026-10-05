@@ -45,7 +45,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
-from matplotlib.patches import Polygon
 import numpy as np
 import pandas as pd
 
@@ -143,47 +142,36 @@ def ensemble_mean(df):
     )
 
 
-def add_strip_band(ax, k, pitch, width, alpha, umin, umax):
+def strip_center_w(u_mm, k, pitch, alpha):
+    """Along-wire w coordinate where strip k crosses a wire at position u."""
+    return u_mm * np.tan(alpha) + k * pitch / np.cos(alpha)
+
+
+def add_strip_centerline(ax, k, pitch, alpha, umin, umax, focus=False):
     """
-    Draw one ideal strip band in the (u,w) plane.
+    Draw only the centre line of strip k in the (u,w) top view.
 
-    Strip centre line:
-        x_alpha = w cos(alpha) - u sin(alpha) = k p
+    For a +alpha strip family,
+        x_alpha = w cos(alpha) - u sin(alpha) = k p,
 
-    therefore
+    so the strip centre line is
         w(u) = u tan(alpha) + k p / cos(alpha).
 
-    The physical strip width is measured perpendicular to the strip, so the
-    band boundaries are x_alpha = k p +/- width/2.
+    We intentionally do NOT fill the strip bands here. For the reference
+    geometry s=p=1.7 mm the bands tile the plane, which makes the geometry
+    visually misleading. Centre lines plus explicit k labels are clearer.
     """
-    ca = np.cos(alpha)
-    ta = np.tan(alpha)
-
-    x_lo = k * pitch - 0.5 * width
-    x_hi = k * pitch + 0.5 * width
-
-    w_lo_umin = umin * ta + x_lo / ca
-    w_lo_umax = umax * ta + x_lo / ca
-    w_hi_umin = umin * ta + x_hi / ca
-    w_hi_umax = umax * ta + x_hi / ca
-
-    poly = Polygon(
-        [
-            (umin, w_lo_umin),
-            (umax, w_lo_umax),
-            (umax, w_hi_umax),
-            (umin, w_hi_umin),
-        ],
-        closed=True,
-        alpha=0.18,
-        linewidth=1.0,
+    us = np.array([umin, umax], dtype=float)
+    ws = us * np.tan(alpha) + (k * pitch) / np.cos(alpha)
+    ax.plot(
+        us,
+        ws,
+        linestyle="--",
+        linewidth=1.7 if focus else 0.9,
+        alpha=0.72 if focus else 0.38,
+        color="tab:red" if focus else "0.55",
+        zorder=1,
     )
-    ax.add_patch(poly)
-
-    # Dashed strip centre.
-    us = np.array([umin, umax])
-    ws = us * ta + (k * pitch) / ca
-    ax.plot(us, ws, linestyle="--", linewidth=0.9, alpha=0.55)
 
 
 def main():
@@ -321,6 +309,10 @@ def main():
     # ------------------------------------------------------------------
     # Panel 1: true top view in (u,w).
     # Wires run along w and are separated along u.
+    #
+    # IMPORTANT: in a tilted geometry, "same w" does NOT mean "same strip".
+    # We therefore label where strips k=-1,0,+1 actually cross the selected
+    # wire. This is the key visual needed to interpret the GIF correctly.
     # ------------------------------------------------------------------
     wire_indices_draw = np.arange(-2, 3)
     u_wires = wire_indices_draw * args.wire_pitch_mm
@@ -328,58 +320,109 @@ def main():
     umin = float(u_wires.min() - 1.2)
     umax = float(u_wires.max() + 1.2)
 
-    w_margin = 2.0 * args.strip_pitch_mm
-    wmin = min(float(w_data.min()), expected_center) - w_margin
-    wmax = max(float(w_data.max()), expected_center) + w_margin
+    focus_ks = np.array([-1, 0, 1], dtype=int)
+    focus_w = np.array(
+        [
+            strip_center_w(
+                wire_u, k, args.strip_pitch_mm, alpha
+            )
+            for k in focus_ks
+        ],
+        dtype=float,
+    )
 
-    # Draw tilted strips k=-3..+3.
+    # Keep the view tight enough to read the selected-wire geometry, while
+    # still showing the k=-1,0,+1 strip centres.
+    w_pad = 0.35
+    wmin = min(float(w_data.min()), float(focus_w.min())) - w_pad
+    wmax = max(float(w_data.max()), float(focus_w.max())) + w_pad
+
+    # Draw strip centre lines only. The physical bands are not filled because
+    # s=p in the current reference geometry and the filled bands would cover
+    # the whole plane.
     for k in range(-3, 4):
-        add_strip_band(
+        add_strip_centerline(
             ax_geom,
             k,
             args.strip_pitch_mm,
-            args.strip_width_mm,
             alpha,
             umin,
             umax,
+            focus=(k in (-1, 0, 1)),
         )
 
     # Draw anode wires. Each wire is one line parallel to w.
     for m, u in zip(wire_indices_draw, u_wires):
-        lw = 2.2 if m == wire_index else 1.0
-        alpha_line = 0.95 if m == wire_index else 0.45
+        selected = m == wire_index
         ax_geom.plot(
             [u, u],
             [wmin, wmax],
-            linewidth=lw,
-            alpha=alpha_line,
+            linewidth=2.8 if selected else 1.0,
+            alpha=0.95 if selected else 0.35,
+            color="tab:blue" if selected else "0.6",
+            zorder=2,
         )
         ax_geom.text(
             u,
-            wmax - 0.05 * (wmax - wmin),
+            wmax - 0.04 * (wmax - wmin),
             rf"$m={m}$",
             ha="center",
             va="top",
             fontsize=8,
         )
 
+    # Explicitly mark where the three relevant strips cross the selected wire.
+    for k, wk in zip(focus_ks, focus_w):
+        ax_geom.plot(
+            [wire_u],
+            [wk],
+            marker="o",
+            markersize=5.5,
+            color="black",
+            linestyle="none",
+            zorder=5,
+        )
+        ax_geom.annotate(
+            rf"$k={k:+d}$",
+            xy=(wire_u, wk),
+            xytext=(7, 4),
+            textcoords="offset points",
+            fontsize=9,
+            ha="left",
+            va="bottom",
+        )
+
     avalanche_marker, = ax_geom.plot(
         [wire_u],
         [w_frames[0]],
         marker="*",
-        markersize=18,
+        markersize=19,
+        color="tab:green",
+        markeredgecolor="black",
+        markeredgewidth=0.5,
         linestyle="none",
-        zorder=6,
+        zorder=7,
     )
 
-    # Response-center point x_alpha=0 on the selected wire.
+    # x_alpha=0 means the avalanche is centred on strip k=0.
+    # On the selected wire this occurs at w = u_wire tan(alpha).
     center_marker, = ax_geom.plot(
         [wire_u],
         [expected_center],
         marker="x",
-        markersize=9,
+        markersize=10,
+        markeredgewidth=2.0,
+        color="tab:red",
         linestyle="none",
-        zorder=5,
+        zorder=6,
+    )
+    ax_geom.annotate(
+        r"$k=0$ centre on this wire",
+        xy=(wire_u, expected_center),
+        xytext=(18, 18),
+        textcoords="offset points",
+        arrowprops=dict(arrowstyle="->", linewidth=0.9),
+        fontsize=9,
     )
 
     motion_line, = ax_geom.plot(
@@ -387,7 +430,9 @@ def main():
         [w_data.min(), w_data.max()],
         linestyle=":",
         linewidth=1.3,
-        alpha=0.65,
+        alpha=0.60,
+        color="tab:blue",
+        zorder=3,
     )
 
     geom_info = ax_geom.text(
@@ -397,7 +442,8 @@ def main():
         transform=ax_geom.transAxes,
         ha="left",
         va="top",
-        bbox=dict(boxstyle="round", facecolor="white", alpha=0.88),
+        fontsize=9.5,
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.90),
     )
 
     ax_geom.set_xlim(umin, umax)
@@ -405,7 +451,7 @@ def main():
     ax_geom.set_xlabel(r"$u$ across anode wires [mm]")
     ax_geom.set_ylabel(r"$w$ along anode wires [mm]")
     ax_geom.set_title(
-        r"Top view: wires $\parallel w$, tilted strips in the $(u,w)$ plane"
+        r"Top view: wire and actual strip-centre crossings"
     )
     ax_geom.grid(alpha=0.18)
 
@@ -515,6 +561,8 @@ def main():
         avalanche_marker.set_data([wire_u], [w0])
         geom_info.set_text(
             rf"$w_0={w0:+.3f}$ mm" + "\n"
+            + rf"$u_{{\rm wire}}={wire_u:+.3f}$ mm" + "\n"
+            + rf"$w_{{\rm center}}=u\tan\alpha={expected_center:+.3f}$ mm" + "\n"
             + rf"$x_\alpha={xalpha:+.3f}$ mm" + "\n"
             + rf"$x_\alpha/p={eta_frames[i]:+.3f}$" + "\n"
             + rf"$R={asym_frames[i]:+.3f}$"
