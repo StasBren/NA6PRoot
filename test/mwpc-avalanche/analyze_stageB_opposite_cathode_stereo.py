@@ -72,6 +72,50 @@ def main():
 
     df = add_cog(df, "minus", ids_m, cols_m, args.strip_pitch_mm)
     df = add_cog(df, "plus", ids_p, cols_p, args.strip_pitch_mm)
+
+    n_all = len(df)
+    n_minus = int(df["minus_reconstructable"].sum())
+    n_plus = int(df["plus_reconstructable"].sum())
+    n_both = int(
+        (df["minus_reconstructable"] & df["plus_reconstructable"]).sum()
+    )
+
+    if n_both == 0:
+        print("\n=== Stage B3c.2 input diagnostics ===")
+        print(f"rows in CSV                  : {n_all}")
+        print(f"minus-family reconstructable : {n_minus}")
+        print(f"plus-family reconstructable  : {n_plus}")
+        for family, cols in [("minus", cols_m), ("plus", cols_p)]:
+            a = df[cols].to_numpy(dtype=float)
+            finite = np.isfinite(a)
+            print(
+                f"{family:5s} finite amplitude entries   : "
+                f"{finite.sum()} / {a.size}"
+            )
+            if finite.any():
+                vals = a[finite]
+                print(
+                    f"{family:5s} amplitude min/max       : "
+                    f"{vals.min():.6g} / {vals.max():.6g} fC"
+                )
+        for col in [
+            "minus_scale_factor", "plus_scale_factor",
+            "q_minus_local_sum_fC", "q_plus_local_sum_fC",
+            "q_cathode_minus_full_fC", "q_cathode_plus_full_fC",
+        ]:
+            if col in df.columns:
+                x = pd.to_numeric(df[col], errors="coerce").to_numpy()
+                print(
+                    f"{col:28s}: "
+                    f"finite {np.isfinite(x).sum()}/{len(x)}"
+                )
+        raise RuntimeError(
+            "No events have finite non-zero strip clusters on both cathodes. "
+            "Regenerate the CSV with the current phaseB_opposite_cathode_stereo "
+            "executable; older output from the unmirrored +v strip-weighting "
+            "cell is not usable."
+        )
+
     df = df[df["minus_reconstructable"] & df["plus_reconstructable"]].copy()
 
     alpha = np.deg2rad(float(df["alpha_deg"].iloc[0]))
