@@ -421,9 +421,13 @@ int main(int argc, char** argv) {
   weightingMinus.AddPlaneY(0., 1., "minus_back");
   weightingMinus.AddPlaneY(-gapMinusCm, 0., "minus_front");
 
+  // For the +v cathode, mirror the local planar weighting problem into
+  // y_local = -v.  This keeps both strip-weighting cells in the same
+  // orientation (readout plane at negative local y), which is the convention
+  // already validated in the earlier Stage-B strip studies.
   Garfield::ComponentAnalyticField weightingPlus;
   weightingPlus.AddPlaneY(0., 1., "plus_back");
-  weightingPlus.AddPlaneY(+gapPlusCm, 0., "plus_front");
+  weightingPlus.AddPlaneY(-gapPlusCm, 0., "plus_front");
 
   std::vector<int> stripIds;
   std::vector<std::string> labelsMinus;
@@ -440,7 +444,7 @@ int main(int argc, char** argv) {
     weightingMinus.AddStripOnPlaneY(
         'x', -gapMinusCm, sMin, sMax, lm, gapMinusCm);
     weightingPlus.AddStripOnPlaneY(
-        'x', +gapPlusCm, sMin, sMax, lp, gapPlusCm);
+        'x', -gapPlusCm, sMin, sMax, lp, gapPlusCm);
 
     stripIds.push_back(k);
     labelsMinus.push_back(lm);
@@ -632,7 +636,7 @@ int main(int argc, char** argv) {
                 0., e.v0, zMinus0, 0., e.v1, zMinus1);
             qPlus[j] += EndpointSignal(
                 weightingPlus, labelsPlus[j], -ElementaryChargeFc,
-                0., e.v0, zPlus0, 0., e.v1, zPlus1);
+                0., -e.v0, zPlus0, 0., -e.v1, zPlus1);
           }
         }
 
@@ -660,7 +664,7 @@ int main(int argc, char** argv) {
                 0., ion.v0, zMinus0, 0., ion.v1, zMinus1);
             qPlus[j] += EndpointSignal(
                 weightingPlus, labelsPlus[j], +ElementaryChargeFc,
-                0., ion.v0, zPlus0, 0., ion.v1, zPlus1);
+                0., -ion.v0, zPlus0, 0., -ion.v1, zPlus1);
           }
         }
 
@@ -672,7 +676,9 @@ int main(int argc, char** argv) {
         }
 
         constexpr double MinDenom = 1.e-18;
-        if (std::abs(qMinusLocalSum) < MinDenom ||
+        if (!std::isfinite(qCathMinus) || !std::isfinite(qCathPlus) ||
+            !std::isfinite(qMinusLocalSum) || !std::isfinite(qPlusLocalSum) ||
+            std::abs(qMinusLocalSum) < MinDenom ||
             std::abs(qPlusLocalSum) < MinDenom) {
           ++scaleFailures;
           continue;
