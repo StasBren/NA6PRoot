@@ -136,7 +136,7 @@ bool AdvanceIonRK4(Garfield::Sensor& sensor,
   return true;
 }
 
-double EndpointSignal(const Garfield::ComponentAnalyticField& field,
+double EndpointSignal(Garfield::ComponentAnalyticField& field,
                       const std::string& label,
                       const double qFc,
                       const double u0, const double v0, const double w0,
