@@ -245,6 +245,30 @@ def main():
             paired["capture5_fraction_plus"],
             paired["capture5_fraction_minus"],
         ])),
+        "projection_error_correlation_rho": float(
+            np.corrcoef(
+                paired["dx_plus_mm"].to_numpy(dtype=float),
+                paired["dx_minus_mm"].to_numpy(dtype=float),
+            )[0, 1]
+        ),
+        "common_mode_sigma_um": float(
+            np.std(
+                0.5e3 * (
+                    paired["dx_plus_mm"].to_numpy(dtype=float)
+                    + paired["dx_minus_mm"].to_numpy(dtype=float)
+                ),
+                ddof=1,
+            )
+        ),
+        "differential_mode_sigma_um": float(
+            np.std(
+                0.5e3 * (
+                    paired["dx_minus_mm"].to_numpy(dtype=float)
+                    - paired["dx_plus_mm"].to_numpy(dtype=float)
+                ),
+                ddof=1,
+            )
+        ),
     }])
     summary.to_csv(args.output_prefix + "_summary.csv", index=False)
 
@@ -391,6 +415,53 @@ def main():
     )
     plt.close(fig)
 
+    # ------------------------------------------------------------
+    # Plot 5: correlation of the two projected-coordinate errors.
+    # This diagnoses why the difference coordinate u can reconstruct much
+    # better than either individual projected coordinate.
+    # ------------------------------------------------------------
+    dplus_um = 1.e3 * paired["dx_plus_mm"].to_numpy(dtype=float)
+    dminus_um = 1.e3 * paired["dx_minus_mm"].to_numpy(dtype=float)
+    rho = float(np.corrcoef(dplus_um, dminus_um)[0, 1])
+
+    common_um = 0.5 * (dplus_um + dminus_um)
+    differential_um = 0.5 * (dminus_um - dplus_um)
+
+    fig, ax = plt.subplots(figsize=(7.2, 6.5))
+    ax.scatter(
+        dplus_um, dminus_um,
+        s=10, alpha=0.18,
+        label=f"paired avalanches, rho = {rho:.4f}"
+    )
+    lo = min(np.min(dplus_um), np.min(dminus_um))
+    hi = max(np.max(dplus_um), np.max(dminus_um))
+    ax.plot([lo, hi], [lo, hi], "--", color="black",
+            linewidth=1.4, label="perfect common-mode: delta_- = delta_+")
+    ax.axhline(0., linewidth=0.8)
+    ax.axvline(0., linewidth=0.8)
+    ax.set_xlabel("error in +alpha projected coordinate, delta_+ [um]")
+    ax.set_ylabel("error in -alpha projected coordinate, delta_- [um]")
+    ax.set_title(
+        "Stage B3b: projected-coordinate errors are strongly common-mode"
+    )
+    ax.grid(alpha=0.25)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(
+        args.output_prefix + "_projection_error_correlation.png",
+        dpi=200,
+    )
+    plt.close(fig)
+
+    # Save the common/differential decomposition explicitly for later
+    # comparison with physical two-cathode readout.
+    paired["delta_common_um"] = common_um
+    paired["delta_differential_um"] = differential_um
+    paired.to_csv(
+        args.output_prefix + "_event_reconstruction.csv",
+        index=False,
+    )
+
     print("\n=== STAGE B3b: TWO-FAMILY CLUSTER-CoG RECONSTRUCTION ===")
     print(f"selected tan(alpha)      : {tplus:+g}, {tminus:+g}")
     print(f"|alpha|                  : {alpha * 180. / np.pi:.4f} deg")
@@ -423,6 +494,16 @@ def main():
         f"{1.e3*mu['bias']:+.2f} / {1.e3*mu['sigma']:.2f} / "
         f"{1.e3*mu['rms']:.2f} um"
     )
+    print("\nError correlation:")
+    print(f"  rho(delta_+, delta_-)   : {rho:.6f}")
+    print(
+        f"  sigma common-mode       : "
+        f"{np.std(common_um, ddof=1):.2f} um"
+    )
+    print(
+        f"  sigma differential-mode : "
+        f"{np.std(differential_um, ddof=1):.2f} um"
+    )
     print(
         "\nNOTE: no R calibration is used; each family coordinate is the "
         "cluster center of gravity over all exported strips."
@@ -438,6 +519,7 @@ def main():
     print(" ", args.output_prefix + "_reconstructed_vs_true.png")
     print(" ", args.output_prefix + "_2d_reconstruction.png")
     print(" ", args.output_prefix + "_resolution_summary.png")
+    print(" ", args.output_prefix + "_projection_error_correlation.png")
 
 
 if __name__ == "__main__":
