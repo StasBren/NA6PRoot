@@ -67,6 +67,10 @@ add_executable(mwpc_phase_b_tilt_scan phaseB_tilt_scan.cxx)
 target_link_libraries(mwpc_phase_b_tilt_scan PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_phase_b_tilt_scan PRIVATE cxx_std_17)
 
+add_executable(mwpc_phase_b_opposite_cathode_plane_coupling phaseB_opposite_cathode_plane_coupling.cxx)
+target_link_libraries(mwpc_phase_b_opposite_cathode_plane_coupling PRIVATE Garfield::Garfield)
+target_compile_features(mwpc_phase_b_opposite_cathode_plane_coupling PRIVATE cxx_std_17)
+
 add_executable(mwpc_heed_visualization heed_muon_visualization.cxx)
 target_link_libraries(mwpc_heed_visualization PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_heed_visualization PRIVATE cxx_std_17)
