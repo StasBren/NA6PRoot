@@ -84,3 +84,7 @@ target_compile_features(mwpc_phase_a_avalanche_visualization PRIVATE cxx_std_17)
 add_executable(mwpc_phase_a_heed_stats phaseA_heed_statistics.cxx)
 target_link_libraries(mwpc_phase_a_heed_stats PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_phase_a_heed_stats PRIVATE cxx_std_17)
+
+add_executable(mwpc_phase_b_opposite_cathode_stereo phaseB_opposite_cathode_stereo.cxx)
+target_link_libraries(mwpc_phase_b_opposite_cathode_stereo PRIVATE Garfield::Garfield)
+target_compile_features(mwpc_phase_b_opposite_cathode_stereo PRIVATE cxx_std_17)
