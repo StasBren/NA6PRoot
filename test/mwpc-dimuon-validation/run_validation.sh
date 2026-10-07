@@ -9,6 +9,7 @@ GEN="${ROOT_DIR}/test/genDimuonBgEvent.C"
 HOOK="${ROOT_DIR}/test/mwpc-dimuon-validation/mwpcDimuonHooks.C"
 KIN_ANALYSIS="${ROOT_DIR}/test/mwpc-dimuon-validation/analyzeMWPCDimuon.C"
 HIT_ANALYSIS="${ROOT_DIR}/test/mwpc-dimuon-validation/plotMWPCHitDensity.C"
+ANGLE_ANALYSIS="${ROOT_DIR}/test/mwpc-dimuon-validation/analyzeMWPCIncidentAngles.C"
 OUT_BASE="${ROOT_DIR}/test_runs/mwpc_dimuon"
 
 mkdir -p "${OUT_BASE}"
@@ -62,9 +63,15 @@ run_channel() {
   # Parent/daughter momentum distributions and decay-closure checks.
   root -l -b -q "${KIN_ANALYSIS}+(\"${out}\",\"${channel}\")"
 
-  # Direct Geant4 MWPC sensitive-gas hit density.  Every chamber crossing is
+  # Direct Geant4 MWPC sensitive-gas hit density. Every chamber crossing is
   # counted separately at its actual position; 1 cm bins resolve the 3 cm seams.
   root -l -b -q "${HIT_ANALYSIS}+(\"${out}\",\"${channel}\",1.)"
+
+  # Stage C0: incidence-angle phase space at MS0-MS3. The analysis uses the
+  # entrance momentum stored in each NA6PMuonSpecHit and reports both the
+  # current analytic 320x240 cm MNP33 aperture and the conservative 245x240 cm
+  # useful-aperture fiducial.
+  root -l -b -q "${ANGLE_ANALYSIS}+(\"${out}\",\"${channel}\")"
 }
 
 run_channel Jpsi 20260915
@@ -75,3 +82,4 @@ echo
 echo "All channels finished."
 echo "Kinematics: ${OUT_BASE}/{Jpsi,Omega,Phi}/plots/"
 echo "Hit density: ${OUT_BASE}/{Jpsi,Omega,Phi}/plots_direct_hits/"
+echo "Incident angles: ${OUT_BASE}/{Jpsi,Omega,Phi}/plots_angles/"
