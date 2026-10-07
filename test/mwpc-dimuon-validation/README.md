@@ -86,6 +86,47 @@ The multiplicity histogram is per generated direct daughter muon. A value of zer
 
 `plotMWPCHitMultiplicityMap.C` is an optional diagnostic for the local mean number of chamber hits per contributing muon. It is not part of the default validation script.
 
+## Stage C0: incident-angle phase space
+
+`analyzeMWPCIncidentAngles.C` uses the entrance momentum stored in each
+`NA6PMuonSpecHit` to measure the local projected incidence angles at MS0-MS3:
+
+```text
+thetaX = atan2(px, pz)
+thetaY = atan2(py, pz)
+theta  = atan2(sqrt(px^2 + py^2), pz)
+```
+
+The analysis stores both crossing-weighted distributions and one
+representative hit per muon per station.  If a muon crosses more than one
+staggered/overlapping chamber, the representative crossing is the one with
+the smallest `|zIn - zStation|`.
+
+For the MNP33 bore study the current analytic magnet geometry is treated as a
+130 cm-long aperture centred at `layout.posDipMS[2]`.  Two fiducials are
+reported:
+
+```text
+geometry fiducial : 320 x 240 cm aperture
+useful fiducial   : 245 x 240 cm aperture
+```
+
+MS1 is extrapolated to the upstream magnet face and MS2 back to the downstream
+face.  Both faces must lie inside the requested aperture.  This is deliberately
+a Stage-C0 phase-space estimate; it is not a replacement for exact trajectory
+sampling inside the magnetic field.
+
+Outputs are written under:
+
+```text
+plots_angles/incident_angles_<channel>.root
+plots_angles/incident_angle_summary_<channel>.csv
+plots_angles/angles_*.png
+```
+
+The CSV reports `N`, mean, RMS and the 5, 16, 50, 84, 95 and 99 percentiles
+for `|thetaX|`, `|thetaY|` and `theta`.
+
 ## Geometry regression checks
 
 The full generated geometry should also pass:
