@@ -38,6 +38,16 @@ def parse_args():
         help="Largest integration window shown.",
     )
     p.add_argument(
+        "--cog-min-fraction",
+        type=float,
+        default=0.01,
+        help=(
+            "Hide CoG points until the accumulated cluster amplitude exceeds "
+            "this fraction of its final value. This avoids showing a centroid "
+            "with a nearly zero denominator before the avalanche signal arrives."
+        ),
+    )
+    p.add_argument(
         "--output",
         default="stageB_response_kernel.png",
     )
@@ -102,7 +112,6 @@ def main():
     if tmax <= 0:
         raise RuntimeError("No positive integration range available.")
 
-    # Key strips for the intuitive current panels.
     key = [-1, 0, 1]
     ecur = {}
     icur = {}
@@ -115,7 +124,6 @@ def main():
         ecur[k] = e[ecol].to_numpy(dtype=float)
         icur[k] = ion[icol].to_numpy(dtype=float)
 
-    # Auto-zoom the electron burst.
     peak = max(float(np.max(np.abs(ecur[k]))) for k in key)
     if peak > 0:
         combined = np.max(np.vstack([np.abs(ecur[k]) for k in key]), axis=0)
@@ -129,7 +137,6 @@ def main():
     else:
         electron_xlim = (te[0], te[-1])
 
-    # Log-spaced observation windows plus a few presentation anchors.
     tmin = max(0.2, min(1.0, tmax))
     windows = np.unique(
         np.concatenate(
@@ -143,6 +150,7 @@ def main():
 
     amp = {k: [] for k in cluster}
     xhat = []
+    cluster_sum = []
 
     for T in windows:
         amps = []
@@ -158,21 +166,24 @@ def main():
         amps = np.asarray(amps, dtype=float)
         centers = np.asarray(centers, dtype=float)
         denom = float(np.sum(amps))
+        cluster_sum.append(denom)
         xhat.append(
             float(np.sum(centers * amps) / denom)
             if denom > 0 else np.nan
         )
+
+    cluster_sum = np.asarray(cluster_sum, dtype=float)
+    xhat = np.asarray(xhat, dtype=float)
+    final_cluster_sum = float(np.nanmax(cluster_sum))
+    valid_cog = cluster_sum >= args.cog_min_fraction * final_cluster_sum
+    xhat_visible = np.where(valid_cog, xhat, np.nan)
 
     fig, axes = plt.subplots(2, 2, figsize=(12.2, 8.4))
     ax_e, ax_i, ax_q, ax_x = axes.flat
 
     styles = {-1: "--", 0: "-", 1: ":"}
     for k in key:
-        ax_e.plot(
-            te, ecur[k],
-            linestyle=styles[k],
-            label=f"strip {k}",
-        )
+        ax_e.plot(te, ecur[k], linestyle=styles[k], label=f"strip {k}")
     ax_e.set_xlim(*electron_xlim)
     ax_e.set_xlabel("time [ns]")
     ax_e.set_ylabel("electron current [fC/ns]")
@@ -181,13 +192,9 @@ def main():
     ax_e.legend()
 
     for k in key:
-        ax_i.plot(
-            ti / 1000.0, icur[k],
-            linestyle=styles[k],
-            label=f"strip {k}",
-        )
+        ax_i.plot(ti / 1000.0, icur[k], linestyle=styles[k], label=f"strip {k}")
     ax_i.set_xlim(0.0, min(tmax, ti[-1]) / 1000.0)
-    ax_i.set_xlabel("time [$\mu$s]")
+    ax_i.set_xlabel(r"time [$\mu$s]")
     ax_i.set_ylabel("positive-ion current [fC/ns]")
     ax_i.set_title("2. Slow positive-ion response")
     ax_i.grid(alpha=0.2)
@@ -195,11 +202,7 @@ def main():
 
     for k in key:
         if k in amp:
-            ax_q.semilogx(
-                windows, amp[k],
-                linestyle=styles[k],
-                label=f"strip {k}",
-            )
+            ax_q.semilogx(windows, amp[k], linestyle=styles[k], label=f"strip {k}")
     ax_q.set_xlabel("observation window $T$ [ns]")
     ax_q.set_ylabel(r"$A_k(T)=|Q_k(T)|$ [fC]")
     ax_q.set_title("3. Integrated strip amplitudes")
@@ -207,7 +210,7 @@ def main():
     ax_q.legend()
 
     true_w = float(event_summary.get("seed_w_mm", np.nan))
-    ax_x.semilogx(windows, 1000.0 * np.asarray(xhat), linewidth=2.0)
+    ax_x.semilogx(windows, 1000.0 * xhat_visible, linewidth=2.2, label="5-strip CoG")
     if np.isfinite(true_w):
         ax_x.axhline(
             1000.0 * true_w,
@@ -215,27 +218,30 @@ def main():
             linestyle="--",
             label=rf"true $w_0={true_w:g}$ mm",
         )
+    if np.any(valid_cog):
+        conv = 1000.0 * xhat_visible[np.where(valid_cog)[0][-1]]
+        ax_x.axhline(
+            conv,
+            color="0.35",
+            linestyle=":",
+            label=rf"late CoG $\approx {conv:.0f}\,\mu$m",
+        )
     ax_x.set_xlabel("observation window $T$ [ns]")
     ax_x.set_ylabel(r"cluster-CoG $\hat w(T)$ [$\mu$m]")
-    ax_x.set_title(
-        "4. Position estimate from the same accumulated cluster"
-    )
+    ax_x.set_title("4. Position stabilizes before full ion collection")
     ax_x.grid(alpha=0.2)
-    if np.isfinite(true_w):
-        ax_x.legend()
+    ax_x.legend()
 
-    fig.suptitle(
-        "Stage B response kernel: microscopic motion -> induced charge -> position"
-    )
+    fig.suptitle("Stage B response kernel: microscopic motion -> induced charge -> position")
     fig.tight_layout()
     fig.savefig(args.output, dpi=220)
     plt.close(fig)
 
-    # Compact numerical anchors for slide notes.
     anchors = [25., 50., 100., 200.]
     print("\n=== STAGE B: RESPONSE KERNEL ===")
     print(f"prefix                   : {args.prefix}")
     print(f"CoG strips               : {cluster}")
+    print(f"CoG visibility threshold : {100.0 * args.cog_min_fraction:.2f}% of max cluster amplitude")
     if np.isfinite(true_w):
         print(f"true position            : {true_w:.4f} mm")
     print("\nCoG versus observation window:")
