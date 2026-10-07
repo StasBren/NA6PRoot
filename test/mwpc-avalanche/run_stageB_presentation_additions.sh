@@ -36,3 +36,15 @@ echo "Wrote:"
 echo "  stageB_cog_time_stability.png"
 echo "  stageB_cog_time_stability_metrics.csv"
 echo "  stageB_response_kernel.png"
+
+
+# Optional microscopic diagnostic for the multiple peaks in the prompt
+# electron-current pulse.  Reuses the already exported electron endpoints.
+if [[ -f "${KERNEL_PREFIX}_electron_endpoints.csv" ]]; then
+  python3 plot_stageB_avalanche_burst_structure.py \
+    --prefix "${KERNEL_PREFIX}" \
+    --bin-ns 0.02 \
+    --output stageB_avalanche_burst_structure.png
+else
+  echo "Skipping avalanche-burst diagnostic: missing ${KERNEL_PREFIX}_electron_endpoints.csv"
+fi
