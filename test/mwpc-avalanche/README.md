@@ -1,153 +1,142 @@
-# MWPC microscopic response sandbox — Phase A
+# MWPC microscopic response sandbox — Stages A and B
 
-This directory is intentionally **standalone** from the main NA6PRoot build.
-Garfield++ is not added as a production dependency of NA6PRoot at this stage.
+This directory contains the **validated microscopic-response work that Stage C
+reuses**.  It is intentionally standalone from the normal NA6PRoot build;
+Garfield++ is still not a production dependency of the main detector code.
 
-The goal of Phase A is to understand the microscopic gas response of a small
-MWPC cell before adding cathode-strip readout or integrating a parameterized
-response into the full detector simulation.
+New event-level integration belongs in `../mwpc-stage-c/`.
+Do not create a second coordinate transform, Heed chain, avalanche model, or
+strip-response model there unless an existing implementation is first factored
+into a shared helper.
 
 ## Coordinate convention
 
 The detector convention is
 
-- detector **X**: horizontal, along the anode wires;
-- detector **Y**: vertical;
-- detector **Z**: along the beam.
+- detector/global **X**: horizontal, along the anode wires;
+- detector/global **Y**: vertical, across the wires;
+- detector/global **Z**: along the beam / nominal chamber normal.
 
-`ComponentAnalyticField` uses wires parallel to its local z axis. Therefore
-the sandbox uses
+The chamber-local convention is
 
-- Garfield x = detector Y,
-- Garfield y = detector Z,
-- Garfield z = detector X.
+- `u`: across wires;
+- `v`: chamber normal;
+- `w`: along wires.
 
-The MNP33 magnetic field +Y therefore maps to Garfield +x.
+Garfield uses
 
-## Geometry is intentionally configurable
+```text
+(x_G, y_G, z_G) = (u, v, w)
+```
 
-The chamber/readout design is not frozen, so the microscopic model must not
-assume a single final cathode spacing or strip topology.
+For the nominal NA60+/DiCE orientation this is
 
-The current default operating point is only a Prototype-3 reference:
+```text
+u = global Y
+v = global Z
+w = global X
+```
+
+The reusable rigid-frame implementation is `MWPCCoordinateFrame.h`.
+`phaseA_coordinate_test.cxx` validates point/vector round trips and basis
+directions.
+
+## Reference microscopic cell
+
+The current reference operating point is Prototype-3-like rather than a claim
+of frozen final chamber geometry:
 
 - Ar/CO2 = 70:30;
 - anode-wire diameter = 30 um;
 - wire pitch = 4 mm;
-- wire plane between cathodes with 2 mm and 4 mm gaps;
+- asymmetric cathode gaps = 2 mm + 4 mm;
 - anode voltage = +1.8 kV;
-- magnetic field = 0 T for the first smoke test.
+- reference strip pitch/width = 1.7 mm / 1.7 mm in the later Stage-B studies.
 
-The two wire-to-cathode gaps are independent runtime parameters. Examples:
+Most executables expose the relevant geometry/field values as runtime options.
 
-```bash
-# Prototype-3-like asymmetric configuration
-./mwpc_phase_a --gap-minus-mm 2 --gap-plus-mm 4
+## Stage A — gas, transport and avalanche
 
-# symmetric 3+3 mm
-./mwpc_phase_a --gap-minus-mm 3 --gap-plus-mm 3
+Key executables/source files:
 
-# symmetric 2.5+2.5 mm
-./mwpc_phase_a --gap-minus-mm 2.5 --gap-plus-mm 2.5
-```
+- `phaseA_coordinate_test.cxx` — global/local frame validation;
+- `phaseA_collection_scan.cxx` — wire collection / separatrix behaviour;
+- `phaseA_heed_muon.cxx` — Heed ionisation clusters and conduction electrons;
+- `phaseA_heed_avalanche.cxx` — full Heed -> microscopic avalanche chain;
+- `phaseA_heed_statistics.cxx` — ionisation/energy-loss statistics;
+- `phaseA_gain_fluctuations.cxx` — stochastic single-electron gain;
+- `phaseA_magnetic_drift.cxx` — B-field drift sensitivity;
+- `phaseA_avalanche_visualization.cxx`, `heed_muon_visualization.cxx` —
+  presentation/diagnostic visualisations.
 
-Wire pitch and diameter are configurable as well:
+Established qualitative/quantitative behaviour includes sensible symmetric
+wire collection at a cell boundary, Poisson-like primary-cluster multiplicity,
+long-tailed energy loss, broad avalanche-gain fluctuations, and mainly
+along-wire Lorentz displacement for the nominal field orientation.
 
-```bash
-./mwpc_phase_a --pitch-mm 4 --wire-diam-um 30
-```
+Absolute gas gain is **not** prototype-calibrated.
 
-This means Phase A can compare field, drift and avalanche behaviour for
-different gap choices without changing the source code.
+## Stage B — induced strip response and reconstruction
 
-## Readout topology to be tested in Phase B
+Key response pieces:
 
-The strip/readout design is also deliberately not frozen. Phase B will support
-at least two distinct configurations rather than baking one into the geometry:
+- `phaseB_strip_weighting.cxx` — strip weighting potential/field;
+- `phaseB_single_ion_signal.cxx` — single-ion Shockley-Ramo test;
+- `phaseB_electron_ion_pair.cxx` — electron/ion signal decomposition;
+- `phaseB_ion_cloud_signal.cxx` and
+  `phaseB_electron_ion_cloud_signal.cxx` — compact cloud studies;
+- `phaseB_real_avalanche_signal.cxx` — real microscopic avalanche -> strip signal;
+- `phaseB_resolution_ensemble.cxx` — repeated-response ensemble;
+- `phaseB_strip_geometry_scan.cxx` — pitch/width trade-off;
+- `phaseB_tilt_scan.cxx` — tilted strip families;
+- `phaseB_opposite_cathode_stereo.cxx` — two-family/opposite-cathode study;
+- `phaseB_avalanche_angle_scan.cxx` — avalanche azimuth around the wire.
 
-1. **two-sided readout** — signal pickup on both cathode sides, with the two
-   strip coordinates distributed between the two cathodes;
-2. **single-sided readout** — both strip-coordinate patterns are placed on one
-   readout cathode while the opposite cathode is not used for strip pickup.
+Associated `analyze_*.py`, `plot_*.py` and `run_*.sh` files are analysis and
+presentation utilities for these studies.
 
-These will share the same Phase-A gas/wire transport model. The difference
-enters when strip electrodes, weighting fields, Shockley-Ramo induced signals,
-charge sharing and reconstruction are added.
+Stage B established that a real avalanche gives a prompt electron component plus
+a long ion tail, while normalized spatial sharing/CoG stabilises much earlier
+than the absolute integrated charge.  Five-strip CoG was already close to the
+full exported cluster in the ideal weighting model.
 
-Keeping the gas geometry and readout topology separate is intentional: we want
-to be able to scan, for example, symmetric versus asymmetric wire placement
-independently of one-sided versus two-sided strip readout.
-
-## Prerequisite
-
-Garfield++ must be installed and its environment loaded. For an installed
-Garfield++ tree this is normally
-
-```bash
-source /path/to/garfield/install/share/Garfield/setupGarfield.sh
-```
-
-The official Garfield++ build requires ROOT 6, GSL, CMake, a compatible C++
-compiler and a Fortran compiler.
+Stage B still excludes final electronics/noise/threshold/shaping and therefore
+does not claim final chamber resolution.
 
 ## Build
 
-From this directory:
+Load the NA6P/ROOT and Garfield environments, then build this standalone
+directory:
 
 ```bash
-mkdir -p build
-cd build
-cmake ..
-cmake --build . -j4
+source ~/na6p/env.sh
+source ~/na6p/install/garfieldpp/share/Garfield/setupGarfield.sh
+
+cd ~/na6p/src/NA6PRoot-mwpc/test/mwpc-avalanche
+
+cmake -S . -B build \
+  -DGarfield_DIR="$HOME/na6p/install/garfieldpp/lib/cmake/Garfield"
+
+cmake --build build -j4
 ```
 
-If CMake cannot find Garfield++, prepend its install prefix to
-`CMAKE_PREFIX_PATH`, for example:
+The exact target names are listed in `CMakeLists.txt`.
 
-```bash
-cmake .. -DCMAKE_PREFIX_PATH="$GARFIELD_HOME/install"
+## Stage C handoff
+
+Stage C starts from a full muon crossing and combines the existing pieces:
+
+```text
+Geant4 crossing
+  -> ChamberFrame global-to-local transform
+  -> Heed ionisation
+  -> electron drift + many avalanches
+  -> Stage-B strip signals
+  -> event-level strip cluster / CoG / timing
 ```
 
-## First test: one electron, B = 0
+The canonical Stage-C workspace and current C0 acceptance analysis are in:
 
-```bash
-./mwpc_phase_a
+```text
+test/mwpc-stage-c/
 ```
-
-The program constructs nine parallel wires between two cathode planes, launches
-one low-energy electron, runs microscopic transport and avalanche multiplication,
-and prints the avalanche size and electron endpoints.
-
-Useful options:
-
-```bash
-./mwpc_phase_a --hv 1800 --b 0
-./mwpc_phase_a --gap-minus-mm 3 --gap-plus-mm 3
-./mwpc_phase_a --x0 0.10 --y0 0.20
-```
-
-## What this test proves — and what it does not
-
-A PASS means only that
-
-1. the Ar/CO2 Magboltz medium is usable,
-2. the analytic wire/cathode field is valid,
-3. an electron is transported,
-4. microscopic multiplication can be generated.
-
-It does **not** yet validate the physical gas gain. Penning transfer,
-gas conditions, exact gap geometry and high-voltage operating point will need
-to be tied to prototype measurements before interpreting the avalanche charge
-quantitatively.
-
-## Next Phase-A checks
-
-After the smoke test works:
-
-1. scan starting position across one wire pitch at B = 0;
-2. scan HV and record the gain distribution;
-3. scan the two cathode gaps, including symmetric and asymmetric cases;
-4. switch on a constant vertical MNP33 field and measure the arrival shift;
-5. replace a single starting electron by ionisation clusters from a muon track.
-
-Cathode-strip weighting fields and Shockley-Ramo signals belong to Phase B.
