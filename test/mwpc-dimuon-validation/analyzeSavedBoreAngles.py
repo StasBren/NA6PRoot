@@ -9,6 +9,12 @@ its own transported trajectory crosses the three MNP33 reference planes inside
   geometry bore : half-widths from manifest (normally 160 x 120 cm)
   useful bore   : 122.5 x 120 cm (245 x 240 cm proposal useful aperture)
 
+A fourth selection, useful_bore_working_area, additionally requires the muon
+crossing position at the station plane to lie inside the same approximate
+finite working rectangle already used by the offline stagger study.  This
+directly tests whether the large downstream angle tails are still relevant to
+finite station coverage.
+
 Angles at MS0..MS3 are taken directly from the transported momentum stored at the
 nominal reference plane:
   theta_x = atan2(px, pz)
@@ -37,7 +43,23 @@ BORE_Z_CM = (365.0, 430.0, 495.0)
 USEFUL_HALF_X_CM = 122.5
 USEFUL_HALF_Y_CM = 120.0
 N_STUDY_STATIONS = 4
-SELECTIONS = ("all", "geometry_bore", "useful_bore")
+
+# Approximate externally specified station working rectangles used by the
+# existing offline stagger study, in detector-global x,y.  These are a
+# physics/layout benchmark rather than a frozen construction envelope.
+WORKING_AREA_CM = (
+    (220.0, 220.0),  # MS0
+    (230.0, 240.0),  # MS1
+    (310.0, 310.0),  # MS2
+    (320.0, 320.0),  # MS3
+)
+
+SELECTIONS = (
+    "all",
+    "geometry_bore",
+    "useful_bore",
+    "useful_bore_working_area",
+)
 
 
 class Bucket:
@@ -143,15 +165,23 @@ def fill_muon(
     if useful_ok:
         counters["useful_bore_muons"] += 1
 
-    selected = {
-        "all": True,
-        "geometry_bore": geometry_ok,
-        "useful_bore": useful_ok,
-    }
     for station, z in enumerate(nominal_z[:N_STUDY_STATIONS]):
         state = states.get(z)
         if state is None:
             continue
+
+        working_x, working_y = WORKING_AREA_CM[station]
+        inside_working_area = (
+            abs(state["x"]) <= 0.5 * working_x
+            and abs(state["y"]) <= 0.5 * working_y
+        )
+
+        selected = {
+            "all": True,
+            "geometry_bore": geometry_ok,
+            "useful_bore": useful_ok,
+            "useful_bore_working_area": useful_ok and inside_working_area,
+        }
         for sel in SELECTIONS:
             if selected[sel]:
                 buckets[sel][station].fill(state)
@@ -234,6 +264,13 @@ def process_job(
     kf.Close()
 
 
+def fraction_abs_above(values: Iterable[float], threshold: float) -> float:
+    data = [abs(float(v)) for v in values]
+    if not data:
+        return float("nan")
+    return sum(v > threshold for v in data) / len(data)
+
+
 def stats_row(source: str, station: int, selection: str, b: Bucket) -> dict:
     tx_mean, tx_rms = mean_rms(b.theta_x)
     ty_mean, ty_rms = mean_rms(b.theta_y)
@@ -249,6 +286,10 @@ def stats_row(source: str, station: int, selection: str, b: Bucket) -> dict:
         "q50_abs_theta_x_deg": quantile(b.theta_x, 0.50, True),
         "q95_abs_theta_x_deg": quantile(b.theta_x, 0.95, True),
         "q99_abs_theta_x_deg": quantile(b.theta_x, 0.99, True),
+        "frac_abs_theta_x_gt20": fraction_abs_above(b.theta_x, 20.0),
+        "frac_abs_theta_x_gt30": fraction_abs_above(b.theta_x, 30.0),
+        "frac_abs_theta_x_gt40": fraction_abs_above(b.theta_x, 40.0),
+        "frac_abs_theta_x_gt50": fraction_abs_above(b.theta_x, 50.0),
         "mean_theta_y_deg": ty_mean,
         "rms_theta_y_deg": ty_rms,
         "q50_abs_theta_y_deg": quantile(b.theta_y, 0.50, True),
@@ -306,6 +347,10 @@ def main() -> None:
         "Fiducials: geometry "
         f"|x|<={geometry_half_x:g} cm, |y|<={geometry_half_y:g} cm; "
         f"useful |x|<={USEFUL_HALF_X_CM:g} cm, |y|<={USEFUL_HALF_Y_CM:g} cm"
+    )
+    print(
+        "Working areas MS0..MS3 [x*y cm]: "
+        + ", ".join(f"{x:g}x{y:g}" for x, y in WORKING_AREA_CM)
     )
 
     for source, jobs in sorted(jobs_by_sample.items()):
@@ -378,6 +423,11 @@ def main() -> None:
         "geometry_bore_half_width_cm": [geometry_half_x, geometry_half_y],
         "useful_bore_half_width_cm": [USEFUL_HALF_X_CM, USEFUL_HALF_Y_CM],
         "selection_scope": "single direct daughter muon; no pair-level requirement",
+        "working_area_cm_xy": [list(x) for x in WORKING_AREA_CM],
+        "working_area_note": (
+            "Approximate external working rectangles from the existing stagger study; "
+            "not frozen construction envelopes."
+        ),
         "source_counts": source_counts,
     }
     metadata_path = args.output / "metadata.json"
