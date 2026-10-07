@@ -1,0 +1,38 @@
+{
+  "coordinate_frame": {
+    "local_u": "detector-global +Y; across anode wires",
+    "local_v": "detector-global +Z; chamber normal",
+    "local_w": "detector-global +X; along anode wires",
+    "garfield_mapping": "(x_G,y_G,z_G)=(u,v,w)",
+    "canonical_implementation": "../mwpc-avalanche/MWPCCoordinateFrame.h"
+  },
+  "mnp33": {
+    "reference_z_cm": [365.0, 430.0, 495.0],
+    "useful_aperture_full_cm_xy": [245.0, 240.0]
+  },
+  "working_area_cm_xy": {
+    "MS0": [220.0, 220.0],
+    "MS1": [230.0, 240.0],
+    "MS2": [310.0, 310.0],
+    "MS3": [320.0, 320.0]
+  },
+  "sources": {
+    "jpsi40-bore": 443,
+    "phi40-bore": 333,
+    "omega40-bore": 223
+  },
+  "reference_cell": {
+    "gas": "Ar/CO2 70:30",
+    "wire_pitch_mm": 4.0,
+    "wire_diameter_um": 30.0,
+    "gap_minus_mm": 2.0,
+    "gap_plus_mm": 4.0,
+    "anode_voltage_V": 1800.0,
+    "strip_pitch_mm": 1.7,
+    "strip_width_mm": 1.7
+  },
+  "notes": [
+    "Working areas are approximate external layout-study benchmarks, not frozen detector envelopes.",
+    "The reference cell records the current Stage-A/B sandbox operating point; final detector parameters remain configurable elsewhere."
+  ]
+}
