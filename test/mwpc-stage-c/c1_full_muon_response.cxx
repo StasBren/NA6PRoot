@@ -300,11 +300,14 @@ int main(int argc, char** argv) {
       outputPrefix + "_strip_summary.csv";
   const std::string seedFile =
       outputPrefix + "_seed_summary.csv";
+  const std::string wireFile =
+      outputPrefix + "_wire_summary.csv";
 
   std::ofstream eventOut(eventFile);
   std::ofstream stripOut(stripFile);
   std::ofstream seedOut(seedFile);
-  if (!eventOut || !stripOut || !seedOut) {
+  std::ofstream wireOut(wireFile);
+  if (!eventOut || !stripOut || !seedOut || !wireOut) {
     std::cerr << "Could not open Stage-C1 output files.\n";
     return 6;
   }
@@ -332,6 +335,10 @@ int main(int argc, char** argv) {
       << "event,cluster,seed,seed_u_mm,seed_v_mm,seed_w_mm,seed_t_ns,"
       << "avalanche_electrons,avalanche_ions,ion_births,"
       << "electron_endpoints,collected_electrons\n";
+
+  wireOut
+      << "event,wire_index,wire_u_mm,collected_electrons,"
+      << "collected_charge_fC\n";
 
   std::cout << std::fixed << std::setprecision(4)
             << "\n=== STAGE C1a: FULL MUON -> EVENT-LEVEL STRIP RESPONSE ===\n"
@@ -467,6 +474,7 @@ int main(int argc, char** argv) {
             ++seedCollected;
             ++counters.collectedElectrons;
             counters.activeWires.insert(nearest);
+            ++counters.wireCollectedElectrons[nearest];
           }
         }
 
@@ -546,6 +554,15 @@ int main(int argc, char** argv) {
         << uResidualMm << "," << wResidualMm << ","
         << (readoutValid ? 1 : 0) << "\n";
 
+    for (const auto& [wireIndex, nCollected] :
+         counters.wireCollectedElectrons) {
+      wireOut
+          << iev << "," << wireIndex << ","
+          << 10. * wireIndex * wirePitchCm << ","
+          << nCollected << ","
+          << nCollected * na6p::mwpc::ElementaryChargeFc << "\n";
+    }
+
     const auto& stripIds = readout.StripIds();
     for (std::size_t j = 0; j < stripIds.size(); ++j) {
       const double centerMm =
@@ -592,6 +609,7 @@ int main(int argc, char** argv) {
       << "  " << eventFile << "\n"
       << "  " << stripFile << "\n"
       << "  " << seedFile << "\n"
+      << "  " << wireFile << "\n"
       << "\nMODEL BOUNDARY:\n"
       << "  - full Heed muon + many microscopic avalanches: yes\n"
       << "  - finite-time electron/ion Shockley-Ramo sum: yes\n"
