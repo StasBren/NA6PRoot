@@ -232,6 +232,15 @@ Run the same executable with `--max-seeds 0` (the default) to process every
 Heed conduction electron.  Start with one event because the microscopic
 avalanche + explicit ion transport is intentionally expensive.
 
+The convenience runner takes `p, theta_u, theta_w, seed`:
+
+```bash
+bash test/mwpc-stage-c/run_c1_full.sh 5 10 25 130001
+```
+
+The defaults are the same values shown above.  The output directory name
+records the requested phase-space point and random seed.
+
 The event summary reports:
 
 - Heed cluster and primary-electron counts;
@@ -245,7 +254,9 @@ The event summary reports:
 - numerical diagnostics such as ion-transport failures.
 
 The strip summary contains the signed and absolute charge on every exported
-strip of both stereo families.
+strip of both stereo families.  The wire summary separately records collected
+avalanche electrons/charge per anode wire, so wire multiplication and cathode
+strip induction remain distinct observables.
 
 ## Next C1 checks
 
