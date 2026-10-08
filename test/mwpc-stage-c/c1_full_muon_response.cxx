@@ -602,7 +602,11 @@ int main(int argc, char** argv) {
         << " qCath(-,+)=(" << response.qCathodeMinusFc << ", "
         << response.qCathodePlusFc << ")"
         << " qLocal(-,+)=(" << response.qMinusLocalSumFc << ", "
-        << response.qPlusLocalSumFc << ")";
+        << response.qPlusLocalSumFc << ")"
+        << " seg(-,+)=(" << response.segmentedMinusSegments << ", "
+        << response.segmentedPlusSegments << ")"
+        << " skipped(-,+)=(" << response.skippedMinusSegments << ", "
+        << response.skippedPlusSegments << ")";
 
     if (!readoutValid) {
       std::cout << " reason=[" << response.invalidReason << "]";
