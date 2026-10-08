@@ -44,6 +44,7 @@ class StereoReadout {
     double uCogMm = std::numeric_limits<double>::quiet_NaN();
     double wCogMm = std::numeric_limits<double>::quiet_NaN();
 
+    std::string invalidReason;
     bool valid = false;
   };
 
@@ -163,6 +164,7 @@ class StereoReadout {
         !std::isfinite(r.qPlusLocalSumFc) ||
         std::abs(r.qMinusLocalSumFc) < MinDenom ||
         std::abs(r.qPlusLocalSumFc) < MinDenom) {
+      r.invalidReason = "non-finite or vanishing local strip sum";
       r.valid = false;
       return false;
     }
@@ -180,6 +182,7 @@ class StereoReadout {
         !std::isfinite(r.xMinusAlphaCogMm) ||
         std::abs(mSinA) < 1.e-12 ||
         std::abs(mCosA) < 1.e-12) {
+      r.invalidReason = "non-finite projected CoG";
       r.valid = false;
       return false;
     }
@@ -189,6 +192,7 @@ class StereoReadout {
     r.uCogMm =
         (r.xMinusAlphaCogMm - r.xPlusAlphaCogMm) / (2. * mSinA);
 
+    r.invalidReason.clear();
     r.valid = true;
     return true;
   }
