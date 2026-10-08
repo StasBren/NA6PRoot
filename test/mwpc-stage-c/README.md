@@ -142,24 +142,121 @@ and are intentionally not committed.
 Small, reviewed reference summaries that we want to preserve for the project
 belong under `test/mwpc-stage-c/results/`.
 
-## Next implementation step: C1
+## C1a — first full-muon event response
 
-C1 should add one executable that consumes a **single local muon crossing** and
-runs the already validated Stage-A + Stage-B physics chain end-to-end.
+C1a is now implemented in
 
-Before writing new physics code, first factor reusable Stage-A/B routines out of
-the existing executables where necessary. The goal is one implementation of
-each physical operation, shared by the old validation programs and Stage C.
+```text
+c1_full_muon_response.cxx
+```
 
-The first C1 observables should be:
+and built as
 
-- number of Heed clusters and primary electrons;
+```text
+mwpc_stage_c1_full_muon
+```
+
+It starts from one **local muon crossing** defined at the wire plane `v=0`
+by `(u0,w0,p,theta_u,theta_w)`.
+
+The chain is:
+
+```text
+one muon
+  -> Heed clusters
+  -> all conduction electrons
+  -> one microscopic Garfield avalanche per conduction electron
+  -> microscopic electron endpoints + avalanche-ion birth points
+  -> finite-time ion transport to Tobs
+  -> Shockley-Ramo segment sums
+  -> Stage-B hybrid opposite-cathode stereo sharing
+  -> event-level strip amplitudes
+  -> two projected CoGs
+  -> reconstructed (u,w)
+```
+
+The low-level finite-time ion propagation and endpoint Shockley-Ramo evaluation
+were factored into `../mwpc-avalanche/MWPCSignalUtils.h`.  The Stage-B3c.2
+opposite-cathode stereo model was factored into
+`../mwpc-avalanche/MWPCStereoReadout.h`.  C1 uses these shared helpers rather
+than carrying a second independent strip-response implementation.
+
+The forward track convention is `+v`, matching nominal `+global Z`.
+Projected angles are exactly the C0 quantities:
+
+```text
+du/dv = tan(theta_u)
+dw/dv = tan(theta_w)
+```
+
+### Build and smoke test
+
+Load the usual NA6P/Garfield environment, switch to the canonical branch, then:
+
+```bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git switch feature/mwpc-stage-c
+git pull --ff-only
+
+source ~/na6p/env.sh
+source ~/na6p/install/garfieldpp/share/Garfield/setupGarfield.sh
+
+bash test/mwpc-stage-c/run_c1_smoke.sh
+```
+
+The smoke run intentionally limits the full Heed event to eight conduction
+electrons.  It is a compile/integration check, not a physics result.
+
+It uses a C0-motivated oblique test point:
+
+```text
+p = 5 GeV/c
+theta_u = 10 deg
+theta_w = 25 deg
+u0 = 1 mm
+w0 = 0
+Tobs = 100 ns
+```
+
+Outputs are written under
+
+```text
+test_runs/mwpc_stage_c/c1_smoke/
+```
+
+with event-, seed- and strip-level CSVs.
+
+### Full event after the smoke test
+
+Run the same executable with `--max-seeds 0` (the default) to process every
+Heed conduction electron.  Start with one event because the microscopic
+avalanche + explicit ion transport is intentionally expensive.
+
+The event summary reports:
+
+- Heed cluster and primary-electron counts;
+- number of processed/zero-gain avalanches;
+- total avalanche electron/ion counts;
 - active wire multiplicity;
-- avalanche charge per wire;
-- per-strip integrated charge at a chosen observation time;
-- reconstructed local coordinate(s);
-- residual/bias versus the true local crossing;
-- dependence on `(p, theta_u, theta_w)`.
+- finite-time cathode charges;
+- stereo projected CoGs;
+- reconstructed `u,w` at the wire-plane reference;
+- residuals relative to the true `u0,w0`;
+- numerical diagnostics such as ion-transport failures.
+
+The strip summary contains the signed and absolute charge on every exported
+strip of both stereo families.
+
+## Next C1 checks
+
+Once the smoke/full normal-incidence event is numerically clean:
+
+1. compare `theta_w=0, 25, 40, 50 deg` at fixed `theta_u`;
+2. compare `theta_u=0, 10, 15 deg` at fixed `theta_w`;
+3. repeat over several momenta representative of the C0 distributions;
+4. only then build an ensemble/lookup-table scan.
+
+The >40--50 deg points are tail validation, not the dense core grid.
 
 ## Scope boundary
 
