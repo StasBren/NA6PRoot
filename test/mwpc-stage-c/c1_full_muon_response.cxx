@@ -325,6 +325,8 @@ int main(int argc, char** argv) {
       << "ion_transport_failures,late_electron_segments,"
       << "collected_electrons,active_wires,"
       << "q_cathode_minus_fC,q_cathode_plus_fC,"
+      << "q_minus_local_sum_fC,q_plus_local_sum_fC,"
+      << "minus_scale,plus_scale,"
       << "x_plus_true_mm,x_minus_true_mm,"
       << "x_plus_cog_mm,x_minus_cog_mm,"
       << "u_cog_mm,w_cog_mm,u_residual_mm,w_residual_mm,"
@@ -549,6 +551,10 @@ int main(int argc, char** argv) {
         << counters.activeWires.size() << ","
         << response.qCathodeMinusFc << ","
         << response.qCathodePlusFc << ","
+        << response.qMinusLocalSumFc << ","
+        << response.qPlusLocalSumFc << ","
+        << response.minusScale << ","
+        << response.plusScale << ","
         << trueXPlusMm << "," << trueXMinusMm << ","
         << response.xPlusAlphaCogMm << ","
         << response.xMinusAlphaCogMm << ","
@@ -592,9 +598,15 @@ int main(int argc, char** argv) {
         << " avalanche_ions=" << counters.avalancheIons
         << " active_wires=" << counters.activeWires.size()
         << " ion_fail=" << counters.ionTransportFailures
-        << " readout=" << (readoutValid ? "valid" : "INVALID");
+        << " readout=" << (readoutValid ? "valid" : "INVALID")
+        << " qCath(-,+)=(" << response.qCathodeMinusFc << ", "
+        << response.qCathodePlusFc << ")"
+        << " qLocal(-,+)=(" << response.qMinusLocalSumFc << ", "
+        << response.qPlusLocalSumFc << ")";
 
-    if (readoutValid) {
+    if (!readoutValid) {
+      std::cout << " reason=[" << response.invalidReason << "]";
+    } else {
       std::cout
           << "  CoG(u,w)=("
           << response.uCogMm << ", "
