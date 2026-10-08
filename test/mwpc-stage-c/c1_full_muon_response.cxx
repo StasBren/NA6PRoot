@@ -6,6 +6,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -85,6 +86,7 @@ struct EventCounters {
   long long collectedElectrons = 0;
   double energyLossEv = 0.;
   std::set<int> activeWires;
+  std::map<int, long long> wireCollectedElectrons;
 };
 
 double DegToRad(const double deg) {
