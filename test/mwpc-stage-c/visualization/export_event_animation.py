@@ -270,6 +270,78 @@ def main():
     write_pvd(args.vtk_dir / "electron_paths_time.pvd", path_entries)
     write_pvd(args.vtk_dir / "ion_births_time.pvd", ion_entries)
 
+    light_script = args.vtk_dir / "open_animation_light.py"
+    light_script.write_text(
+f'''from paraview.simple import *
+from pathlib import Path
+
+base = Path(r"{args.vtk_dir}")
+
+def legacy(name):
+    return LegacyVTKReader(registrationName=name, FileNames=[str(base / name)])
+
+# Lightweight scene: only the layers needed to understand the event.
+# Heavy FEM mesh, field triangulation, primary-electron point cloud and
+# ion-birth cloud are deliberately not loaded.
+cath = legacy("cathodes.vtk")
+dc = Show(cath)
+dc.Representation = "Surface"
+dc.Opacity = 0.08
+dc.DiffuseColor = [0.75, 0.75, 0.78]
+
+wires = legacy("wire_axes.vtk")
+tube = Tube(registrationName="Anode wires", Input=wires)
+tube.Radius = 0.015
+tube.NumberofSides = 12
+dw = Show(tube)
+dw.DiffuseColor = [0.15, 0.15, 0.15]
+
+mu = legacy("muon_track.vtk")
+mu_t = Tube(registrationName="Muon track", Input=mu)
+mu_t.Radius = 0.03
+mu_t.NumberofSides = 10
+dm = Show(mu_t)
+dm.DiffuseColor = [0.9, 0.15, 0.1]
+
+clusters = PVDReader(
+    registrationName="Heed clusters (time)",
+    FileName=str(base / "clusters_time.pvd"))
+dcl = Show(clusters)
+dcl.Representation = "Points"
+dcl.PointSize = 7
+dcl.DiffuseColor = [0.15, 0.55, 0.95]
+
+paths = PVDReader(
+    registrationName="Electron paths (time)",
+    FileName=str(base / "electron_paths_time.pvd"))
+dpa = Show(paths)
+dpa.Representation = "Wireframe"
+dpa.LineWidth = 1.5
+dpa.DiffuseColor = [0.2, 0.45, 1.0]
+dpa.Opacity = 0.70
+
+scene = GetAnimationScene()
+scene.UpdateAnimationUsingDataTimeSteps()
+scene.PlayMode = "Snap To TimeSteps"
+
+view = GetActiveViewOrCreate("RenderView")
+view.OrientationAxesVisibility = 1
+view.AxesGrid.Visibility = 0
+view.Background = [0.96, 0.96, 0.96]
+ResetCamera()
+Render()
+
+print("Lightweight animated C2 scene loaded.")
+print("ParaView 5.11 playback command:")
+print("  from paraview.simple import GetAnimationScene")
+print("  GetAnimationScene().Play()")
+print("To stop:")
+print("  GetAnimationScene().Stop()")
+print("Time range: {t0:.6g} to {t1:.6g} ns, frames: {args.frames}.")
+''',
+        encoding="utf-8",
+    )
+
     script = args.vtk_dir / "open_animation.py"
     script.write_text(
 f'''from paraview.simple import *
@@ -364,7 +436,10 @@ print("Time range: {t0:.6g} to {t1:.6g} ns, frames: {args.frames}.")
     print(f"Animation time range: {t0:.6g} .. {t1:.6g} ns")
     print(f"Frames: {args.frames}")
     print("Wrote:", script)
-    print("Open with:")
+    print("Wrote:", light_script)
+    print("Open lightweight scene with:")
+    print(f'  paraview --script="{light_script}"')
+    print("Open full scene with:")
     print(f'  paraview --script="{script}"')
 
 
