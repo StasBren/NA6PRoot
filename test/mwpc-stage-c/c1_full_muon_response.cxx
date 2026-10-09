@@ -112,9 +112,9 @@ int main(int argc, char** argv) {
   // ------------------------------------------------------------------
 
   const double gapMinusCm =
-      0.1 * ReadArg(argc, argv, "--gap-minus-mm", 2.0);
+      0.1 * ReadArg(argc, argv, "--gap-minus-mm", 2.5);
   const double gapPlusCm =
-      0.1 * ReadArg(argc, argv, "--gap-plus-mm", 4.0);
+      0.1 * ReadArg(argc, argv, "--gap-plus-mm", 2.5);
   const double wirePitchCm =
       0.1 * ReadArg(argc, argv, "--wire-pitch-mm", 4.0);
   const double wireDiameterCm =
