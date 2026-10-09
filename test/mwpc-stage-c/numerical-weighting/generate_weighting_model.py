@@ -365,7 +365,7 @@ def generate_weighting_sif(
     cfg: Dict[str, Any], mesh_dir: str, cathode: str, index: int
 ) -> str:
     e = cfg["electrostatics"]
-    name = f"weight_{cathode}_{index:+d}".replace("+", "p").replace("-", "m")
+    name = result_stem(cathode, index)
     common = solver_common(
         mesh_dir, f"{name}.result", float(e["gas_relative_permittivity"])
     )
@@ -408,7 +408,13 @@ End
 
 
 def result_stem(cathode: str, index: int) -> str:
-    return f"weight_{cathode}_{index:+d}".replace("+", "p").replace("-", "m")
+    if index < 0:
+        suffix = f"m{-index}"
+    elif index > 0:
+        suffix = f"p{index}"
+    else:
+        suffix = "0"
+    return f"weight_{cathode}_{suffix}"
 
 
 def write_all(cfg: Dict[str, Any], out: Path) -> None:
