@@ -60,6 +60,7 @@ GAP_MINUS="$(read_json geometry.gap_minus_mm)"
 GAP_PLUS="$(read_json geometry.gap_plus_mm)"
 WIRE_PITCH="$(read_json geometry.wire_pitch_mm)"
 WIRE_DIAM="$(read_json geometry.wire_diameter_um)"
+MAP_HALF_WIRES="$(read_json geometry.half_wires)"
 STRIP_PITCH="$(read_json geometry.strip_pitch_mm)"
 STRIP_WIDTH="$(read_json geometry.strip_width_mm)"
 TAN_ALPHA="$(read_json geometry.tan_alpha)"
@@ -132,6 +133,9 @@ echo "=== Full muon with direct numerical strip weighting ==="
   --numerical-map-dir "${MAP_DIR}" \
   --map-u-half-mm "${MAP_U_HALF}" \
   --map-w-half-mm "${MAP_W_HALF}" \
+  --map-wire-pitch-mm "${WIRE_PITCH}" \
+  --map-wire-diam-um "${WIRE_DIAM}" \
+  --map-half-wires "${MAP_HALF_WIRES}" \
   --gap-minus-mm "${GAP_MINUS}" \
   --gap-plus-mm "${GAP_PLUS}" \
   --wire-pitch-mm "${WIRE_PITCH}" \
