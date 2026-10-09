@@ -334,7 +334,7 @@ int main(int argc, char** argv) {
   }
 
   eventOut
-      << "event,random_seed,particle,momentum_GeV,"
+      << "event,random_seed,sharing_domain,particle,momentum_GeV,"
       << "u0_mm,w0_mm,theta_u_deg,theta_w_deg,"
       << "u_start_mm,v_start_mm,w_start_mm,"
       << "u_exit_mm,v_exit_mm,w_exit_mm,"
@@ -624,6 +624,7 @@ int main(int argc, char** argv) {
 
     eventOut
         << iev << "," << randomSeed << ","
+        << readout.SharingDomainName() << ","
         << particle << "," << momentumGeV << ","
         << 10. * u0Cm << "," << 10. * w0Cm << ","
         << thetaUDeg << "," << thetaWDeg << ","
