@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import math
 from collections import defaultdict
 from pathlib import Path
@@ -189,11 +190,95 @@ def quantile(values, q):
     return vals[lo] * (1 - f) + vals[hi] * f
 
 
+
+def inside_roi(row, u_half, v_minus, v_plus, w_half):
+    return (
+        abs(fv(row, "u_mm")) <= u_half
+        and -v_minus <= fv(row, "v_mm") <= v_plus
+        and abs(fv(row, "w_mm")) <= w_half
+    )
+
+
+def write_legacy_line(path: Path, rows):
+    pts = [(fv(r, "u_mm"), fv(r, "v_mm"), fv(r, "w_mm")) for r in rows]
+    with path.open("w", encoding="utf-8") as out:
+        out.write("# vtk DataFile Version 3.0\n")
+        out.write(path.stem + "\nASCII\nDATASET POLYDATA\n")
+        out.write(f"POINTS {len(pts)} float\n")
+        for x, y, z in pts:
+            out.write(f"{x:.9g} {y:.9g} {z:.9g}\n")
+        if len(pts) >= 2:
+            out.write(f"LINES 1 {len(pts) + 1}\n")
+            out.write(
+                str(len(pts)) + " " +
+                " ".join(str(j) for j in range(len(pts))) + "\n"
+            )
+        else:
+            out.write("LINES 0 0\n")
+
+
+def write_single_wire_geometry(
+    vtk_dir: Path,
+    gap_minus_mm: float,
+    gap_plus_mm: float,
+    u_half_mm: float,
+    w_half_mm: float,
+):
+    cath = vtk_dir / "single_wire_cathodes.vtk"
+    pts = [
+        (-u_half_mm, -gap_minus_mm, -w_half_mm),
+        (+u_half_mm, -gap_minus_mm, -w_half_mm),
+        (+u_half_mm, -gap_minus_mm, +w_half_mm),
+        (-u_half_mm, -gap_minus_mm, +w_half_mm),
+        (-u_half_mm, +gap_plus_mm, -w_half_mm),
+        (+u_half_mm, +gap_plus_mm, -w_half_mm),
+        (+u_half_mm, +gap_plus_mm, +w_half_mm),
+        (-u_half_mm, +gap_plus_mm, +w_half_mm),
+    ]
+    with cath.open("w", encoding="utf-8") as out:
+        out.write("# vtk DataFile Version 3.0\n")
+        out.write("Local cathode patches\nASCII\nDATASET POLYDATA\n")
+        out.write("POINTS 8 float\n")
+        for x, y, z in pts:
+            out.write(f"{x:.9g} {y:.9g} {z:.9g}\n")
+        out.write("POLYGONS 2 10\n")
+        out.write("4 0 1 2 3\n")
+        out.write("4 4 5 6 7\n")
+
+    wire = vtk_dir / "central_wire.vtk"
+    with wire.open("w", encoding="utf-8") as out:
+        out.write("# vtk DataFile Version 3.0\n")
+        out.write("Central anode wire\nASCII\nDATASET POLYDATA\n")
+        out.write("POINTS 2 float\n")
+        out.write(f"0 0 {-w_half_mm:.9g}\n")
+        out.write(f"0 0 {+w_half_mm:.9g}\n")
+        out.write("LINES 1 3\n")
+        out.write("2 0 1\n")
+
+
+def write_truncated_paths_roi(
+    path: Path,
+    rows,
+    tmax: float,
+    u_half: float,
+    v_minus: float,
+    v_plus: float,
+    w_half: float,
+):
+    filtered = [
+        r for r in rows
+        if inside_roi(r, u_half, v_minus, v_plus, w_half)
+    ]
+    write_truncated_paths(path, filtered, tmax)
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--event-dir", required=True, type=Path)
     ap.add_argument("--prefix", default="c2_event3d")
     ap.add_argument("--vtk-dir", required=True, type=Path)
+    ap.add_argument("--config", type=Path, default=None)
+    ap.add_argument("--single-wire-u-half-mm", type=float, default=2.0)
+    ap.add_argument("--single-wire-w-half-mm", type=float, default=3.0)
     ap.add_argument("--frames", type=int, default=32)
     ap.add_argument("--tail-quantile", type=float, default=0.995)
     args = ap.parse_args()
@@ -206,6 +291,11 @@ def main():
     primaries = read_rows(args.event_dir / f"{p}_primary_electrons.csv")
     paths = read_rows(args.event_dir / f"{p}_electron_paths.csv")
     ions = read_rows(args.event_dir / f"{p}_ion_births.csv")
+    muon = read_rows(args.event_dir / f"{p}_muon_track.csv")
+
+    cfg = None
+    if args.config is not None:
+        cfg = json.loads(args.config.read_text(encoding="utf-8"))
 
     times = []
     times += [fv(r, "t_ns") for r in clusters]
@@ -269,6 +359,152 @@ def main():
     write_pvd(args.vtk_dir / "primary_electrons_time.pvd", primary_entries)
     write_pvd(args.vtk_dir / "electron_paths_time.pvd", path_entries)
     write_pvd(args.vtk_dir / "ion_births_time.pvd", ion_entries)
+
+    # Single-wire local animation products.  These use only the data close to
+    # the central anode wire and therefore stay responsive even in ParaView
+    # running through WSL/X11.
+    if cfg is not None:
+        gap_minus_mm = float(cfg["geometry"]["gap_minus_mm"])
+        gap_plus_mm = float(cfg["geometry"]["gap_plus_mm"])
+        wire_radius_mm = 0.0005 * float(cfg["geometry"]["wire_diameter_um"])
+    else:
+        gap_minus_mm = 2.5
+        gap_plus_mm = 2.5
+        wire_radius_mm = 0.015
+
+    roi_u = args.single_wire_u_half_mm
+    roi_w = args.single_wire_w_half_mm
+
+    if roi_u <= 0 or roi_w <= 0:
+        raise SystemExit("Single-wire ROI half-sizes must be > 0.")
+
+    write_single_wire_geometry(
+        args.vtk_dir, gap_minus_mm, gap_plus_mm, roi_u, roi_w
+    )
+
+    local_muon = [
+        r for r in muon
+        if inside_roi(r, roi_u, gap_minus_mm, gap_plus_mm, roi_w)
+    ]
+    write_legacy_line(args.vtk_dir / "muon_track_single_wire.vtk", local_muon)
+
+    single_cluster_entries = []
+    single_path_entries = []
+    single_anim = args.vtk_dir / "animation_single_wire"
+    single_anim.mkdir(parents=True, exist_ok=True)
+
+    for iframe in range(args.frames):
+        frac = iframe / (args.frames - 1)
+        t = t0 + frac * (t1 - t0)
+
+        crows = [
+            r for r in clusters
+            if fv(r, "t_ns") <= t
+            and inside_roi(r, roi_u, gap_minus_mm, gap_plus_mm, roi_w)
+        ]
+
+        cfile = f"clusters_{iframe:04d}.vtp"
+        efile = f"electron_paths_{iframe:04d}.vtp"
+
+        write_points(
+            single_anim / cfile, crows,
+            [
+                ("n_primary", "n_primary", "int"),
+                ("energy_eV", "energy_eV", "float"),
+            ],
+        )
+        write_truncated_paths_roi(
+            single_anim / efile, paths, t,
+            roi_u, gap_minus_mm, gap_plus_mm, roi_w,
+        )
+
+        single_cluster_entries.append(
+            (t, f"animation_single_wire/{cfile}")
+        )
+        single_path_entries.append(
+            (t, f"animation_single_wire/{efile}")
+        )
+
+    write_pvd(
+        args.vtk_dir / "clusters_single_wire_time.pvd",
+        single_cluster_entries,
+    )
+    write_pvd(
+        args.vtk_dir / "electron_paths_single_wire_time.pvd",
+        single_path_entries,
+    )
+
+    single_script = args.vtk_dir / "open_animation_single_wire.py"
+    single_script.write_text(
+f'''from paraview.simple import *
+from pathlib import Path
+
+base = Path(r"{args.vtk_dir}")
+
+def legacy(name):
+    return LegacyVTKReader(
+        registrationName=name, FileNames=[str(base / name)])
+
+# Local cathode patches only; no chamber-wide geometry.
+cath = legacy("single_wire_cathodes.vtk")
+dc = Show(cath)
+dc.Representation = "Surface"
+dc.Opacity = 0.07
+dc.DiffuseColor = [0.72, 0.72, 0.76]
+
+# Exactly one anode wire.
+wire = legacy("central_wire.vtk")
+tube = Tube(registrationName="Central anode wire", Input=wire)
+tube.Radius = {wire_radius_mm}
+tube.NumberofSides = 16
+dw = Show(tube)
+dw.DiffuseColor = [0.12, 0.12, 0.12]
+
+# Only the part of the muon track inside the local single-wire volume.
+mu = legacy("muon_track_single_wire.vtk")
+mu_t = Tube(registrationName="Muon track (local)", Input=mu)
+mu_t.Radius = 0.025
+mu_t.NumberofSides = 10
+dm = Show(mu_t)
+dm.DiffuseColor = [0.9, 0.15, 0.1]
+
+clusters = PVDReader(
+    registrationName="Heed clusters (local, time)",
+    FileName=str(base / "clusters_single_wire_time.pvd"))
+dcl = Show(clusters)
+dcl.Representation = "Points"
+dcl.PointSize = 8
+dcl.DiffuseColor = [0.15, 0.55, 0.95]
+
+paths = PVDReader(
+    registrationName="Electron / avalanche paths (local, time)",
+    FileName=str(base / "electron_paths_single_wire_time.pvd"))
+dpa = Show(paths)
+dpa.Representation = "Wireframe"
+dpa.LineWidth = 2.0
+dpa.DiffuseColor = [0.12, 0.38, 0.95]
+dpa.Opacity = 0.85
+
+scene = GetAnimationScene()
+scene.UpdateAnimationUsingDataTimeSteps()
+scene.PlayMode = "Snap To TimeSteps"
+
+view = GetActiveViewOrCreate("RenderView")
+view.OrientationAxesVisibility = 1
+view.AxesGrid.Visibility = 0
+view.Background = [0.96, 0.96, 0.96]
+ResetCamera()
+Render()
+
+print("Single-wire C2 animation loaded.")
+print("ROI: u = +/-{roi_u:.3g} mm, v = -{gap_minus_mm:.3g}..+{gap_plus_mm:.3g} mm, "
+      "w = +/-{roi_w:.3g} mm.")
+print("ParaView 5.11 playback: View -> Python Shell, then")
+print("  GetAnimationScene().GoToFirst()")
+print("  GetAnimationScene().Play()")
+''',
+        encoding="utf-8",
+    )
 
     light_script = args.vtk_dir / "open_animation_light.py"
     light_script.write_text(
@@ -437,6 +673,9 @@ print("Time range: {t0:.6g} to {t1:.6g} ns, frames: {args.frames}.")
     print(f"Frames: {args.frames}")
     print("Wrote:", script)
     print("Wrote:", light_script)
+    print("Wrote:", single_script)
+    print("Open single-wire scene with:")
+    print(f'  paraview --script="{single_script}"')
     print("Open lightweight scene with:")
     print(f'  paraview --script="{light_script}"')
     print("Open full scene with:")
