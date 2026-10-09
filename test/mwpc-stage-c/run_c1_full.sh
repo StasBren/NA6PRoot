@@ -4,7 +4,7 @@ set -euo pipefail
 # Full (all-Heed-seeds) Stage-C1 event.
 #
 # Usage:
-#   bash test/mwpc-stage-c/run_c1_full.sh [momentum_GeV] [theta_u_deg] [theta_w_deg] [seed]
+#   bash test/mwpc-stage-c/run_c1_full.sh [momentum_GeV] [theta_u_deg] [theta_w_deg] [seed] [sharing_domain]
 #
 # Defaults are chosen near the low-mass downstream core identified in C0.
 
@@ -16,8 +16,9 @@ P_GEV="${1:-5}"
 THETA_U="${2:-10}"
 THETA_W="${3:-25}"
 SEED="${4:-120001}"
+SHARING_DOMAIN="${5:-full}"
 
-TAG="p${P_GEV}_tu${THETA_U}_tw${THETA_W}_seed${SEED}"
+TAG="p${P_GEV}_tu${THETA_U}_tw${THETA_W}_seed${SEED}_${SHARING_DOMAIN}"
 TAG="${TAG//./p}"
 TAG="${TAG//-/m}"
 
@@ -45,10 +46,11 @@ echo "  p       = ${P_GEV} GeV/c"
 echo "  theta_u = ${THETA_U} deg"
 echo "  theta_w = ${THETA_W} deg"
 echo "  seed    = ${SEED}"
+echo "  sharing = ${SHARING_DOMAIN}"
 echo "  output  = ${OUT_DIR}"
 echo
 
-"${BUILD_DIR}/mwpc_stage_c1_full_muon"   --gap-minus-mm 2.5   --gap-plus-mm 2.5   --momentum-gev "${P_GEV}"   --u0-mm 1.0   --w0-mm 0.0   --theta-u-deg "${THETA_U}"   --theta-w-deg "${THETA_W}"   --b-tesla 0   --sharing-domain full   --observation-ns 100   --ion-rk-dt-ns 5   --half-wires 6   --half-strips 12   --events 1   --max-seeds 0   --base-seed "${SEED}"   --ion-mobility "${MOBILITY}"   --output-prefix c1_full
+"${BUILD_DIR}/mwpc_stage_c1_full_muon"   --gap-minus-mm 2.5   --gap-plus-mm 2.5   --momentum-gev "${P_GEV}"   --u0-mm 1.0   --w0-mm 0.0   --theta-u-deg "${THETA_U}"   --theta-w-deg "${THETA_W}"   --b-tesla 0   --sharing-domain "${SHARING_DOMAIN}"   --observation-ns 100   --ion-rk-dt-ns 5   --half-wires 6   --half-strips 12   --events 1   --max-seeds 0   --base-seed "${SEED}"   --ion-mobility "${MOBILITY}"   --output-prefix c1_full
 
 echo
 echo "Full-event outputs:"
