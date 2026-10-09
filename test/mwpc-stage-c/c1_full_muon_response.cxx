@@ -85,6 +85,9 @@ struct EventCounters {
   long long ionTransportFailures = 0;
   long long collectedElectrons = 0;
   double energyLossEv = 0.;
+  double sumIonBirthU = 0.;
+  double sumIonBirthW = 0.;
+  long long nIonBirthPositionSamples = 0;
   std::set<int> activeWires;
   std::map<int, long long> wireCollectedElectrons;
 };
@@ -336,12 +339,17 @@ int main(int argc, char** argv) {
       << "avalanche_electrons,avalanche_ions,recorded_ion_births,"
       << "ion_transport_failures,late_electron_segments,"
       << "collected_electrons,active_wires,"
+      << "ion_birth_mean_u_mm,ion_birth_mean_w_mm,"
+      << "wire_cog_u_mm,"
       << "q_cathode_minus_fC,q_cathode_plus_fC,"
       << "q_minus_local_sum_fC,q_plus_local_sum_fC,"
       << "minus_scale,plus_scale,"
       << "x_plus_true_mm,x_minus_true_mm,"
       << "x_plus_cog_mm,x_minus_cog_mm,"
-      << "u_cog_mm,w_cog_mm,u_residual_mm,w_residual_mm,"
+      << "u_stereo_mm,w_stereo_mm,"
+      << "u_stereo_minus_ionbirth_mm,w_stereo_minus_ionbirth_mm,"
+      << "wire_cog_minus_ionbirth_u_mm,"
+      << "u_stereo_minus_track_u0_mm,w_stereo_minus_track_w0_mm,"
       << "readout_valid\n";
 
   stripOut
@@ -497,6 +505,13 @@ int main(int argc, char** argv) {
         }
 
         for (const auto& birth : gIonBirths) {
+          // Every recorded birth corresponds to one microscopic avalanche
+          // ionisation.  Its (u,w) therefore provides a useful avalanche-charge
+          // weighted truth coordinate for this (possibly truncated) event.
+          counters.sumIonBirthU += birth.u;
+          counters.sumIonBirthW += birth.w;
+          ++counters.nIonBirthPositionSamples;
+
           if (birth.t >= observationNs) continue;
 
           std::array<double, 3> x =
@@ -534,10 +549,44 @@ int main(int argc, char** argv) {
 
     const bool readoutValid = readout.Finalize(response);
 
-    const double uResidualMm =
+    const double ionBirthMeanUMm =
+        counters.nIonBirthPositionSamples > 0
+            ? 10. * counters.sumIonBirthU /
+                  static_cast<double>(counters.nIonBirthPositionSamples)
+            : std::numeric_limits<double>::quiet_NaN();
+    const double ionBirthMeanWMm =
+        counters.nIonBirthPositionSamples > 0
+            ? 10. * counters.sumIonBirthW /
+                  static_cast<double>(counters.nIonBirthPositionSamples)
+            : std::numeric_limits<double>::quiet_NaN();
+
+    double wireCogUMm = std::numeric_limits<double>::quiet_NaN();
+    if (counters.collectedElectrons > 0) {
+      double numer = 0.;
+      for (const auto& [wireIndex, nCollected] :
+           counters.wireCollectedElectrons) {
+        numer += (10. * wireIndex * wirePitchCm) *
+                 static_cast<double>(nCollected);
+      }
+      wireCogUMm =
+          numer / static_cast<double>(counters.collectedElectrons);
+    }
+
+    const double uStereoMinusIonBirthMm =
+        readoutValid ? response.uCogMm - ionBirthMeanUMm
+                     : std::numeric_limits<double>::quiet_NaN();
+    const double wStereoMinusIonBirthMm =
+        readoutValid ? response.wCogMm - ionBirthMeanWMm
+                     : std::numeric_limits<double>::quiet_NaN();
+    const double wireCogMinusIonBirthUMm =
+        std::isfinite(wireCogUMm) && std::isfinite(ionBirthMeanUMm)
+            ? wireCogUMm - ionBirthMeanUMm
+            : std::numeric_limits<double>::quiet_NaN();
+
+    const double uStereoMinusTrackU0Mm =
         readoutValid ? response.uCogMm - 10. * u0Cm
                      : std::numeric_limits<double>::quiet_NaN();
-    const double wResidualMm =
+    const double wStereoMinusTrackW0Mm =
         readoutValid ? response.wCogMm - 10. * w0Cm
                      : std::numeric_limits<double>::quiet_NaN();
 
@@ -563,6 +612,8 @@ int main(int argc, char** argv) {
         << counters.lateElectronSegments << ","
         << counters.collectedElectrons << ","
         << counters.activeWires.size() << ","
+        << ionBirthMeanUMm << "," << ionBirthMeanWMm << ","
+        << wireCogUMm << ","
         << response.qCathodeMinusFc << ","
         << response.qCathodePlusFc << ","
         << response.qMinusLocalSumFc << ","
@@ -573,7 +624,11 @@ int main(int argc, char** argv) {
         << response.xPlusAlphaCogMm << ","
         << response.xMinusAlphaCogMm << ","
         << response.uCogMm << "," << response.wCogMm << ","
-        << uResidualMm << "," << wResidualMm << ","
+        << uStereoMinusIonBirthMm << ","
+        << wStereoMinusIonBirthMm << ","
+        << wireCogMinusIonBirthUMm << ","
+        << uStereoMinusTrackU0Mm << ","
+        << wStereoMinusTrackW0Mm << ","
         << (readoutValid ? 1 : 0) << "\n";
 
     for (const auto& [wireIndex, nCollected] :
@@ -629,9 +684,13 @@ int main(int argc, char** argv) {
           << "  CoG(u,w)=("
           << response.uCogMm << ", "
           << response.wCogMm << ") mm"
-          << " residual=("
-          << uResidualMm << ", "
-          << wResidualMm << ") mm";
+          << " ion-birth mean(u,w)=("
+          << ionBirthMeanUMm << ", "
+          << ionBirthMeanWMm << ") mm"
+          << " delta_stereo-ionbirth=("
+          << uStereoMinusIonBirthMm << ", "
+          << wStereoMinusIonBirthMm << ") mm"
+          << " wireCoG(u)=" << wireCogUMm << " mm";
     }
     std::cout << "\n";
   }
