@@ -249,14 +249,31 @@ The event summary reports:
 - active wire multiplicity;
 - finite-time cathode charges;
 - stereo projected CoGs;
-- reconstructed `u,w` at the wire-plane reference;
-- residuals relative to the true `u0,w0`;
+- strip-derived `u,w`;
+- avalanche-ion-birth mean `u,w` as a charge-weighted microscopic truth
+  diagnostic;
+- wire-charge CoG in `u`;
+- differences of the readout estimators both from avalanche truth and from the
+  requested track intercept `(u0,w0)`;
 - numerical diagnostics such as ion-transport failures.
+
+For truncated smoke events, comparisons to `(u0,w0)` are not detector
+residuals: the processed seeds may occupy only one part of the physical track.
+The avalanche-ion-birth mean is the useful diagnostic in that case.
 
 The strip summary contains the signed and absolute charge on every exported
 strip of both stereo families.  The wire summary separately records collected
 avalanche electrons/charge per anode wire, so wire multiplication and cathode
 strip induction remain distinct observables.
+
+The default Stage-C segmented weighting mode is `full-cathode-gap`: the ideal
+planar strip weighting problem spans the two physical cathodes, so it is defined
+throughout the gas volume.  `--sharing-domain legacy` retains the historical
+Stage-B wire-plane-to-cathode half-gap construction for regression tests.
+
+Both are still hybrid approximations: full cathode coupling is wire-aware,
+while segmentation uses Garfield's ideal planar-strip solution rather than a
+full numerical 3-D weighting field with discrete wires and PCB strips.
 
 ## Next C1 checks
 
