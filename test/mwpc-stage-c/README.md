@@ -455,3 +455,41 @@ python test/mwpc-stage-c/visualization/export_event_animation.py \
   --single-wire-u-half-mm 2.0 \
   --single-wire-w-half-mm 3.0
 ```
+
+
+## Long dense across-wire scan
+
+For unattended detector-response characterization, use the resumable dense
+normal-incidence scan:
+
+```bash
+bash test/mwpc-stage-c/run_c2_u_cell_scan_long.sh 30 140001 0.2
+```
+
+Default range is `u0=-1.9..+1.9 mm`.  With a 0.2-mm step this gives 20
+positions; 30 events per point therefore gives 600 full microscopic events.
+
+The same seed block is reused at every position for paired comparisons.  The
+FEM map is built only once and reused.  Completed positions are checkpointed;
+rerunning the same command skips them, while an interrupted point is rerun from
+scratch.
+
+Useful outputs:
+
+```text
+test_runs/mwpc_stage_c/c2_u_cell_scan_dense/
+  c2_u_dense_event_summary.csv
+  c2_u_dense_point_summary.csv
+  scan_progress.log
+  events/u_*/...
+```
+
+The compact point summary reports raw stereo means/spreads, gain-weighted truth,
+wire assignment fractions, multi-wire fraction and strip-charge coverage.
+
+The range can be overridden without editing the script:
+
+```bash
+C2_U_MIN_MM=-1.9 C2_U_MAX_MM=1.9 \
+bash test/mwpc-stage-c/run_c2_u_cell_scan_long.sh 50 140001 0.1
+```
