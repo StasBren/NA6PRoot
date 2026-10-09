@@ -70,6 +70,9 @@ class NumericalStereoReadout {
       const int halfStrips,
       const double mapUHalfSpanCm,
       const double mapWHalfSpanCm,
+      const double mapWirePitchCm,
+      const double mapWireRadiusCm,
+      const int mapHalfWires,
       const std::string& minusCentralLabel = "minus_strip_0",
       const std::string& plusCentralLabel = "plus_strip_0")
       : mWeighting(weighting),
@@ -80,6 +83,9 @@ class NumericalStereoReadout {
         mHalfStrips(halfStrips),
         mMapUHalfSpanCm(mapUHalfSpanCm),
         mMapWHalfSpanCm(mapWHalfSpanCm),
+        mMapWirePitchCm(mapWirePitchCm),
+        mMapWireRadiusCm(mapWireRadiusCm),
+        mMapHalfWires(mapHalfWires),
         mMinusCentralLabel(minusCentralLabel),
         mPlusCentralLabel(plusCentralLabel),
         mAlpha(std::atan(tanAlpha)),
@@ -88,7 +94,9 @@ class NumericalStereoReadout {
     if (gapMinusCm <= 0. || gapPlusCm <= 0. ||
         stripPitchCm <= 0. || tanAlpha <= 0. ||
         halfStrips < 1 || mapUHalfSpanCm <= 0. ||
-        mapWHalfSpanCm <= 0. || std::abs(mCosA) < 1.e-12) {
+        mapWHalfSpanCm <= 0. || mapWirePitchCm <= 0. ||
+        mapWireRadiusCm <= 0. || mapHalfWires < 1 ||
+        std::abs(mCosA) < 1.e-12) {
       throw std::invalid_argument(
           "Invalid numerical stereo-readout geometry.");
     }
@@ -142,9 +150,9 @@ class NumericalStereoReadout {
 
       if (InsideMap(u0, v0, w0 - wShiftCm) &&
           InsideMap(u1, v1, w1 - wShiftCm)) {
-        const double phi0 = mWeighting.WeightingPotential(
+        const double phi0 = WeightingPotentialSafe(
             u0, v0, w0 - wShiftCm, mMinusCentralLabel);
-        const double phi1 = mWeighting.WeightingPotential(
+        const double phi1 = WeightingPotentialSafe(
             u1, v1, w1 - wShiftCm, mMinusCentralLabel);
 
         if (std::isfinite(phi0) && std::isfinite(phi1)) {
@@ -158,9 +166,9 @@ class NumericalStereoReadout {
 
       if (InsideMap(u0, v0, w0 - wShiftCm) &&
           InsideMap(u1, v1, w1 - wShiftCm)) {
-        const double phi0 = mWeighting.WeightingPotential(
+        const double phi0 = WeightingPotentialSafe(
             u0, v0, w0 - wShiftCm, mPlusCentralLabel);
-        const double phi1 = mWeighting.WeightingPotential(
+        const double phi1 = WeightingPotentialSafe(
             u1, v1, w1 - wShiftCm, mPlusCentralLabel);
 
         if (std::isfinite(phi0) && std::isfinite(phi1)) {
@@ -235,6 +243,30 @@ class NumericalStereoReadout {
     return 3.14159265358979323846;
   }
 
+  double WeightingPotentialSafe(
+      const double uCm,
+      const double vCm,
+      const double wCm,
+      const std::string& label) {
+    // Electron endpoints can lie microscopically on or just inside the
+    // conductor surface.  The FEM mesh contains only gas, but the exact
+    // cathode-strip weighting potential on every anode wire is zero.
+    const int nearest =
+        static_cast<int>(std::lround(uCm / mMapWirePitchCm));
+    if (std::abs(nearest) <= mMapHalfWires) {
+      const double wireU = nearest * mMapWirePitchCm;
+      const double rho = std::hypot(uCm - wireU, vCm);
+      const double conductorToleranceCm =
+          std::max(2.e-6, 0.02 * mMapWireRadiusCm);
+      if (rho <= mMapWireRadiusCm + conductorToleranceCm) {
+        return 0.;
+      }
+    }
+
+    return mWeighting.WeightingPotential(
+        uCm, vCm, wCm, label);
+  }
+
   bool InsideMap(
       const double uCm,
       const double vCm,
@@ -280,6 +312,9 @@ class NumericalStereoReadout {
   int mHalfStrips = 0;
   double mMapUHalfSpanCm = 0.;
   double mMapWHalfSpanCm = 0.;
+  double mMapWirePitchCm = 0.;
+  double mMapWireRadiusCm = 0.;
+  int mMapHalfWires = 0;
 
   std::string mMinusCentralLabel;
   std::string mPlusCentralLabel;
