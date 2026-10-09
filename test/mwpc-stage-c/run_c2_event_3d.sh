@@ -132,8 +132,12 @@ echo
 echo "Static scene:"
 echo "  paraview --script=\"${VTK_DIR}/open_scene.py\""
 echo
-echo "Animated scene:"
+echo "Lightweight animated scene (recommended):"
+echo "  paraview --script=\"${VTK_DIR}/open_animation_light.py\""
+echo
+echo "Full animated scene:"
 echo "  paraview --script=\"${VTK_DIR}/open_animation.py\""
 echo
-echo "In the animated scene use the Play button in ParaView's Animation toolbar"
-echo "or press Space. The FEM mesh starts hidden and can be toggled in Pipeline Browser."
+echo "ParaView 5.11: if VCR controls are hidden, open View -> Python Shell and run:"
+echo "  from paraview.simple import *"
+echo "  GetAnimationScene().Play()"
