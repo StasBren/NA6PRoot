@@ -48,7 +48,7 @@ echo "  seed    = ${SEED}"
 echo "  output  = ${OUT_DIR}"
 echo
 
-"${BUILD_DIR}/mwpc_stage_c1_full_muon"   --momentum-gev "${P_GEV}"   --u0-mm 1.0   --w0-mm 0.0   --theta-u-deg "${THETA_U}"   --theta-w-deg "${THETA_W}"   --b-tesla 0   --observation-ns 100   --ion-rk-dt-ns 5   --half-wires 6   --half-strips 12   --events 1   --max-seeds 0   --base-seed "${SEED}"   --ion-mobility "${MOBILITY}"   --output-prefix c1_full
+"${BUILD_DIR}/mwpc_stage_c1_full_muon"   --gap-minus-mm 2.5   --gap-plus-mm 2.5   --momentum-gev "${P_GEV}"   --u0-mm 1.0   --w0-mm 0.0   --theta-u-deg "${THETA_U}"   --theta-w-deg "${THETA_W}"   --b-tesla 0   --observation-ns 100   --ion-rk-dt-ns 5   --half-wires 6   --half-strips 12   --events 1   --max-seeds 0   --base-seed "${SEED}"   --ion-mobility "${MOBILITY}"   --output-prefix c1_full
 
 echo
 echo "Full-event outputs:"
