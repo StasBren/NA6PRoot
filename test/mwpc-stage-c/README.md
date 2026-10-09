@@ -340,3 +340,45 @@ bash test/mwpc-stage-c/run_c2_weighting_smoke.sh
 
 Do not connect C2 maps to the full C1 event accumulator until the numerical map
 passes its boundary and mesh/patch convergence checks.
+
+
+## C2 3-D event visualization
+
+A first ParaView-oriented event viewer is available through:
+
+```bash
+bash test/mwpc-stage-c/run_c2_event_3d.sh 120001 2
+```
+
+The runner reuses the default C2 FEM map when possible, dumps one canonical
+Heed/Garfield event and exports a set of VTK layers:
+
+- transparent cathode planes;
+- explicit anode-wire axes;
+- the Gmsh/Elmer tetrahedral chamber mesh;
+- the muon track;
+- all Heed ionisation clusters;
+- all primary Heed electrons;
+- representative microscopic avalanche electron drift paths for the selected
+  detailed seeds;
+- a sampled avalanche ion-birth cloud;
+- a numerical u-v field slice at w=0 containing E, |E|, electrostatic
+  potential and the central minus/plus strip weighting potentials.
+
+The visualization Python environment is expected at
+`~/na6p/venvs/mwpc-viz` and needs `meshio`.
+
+Output is written below:
+
+```text
+test_runs/mwpc_stage_c/c2_event_3d/seed_<seed>/vtk/
+```
+
+The exporter also writes `open_scene.py`.  With ParaView installed:
+
+```bash
+paraview --script="test_runs/mwpc_stage_c/c2_event_3d/seed_120001/vtk/open_scene.py"
+```
+
+The FEM mesh starts hidden because it is visually dense; enable it from the
+Pipeline Browser when inspecting the mesh refinement around wires.
