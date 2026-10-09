@@ -100,3 +100,51 @@ C2a has validated the numerical modelling route.  Do not connect this first map
 to the full event yet.  First rerun the stability revision and confirm that the
 `Coordinates13` warnings disappear; after that perform mesh/patch convergence
 and generate a neighboring-strip bank.
+
+
+## Stability rerun after linear isoparametric geometry mapping
+
+The revised mesh with `Mesh.SecondOrderLinear = 1` was rerun successfully.
+
+```text
+minus target cathode phi      = 0.98384560
+minus opposite cathode phi    = 0.00069177
+plus target cathode phi       = 0.98363487
+plus opposite cathode phi     = 0.00068976
+minus phi near central wire   = 0.03300738
+plus phi near central wire    = 0.04174073
+
+profile phi range             = 0.00483802 .. 0.33288576
+max reflected diff (near)     = 0.00552075
+max reflected diff (far)      = 0.00031177
+
+boundary sanity               = PASS
+profile sanity                = PASS
+```
+
+No `ComponentElmer::Coordinates13` convergence warnings were observed.
+C2a is therefore considered stable enough to proceed to event integration.
+
+## C2b strategy
+
+Neighbouring parallel strips do not require independent Elmer solves.  In the
+ideal local chamber the electrodes and wires are translationally invariant
+along local `w`.  For a strip family
+
+```text
+x = w cos(alpha) +/- u sin(alpha)
+```
+
+strip `k` is obtained from the central-strip weighting map by
+
+```text
+w -> w - k * strip_pitch / cos(alpha).
+```
+
+C2b therefore loads only the central minus/plus FEM maps and evaluates a
+parameterised translated strip bank.  This preserves the explicit anode-wire
+boundary while avoiding 2*N+1 separate Elmer solves per cathode.
+
+The finite `w` patch must be wider than the translated strip bank plus the
+event footprint.  The first C2b reference config therefore enlarges the patch
+from +/-8.5 mm to +/-12 mm and uses strips k=-4..+4.
