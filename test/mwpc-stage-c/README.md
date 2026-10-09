@@ -382,3 +382,36 @@ paraview --script="test_runs/mwpc_stage_c/c2_event_3d/seed_120001/vtk/open_scene
 
 The FEM mesh starts hidden because it is visually dense; enable it from the
 Pipeline Browser when inspecting the mesh refinement around wires.
+
+
+### Animated C2 scene
+
+The 3-D visualization runner now also writes a time-resolved ParaView scene.
+
+```bash
+bash test/mwpc-stage-c/run_c2_event_3d.sh 120001 2
+```
+
+Static scene:
+
+```bash
+paraview --script="$HOME/na6p/src/NA6PRoot-mwpc/test_runs/mwpc_stage_c/c2_event_3d/seed_120001/vtk/open_scene.py"
+```
+
+Animated scene:
+
+```bash
+paraview --script="$HOME/na6p/src/NA6PRoot-mwpc/test_runs/mwpc_stage_c/c2_event_3d/seed_120001/vtk/open_animation.py"
+```
+
+The time-series uses the Garfield/Heed timestamps already stored in the event
+dump.  As time advances:
+
+- Heed clusters appear;
+- primary electrons appear;
+- sampled microscopic electron trajectories grow point-by-point;
+- avalanche ion-birth points accumulate.
+
+Cathodes, wires, FEM mesh and the field slice are static reference layers.
+The animation exporter uses cumulative PVD time series, so ParaView's native
+Animation toolbar and time slider control the process.
