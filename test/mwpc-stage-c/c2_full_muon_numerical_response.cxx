@@ -184,6 +184,14 @@ int main(int argc, char** argv) {
       0.1 * ReadArg(argc, argv, "--map-u-half-mm", 12.0);
   const double mapWHalfSpanCm =
       0.1 * ReadArg(argc, argv, "--map-w-half-mm", 12.0);
+  const double mapWirePitchCm =
+      0.1 * ReadArg(
+          argc, argv, "--map-wire-pitch-mm", 10. * wirePitchCm);
+  const double mapWireRadiusCm =
+      0.5e-4 * ReadArg(
+          argc, argv, "--map-wire-diam-um", 1.e4 * wireDiameterCm);
+  const int mapHalfWires =
+      ReadIntArg(argc, argv, "--map-half-wires", 2);
 
   if (gapMinusCm <= 0. || gapPlusCm <= 0. ||
       wirePitchCm <= 0. || wireDiameterCm <= 0. ||
@@ -191,6 +199,8 @@ int main(int argc, char** argv) {
       stripWidthCm > stripPitchCm + 1.e-12 ||
       tanAlpha <= 0. || halfWires < 2 || halfStrips < 1 ||
       mapUHalfSpanCm <= 0. || mapWHalfSpanCm <= 0. ||
+      mapWirePitchCm <= 0. || mapWireRadiusCm <= 0. ||
+      mapHalfWires < 1 ||
       momentumGeV <= 0. || events < 1 || baseSeed < 0 ||
       avalancheLimit < 1 || maxSeeds < 0 ||
       observationNs <= 0. || ionRkDtNs <= 0.) {
@@ -301,7 +311,8 @@ int main(int argc, char** argv) {
       numericalWeighting,
       gapMinusCm, gapPlusCm,
       stripPitchCm, tanAlpha, halfStrips,
-      mapUHalfSpanCm, mapWHalfSpanCm);
+      mapUHalfSpanCm, mapWHalfSpanCm,
+      mapWirePitchCm, mapWireRadiusCm, mapHalfWires);
 
   const double alpha = readout.AlphaRad();
   const double cosA = std::cos(alpha);
