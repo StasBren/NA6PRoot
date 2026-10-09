@@ -50,11 +50,11 @@ echo "  sharing = ${SHARING_DOMAIN}"
 echo "  output  = ${OUT_DIR}"
 echo
 
-"${BUILD_DIR}/mwpc_stage_c1_full_muon"   --gap-minus-mm 2.5   --gap-plus-mm 2.5   --momentum-gev "${P_GEV}"   --u0-mm 1.0   --w0-mm 0.0   --theta-u-deg "${THETA_U}"   --theta-w-deg "${THETA_W}"   --b-tesla 0   --sharing-domain "${SHARING_DOMAIN}"   --observation-ns 100   --ion-rk-dt-ns 5   --half-wires 6   --half-strips 12   --events 1   --max-seeds 0   --base-seed "${SEED}"   --ion-mobility "${MOBILITY}"   --output-prefix c1_full
+"${BUILD_DIR}/mwpc_stage_c1_full_muon"   --gap-minus-mm 2.5   --gap-plus-mm 2.5   --momentum-gev "${P_GEV}"   --u0-mm 1.0   --w0-mm 0.0   --theta-u-deg "${THETA_U}"   --theta-w-deg "${THETA_W}"   --b-tesla 0   --sharing-domain "${SHARING_DOMAIN}"   --observation-ns 100   --ion-rk-dt-ns 5   --half-wires 6   --half-strips 12   --events 1   --max-seeds 0   --base-seed "${SEED}"   --ion-mobility "${MOBILITY}"   --output-prefix "c1_full_${SHARING_DOMAIN}"
 
 echo
 echo "Full-event outputs:"
-echo "  ${OUT_DIR}/c1_full_event_summary.csv"
-echo "  ${OUT_DIR}/c1_full_strip_summary.csv"
-echo "  ${OUT_DIR}/c1_full_seed_summary.csv"
-echo "  ${OUT_DIR}/c1_full_wire_summary.csv"
+echo "  ${OUT_DIR}/c1_full_${SHARING_DOMAIN}_event_summary.csv"
+echo "  ${OUT_DIR}/c1_full_${SHARING_DOMAIN}_strip_summary.csv"
+echo "  ${OUT_DIR}/c1_full_${SHARING_DOMAIN}_seed_summary.csv"
+echo "  ${OUT_DIR}/c1_full_${SHARING_DOMAIN}_wire_summary.csv"
