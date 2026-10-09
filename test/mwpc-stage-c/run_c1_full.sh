@@ -15,7 +15,7 @@ BUILD_DIR="${STAGE_DIR}/build"
 P_GEV="${1:-5}"
 THETA_U="${2:-10}"
 THETA_W="${3:-25}"
-SEED="${4:-130001}"
+SEED="${4:-120001}"
 
 TAG="p${P_GEV}_tu${THETA_U}_tw${THETA_W}_seed${SEED}"
 TAG="${TAG//./p}"
