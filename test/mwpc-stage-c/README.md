@@ -415,3 +415,43 @@ dump.  As time advances:
 Cathodes, wires, FEM mesh and the field slice are static reference layers.
 The animation exporter uses cumulative PVD time series, so ParaView's native
 Animation toolbar and time slider control the process.
+
+
+### Single-wire animation
+
+For studying the local detector physics around one anode, the animation exporter
+also creates a focused scene:
+
+```text
+open_animation_single_wire.py
+```
+
+Default local region:
+
+```text
+u = +/-2.0 mm
+v = full configured gas gap
+w = +/-3.0 mm
+```
+
+Only the following layers are loaded:
+
+- the central anode wire;
+- small local cathode patches;
+- the local segment of the muon track;
+- time-resolved Heed clusters;
+- time-resolved microscopic electron/avalanche paths.
+
+The chamber-wide wire bank, FEM mesh, field slice, primary-electron point cloud
+and ion-birth cloud are deliberately omitted to keep playback responsive.
+
+The ROI remains parameterised:
+
+```bash
+python test/mwpc-stage-c/visualization/export_event_animation.py \
+  --event-dir <event-dir> \
+  --vtk-dir <vtk-dir> \
+  --config test/mwpc-stage-c/numerical-weighting/weighting_config_c2b.json \
+  --single-wire-u-half-mm 2.0 \
+  --single-wire-w-half-mm 3.0
+```
