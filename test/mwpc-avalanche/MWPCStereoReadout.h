@@ -12,7 +12,19 @@
 
 namespace na6p::mwpc {
 
-// Reusable form of the validated Stage-B3c.2 hybrid stereo model.
+enum class StereoSharingDomain {
+  // Stage-C default: the analytic segmented-strip weighting problem spans the
+  // full cathode-to-cathode gas gap. This lets either cathode respond to
+  // carriers anywhere in the chamber.
+  FullCathodeGap,
+
+  // Historical Stage-B construction: each segmented weighting problem spans
+  // only wire plane -> selected cathode. Kept for regression/comparison.
+  LegacyHalfGap
+};
+
+// Reusable form of the Stage-B3c.2 hybrid stereo model, with a Stage-C
+// full-gap extension for complete muon tracks.
 //
 // Physical total coupling:
 //   full analytic MWPC cell, including wires, via complete cathode labels.
@@ -59,13 +71,16 @@ class StereoReadout {
       const double stripPitchCm,
       const double stripWidthCm,
       const double tanAlpha,
-      const int halfStrips)
+      const int halfStrips,
+      const StereoSharingDomain sharingDomain =
+          StereoSharingDomain::FullCathodeGap)
       : mGapMinusCm(gapMinusCm),
         mGapPlusCm(gapPlusCm),
         mStripPitchCm(stripPitchCm),
         mStripWidthCm(stripWidthCm),
         mTanAlpha(tanAlpha),
         mHalfStrips(halfStrips),
+        mSharingDomain(sharingDomain),
         mAlpha(std::atan(tanAlpha)),
         mCosA(std::cos(mAlpha)),
         mSinA(std::sin(mAlpha)) {
@@ -76,33 +91,76 @@ class StereoReadout {
       throw std::invalid_argument("Invalid stereo-readout geometry.");
     }
 
-    mWeightingMinus.AddPlaneY(0., 1., "minus_back");
-    mWeightingMinus.AddPlaneY(-mGapMinusCm, 0., "minus_front");
+    if (mSharingDomain == StereoSharingDomain::FullCathodeGap) {
+      const double fullGapCm = mGapMinusCm + mGapPlusCm;
 
-    // Mirror +v into a local y coordinate with the readout plane at -gap.
-    mWeightingPlus.AddPlaneY(0., 1., "plus_back");
-    mWeightingPlus.AddPlaneY(-mGapPlusCm, 0., "plus_front");
+      // Stage-C extension of the same analytic strip model:
+      // both real cathodes are the bounding planes, so the strip weighting
+      // potential is defined throughout the complete gas volume.
+      //
+      // The auxiliary plane voltages only establish a valid analytic cell;
+      // AddStripOnPlaneY constructs the actual unit weighting field.
+      mWeightingMinus.AddPlaneY(
+          -mGapMinusCm, 0., "minus_front");
+      mWeightingMinus.AddPlaneY(
+          +mGapPlusCm, 1., "minus_back");
 
-    mStripIds.reserve(2 * mHalfStrips + 1);
-    mLabelsMinus.reserve(2 * mHalfStrips + 1);
-    mLabelsPlus.reserve(2 * mHalfStrips + 1);
+      mWeightingPlus.AddPlaneY(
+          -mGapMinusCm, 1., "plus_back");
+      mWeightingPlus.AddPlaneY(
+          +mGapPlusCm, 0., "plus_front");
 
-    for (int k = -mHalfStrips; k <= mHalfStrips; ++k) {
-      const double center = k * mStripPitchCm;
-      const double sMin = center - 0.5 * mStripWidthCm;
-      const double sMax = center + 0.5 * mStripWidthCm;
+      mStripIds.reserve(2 * mHalfStrips + 1);
+      mLabelsMinus.reserve(2 * mHalfStrips + 1);
+      mLabelsPlus.reserve(2 * mHalfStrips + 1);
 
-      const std::string lm = FamilyLabel("minus_strip", k);
-      const std::string lp = FamilyLabel("plus_strip", k);
+      for (int k = -mHalfStrips; k <= mHalfStrips; ++k) {
+        const double center = k * mStripPitchCm;
+        const double sMin = center - 0.5 * mStripWidthCm;
+        const double sMax = center + 0.5 * mStripWidthCm;
 
-      mWeightingMinus.AddStripOnPlaneY(
-          'x', -mGapMinusCm, sMin, sMax, lm, mGapMinusCm);
-      mWeightingPlus.AddStripOnPlaneY(
-          'x', -mGapPlusCm, sMin, sMax, lp, mGapPlusCm);
+        const std::string lm = FamilyLabel("minus_strip", k);
+        const std::string lp = FamilyLabel("plus_strip", k);
 
-      mStripIds.push_back(k);
-      mLabelsMinus.push_back(lm);
-      mLabelsPlus.push_back(lp);
+        mWeightingMinus.AddStripOnPlaneY(
+            'x', -mGapMinusCm, sMin, sMax, lm, fullGapCm);
+        mWeightingPlus.AddStripOnPlaneY(
+            'x', +mGapPlusCm, sMin, sMax, lp, fullGapCm);
+
+        mStripIds.push_back(k);
+        mLabelsMinus.push_back(lm);
+        mLabelsPlus.push_back(lp);
+      }
+    } else {
+      // Exact historical Stage-B half-gap construction.
+      mWeightingMinus.AddPlaneY(0., 1., "minus_back");
+      mWeightingMinus.AddPlaneY(-mGapMinusCm, 0., "minus_front");
+
+      // Mirror +v into local y with readout plane at -gap.
+      mWeightingPlus.AddPlaneY(0., 1., "plus_back");
+      mWeightingPlus.AddPlaneY(-mGapPlusCm, 0., "plus_front");
+
+      mStripIds.reserve(2 * mHalfStrips + 1);
+      mLabelsMinus.reserve(2 * mHalfStrips + 1);
+      mLabelsPlus.reserve(2 * mHalfStrips + 1);
+
+      for (int k = -mHalfStrips; k <= mHalfStrips; ++k) {
+        const double center = k * mStripPitchCm;
+        const double sMin = center - 0.5 * mStripWidthCm;
+        const double sMax = center + 0.5 * mStripWidthCm;
+
+        const std::string lm = FamilyLabel("minus_strip", k);
+        const std::string lp = FamilyLabel("plus_strip", k);
+
+        mWeightingMinus.AddStripOnPlaneY(
+            'x', -mGapMinusCm, sMin, sMax, lm, mGapMinusCm);
+        mWeightingPlus.AddStripOnPlaneY(
+            'x', -mGapPlusCm, sMin, sMax, lp, mGapPlusCm);
+
+        mStripIds.push_back(k);
+        mLabelsMinus.push_back(lm);
+        mLabelsPlus.push_back(lp);
+      }
     }
   }
 
@@ -111,6 +169,12 @@ class StereoReadout {
   double AlphaRad() const { return mAlpha; }
   double AlphaDeg() const { return 180. * mAlpha / Pi(); }
   const std::vector<int>& StripIds() const { return mStripIds; }
+
+  const char* SharingDomainName() const {
+    return mSharingDomain == StereoSharingDomain::FullCathodeGap
+               ? "full-cathode-gap"
+               : "legacy-half-gap";
+  }
 
   Result EmptyResult() const {
     Result r;
@@ -138,64 +202,68 @@ class StereoReadout {
         physicalField, "cathode_plus", qFc,
         u0, v0, w0, u1, v1, w1);
 
-    // The ideal planar strip cells are only defined on their own side of
-    // the wire plane:
-    //   minus family: -gapMinus <= v <= 0
-    //   plus family :  0 <= v <= +gapPlus
-    //
-    // Stage B used avalanches launched close to one wire side, so this domain
-    // issue was mostly hidden. A full Heed muon contains primary electrons
-    // across BOTH gas gaps; evaluating the opposite-side planar weighting cell
-    // outside its domain can therefore return NaN.
-    //
-    // Controlled Stage-C extension:
-    //   * full wire-aware cathode coupling above is kept for the ENTIRE segment;
-    //   * the normalized segmented-sharing template for each cathode uses only
-    //     the part of the carrier segment lying in that cathode's own half-gap;
-    //   * Finalize() then rescales each segmented family to the full-cathode
-    //     signal, exactly as in Stage B3c.2.
-    //
-    // Thus we do not silently extrapolate Garfield's ideal planar strip
-    // weighting solution beyond the domain in which it was constructed.
+    const double zMinus0 = w0 * mCosA - u0 * mSinA;
+    const double zMinus1 = w1 * mCosA - u1 * mSinA;
+    const double zPlus0 = w0 * mCosA + u0 * mSinA;
+    const double zPlus1 = w1 * mCosA + u1 * mSinA;
 
-    Segment clipped;
-
-    if (ClipToVRange(
-            u0, v0, w0, u1, v1, w1,
-            -mGapMinusCm, 0., clipped)) {
-      const double zMinus0 =
-          clipped.w0 * mCosA - clipped.u0 * mSinA;
-      const double zMinus1 =
-          clipped.w1 * mCosA - clipped.u1 * mSinA;
-
+    if (mSharingDomain == StereoSharingDomain::FullCathodeGap) {
       for (std::size_t j = 0; j < mStripIds.size(); ++j) {
         r.qMinusFc[j] += EndpointSignal(
             mWeightingMinus, mLabelsMinus[j], qFc,
-            0., clipped.v0, zMinus0,
-            0., clipped.v1, zMinus1);
-      }
-      ++r.segmentedMinusSegments;
-    } else {
-      ++r.skippedMinusSegments;
-    }
+            0., v0, zMinus0,
+            0., v1, zMinus1);
 
-    if (ClipToVRange(
-            u0, v0, w0, u1, v1, w1,
-            0., mGapPlusCm, clipped)) {
-      const double zPlus0 =
-          clipped.w0 * mCosA + clipped.u0 * mSinA;
-      const double zPlus1 =
-          clipped.w1 * mCosA + clipped.u1 * mSinA;
-
-      for (std::size_t j = 0; j < mStripIds.size(); ++j) {
         r.qPlusFc[j] += EndpointSignal(
             mWeightingPlus, mLabelsPlus[j], qFc,
-            0., -clipped.v0, zPlus0,
-            0., -clipped.v1, zPlus1);
+            0., v0, zPlus0,
+            0., v1, zPlus1);
       }
+      ++r.segmentedMinusSegments;
       ++r.segmentedPlusSegments;
     } else {
-      ++r.skippedPlusSegments;
+      // Historical half-gap weighting problems are not defined beyond v=0.
+      // Clip only in this legacy mode to avoid evaluating them outside their
+      // analytic domain.
+      Segment clipped;
+
+      if (ClipToVRange(
+              u0, v0, w0, u1, v1, w1,
+              -mGapMinusCm, 0., clipped)) {
+        const double zm0 =
+            clipped.w0 * mCosA - clipped.u0 * mSinA;
+        const double zm1 =
+            clipped.w1 * mCosA - clipped.u1 * mSinA;
+
+        for (std::size_t j = 0; j < mStripIds.size(); ++j) {
+          r.qMinusFc[j] += EndpointSignal(
+              mWeightingMinus, mLabelsMinus[j], qFc,
+              0., clipped.v0, zm0,
+              0., clipped.v1, zm1);
+        }
+        ++r.segmentedMinusSegments;
+      } else {
+        ++r.skippedMinusSegments;
+      }
+
+      if (ClipToVRange(
+              u0, v0, w0, u1, v1, w1,
+              0., mGapPlusCm, clipped)) {
+        const double zp0 =
+            clipped.w0 * mCosA + clipped.u0 * mSinA;
+        const double zp1 =
+            clipped.w1 * mCosA + clipped.u1 * mSinA;
+
+        for (std::size_t j = 0; j < mStripIds.size(); ++j) {
+          r.qPlusFc[j] += EndpointSignal(
+              mWeightingPlus, mLabelsPlus[j], qFc,
+              0., -clipped.v0, zp0,
+              0., -clipped.v1, zp1);
+        }
+        ++r.segmentedPlusSegments;
+      } else {
+        ++r.skippedPlusSegments;
+      }
     }
   }
 
@@ -325,6 +393,8 @@ class StereoReadout {
   double mStripWidthCm = 0.;
   double mTanAlpha = 0.;
   int mHalfStrips = 0;
+  StereoSharingDomain mSharingDomain =
+      StereoSharingDomain::FullCathodeGap;
 
   double mAlpha = 0.;
   double mCosA = 1.;
