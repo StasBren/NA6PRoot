@@ -371,14 +371,16 @@ def generate_weighting_sif(
     )
     expr = strip_expression(cfg, cathode, index)
 
+    variable_bc = (
+        "  Potential = Variable Coordinate 1, Coordinate 3\n"
+        f'    Real MATC "{expr}"'
+    )
     if cathode == "minus":
-        minus = f"""  Potential = Variable Coordinate 1, Coordinate 3
-    Real MATC "{expr}""""
+        minus = variable_bc
         plus = "  Potential = 0.0"
     else:
         minus = "  Potential = 0.0"
-        plus = f"""  Potential = Variable Coordinate 1, Coordinate 3
-    Real MATC "{expr}""""
+        plus = variable_bc
 
     return common + f"""
 ! Exact Shockley-Ramo conductor boundary conditions:
