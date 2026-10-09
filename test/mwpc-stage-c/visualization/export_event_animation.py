@@ -33,30 +33,72 @@ def iv(row, key):
     return int(float(row[key]))
 
 
+def _write_data_array(out, name, values, vtk_type="Float64", ncomp=1):
+    attrs = [f'type="{vtk_type}"', 'format="ascii"']
+    if name:
+        attrs.insert(1, f'Name="{name}"')
+    if ncomp != 1:
+        attrs.insert(2, f'NumberOfComponents="{ncomp}"')
+    out.write("        <DataArray " + " ".join(attrs) + ">\n")
+    if ncomp == 1:
+        out.write("          " + " ".join(str(v) for v in values) + "\n")
+    else:
+        out.write(
+            "          " +
+            " ".join(" ".join(str(x) for x in value) for value in values) +
+            "\n"
+        )
+    out.write("        </DataArray>\n")
+
+
 def write_points(path: Path, rows, scalar_defs=None):
+    """Write XML VTK PolyData (.vtp) point cloud.
+
+    PVD collections are XML collection readers in ParaView and must reference
+    XML VTK datasets (VTP/VTU), not legacy .vtk files.
+    """
     scalar_defs = scalar_defs or []
     pts = [(fv(r, "u_mm"), fv(r, "v_mm"), fv(r, "w_mm")) for r in rows]
+    n = len(pts)
+
     with path.open("w", encoding="utf-8") as out:
-        out.write("# vtk DataFile Version 3.0\n")
-        out.write(path.stem + "\nASCII\nDATASET POLYDATA\n")
-        out.write(f"POINTS {len(pts)} float\n")
-        for x, y, z in pts:
-            out.write(f"{x:.9g} {y:.9g} {z:.9g}\n")
-        out.write(f"VERTICES {len(pts)} {2 * len(pts)}\n")
-        for idx in range(len(pts)):
-            out.write(f"1 {idx}\n")
-        if pts and scalar_defs:
-            out.write(f"POINT_DATA {len(pts)}\n")
-            for name, key, typ in scalar_defs:
-                out.write(f"SCALARS {name} {typ} 1\nLOOKUP_TABLE default\n")
-                for row in rows:
-                    out.write(
-                        f"{iv(row, key)}\n" if typ == "int"
-                        else f"{fv(row, key):.9g}\n"
-                    )
+        out.write('<?xml version="1.0"?>\n')
+        out.write(
+            '<VTKFile type="PolyData" version="0.1" '
+            'byte_order="LittleEndian">\n'
+        )
+        out.write("  <PolyData>\n")
+        out.write(
+            f'    <Piece NumberOfPoints="{n}" NumberOfVerts="{n}" '
+            'NumberOfLines="0" NumberOfStrips="0" NumberOfPolys="0">\n'
+        )
+
+        out.write("      <PointData>\n")
+        for name, key, typ in scalar_defs:
+            vtk_type = "Int32" if typ == "int" else "Float64"
+            vals = [iv(r, key) if typ == "int" else fv(r, key) for r in rows]
+            _write_data_array(out, name, vals, vtk_type)
+        out.write("      </PointData>\n")
+        out.write("      <CellData/>\n")
+
+        out.write("      <Points>\n")
+        _write_data_array(out, None, pts, "Float64", 3)
+        out.write("      </Points>\n")
+
+        out.write("      <Verts>\n")
+        _write_data_array(out, "connectivity", list(range(n)), "Int64")
+        _write_data_array(out, "offsets", list(range(1, n + 1)), "Int64")
+        out.write("      </Verts>\n")
+        out.write("      <Lines/>\n")
+        out.write("      <Strips/>\n")
+        out.write("      <Polys/>\n")
+        out.write("    </Piece>\n")
+        out.write("  </PolyData>\n")
+        out.write("</VTKFile>\n")
 
 
 def write_truncated_paths(path: Path, rows, tmax: float):
+    """Write cumulative microscopic electron trajectories as XML VTP."""
     groups = defaultdict(list)
     for row in rows:
         if fv(row, "t_ns") <= tmax:
@@ -75,21 +117,49 @@ def write_truncated_paths(path: Path, rows, tmax: float):
         lines.append(list(range(start, start + len(grows))))
         line_meta.append(key)
 
+    connectivity = [idx for line in lines for idx in line]
+    offsets = []
+    running = 0
+    for line in lines:
+        running += len(line)
+        offsets.append(running)
+
     with path.open("w", encoding="utf-8") as out:
-        out.write("# vtk DataFile Version 3.0\n")
-        out.write("Growing microscopic electron paths\nASCII\nDATASET POLYDATA\n")
-        out.write(f"POINTS {len(points)} float\n")
-        for x, y, z in points:
-            out.write(f"{x:.9g} {y:.9g} {z:.9g}\n")
-        total = sum(len(line) + 1 for line in lines)
-        out.write(f"LINES {len(lines)} {total}\n")
-        for line in lines:
-            out.write(str(len(line)) + " " + " ".join(map(str, line)) + "\n")
-        if lines:
-            out.write(f"CELL_DATA {len(lines)}\n")
-            out.write("SCALARS seed int 1\nLOOKUP_TABLE default\n")
-            for seed, _ in line_meta:
-                out.write(f"{seed}\n")
+        out.write('<?xml version="1.0"?>\n')
+        out.write(
+            '<VTKFile type="PolyData" version="0.1" '
+            'byte_order="LittleEndian">\n'
+        )
+        out.write("  <PolyData>\n")
+        out.write(
+            f'    <Piece NumberOfPoints="{len(points)}" NumberOfVerts="0" '
+            f'NumberOfLines="{len(lines)}" NumberOfStrips="0" '
+            'NumberOfPolys="0">\n'
+        )
+        out.write("      <PointData/>\n")
+        out.write("      <CellData>\n")
+        _write_data_array(
+            out, "seed", [seed for seed, _ in line_meta], "Int32"
+        )
+        _write_data_array(
+            out, "path", [path_id for _, path_id in line_meta], "Int32"
+        )
+        out.write("      </CellData>\n")
+
+        out.write("      <Points>\n")
+        _write_data_array(out, None, points, "Float64", 3)
+        out.write("      </Points>\n")
+
+        out.write("      <Verts/>\n")
+        out.write("      <Lines>\n")
+        _write_data_array(out, "connectivity", connectivity, "Int64")
+        _write_data_array(out, "offsets", offsets, "Int64")
+        out.write("      </Lines>\n")
+        out.write("      <Strips/>\n")
+        out.write("      <Polys/>\n")
+        out.write("    </Piece>\n")
+        out.write("  </PolyData>\n")
+        out.write("</VTKFile>\n")
 
 
 def write_pvd(path: Path, entries):
@@ -170,10 +240,10 @@ def main():
         prows = [r for r in primaries if fv(r, "t_ns") <= t]
         irows = [r for r in ions if fv(r, "t_ns") <= t]
 
-        cfile = f"clusters_{iframe:04d}.vtk"
-        pfile = f"primaries_{iframe:04d}.vtk"
-        efile = f"electron_paths_{iframe:04d}.vtk"
-        ifile = f"ion_births_{iframe:04d}.vtk"
+        cfile = f"clusters_{iframe:04d}.vtp"
+        pfile = f"primaries_{iframe:04d}.vtp"
+        efile = f"electron_paths_{iframe:04d}.vtp"
+        ifile = f"ion_births_{iframe:04d}.vtp"
 
         write_points(
             anim / cfile, crows,
