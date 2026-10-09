@@ -375,7 +375,7 @@ int main(int argc, char** argv) {
       << "iu,iv,u_mm,v_mm,w_mm,eu_Vcm,ev_Vcm,ew_Vcm,"
       << "E_mag_Vcm,potential_V,phi_minus_0,phi_plus_0,valid\n";
 
-  const double wireRadiusMm = 5.e-3 * wireDiameterCm * 1.e4;
+  const double wireRadiusMm = 5. * wireDiameterCm;
   for (int iu = 0; iu < fieldNu; ++iu) {
     const double uMm =
         -fieldUHalfMm +
