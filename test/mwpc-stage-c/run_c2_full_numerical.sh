@@ -5,7 +5,7 @@ set -euo pipefail
 #
 # Usage:
 #   bash test/mwpc-stage-c/run_c2_full_numerical.sh \
-#     [momentum_GeV] [theta_u_deg] [theta_w_deg] [seed] [config_json]
+#     [momentum_GeV] [theta_u_deg] [theta_w_deg] [seed] [config_json] [events]
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 STAGE_DIR="${ROOT_DIR}/test/mwpc-stage-c"
@@ -17,6 +17,7 @@ THETA_U="${2:-10}"
 THETA_W="${3:-25}"
 SEED="${4:-120001}"
 CONFIG="${5:-${NUM_DIR}/weighting_config_c2b.json}"
+EVENTS="${6:-1}"
 
 TAG="p${P_GEV}_tu${THETA_U}_tw${THETA_W}_seed${SEED}"
 TAG="${TAG//./p}"
@@ -78,6 +79,7 @@ echo "p            : ${P_GEV} GeV/c"
 echo "theta_u      : ${THETA_U} deg"
 echo "theta_w      : ${THETA_W} deg"
 echo "seed         : ${SEED}"
+echo "events       : ${EVENTS}"
 echo "gap          : ${GAP_MINUS} + ${GAP_PLUS} mm"
 echo "wire pitch   : ${WIRE_PITCH} mm"
 echo "strip pitch  : ${STRIP_PITCH} mm"
@@ -154,7 +156,7 @@ echo "=== Full muon with direct numerical strip weighting ==="
   --observation-ns 100 \
   --ion-rk-dt-ns 5 \
   --half-wires 6 \
-  --events 1 \
+  --events "${EVENTS}" \
   --max-seeds 0 \
   --base-seed "${SEED}" \
   --ion-mobility "${MOBILITY}" \
