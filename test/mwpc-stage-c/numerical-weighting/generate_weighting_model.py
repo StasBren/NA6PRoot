@@ -246,7 +246,7 @@ def generate_geo(cfg: Dict[str, Any]) -> str:
         "",
         "Mesh.Algorithm3D = 1;",
         "Mesh.Optimize = 1;",
-        "Mesh.SecondOrderLinear = 0;",
+        "Mesh.SecondOrderLinear = 1;",
         "Mesh.MshFileVersion = 2.2;",
         "",
     ]
