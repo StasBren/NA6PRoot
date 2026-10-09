@@ -24,7 +24,7 @@ cmake --build "${BUILD_DIR}" -j4
 
 cd "${OUT_DIR}"
 
-"${BUILD_DIR}/mwpc_stage_c1_full_muon"   --momentum-gev 5   --u0-mm 1.0   --w0-mm 0.0   --theta-u-deg 10   --theta-w-deg 25   --b-tesla 0   --sharing-domain full   --observation-ns 100   --ion-rk-dt-ns 5   --half-wires 6   --half-strips 12   --events 1   --max-seeds 8   --base-seed 120001   --ion-mobility "${MOBILITY}"   --output-prefix c1_smoke
+"${BUILD_DIR}/mwpc_stage_c1_full_muon"   --gap-minus-mm 2.5   --gap-plus-mm 2.5   --momentum-gev 5   --u0-mm 1.0   --w0-mm 0.0   --theta-u-deg 10   --theta-w-deg 25   --b-tesla 0   --sharing-domain full   --observation-ns 100   --ion-rk-dt-ns 5   --half-wires 6   --half-strips 12   --events 1   --max-seeds 8   --base-seed 120001   --ion-mobility "${MOBILITY}"   --output-prefix c1_smoke
 
 echo
 echo "Smoke outputs:"
