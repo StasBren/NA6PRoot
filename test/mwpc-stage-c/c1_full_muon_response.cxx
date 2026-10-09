@@ -88,6 +88,10 @@ struct EventCounters {
   double sumIonBirthU = 0.;
   double sumIonBirthW = 0.;
   long long nIonBirthPositionSamples = 0;
+  double sumGainWeightedSeedU = 0.;
+  double sumGainWeightedSeedV = 0.;
+  double sumGainWeightedSeedW = 0.;
+  long long gainWeight = 0;
   std::set<int> activeWires;
   std::map<int, long long> wireCollectedElectrons;
 };
@@ -340,6 +344,8 @@ int main(int argc, char** argv) {
       << "ion_transport_failures,late_electron_segments,"
       << "collected_electrons,active_wires,"
       << "ion_birth_mean_u_mm,ion_birth_mean_w_mm,"
+      << "gain_weighted_seed_u_mm,gain_weighted_seed_v_mm,"
+      << "gain_weighted_seed_w_mm,"
       << "wire_cog_u_mm,"
       << "q_cathode_minus_fC,q_cathode_plus_fC,"
       << "q_minus_local_sum_fC,q_plus_local_sum_fC,"
@@ -461,6 +467,16 @@ int main(int argc, char** argv) {
         counters.avalancheIons += nAvalancheIons;
         counters.recordedIonBirths += gIonBirths.size();
 
+        const long long seedGain =
+            static_cast<long long>(gIonBirths.size());
+        counters.sumGainWeightedSeedU +=
+            seedGain * xe;
+        counters.sumGainWeightedSeedV +=
+            seedGain * ye;
+        counters.sumGainWeightedSeedW +=
+            seedGain * ze;
+        counters.gainWeight += seedGain;
+
         if (!avalancheOk || nAvalancheIons <= 0) {
           ++counters.zeroAvalanches;
         }
@@ -560,6 +576,22 @@ int main(int argc, char** argv) {
                   static_cast<double>(counters.nIonBirthPositionSamples)
             : std::numeric_limits<double>::quiet_NaN();
 
+    const double gainWeightedSeedUMm =
+        counters.gainWeight > 0
+            ? 10. * counters.sumGainWeightedSeedU /
+                  static_cast<double>(counters.gainWeight)
+            : std::numeric_limits<double>::quiet_NaN();
+    const double gainWeightedSeedVMm =
+        counters.gainWeight > 0
+            ? 10. * counters.sumGainWeightedSeedV /
+                  static_cast<double>(counters.gainWeight)
+            : std::numeric_limits<double>::quiet_NaN();
+    const double gainWeightedSeedWMm =
+        counters.gainWeight > 0
+            ? 10. * counters.sumGainWeightedSeedW /
+                  static_cast<double>(counters.gainWeight)
+            : std::numeric_limits<double>::quiet_NaN();
+
     double wireCogUMm = std::numeric_limits<double>::quiet_NaN();
     if (counters.collectedElectrons > 0) {
       double numer = 0.;
@@ -613,6 +645,9 @@ int main(int argc, char** argv) {
         << counters.collectedElectrons << ","
         << counters.activeWires.size() << ","
         << ionBirthMeanUMm << "," << ionBirthMeanWMm << ","
+        << gainWeightedSeedUMm << ","
+        << gainWeightedSeedVMm << ","
+        << gainWeightedSeedWMm << ","
         << wireCogUMm << ","
         << response.qCathodeMinusFc << ","
         << response.qCathodePlusFc << ","
@@ -687,6 +722,10 @@ int main(int argc, char** argv) {
           << " ion-birth mean(u,w)=("
           << ionBirthMeanUMm << ", "
           << ionBirthMeanWMm << ") mm"
+          << " gain-weighted seed(u,v,w)=("
+          << gainWeightedSeedUMm << ", "
+          << gainWeightedSeedVMm << ", "
+          << gainWeightedSeedWMm << ") mm"
           << " delta_stereo-ionbirth=("
           << uStereoMinusIonBirthMm << ", "
           << wStereoMinusIonBirthMm << ") mm"
