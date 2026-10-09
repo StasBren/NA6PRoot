@@ -144,6 +144,25 @@ belong under `test/mwpc-stage-c/results/`.
 
 ## C1a — first full-muon event response
 
+### Current Stage-C chamber baseline
+
+For new C1 response work the default geometry is the current preferred
+two-sided MuTr baseline rather than the asymmetric Prototype-3 sandbox:
+
+```text
+gas gap       : 2.5 + 2.5 mm
+strip width   : 1.7 mm
+tan(alpha)    : 0.1
+readout       : two-sided stereo cathode strips
+```
+
+The historical Prototype-3 2+4 mm geometry remains available through explicit
+runtime arguments for regression studies. The Stage-A/B 1.8 kV operating
+voltage is retained for integration continuity only; gain/HV for the symmetric
+gap is not yet calibrated.
+
+
+
 C1a is now implemented in
 
 ```text
