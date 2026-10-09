@@ -125,6 +125,8 @@ int main(int argc, char** argv) {
       0.1 * ReadArg(argc, argv, "--strip-width-mm", 1.7);
   const double tanAlpha =
       ReadArg(argc, argv, "--tan-alpha", 0.10);
+  const std::string sharingDomainText =
+      ReadStringArg(argc, argv, "--sharing-domain", "full");
 
   const int halfWires =
       ReadIntArg(argc, argv, "--half-wires", 6);
@@ -179,6 +181,16 @@ int main(int argc, char** argv) {
       avalancheLimit < 1 || maxSeeds < 0 ||
       observationNs <= 0. || ionRkDtNs <= 0.) {
     std::cerr << "Invalid Stage-C1 parameters.\n";
+    return 2;
+  }
+
+  na6p::mwpc::StereoSharingDomain sharingDomain =
+      na6p::mwpc::StereoSharingDomain::FullCathodeGap;
+  if (sharingDomainText == "legacy") {
+    sharingDomain =
+        na6p::mwpc::StereoSharingDomain::LegacyHalfGap;
+  } else if (sharingDomainText != "full") {
+    std::cerr << "--sharing-domain must be 'full' or 'legacy'.\n";
     return 2;
   }
 
@@ -248,7 +260,7 @@ int main(int argc, char** argv) {
   na6p::mwpc::StereoReadout readout(
       gapMinusCm, gapPlusCm,
       stripPitchCm, stripWidthCm,
-      tanAlpha, halfStrips);
+      tanAlpha, halfStrips, sharingDomain);
 
   const double alpha = readout.AlphaRad();
   const double cosA = std::cos(alpha);
@@ -366,6 +378,8 @@ int main(int argc, char** argv) {
             << observationNs << " ns\n"
             << "stereo alpha               : "
             << readout.AlphaDeg() << " deg\n"
+            << "segmented weighting domain : "
+            << readout.SharingDomainName() << "\n"
             << "events                      : "
             << events << "\n"
             << "max seeds (0=all)           : "
