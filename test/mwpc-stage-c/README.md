@@ -309,3 +309,34 @@ The >40--50 deg points are tail validation, not the dense core grid.
 
 Stage C does not yet claim final detector resolution. Absolute gas gain is not
 prototype-calibrated, and electronics/noise/threshold/shaping are still absent.
+
+
+## C2 — numerical strip weighting
+
+The C1 full-event tests exposed the analytic hybrid strip-sharing model as the
+remaining weak point.  Stage C2 therefore replaces only the weighting-field
+piece while keeping the validated microscopic transport chain unchanged.
+
+The first numerical prototype lives in:
+
+```text
+test/mwpc-stage-c/numerical-weighting/
+```
+
+It uses a parameterised local 3-D Gmsh/Elmer model with explicit cylindrical
+anode wires and two physical cathodes.  For each weighting solve, the selected
+strip is set to 1 V while all other conductors, including every wire, are set to
+0 V.  The resulting map is imported through Garfield++ `ComponentElmer`.
+
+Geometry is controlled by `numerical-weighting/weighting_config.json`; wire
+pitch/diameter, both cathode gaps, strip pitch/width/stereo angle, patch size,
+mesh refinement and strip indices are all runtime parameters.
+
+Initial map smoke test:
+
+```bash
+bash test/mwpc-stage-c/run_c2_weighting_smoke.sh
+```
+
+Do not connect C2 maps to the full C1 event accumulator until the numerical map
+passes its boundary and mesh/patch convergence checks.
