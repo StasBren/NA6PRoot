@@ -127,18 +127,48 @@ int main(int argc, char** argv) {
   const double vMinusQuarter = -0.5 * gapMinusMm;
   const double vPlusQuarter = +0.5 * gapPlusMm;
 
+  double minPhi = +1.e9;
+  double maxPhi = -1.e9;
+  double maxMirrorNearCathode = 0.;
+  double maxMirrorFarCathode = 0.;
+  bool allFinite = true;
+
   for (double w = -wHalfMm; w <= wHalfMm + 0.5 * wStepMm;
        w += wStepMm) {
+    const double mmq =
+        phi(0., vMinusQuarter, w, "minus_strip_0");
+    const double mm0 =
+        phi(0., 0.05, w, "minus_strip_0");
+    const double mpq =
+        phi(0., vPlusQuarter, w, "minus_strip_0");
+    const double pmq =
+        phi(0., vMinusQuarter, w, "plus_strip_0");
+    const double pm0 =
+        phi(0., 0.05, w, "plus_strip_0");
+    const double ppq =
+        phi(0., vPlusQuarter, w, "plus_strip_0");
+
+    for (const double value : {mmq, mm0, mpq, pmq, pm0, ppq}) {
+      allFinite = allFinite && std::isfinite(value);
+      if (std::isfinite(value)) {
+        minPhi = std::min(minPhi, value);
+        maxPhi = std::max(maxPhi, value);
+      }
+    }
+
+    // For the symmetric 2-sided reference geometry the reflected maps
+    // should agree up to FEM discretisation error.
+    maxMirrorNearCathode =
+        std::max(maxMirrorNearCathode, std::abs(mmq - ppq));
+    maxMirrorFarCathode =
+        std::max(maxMirrorFarCathode, std::abs(mpq - pmq));
+
     out << w << ","
-        << phi(0., vMinusQuarter, w, "minus_strip_0") << ","
-        << phi(0., 0.05, w, "minus_strip_0") << ","
-        << phi(0., vPlusQuarter, w, "minus_strip_0") << ","
-        << phi(0., vMinusQuarter, w, "plus_strip_0") << ","
-        << phi(0., 0.05, w, "plus_strip_0") << ","
-        << phi(0., vPlusQuarter, w, "plus_strip_0") << "\n";
+        << mmq << "," << mm0 << "," << mpq << ","
+        << pmq << "," << pm0 << "," << ppq << "\n";
   }
 
-  const bool bounded =
+  const bool boundarySanity =
       std::isfinite(phiMinusTarget) &&
       std::isfinite(phiPlusTarget) &&
       phiMinusTarget > 0.5 && phiMinusTarget < 1.05 &&
@@ -148,10 +178,23 @@ int main(int argc, char** argv) {
       std::abs(phiMinusNearWire) < 0.2 &&
       std::abs(phiPlusNearWire) < 0.2;
 
+  const bool profileSanity =
+      allFinite && minPhi > -0.02 && maxPhi < 1.02 &&
+      maxMirrorNearCathode < 0.02 &&
+      maxMirrorFarCathode < 0.02;
+
   std::cout << "profile output                 : " << profileFile << "\n"
+            << "profile phi range              : ["
+            << minPhi << ", " << maxPhi << "]\n"
+            << "max reflected diff (near)      : "
+            << maxMirrorNearCathode << "\n"
+            << "max reflected diff (far)       : "
+            << maxMirrorFarCathode << "\n"
             << "boundary sanity                : "
-            << (bounded ? "PASS" : "CHECK") << "\n"
+            << (boundarySanity ? "PASS" : "CHECK") << "\n"
+            << "profile sanity                 : "
+            << (profileSanity ? "PASS" : "CHECK") << "\n"
             << "=========================================================\n";
 
-  return bounded ? 0 : 5;
+  return (boundarySanity && profileSanity) ? 0 : 5;
 }
