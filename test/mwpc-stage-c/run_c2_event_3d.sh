@@ -20,7 +20,8 @@ BUILD_DIR="${STAGE_DIR}/build"
 
 SEED="${1:-120001}"
 DETAILED_SEEDS="${2:-2}"
-CONFIG="${3:-${NUM_DIR}/weighting_config_c2b.json}"
+DEFAULT_CONFIG="${NUM_DIR}/weighting_config_c2b.json"
+CONFIG="${3:-${DEFAULT_CONFIG}}"
 
 OUT_DIR="${ROOT_DIR}/test_runs/mwpc_stage_c/c2_event_3d/seed_${SEED}"
 EVENT_DIR="${OUT_DIR}/event"
