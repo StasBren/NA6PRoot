@@ -132,7 +132,10 @@ echo
 echo "Static scene:"
 echo "  paraview --script=\"${VTK_DIR}/open_scene.py\""
 echo
-echo "Lightweight animated scene (recommended):"
+echo "Single-wire animated scene (recommended):"
+echo "  paraview --script=\"${VTK_DIR}/open_animation_single_wire.py\""
+echo
+echo "Lightweight chamber-wide animation:"
 echo "  paraview --script=\"${VTK_DIR}/open_animation_light.py\""
 echo
 echo "Full animated scene:"
