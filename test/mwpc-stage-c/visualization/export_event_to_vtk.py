@@ -202,7 +202,8 @@ def write_paraview_script(out_dir: Path, wire_radius_mm: float):
     content = f'''from paraview.simple import *
 from pathlib import Path
 
-DisableFirstRenderCameraReset()
+# ParaView's trace helper changed name across releases.  It is optional for
+# this scene, so deliberately avoid calling it for 5.11/5.12 portability.
 base = Path(r"{out_dir}")
 
 def reader(name):
