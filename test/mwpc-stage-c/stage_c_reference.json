@@ -25,14 +25,15 @@
     "gas": "Ar/CO2 70:30",
     "wire_pitch_mm": 4.0,
     "wire_diameter_um": 30.0,
-    "gap_minus_mm": 2.0,
-    "gap_plus_mm": 4.0,
+    "gap_minus_mm": 2.5,
+    "gap_plus_mm": 2.5,
     "anode_voltage_V": 1800.0,
+    "anode_voltage_note": "Kept at the Stage-A/B continuity value for response-integration tests; the symmetric 2.5+2.5 mm two-sided design still needs an operating-voltage/gain choice."
     "strip_pitch_mm": 1.7,
     "strip_width_mm": 1.7
   },
   "notes": [
     "Working areas are approximate external layout-study benchmarks, not frozen detector envelopes.",
-    "The reference cell records the current Stage-A/B sandbox operating point; final detector parameters remain configurable elsewhere."
+    "Stage C uses the current preferred two-sided MuTr geometry baseline: symmetric 2.5+2.5 mm gap, 1.7 mm strips, tan(alpha)=0.1. Prototype-3 2+4 mm remains a regression case, not the Stage-C default."
   ]
 }
