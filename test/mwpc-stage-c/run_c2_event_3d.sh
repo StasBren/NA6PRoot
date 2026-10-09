@@ -129,7 +129,11 @@ echo "=== 3D scene ready ==="
 echo "VTK directory:"
 echo "  ${VTK_DIR}"
 echo
-echo "If ParaView is installed in WSL:"
+echo "Static scene:"
 echo "  paraview --script=\"${VTK_DIR}/open_scene.py\""
 echo
-echo "Or open ${VTK_DIR}/chamber.vtu manually in ParaView and add the *.vtk layers."
+echo "Animated scene:"
+echo "  paraview --script=\"${VTK_DIR}/open_animation.py\""
+echo
+echo "In the animated scene use the Play button in ParaView's Animation toolbar"
+echo "or press Space. The FEM mesh starts hidden and can be toggled in Pipeline Browser."
