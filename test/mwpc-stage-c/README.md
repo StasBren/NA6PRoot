@@ -535,3 +535,32 @@ The strip-template estimator deliberately uses no truth coordinates, avalanche
 birth positions, gain-weighted seed coordinates, or wire assignment.  It tests
 whether information discarded by the two-CoG compression is recoverable from
 the cathode strip pattern itself.
+
+
+## Regularized strip reconstruction v2
+
+The first full-strip nearest-template test is intentionally simple and can be
+noise-dominated because the strip fractions change only weakly with sub-wire
+position.  A second reconstruction study therefore compares four seed-grouped
+cross-validated estimators:
+
+```text
+nonlinear_cog_calibration
+pooled_strip_template
+cog_plus_full_strip_ridge
+cog_plus_strip_moment_ridge
+```
+
+The pooled template uses one regularized covariance matrix for strip-pattern
+residuals.  The ridge estimators use nested seed-grouped cross-validation to
+select the regularization strength.
+
+Run:
+
+```bash
+~/na6p/venvs/mwpc-viz/bin/python \
+  test/mwpc-stage-c/analyze_c2_strip_reco_v2.py \
+  --scan-dir test_runs/mwpc_stage_c/c2_u_cell_scan_dense
+```
+
+This is reconstruction-only and does not rerun Garfield or Elmer.
