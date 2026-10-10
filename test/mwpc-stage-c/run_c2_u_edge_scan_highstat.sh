@@ -272,6 +272,10 @@ for U0 in "${U_POINTS[@]}"; do
 done
 
 rebuild_combined
+
+python3 "${STAGE_DIR}/analyze_c2_edge_symmetry.py" \
+  --scan-dir "${OUT_DIR}"
+
 trap - INT TERM EXIT
 
 echo
