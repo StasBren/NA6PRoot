@@ -493,3 +493,45 @@ The range can be overridden without editing the script:
 C2_U_MIN_MM=-1.9 C2_U_MAX_MM=1.9 \
 bash test/mwpc-stage-c/run_c2_u_cell_scan_long.sh 50 140001 0.1
 ```
+
+
+## Full strip-pattern estimator
+
+The dense C2 scan already writes one strip-summary CSV per u0 point, so the
+existing microscopic sample can be reused to test reconstruction improvements
+without rerunning Garfield or Elmer.
+
+The comparison script uses the normalized two-cathode strip amplitudes
+
+```text
+a(side,k) = |Q(side,k)| / sum_j |Q(side,j)|
+```
+
+and compares a full strip-pattern template estimator against the current
+nonlinear calibration of the stereo CoG.
+
+Run it with:
+
+```bash
+~/na6p/venvs/mwpc-viz/bin/python \
+  test/mwpc-stage-c/analyze_c2_strip_patterns.py \
+  --scan-dir test_runs/mwpc_stage_c/c2_u_cell_scan_dense
+```
+
+The comparison is cross-validated by random seed.  Because the dense scan
+reuses the same seed block at every u0, all events from a held-out seed are kept
+out of the template used to reconstruct that seed.
+
+Outputs:
+
+```text
+c2_strip_estimator_predictions.csv
+c2_strip_estimator_metrics.csv
+c2_strip_estimator_by_u.csv
+c2_strip_templates.csv
+```
+
+The strip-template estimator deliberately uses no truth coordinates, avalanche
+birth positions, gain-weighted seed coordinates, or wire assignment.  It tests
+whether information discarded by the two-CoG compression is recoverable from
+the cathode strip pattern itself.
