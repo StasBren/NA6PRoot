@@ -17,9 +17,11 @@ set -euo pipefail
 #   bash test/mwpc-stage-c/run_c_wire_boundary_scan.sh [events] [base_seed]
 #
 # Environment overrides:
-#   C_WIRE_ABS_MIN_MM  default 1.5
-#   C_WIRE_ABS_MAX_MM  default 2.5
-#   C_WIRE_STEP_MM     default 0.1
+#   C_WIRE_ABS_MIN_MM    default 1.5
+#   C_WIRE_ABS_MAX_MM    default 2.5
+#   C_WIRE_STEP_MM       default 0.1
+#   C_WIRE_GAP_MINUS_MM  default 2.0
+#   C_WIRE_GAP_PLUS_MM   default 4.0
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 STAGE_DIR="${ROOT_DIR}/test/mwpc-stage-c"
@@ -31,8 +33,11 @@ BASE_SEED="${2:-160001}"
 ABS_MIN="${C_WIRE_ABS_MIN_MM:-1.5}"
 ABS_MAX="${C_WIRE_ABS_MAX_MM:-2.5}"
 STEP="${C_WIRE_STEP_MM:-0.1}"
+GAP_MINUS_MM="${C_WIRE_GAP_MINUS_MM:-2.0}"
+GAP_PLUS_MM="${C_WIRE_GAP_PLUS_MM:-4.0}"
+gap_tag="gm${GAP_MINUS_MM//./p}_gp${GAP_PLUS_MM//./p}"
 
-OUT_DIR="${ROOT_DIR}/test_runs/mwpc_stage_c/c_wire_boundary_scan"
+OUT_DIR="${ROOT_DIR}/test_runs/mwpc_stage_c/c_wire_boundary_scan_${gap_tag}"
 EVENT_ROOT="${OUT_DIR}/events"
 RUN_LOG="${OUT_DIR}/scan_progress.log"
 COMBINED_EVENT="${OUT_DIR}/c_wire_event_summary.csv"
@@ -73,6 +78,7 @@ echo "started           : $(date --iso-8601=seconds)"
 echo "points            : ${U_POINTS[*]}"
 echo "events / point    : ${EVENTS}"
 echo "base seed         : ${BASE_SEED}"
+echo "gap (-,+) [mm]    : ${GAP_MINUS_MM}, ${GAP_PLUS_MM}"
 echo "total events      : $(( EVENTS * ${#U_POINTS[@]} ))"
 echo "output            : ${OUT_DIR}"
 echo "================================================================"
@@ -170,8 +176,8 @@ for U0 in "${U_POINTS[@]}"; do
   cd "${D}"
 
   stdbuf -oL -eL "${BUILD_DIR}/mwpc_stage_c_wire_response" \
-    --gap-minus-mm 2.5 \
-    --gap-plus-mm 2.5 \
+    --gap-minus-mm "${GAP_MINUS_MM}" \
+    --gap-plus-mm "${GAP_PLUS_MM}" \
     --wire-pitch-mm 4.0 \
     --wire-diam-um 30.0 \
     --hv 1800 \
