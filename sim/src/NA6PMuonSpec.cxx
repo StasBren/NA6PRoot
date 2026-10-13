@@ -17,6 +17,7 @@
 #include <TTree.h>
 
 #include <cmath>
+#include <cstdlib>
 #include <stdexcept>
 #include <string>
 
@@ -279,6 +280,49 @@ bool NA6PMuonSpec::stepManager(int volID)
     LOGP(fatal, "Non-sensor volID={} was provided to stepManager of {}", volID, getName());
   }
   auto mc = TVirtualMC::GetMC();
+
+  // Optional diagnostic dump of non-zero GEANT energy-deposit steps in the
+  // sensitive gas.  This is deliberately separate from the normal hit object:
+  // a MuonSpec hit integrates Edep over the full gas crossing, while the
+  // response-map workflow needs the spatial distribution of deposits.
+  if (mStoreGasSteps) {
+    const double eDep = mc->Edep();
+    if (eDep > 0.) {
+      TLorentzVector pos;
+      TLorentzVector mom;
+      mc->TrackPosition(pos);
+      mc->TrackMomentum(mom);
+
+      double master[3] = {pos.X(), pos.Y(), pos.Z()};
+      double local[3] = {0., 0., 0.};
+      if (gGeoManager) {
+        gGeoManager->MasterToLocal(master, local);
+      }
+
+      auto* stackNow = static_cast<NA6PMCStack*>(mc->GetStack());
+      mGasStepTrackID = stackNow ? stackNow->GetCurrentTrackNumber() : -1;
+      mGasStepDetID = sensID;
+
+      // GEANT/VMC geometry uses cm and GeV.  For the installed +90 deg chamber
+      // rotation: gas-local x -> detector Y (= Garfield u), gas-local y ->
+      // -detector X (= -Garfield w), gas-local z -> detector Z (= Garfield v).
+      // Store u/v/w in mm so the file can be binned directly against the
+      // Stage-C Garfield response map.
+      mGasStepX = pos.X();
+      mGasStepY = pos.Y();
+      mGasStepZ = pos.Z();
+      mGasStepU = 10. * local[0];
+      mGasStepV = 10. * local[2];
+      mGasStepW = -10. * local[1];
+
+      mGasStepPx = mom.Px();
+      mGasStepPy = mom.Py();
+      mGasStepPz = mom.Pz();
+      mGasStepEdep = eDep;
+      mGasStepTree->Fill();
+    }
+  }
+
   bool startHit = false, stopHit = false;
   unsigned char status = 0;
   if (mc->IsTrackEntering()) {
@@ -353,6 +397,31 @@ void NA6PMuonSpec::createHitsOutput(const std::string& outDir)
   mHitsFile = TFile::Open(nm.c_str(), "recreate");
   mHitsTree = new TTree(fmt::format("hits{}", getName()).c_str(), fmt::format("{} Hits", getName()).c_str());
   mHitsTree->Branch(getName().c_str(), &hHitsPtr);
+
+  const char* stepEnv = std::getenv("NA6P_MWPC_STORE_GAS_STEPS");
+  mStoreGasSteps = stepEnv && std::string(stepEnv) != "0";
+  if (mStoreGasSteps) {
+    mGasStepEvent = 0;
+    mGasStepTree = new TTree("gasStepsMuonSpec",
+                             "Non-zero GEANT energy-deposit steps in MWPC gas");
+    mGasStepTree->Branch("event", &mGasStepEvent, "event/I");
+    mGasStepTree->Branch("trackID", &mGasStepTrackID, "trackID/I");
+    mGasStepTree->Branch("detID", &mGasStepDetID, "detID/I");
+    mGasStepTree->Branch("x_cm", &mGasStepX, "x_cm/D");
+    mGasStepTree->Branch("y_cm", &mGasStepY, "y_cm/D");
+    mGasStepTree->Branch("z_cm", &mGasStepZ, "z_cm/D");
+    mGasStepTree->Branch("u_mm", &mGasStepU, "u_mm/D");
+    mGasStepTree->Branch("v_mm", &mGasStepV, "v_mm/D");
+    mGasStepTree->Branch("w_mm", &mGasStepW, "w_mm/D");
+    mGasStepTree->Branch("px_GeV", &mGasStepPx, "px_GeV/D");
+    mGasStepTree->Branch("py_GeV", &mGasStepPy, "py_GeV/D");
+    mGasStepTree->Branch("pz_GeV", &mGasStepPz, "pz_GeV/D");
+    mGasStepTree->Branch("edep_GeV", &mGasStepEdep, "edep_GeV/D");
+    LOGP(info,
+         "MWPC gas-step diagnostics enabled: tree gasStepsMuonSpec in {}",
+         nm);
+  }
+
   LOGP(info, "Will store {} hits in {}", getName(), nm);
 }
 
@@ -361,6 +430,11 @@ void NA6PMuonSpec::closeHitsOutput()
   if (mHitsTree && mHitsFile) {
     mHitsFile->cd();
     mHitsTree->Write();
+    if (mGasStepTree) {
+      mGasStepTree->Write();
+      delete mGasStepTree;
+      mGasStepTree = nullptr;
+    }
     delete mHitsTree;
     mHitsTree = 0;
     mHitsFile->Close();
@@ -381,5 +455,10 @@ void NA6PMuonSpec::writeHits(const std::vector<int>& remapping)
   }
   if (mHitsTree) {
     mHitsTree->Fill();
+  }
+  // stepManager fills diagnostic rows during the event; advance the label only
+  // after the normal per-event hit tree has been written.
+  if (mStoreGasSteps) {
+    ++mGasStepEvent;
   }
 }
