@@ -35,6 +35,26 @@ class NA6PMuonSpec : public NA6PModule
   std::vector<NA6PMuonSpecHit> mHits, *hHitsPtr = &mHits;
   TFile* mHitsFile = nullptr;
   TTree* mHitsTree = nullptr;
+
+  // Optional diagnostic GEANT step dump in the sensitive MWPC gas.
+  // Enabled only when NA6P_MWPC_STORE_GAS_STEPS is set to a non-zero value.
+  // It stores non-zero per-step energy deposits, not microscopic ionisation
+  // clusters.  The latter can be sampled later from the deposited energy.
+  bool mStoreGasSteps = false;
+  TTree* mGasStepTree = nullptr;
+  int mGasStepEvent = 0;
+  int mGasStepTrackID = 0;
+  int mGasStepDetID = 0;
+  double mGasStepX = 0.;
+  double mGasStepY = 0.;
+  double mGasStepZ = 0.;
+  double mGasStepU = 0.;
+  double mGasStepV = 0.;
+  double mGasStepW = 0.;
+  double mGasStepPx = 0.;
+  double mGasStepPy = 0.;
+  double mGasStepPz = 0.;
+  double mGasStepEdep = 0.;
 };
 
 #endif
