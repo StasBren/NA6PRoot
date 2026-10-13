@@ -121,6 +121,21 @@ def summary_row(label, rows):
         "mean_drift_time_ns": mean(
             [f(r, "mean_drift_time_ns") for r in valid]
         ),
+        "mean_fraction_before_25ns": mean(
+            [f(r, "fraction_collected_before_25ns") for r in valid]
+        ),
+        "mean_fraction_before_50ns": mean(
+            [f(r, "fraction_collected_before_50ns") for r in valid]
+        ),
+        "mean_fraction_before_100ns": mean(
+            [f(r, "fraction_collected_before_100ns") for r in valid]
+        ),
+        "mean_fraction_before_150ns": mean(
+            [f(r, "fraction_collected_before_150ns") for r in valid]
+        ),
+        "mean_fraction_before_200ns": mean(
+            [f(r, "fraction_collected_before_200ns") for r in valid]
+        ),
         "q05_earliest_drift_time_ns": quantile(
             [f(r, "earliest_drift_time_ns") for r in valid], 0.05
         ),
@@ -162,6 +177,9 @@ def main():
         "wire_cog_bias_u0_mm", "wire_cog_rms_u0_mm",
         "wire_cog_bias_charge_truth_mm", "wire_cog_rms_charge_truth_mm",
         "mean_drift_time_ns",
+        "mean_fraction_before_25ns", "mean_fraction_before_50ns",
+        "mean_fraction_before_100ns", "mean_fraction_before_150ns",
+        "mean_fraction_before_200ns",
         "q05_earliest_drift_time_ns", "q50_earliest_drift_time_ns",
         "q95_earliest_drift_time_ns",
         "corr_u0_mean_cos_phi", "corr_u0_A_LR", "mean_abs_cos_phi",
@@ -199,6 +217,9 @@ def main():
         "binary_bias_u0_mm", "binary_rms_u0_mm",
         "wire_cog_bias_u0_mm", "wire_cog_rms_u0_mm",
         "mean_collection_fraction", "mean_drift_time_ns",
+        "mean_fraction_before_25ns", "mean_fraction_before_50ns",
+        "mean_fraction_before_100ns", "mean_fraction_before_150ns",
+        "mean_fraction_before_200ns",
     ]
     ubin_rows = []
     for ib, grows in sorted(u_groups.items()):
@@ -239,6 +260,21 @@ def main():
             ),
             "mean_drift_time_ns": mean(
                 [f(r, "mean_drift_time_ns") for r in valid]
+            ),
+            "mean_fraction_before_25ns": mean(
+                [f(r, "fraction_collected_before_25ns") for r in valid]
+            ),
+            "mean_fraction_before_50ns": mean(
+                [f(r, "fraction_collected_before_50ns") for r in valid]
+            ),
+            "mean_fraction_before_100ns": mean(
+                [f(r, "fraction_collected_before_100ns") for r in valid]
+            ),
+            "mean_fraction_before_150ns": mean(
+                [f(r, "fraction_collected_before_150ns") for r in valid]
+            ),
+            "mean_fraction_before_200ns": mean(
+                [f(r, "fraction_collected_before_200ns") for r in valid]
             ),
         })
 
