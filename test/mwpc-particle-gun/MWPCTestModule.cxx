@@ -6,7 +6,9 @@
 #include "NA6PMWPCChamber.h"
 
 #include <TVirtualMC.h>
+#include <TGeoManager.h>
 #include <TGeoVolume.h>
+#include <TLorentzVector.h>
 
 #include <fstream>
 #include <stdexcept>
@@ -66,7 +68,42 @@ bool MWPCTestModule::stepManager(int volID)
   }
 
   ++mStats.gasSteps;
-  mStats.energyDepositGeV += mc->Edep();
+  const double eDep = mc->Edep();
+  mStats.energyDepositGeV += eDep;
+
+  if (eDep > 0.) {
+    TLorentzVector pos;
+    TLorentzVector mom;
+    mc->TrackPosition(pos);
+    mc->TrackMomentum(mom);
+
+    double master[3] = {pos.X(), pos.Y(), pos.Z()};
+    double local[3] = {0., 0., 0.};
+    if (gGeoManager) {
+      gGeoManager->MasterToLocal(master, local);
+    }
+
+    auto* stackNow = static_cast<NA6PMCStack*>(mc->GetStack());
+    GasStepRecord rec;
+    rec.trackID = stackNow ? stackNow->GetCurrentTrackNumber() : -1;
+    rec.xCm = pos.X();
+    rec.yCm = pos.Y();
+    rec.zCm = pos.Z();
+
+    // Isolated-chamber local axes before installation rotation:
+    //   local x = across wires (Garfield u)
+    //   local z = chamber normal (Garfield v)
+    //   local y = along wires (Garfield w)
+    rec.uMm = 10. * local[0];
+    rec.vMm = 10. * local[2];
+    rec.wMm = 10. * local[1];
+
+    rec.pxGeV = mom.Px();
+    rec.pyGeV = mom.Py();
+    rec.pzGeV = mom.Pz();
+    rec.eDepGeV = eDep;
+    mGasSteps.push_back(rec);
+  }
   if (mc->IsTrackEntering()) {
     ++mStats.gasEntries;
   }
