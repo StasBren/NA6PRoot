@@ -11,9 +11,10 @@ This is intentionally a first-order model:
   * cluster electron multiplicity can be fixed, approximated with a shifted
     Poisson, or sampled directly from an empirical Heed cluster library.
 
-The default cluster density is 21.77 / 6 mm = 3.62833 / mm, from the completed
-Stage-A Heed study of the 2+4 mm reference gap.  If --heed-tracks-csv is given,
-the script derives lambda_cl directly from that library instead.
+The preferred cluster density is derived from a Heed library.  Note that
+phaseA_heed_statistics starts 0.1 mm inside the +v cathode, so a nominal
+2+4 mm chamber samples 5.9 mm of track.  The derived density is then applied
+to the full physical path length in the 6-mm chamber.
 
 The preferred multiplicity mode for the PI study is heed-empirical, using the
 actual Heed 'electrons' distribution from --heed-clusters-csv.
@@ -93,8 +94,12 @@ def main():
     ap.add_argument(
         "--heed-reference-length-mm",
         type=float,
-        default=6.0,
-        help="Reference Heed track length for --heed-tracks-csv.",
+        default=5.9,
+        help=(
+            "Effective path length sampled by phaseA_heed_statistics. "
+            "For the 2+4 mm library the track starts 0.1 mm inside the +v "
+            "cathode, so the Heed sample spans 5.9 mm."
+        ),
     )
     ap.add_argument(
         "--wire-phase-from-y",
