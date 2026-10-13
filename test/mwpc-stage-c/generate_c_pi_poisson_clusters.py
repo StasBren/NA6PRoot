@@ -5,19 +5,18 @@ track crossings.
 
 This is intentionally a first-order model:
   * number of clusters is Poisson(lambda_cl * track_length);
-  * clusters are uniform in path length through the 5-mm gas gap;
+  * clusters are uniform in path length through the asymmetric 2+4 mm gas gap;
   * the wire-cell phase u0 at v=0 is sampled uniformly within one 4-mm pitch,
     unless --wire-phase-from-y is explicitly requested;
-  * cluster electron multiplicity can be fixed to one or sampled with a shifted
-    Poisson model.
+  * cluster electron multiplicity can be fixed, approximated with a shifted
+    Poisson, or sampled directly from an empirical Heed cluster library.
 
-Default lambda_cl = 3.4752 / mm comes from the current Stage-C Heed baseline:
-  <N_clusters> = 17.376 over a 5-mm normal-incidence crossing (1000-event
-  high-stat edge sample).
+The default cluster density is 21.77 / 6 mm = 3.62833 / mm, from the completed
+Stage-A Heed study of the 2+4 mm reference gap.  If --heed-tracks-csv is given,
+the script derives lambda_cl directly from that library instead.
 
-The default shifted-Poisson multiplicity mean 2.3704 comes from the same
-baseline:
-  <N_primary_electrons>/<N_clusters> = 41.188/17.376.
+The preferred multiplicity mode for the PI study is heed-empirical, using the
+actual Heed 'electrons' distribution from --heed-clusters-csv.
 
 This file does NOT use the Garfield response map yet.  It prepares the cluster
 population that will later be folded with P(wire|u,v), drift time and arrival
@@ -53,24 +52,49 @@ def main():
     ap.add_argument("--tracks", required=True, type=Path)
     ap.add_argument("--output", required=True, type=Path)
     ap.add_argument("--seed", type=int, default=180101)
-    ap.add_argument("--gap-minus-mm", type=float, default=2.5)
-    ap.add_argument("--gap-plus-mm", type=float, default=2.5)
+    ap.add_argument("--gap-minus-mm", type=float, default=2.0)
+    ap.add_argument("--gap-plus-mm", type=float, default=4.0)
     ap.add_argument("--wire-pitch-mm", type=float, default=4.0)
     ap.add_argument(
         "--lambda-clusters-per-mm",
         type=float,
-        default=3.4752,
-        help="Poisson primary-cluster density along track length",
+        default=21.77 / 6.0,
+        help=(
+            "Poisson primary-cluster density along track length. "
+            "Ignored when --heed-tracks-csv is supplied."
+        ),
     )
     ap.add_argument(
         "--cluster-electron-model",
-        choices=("one", "shifted-poisson"),
-        default="shifted-poisson",
+        choices=("one", "shifted-poisson", "heed-empirical"),
+        default="heed-empirical",
     )
     ap.add_argument(
         "--mean-electrons-per-cluster",
         type=float,
         default=2.3704,
+    )
+    ap.add_argument(
+        "--heed-tracks-csv",
+        type=Path,
+        help=(
+            "Optional phaseA_heed_statistics *_tracks.csv. "
+            "Mean clusters/reference length defines lambda_cl."
+        ),
+    )
+    ap.add_argument(
+        "--heed-clusters-csv",
+        type=Path,
+        help=(
+            "Optional phaseA_heed_statistics *_clusters.csv used by "
+            "--cluster-electron-model heed-empirical."
+        ),
+    )
+    ap.add_argument(
+        "--heed-reference-length-mm",
+        type=float,
+        default=6.0,
+        help="Reference Heed track length for --heed-tracks-csv.",
     )
     ap.add_argument(
         "--wire-phase-from-y",
@@ -98,6 +122,43 @@ def main():
         raise SystemExit("Invalid geometry/cluster parameters.")
 
     rng = np.random.default_rng(args.seed)
+
+    lambda_clusters_per_mm = args.lambda_clusters_per_mm
+    if args.heed_tracks_csv:
+        with args.heed_tracks_csv.open(newline="", encoding="utf-8") as f:
+            heed_tracks = list(csv.DictReader(f))
+        if not heed_tracks or "clusters" not in heed_tracks[0]:
+            raise SystemExit("Invalid Heed tracks CSV: expected 'clusters' column.")
+        if args.heed_reference_length_mm <= 0:
+            raise SystemExit("--heed-reference-length-mm must be positive.")
+        mean_heed_clusters = float(
+            np.mean([float(r["clusters"]) for r in heed_tracks])
+        )
+        lambda_clusters_per_mm = (
+            mean_heed_clusters / args.heed_reference_length_mm
+        )
+
+    empirical_cluster_sizes = None
+    if args.cluster_electron_model == "heed-empirical":
+        if not args.heed_clusters_csv:
+            raise SystemExit(
+                "heed-empirical mode requires --heed-clusters-csv."
+            )
+        with args.heed_clusters_csv.open(newline="", encoding="utf-8") as f:
+            heed_clusters = list(csv.DictReader(f))
+        if not heed_clusters or "electrons" not in heed_clusters[0]:
+            raise SystemExit(
+                "Invalid Heed clusters CSV: expected 'electrons' column."
+            )
+        empirical_cluster_sizes = np.asarray(
+            [int(float(r["electrons"])) for r in heed_clusters],
+            dtype=int,
+        )
+        empirical_cluster_sizes = empirical_cluster_sizes[
+            empirical_cluster_sizes >= 1
+        ]
+        if len(empirical_cluster_sizes) == 0:
+            raise SystemExit("No positive cluster sizes in Heed library.")
 
     with args.tracks.open(newline="", encoding="utf-8") as f:
         tracks = list(csv.DictReader(f))
@@ -133,7 +194,7 @@ def main():
             norm = math.sqrt(1.0 + tu * tu + tw * tw)
             gap = args.gap_minus_mm + args.gap_plus_mm
             length_mm = gap * norm
-            mean_clusters = args.lambda_clusters_per_mm * length_mm
+            mean_clusters = lambda_clusters_per_mm * length_mm
             ncl = int(rng.poisson(mean_clusters))
             if ncl == 0:
                 n_zero_cluster_tracks += 1
@@ -165,10 +226,12 @@ def main():
             for ic, v_mm in enumerate(v_values):
                 if args.cluster_electron_model == "one":
                     ne = 1
-                else:
+                elif args.cluster_electron_model == "shifted-poisson":
                     # At least one primary electron belongs to each cluster.
                     extra_mean = args.mean_electrons_per_cluster - 1.0
                     ne = 1 + int(rng.poisson(extra_mean))
+                else:
+                    ne = int(rng.choice(empirical_cluster_sizes))
 
                 u_unfolded = u0_cell + v_mm * tu
                 wire_offset, u_cell = fold_cell(
@@ -205,6 +268,14 @@ def main():
 
     print("PI Poisson cluster generator")
     print(f"  tracks read                 : {len(tracks)}")
+    print(
+        f"  cluster density [/mm]       : "
+        f"{lambda_clusters_per_mm:.6f}"
+    )
+    print(
+        f"  electron multiplicity model : "
+        f"{args.cluster_electron_model}"
+    )
     print(f"  tracks with zero clusters   : {n_zero_cluster_tracks}")
     print(f"  clusters written            : {n_clusters_total}")
     print(f"  primary electrons (model)   : {n_e_total}")
