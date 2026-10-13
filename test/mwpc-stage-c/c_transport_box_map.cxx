@@ -79,7 +79,7 @@ LastStep gLastStep;
 void RecordStep(const double x, const double y, const double z,
                 const double t, const double e,
                 const double dx, const double dy, const double dz,
-                const bool hole) {
+                const bool hole, const int /*band*/) {
   if (hole) return;
   gLastStep.valid = true;
   gLastStep.u = x;
