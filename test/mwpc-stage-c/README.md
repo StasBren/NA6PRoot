@@ -623,3 +623,76 @@ The point summary contains dominant-wire probabilities, multi-wire fractions,
 binary-wire and charge-weighted-wire residuals.  The transition summary
 estimates the 16%, 50%, and 84% neighbour-wire transition positions and the
 16--84% transition width separately at the positive and negative boundaries.
+
+
+## Electron transport box map
+
+To separate the gas-transport problem from the later GEANT ionisation pattern
+and cathode readout, Stage C now has a reusable single-electron response map.
+
+The executable
+
+```text
+mwpc_stage_c_transport_box_map
+```
+
+divides one 4-mm wire cell and the full 5-mm gas gap into `(u,v)` boxes.
+From every box it launches many electrons with
+`AvalancheMicroscopic::DriftElectron` and stores
+
+```text
+starting box
+  -> destination wire
+  -> drift time
+  -> hit position around the wire
+  -> last microscopic direction
+  -> incidence angle with respect to the inward wire normal
+```
+
+The default grid is
+
+```text
+u = [-2,+2] mm
+v = [-2.5,+2.5] mm
+du = dv = 0.2 mm
+20 x 25 = 500 boxes
+```
+
+and the default run uses 50 electrons per box.
+
+Run:
+
+```bash
+bash test/mwpc-stage-c/run_c_transport_box_map.sh 50 170001
+```
+
+The shell scan is resumable by complete u-column. It uses the current
+5-mm, 4-mm-pitch, 30-um-wire, 1800-V, Ar/CO2 70:30 baseline and starts at
+B=0.
+
+Outputs:
+
+```text
+test_runs/mwpc_stage_c/c_transport_box_map/
+  c_transport_box_electrons.csv
+  c_transport_box_summary.csv
+  scan_progress.log
+  columns/
+```
+
+The raw electron file contains the endpoint wire, drift time,
+`phi_hit`, `cos(phi_hit)`, the last microscopic direction, and the
+incidence angle.  The box summary contains
+
+```text
+P(wire=-1), P(wire=0), P(wire=+1)
+mean/std/median drift time
+A_LR = (N(+u hit side)-N(-u hit side))/(N(+u)+N(-u))
+<cos(phi_hit)>, <sin(phi_hit)>
+mean/std incidence angle
+```
+
+This map is intentionally independent of a particular muon track.  A later
+digitisation step will weight the boxes with the GEANT cluster / energy-deposit
+distribution.  The exact GEANT adapter should be connected to the actual
+NA6PRoot cluster or step output rather than inventing a surrogate format.
