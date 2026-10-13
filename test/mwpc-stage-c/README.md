@@ -696,3 +696,57 @@ This map is intentionally independent of a particular muon track.  A later
 digitisation step will weight the boxes with the GEANT cluster / energy-deposit
 distribution.  The exact GEANT adapter should be connected to the actual
 NA6PRoot cluster or step output rather than inventing a surrogate format.
+
+
+## PI track + Poisson-cluster workflow
+
+The large historical MNP33 bore scans can be reused for realistic muon
+crossing kinematics without rerunning the absorber/magnet transport. Their
+`bore_muon_crossings.csv` files contain station position and momentum.
+
+Stage-C coordinate mapping:
+
+```text
+global X -> local w (along wires)
+global Y -> local u (across wires)
+global Z -> local v (chamber normal)
+
+theta_w = atan(px/pz) = theta_x
+theta_u = atan(py/pz) = theta_y
+```
+
+Prepare compact per-channel/per-station track samples and summaries:
+
+```bash
+python3 test/mwpc-stage-c/prepare_c_pi_tracks.py \
+  --base <mnp33-bore-run-dir> \
+  --output-dir test_runs/mwpc_stage_c/c_pi_tracks \
+  --sample-per-channel-station 2000
+```
+
+The old global `y_cm` is **not** automatically folded into a 4-mm wire
+cell, because the exact per-chamber wire-origin phase is not frozen in those
+historical crossing files.
+
+A first-order ionisation model can then generate clusters along each realistic
+track:
+
+```bash
+python3 test/mwpc-stage-c/generate_c_pi_poisson_clusters.py \
+  --tracks test_runs/mwpc_stage_c/c_pi_tracks/c_pi_track_sample.csv \
+  --output test_runs/mwpc_stage_c/c_pi_tracks/c_pi_poisson_clusters.csv
+```
+
+Default cluster density is `3.4752/mm`, estimated from the current Stage-C
+Heed baseline (`<Nclusters>=17.376` in a 5-mm normal-incidence crossing).
+The default optional cluster-size approximation is a shifted Poisson with mean
+`2.3704` primary electrons/cluster, matching
+`<Nprimary>/<Nclusters> = 41.188/17.376` in the same sample.
+
+By default the wire phase at `v=0` is sampled uniformly in one pitch. This is
+appropriate for a broad acceptance sample until the exact old-run chamber/wire
+phase is tied to the current geometry. The generated cluster coordinates are
+folded back into one wire cell and store the integer wire offset separately.
+
+The next stage folds these synthetic clusters with the Garfield transport map:
+`P(wire|u,v)`, drift time, and conditional wire-arrival angle.
