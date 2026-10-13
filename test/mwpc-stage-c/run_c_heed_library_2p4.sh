@@ -13,6 +13,12 @@ set -euo pipefail
 # This is Heed-only: no drift, avalanche, weighting field or electronics.
 # It is therefore cheap compared with Stage-C microscopic transport.
 #
+# phaseA_heed_statistics starts the muon 0.1 mm inside the +v cathode to avoid
+# the exact boundary.  The sampled Heed path is therefore 5.9 mm, even though
+# the physical chamber gap is 6.0 mm.  The analysis uses 5.9 mm when extracting
+# the cluster density and then the PI generator extrapolates that density over
+# the full physical path.
+#
 # Usage:
 #   bash test/mwpc-stage-c/run_c_heed_library_2p4.sh [tracks] [momentum_GeV]
 #
@@ -51,7 +57,7 @@ PREFIX="${OUT_DIR}/heed_2p4"
 python3 "${ROOT_DIR}/test/mwpc-stage-c/analyze_c_heed_library.py" \
   --tracks "${PREFIX}_tracks.csv" \
   --clusters "${PREFIX}_clusters.csv" \
-  --reference-length-mm 6 \
+  --reference-length-mm 5.9 \
   --output "${OUT_DIR}/heed_2p4_summary.txt"
 
 echo
