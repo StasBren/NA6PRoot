@@ -24,3 +24,8 @@ target_compile_features(mwpc_stage_c2_event_3d_dump PRIVATE cxx_std_17)
 add_executable(mwpc_stage_c_wire_response c_wire_coordinate_response.cxx)
 target_link_libraries(mwpc_stage_c_wire_response PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_stage_c_wire_response PRIVATE cxx_std_17)
+
+
+add_executable(mwpc_stage_c_transport_box_map c_transport_box_map.cxx)
+target_link_libraries(mwpc_stage_c_transport_box_map PRIVATE Garfield::Garfield)
+target_compile_features(mwpc_stage_c_transport_box_map PRIVATE cxx_std_17)
