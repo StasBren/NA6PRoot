@@ -20,6 +20,7 @@ set -euo pipefail
 #   C_PI_MAX_TRACKS=0        0 means all tracks in c_pi_track_sample.csv
 #   C_PI_CLUSTER_SEED=180101
 #   C_PI_TRANSPORT_SEED=181001
+#   C_PI_REGENERATE_CLUSTERS=0  set 1 to force regeneration
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 STAGE_DIR="${ROOT_DIR}/test/mwpc-stage-c"
@@ -42,6 +43,7 @@ UBINS="${OUT_DIR}/c_pi_fast_u_bins.csv"
 MAX_TRACKS="${C_PI_MAX_TRACKS:-0}"
 CLUSTER_SEED="${C_PI_CLUSTER_SEED:-180101}"
 TRANSPORT_SEED="${C_PI_TRANSPORT_SEED:-181001}"
+REGENERATE_CLUSTERS="${C_PI_REGENERATE_CLUSTERS:-0}"
 
 mkdir -p "${OUT_DIR}"
 
@@ -71,18 +73,22 @@ print(f"Transport map check: {len(boxes)} boxes, {n} electron trials")
 PY
 
 echo
-echo "=== 1/3 Generate PI clusters from realistic tracks + Heed library ==="
-python3 "${STAGE_DIR}/generate_c_pi_poisson_clusters.py" \
-  --tracks "${TRACKS}" \
-  --output "${CLUSTERS}" \
-  --gap-minus-mm 2 \
-  --gap-plus-mm 4 \
-  --heed-tracks-csv "${HEED_TRACKS}" \
-  --heed-clusters-csv "${HEED_CLUSTERS}" \
-  --heed-reference-length-mm 5.9 \
-  --cluster-electron-model heed-empirical \
-  --max-tracks "${MAX_TRACKS}" \
-  --seed "${CLUSTER_SEED}"
+echo "=== 1/3 Prepare PI clusters from realistic tracks + Heed library ==="
+if [[ -f "${CLUSTERS}" && "${REGENERATE_CLUSTERS}" != "1" ]]; then
+  echo "Reusing existing cluster sample: ${CLUSTERS}"
+else
+  python3 "${STAGE_DIR}/generate_c_pi_poisson_clusters.py" \
+    --tracks "${TRACKS}" \
+    --output "${CLUSTERS}" \
+    --gap-minus-mm 2 \
+    --gap-plus-mm 4 \
+    --heed-tracks-csv "${HEED_TRACKS}" \
+    --heed-clusters-csv "${HEED_CLUSTERS}" \
+    --heed-reference-length-mm 5.9 \
+    --cluster-electron-model heed-empirical \
+    --max-tracks "${MAX_TRACKS}" \
+    --seed "${CLUSTER_SEED}"
+fi
 
 echo
 echo "=== 2/3 Fold clusters through Garfield box responses ==="
