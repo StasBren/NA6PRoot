@@ -112,9 +112,9 @@ int main(int argc, char** argv) {
   // ------------------------------------------------------------------
 
   const double gapMinusMm =
-      ReadArg(argc, argv, "--gap-minus-mm", 2.5);
+      ReadArg(argc, argv, "--gap-minus-mm", 2.0);
   const double gapPlusMm =
-      ReadArg(argc, argv, "--gap-plus-mm", 2.5);
+      ReadArg(argc, argv, "--gap-plus-mm", 4.0);
   const double wirePitchMm =
       ReadArg(argc, argv, "--wire-pitch-mm", 4.0);
   const double wireDiameterUm =
@@ -377,7 +377,7 @@ int main(int argc, char** argv) {
             const double radialV = v1;
             const double rho = std::hypot(radialU, radialV);
 
-            if (rho < 1.5 * wireRadiusCm) {
+            if (rho < 1.5 * wireRadiusCm && status != -7) {
               collected = true;
               wireUMm = 10. * wireUCm;
               phiHitDeg =
@@ -394,7 +394,9 @@ int main(int argc, char** argv) {
 
               if (gLastStep.valid && rho > 0.) {
                 const double dNorm =
-                    std::hypot(gLastStep.du, gLastStep.dv);
+                    std::sqrt(gLastStep.du * gLastStep.du +
+                              gLastStep.dv * gLastStep.dv +
+                              gLastStep.dw * gLastStep.dw);
                 if (dNorm > 0.) {
                   const double inwardU = -radialU / rho;
                   const double inwardV = -radialV / rho;
