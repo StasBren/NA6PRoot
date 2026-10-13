@@ -205,6 +205,11 @@ def main():
         "binary_residual_u0_mm", "binary_residual_charge_truth_mm",
         "wire_cog_residual_u0_mm", "wire_cog_residual_charge_truth_mm",
         "mean_drift_time_ns", "earliest_drift_time_ns",
+        "fraction_collected_before_25ns",
+        "fraction_collected_before_50ns",
+        "fraction_collected_before_100ns",
+        "fraction_collected_before_150ns",
+        "fraction_collected_before_200ns",
         "dominant_wire_A_LR", "dominant_wire_mean_cos_phi",
         "dominant_wire_mean_incidence_deg",
         "out_of_map_electrons",
@@ -215,6 +220,9 @@ def main():
         "collected_electrons", "collected_fraction",
         "A_LR", "mean_cos_phi", "mean_incidence_deg",
         "mean_drift_time_ns",
+        "fraction_before_25ns", "fraction_before_50ns",
+        "fraction_before_100ns", "fraction_before_150ns",
+        "fraction_before_200ns",
     ]
 
     total_tracks = 0
@@ -269,11 +277,13 @@ def main():
                         "n_inc": 0,
                         "sum_dt": 0.0,
                         "n_dt": 0,
+                        "before": {25: 0, 50: 0, 100: 0, 150: 0, 200: 0},
                     }
                 ),
                 "sum_dt": 0.0,
                 "n_dt": 0,
                 "earliest_dt": math.inf,
+                "before": {25: 0, 50: 0, 100: 0, 150: 0, 200: 0},
             }
 
         def flush(s):
@@ -375,6 +385,21 @@ def main():
                         if math.isfinite(s["earliest_dt"])
                         else math.nan
                     ),
+                    "fraction_collected_before_25ns": (
+                        s["before"][25] / collected if collected else math.nan
+                    ),
+                    "fraction_collected_before_50ns": (
+                        s["before"][50] / collected if collected else math.nan
+                    ),
+                    "fraction_collected_before_100ns": (
+                        s["before"][100] / collected if collected else math.nan
+                    ),
+                    "fraction_collected_before_150ns": (
+                        s["before"][150] / collected if collected else math.nan
+                    ),
+                    "fraction_collected_before_200ns": (
+                        s["before"][200] / collected if collected else math.nan
+                    ),
                     "dominant_wire_A_LR": dominant_a,
                     "dominant_wire_mean_cos_phi": dominant_cos,
                     "dominant_wire_mean_incidence_deg": dominant_inc,
@@ -407,6 +432,21 @@ def main():
                         ),
                         "mean_drift_time_ns": finite_mean(
                             wd["sum_dt"], wd["n_dt"]
+                        ),
+                        "fraction_before_25ns": (
+                            wd["before"][25] / wd["n"] if wd["n"] else math.nan
+                        ),
+                        "fraction_before_50ns": (
+                            wd["before"][50] / wd["n"] if wd["n"] else math.nan
+                        ),
+                        "fraction_before_100ns": (
+                            wd["before"][100] / wd["n"] if wd["n"] else math.nan
+                        ),
+                        "fraction_before_150ns": (
+                            wd["before"][150] / wd["n"] if wd["n"] else math.nan
+                        ),
+                        "fraction_before_200ns": (
+                            wd["before"][200] / wd["n"] if wd["n"] else math.nan
                         ),
                     }
                 )
@@ -483,6 +523,10 @@ def main():
                     state["sum_dt"] += dt
                     state["n_dt"] += 1
                     state["earliest_dt"] = min(state["earliest_dt"], dt)
+                    for threshold in state["before"]:
+                        if dt <= threshold:
+                            state["before"][threshold] += 1
+                            wd["before"][threshold] += 1
 
         flush(state)
 
