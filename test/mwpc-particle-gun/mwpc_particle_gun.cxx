@@ -50,9 +50,13 @@ class MWPCParticleGunApplication final : public NA6PMC
   explicit MWPCParticleGunApplication(MWPCTestModule& module)
     : NA6PMC("NA6PMWPCParticleGun", "Isolated detailed MWPC particle-gun test"),
       mModule(module),
-      mEvents("events.csv")
+      mEvents("events.csv"),
+      mGasSteps("gas_steps.csv")
   {
     mEvents << "event,gas_steps,gas_entries,gas_exits,primary_steps,primary_entries,energy_deposit_keV\n";
+    mGasSteps
+      << "event,track_id,x_cm,y_cm,z_cm,u_mm,v_mm,w_mm,"
+      << "px_GeV,py_GeV,pz_GeV,edep_GeV,edep_eV\n";
   }
 
   void ConstructGeometry() override
@@ -111,6 +115,17 @@ class MWPCParticleGunApplication final : public NA6PMC
             << std::setprecision(10) << s.energyDepositGeV * 1.e6 << '\n';
     mEvents.flush();
 
+    for (const auto& step : mModule.gasSteps()) {
+      mGasSteps
+          << mEventCount << ","
+          << step.trackID << ","
+          << step.xCm << "," << step.yCm << "," << step.zCm << ","
+          << step.uMm << "," << step.vMm << "," << step.wMm << ","
+          << step.pxGeV << "," << step.pyGeV << "," << step.pzGeV << ","
+          << step.eDepGeV << "," << step.eDepGeV * 1.e9 << "\n";
+    }
+    mGasSteps.flush();
+
     ++mEventCount;
     if (s.primarySteps > 0) {
       ++mEventsWithPrimaryGasSteps;
@@ -133,6 +148,7 @@ class MWPCParticleGunApplication final : public NA6PMC
  private:
   MWPCTestModule& mModule;
   std::ofstream mEvents;
+  std::ofstream mGasSteps;
   int mEventCount = 0;
   int mEventsWithPrimaryGasSteps = 0;
   int mEventsWithPrimaryEntry = 0;
