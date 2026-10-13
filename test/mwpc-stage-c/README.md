@@ -564,3 +564,62 @@ Run:
 ```
 
 This is reconstruction-only and does not rerun Garfield or Elmer.
+
+
+## Wire-only Stage-C response
+
+For the current detector-development step, the cathode-strip reconstruction can
+be factored out and the coordinate associated with the anode-wire plane can be
+studied directly.
+
+The dedicated executable
+
+```text
+mwpc_stage_c_wire_response
+```
+
+keeps
+
+```text
+muon -> Heed clusters -> primary electrons -> microscopic avalanche
+     -> collected avalanche electrons on the anode wires
+```
+
+but intentionally omits Elmer weighting maps, cathode-strip induction, ion
+transport, electronics, thresholds and shaping.
+
+For every event it records the active wires, the dominant wire, its collected
+charge fraction, and the charge-weighted wire coordinate.  The binary estimator
+is simply the coordinate of the dominant wire.
+
+A focused scan maps the transition between neighbouring 4-mm wire cells:
+
+```bash
+bash test/mwpc-stage-c/run_c_wire_boundary_scan.sh 100 160001
+```
+
+The default points are
+
+```text
+u0 = +/- (1.5, 1.6, ..., 2.5) mm
+```
+
+so the geometric boundaries at `u = +/-2 mm` are crossed explicitly.  The run
+is resumable point-by-point and is much lighter than the full C2 cathode scan
+because no FEM weighting or ion signal is evaluated.
+
+Outputs:
+
+```text
+test_runs/mwpc_stage_c/c_wire_boundary_scan/
+  c_wire_event_summary.csv
+  c_wire_wire_summary.csv
+  c_wire_point_summary.csv
+  c_wire_transition_summary.csv
+  scan_progress.log
+```
+
+The point summary contains dominant-wire probabilities, multi-wire fractions,
+binary-wire and charge-weighted-wire residuals.  The transition summary
+estimates the 16%, 50%, and 84% neighbour-wire transition positions and the
+16--84% transition width separately at the positive and negative boundaries.
