@@ -92,6 +92,12 @@ def main():
         "mean_sin_phi_hit", "std_sin_phi_hit",
         "mean_phi_hit_deg", "std_phi_hit_deg",
         "mean_incidence_normal_deg", "std_incidence_normal_deg",
+        "A_LR_wire_minus1", "A_LR_wire_0", "A_LR_wire_plus1",
+        "mean_cos_phi_wire_minus1", "mean_cos_phi_wire_0",
+        "mean_cos_phi_wire_plus1",
+        "mean_incidence_wire_minus1_deg",
+        "mean_incidence_wire_0_deg",
+        "mean_incidence_wire_plus1_deg",
     ]
 
     out_rows = []
@@ -133,6 +139,18 @@ def main():
         phi = [ff(r, "phi_hit_deg") for r in collected]
         inc = [ff(r, "incidence_normal_deg") for r in collected]
 
+        conditional = {}
+        for wire in (-1, 0, +1):
+            wr = [r for r in collected if ii(r, "wire_index") == wire]
+            wsides = [ii(r, "hit_side_u") for r in wr]
+            wp = sum(s > 0 for s in wsides)
+            wm = sum(s < 0 for s in wsides)
+            conditional[wire] = {
+                "A": (wp - wm) / (wp + wm) if (wp + wm) else math.nan,
+                "cos": mean([ff(r, "cos_phi_hit") for r in wr]),
+                "inc": mean([ff(r, "incidence_normal_deg") for r in wr]),
+            }
+
         first = grows[0]
         out_rows.append({
             "iu": iu,
@@ -161,6 +179,15 @@ def main():
             "std_phi_hit_deg": stdev(phi),
             "mean_incidence_normal_deg": mean(inc),
             "std_incidence_normal_deg": stdev(inc),
+            "A_LR_wire_minus1": conditional[-1]["A"],
+            "A_LR_wire_0": conditional[0]["A"],
+            "A_LR_wire_plus1": conditional[+1]["A"],
+            "mean_cos_phi_wire_minus1": conditional[-1]["cos"],
+            "mean_cos_phi_wire_0": conditional[0]["cos"],
+            "mean_cos_phi_wire_plus1": conditional[+1]["cos"],
+            "mean_incidence_wire_minus1_deg": conditional[-1]["inc"],
+            "mean_incidence_wire_0_deg": conditional[0]["inc"],
+            "mean_incidence_wire_plus1_deg": conditional[+1]["inc"],
         })
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
