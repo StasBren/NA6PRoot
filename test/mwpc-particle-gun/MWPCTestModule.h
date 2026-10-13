@@ -25,6 +25,20 @@ class MWPCTestModule final : public NA6PModule
     double energyDepositGeV = 0.;
   };
 
+  struct GasStepRecord {
+    int trackID = -1;
+    double xCm = 0.;
+    double yCm = 0.;
+    double zCm = 0.;
+    double uMm = 0.;
+    double vMm = 0.;
+    double wMm = 0.;
+    double pxGeV = 0.;
+    double pyGeV = 0.;
+    double pzGeV = 0.;
+    double eDepGeV = 0.;
+  };
+
   explicit MWPCTestModule(int activeID);
   ~MWPCTestModule() override = default;
 
@@ -33,7 +47,11 @@ class MWPCTestModule final : public NA6PModule
   bool stepManager(int volID) override;
 
   size_t getNHits() const override { return static_cast<size_t>(mStats.gasEntries); }
-  void clearHits() override { mStats = {}; }
+  void clearHits() override
+  {
+    mStats = {};
+    mGasSteps.clear();
+  }
 
   // The test writes its own compact CSV, so no detector hit tree is needed here.
   void createHitsOutput(const std::string&) override {}
@@ -41,9 +59,11 @@ class MWPCTestModule final : public NA6PModule
   void writeHits(const std::vector<int>&) override {}
 
   const EventStats& stats() const { return mStats; }
+  const std::vector<GasStepRecord>& gasSteps() const { return mGasSteps; }
 
  private:
   EventStats mStats{};
+  std::vector<GasStepRecord> mGasSteps;
 };
 
 #endif
