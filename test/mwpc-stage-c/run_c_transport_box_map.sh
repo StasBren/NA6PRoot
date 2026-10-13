@@ -5,9 +5,9 @@ set -euo pipefail
 #
 # Default baseline:
 #   one 4-mm wire cell: u in [-2,+2] mm
-#   full 5-mm gas gap:  v in [-2.5,+2.5] mm
-#   0.2 x 0.2 mm boxes -> 20 x 25 = 500 boxes
-#   50 electrons / box -> 25,000 microscopic drift electrons
+#   asymmetric 6-mm gas gap: v in [-2,+4] mm
+#   0.2 x 0.2 mm boxes -> 20 x 30 = 600 boxes
+#   50 electrons / box -> 30,000 microscopic drift electrons
 #
 # The scan runs one u-column at a time, so completed columns survive an
 # interruption. No Elmer map and no ion transport are used.
@@ -17,10 +17,12 @@ set -euo pipefail
 #     [electrons_per_box] [base_seed]
 #
 # Optional environment variables:
-#   C_TRANSPORT_DU_MM       default 0.2
-#   C_TRANSPORT_DV_MM       default 0.2
-#   C_TRANSPORT_B_TESLA     default 0
-#   C_TRANSPORT_START_E_EV  default 0.1
+#   C_TRANSPORT_DU_MM          default 0.2
+#   C_TRANSPORT_DV_MM          default 0.2
+#   C_TRANSPORT_B_TESLA        default 0
+#   C_TRANSPORT_START_E_EV     default 0.1
+#   C_TRANSPORT_GAP_MINUS_MM   default 2.0
+#   C_TRANSPORT_GAP_PLUS_MM    default 4.0
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 STAGE_DIR="${ROOT_DIR}/test/mwpc-stage-c"
@@ -33,13 +35,16 @@ DU_MM="${C_TRANSPORT_DU_MM:-0.2}"
 DV_MM="${C_TRANSPORT_DV_MM:-0.2}"
 B_TESLA="${C_TRANSPORT_B_TESLA:-0}"
 START_E_EV="${C_TRANSPORT_START_E_EV:-0.1}"
+GAP_MINUS_MM="${C_TRANSPORT_GAP_MINUS_MM:-2.0}"
+GAP_PLUS_MM="${C_TRANSPORT_GAP_PLUS_MM:-4.0}"
 
 U_MIN_MM="-2.0"
 U_MAX_MM="+2.0"
-V_MIN_MM="-2.5"
-V_MAX_MM="+2.5"
+V_MIN_MM="-${GAP_MINUS_MM}"
+V_MAX_MM="+${GAP_PLUS_MM}"
 
-OUT_DIR="${ROOT_DIR}/test_runs/mwpc_stage_c/c_transport_box_map"
+gap_tag="gm${GAP_MINUS_MM//./p}_gp${GAP_PLUS_MM//./p}"
+OUT_DIR="${ROOT_DIR}/test_runs/mwpc_stage_c/c_transport_box_map_${gap_tag}"
 COL_DIR="${OUT_DIR}/columns"
 RUN_LOG="${OUT_DIR}/scan_progress.log"
 COMBINED="${OUT_DIR}/c_transport_box_electrons.csv"
@@ -77,6 +82,7 @@ echo "du,dv [mm]            : ${DU_MM}, ${DV_MM}"
 echo "electrons / box       : ${ELECTRONS}"
 echo "electrons / u-column  : ${EXPECTED_PER_COLUMN}"
 echo "total electrons       : $(( N_U * EXPECTED_PER_COLUMN ))"
+echo "gap (-,+) [mm]        : ${GAP_MINUS_MM}, ${GAP_PLUS_MM}"
 echo "B [T]                 : ${B_TESLA}"
 echo "start energy [eV]     : ${START_E_EV}"
 echo "output                 : ${OUT_DIR}"
@@ -108,11 +114,16 @@ PY
 
 rebuild_combined() {
   local first=1
+  local j
+  local csv
   rm -f "${COMBINED}"
 
-  for ((iu=0; iu<N_U; ++iu)); do
-    local csv="${COL_DIR}/iu_$(printf '%03d' "${iu}").csv"
-    if column_complete "${csv}" "${EXPECTED_PER_COLUMN}" "${iu}"; then
+  # Do not reuse the outer scan variable iu here. Bash function variables are
+  # global unless declared local; the old version advanced the outer loop to
+  # N_U after the first column and then falsely printed COMPLETE.
+  for ((j=0; j<N_U; ++j)); do
+    csv="${COL_DIR}/iu_$(printf '%03d' "${j}").csv"
+    if column_complete "${csv}" "${EXPECTED_PER_COLUMN}" "${j}"; then
       if [[ "${first}" -eq 1 ]]; then
         cat "${csv}" > "${COMBINED}"
         first=0
@@ -150,8 +161,8 @@ for ((iu=0; iu<N_U; ++iu)); do
   rm -f "${CSV}"
 
   stdbuf -oL -eL "${BUILD_DIR}/mwpc_stage_c_transport_box_map" \
-    --gap-minus-mm 2.5 \
-    --gap-plus-mm 2.5 \
+    --gap-minus-mm "${GAP_MINUS_MM}" \
+    --gap-plus-mm "${GAP_PLUS_MM}" \
     --wire-pitch-mm 4.0 \
     --wire-diam-um 30.0 \
     --hv 1800 \
