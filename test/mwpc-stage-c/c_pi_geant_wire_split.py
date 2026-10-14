@@ -224,6 +224,7 @@ def main():
     prefix.parent.mkdir(parents=True, exist_ok=True)
     event_path = Path(str(prefix) + "_crossings.csv")
     wire_path = Path(str(prefix) + "_wires.csv")
+    cluster_path = Path(str(prefix) + "_clusters.csv")
 
     event_fields = [
         "crossing_id", "event", "track_id", "det_id", "station",
@@ -248,6 +249,13 @@ def main():
         "n_primary_electrons", "electron_fraction",
         "synthetic_heed_transfer_eV", "transfer_fraction",
     ]
+    cluster_fields = [
+        "crossing_id", "cluster_index",
+        "event", "track_id", "det_id", "station",
+        "wire_index", "wire_u_mm",
+        "s_fraction", "u_mm", "v_mm", "w_mm",
+        "n_primary_electrons", "heed_transfer_eV",
+    ]
 
     total_clusters = 0
     total_electrons = 0
@@ -257,11 +265,14 @@ def main():
     with (
         event_path.open("w", newline="", encoding="utf-8") as fe,
         wire_path.open("w", newline="", encoding="utf-8") as fw,
+        cluster_path.open("w", newline="", encoding="utf-8") as fc,
     ):
         ew = csv.DictWriter(fe, fieldnames=event_fields)
         ww = csv.DictWriter(fw, fieldnames=wire_fields)
+        cw = csv.DictWriter(fc, fieldnames=cluster_fields)
         ew.writeheader()
         ww.writeheader()
+        cw.writeheader()
 
         for cid, r in enumerate(crossings):
             u0 = float(r["u_in_mm"])
@@ -322,12 +333,46 @@ def main():
                 marks_de = marks_de[order]
 
             offset = 0
+            cluster_index = 0
             wire_rows = []
             for ip, (p, ncl) in enumerate(zip(pieces, ncl_by_piece)):
                 ncl = int(ncl)
                 sl = slice(offset, offset + ncl)
-                ne = int(np.sum(marks_ne[sl])) if ncl else 0
-                de = float(np.sum(marks_de[sl])) if ncl else 0.0
+                piece_ne = marks_ne[sl]
+                piece_de = marks_de[sl]
+                ne = int(np.sum(piece_ne)) if ncl else 0
+                de = float(np.sum(piece_de)) if ncl else 0.0
+
+                # Conditional on the multinomial count in a path segment,
+                # Poisson-process cluster positions are uniform in that segment.
+                if ncl:
+                    s_values = rng.uniform(p["s0"], p["s1"], size=ncl)
+                    for j, s in enumerate(s_values):
+                        u = u0 + s * (u1 - u0)
+                        v = v0 + s * (v1 - v0)
+                        wwpos = w0 + s * (w1 - w0)
+                        cw.writerow(
+                            {
+                                "crossing_id": cid,
+                                "cluster_index": cluster_index,
+                                "event": r["event"],
+                                "track_id": r["track_id"],
+                                "det_id": r["det_id"],
+                                "station": r["station"],
+                                "wire_index": p["wire_index"],
+                                "wire_u_mm": (
+                                    p["wire_index"] * args.wire_pitch_mm
+                                ),
+                                "s_fraction": s,
+                                "u_mm": u,
+                                "v_mm": v,
+                                "w_mm": wwpos,
+                                "n_primary_electrons": int(piece_ne[j]),
+                                "heed_transfer_eV": float(piece_de[j]),
+                            }
+                        )
+                        cluster_index += 1
+
                 offset += ncl
                 wire_rows.append(
                     {
@@ -443,6 +488,7 @@ def main():
     print(f"  primary electrons sampled     : {total_electrons}")
     print(f"  crossing summary              : {event_path}")
     print(f"  wire summary                  : {wire_path}")
+    print(f"  cluster positions             : {cluster_path}")
     print()
     print(
         "GEANT Edep is diagnostic only; the Poisson/Heed population is not "
