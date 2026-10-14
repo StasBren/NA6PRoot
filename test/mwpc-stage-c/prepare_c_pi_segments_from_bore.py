@@ -4,8 +4,13 @@ Reconstruct 6-mm MWPC gas entry/exit segments from the historical MNP33-bore
 station-plane crossings.
 
 The LocalTrajectoryAudit study stored track states exactly at the nominal
-station planes z = 300, 340, 550, 590, 810, 850 cm.  In the current MWPC
-geometry these station references are the gas-centre planes.
+station reference planes z = 300, 340, 550, 590, 810, 850 cm.
+
+For the intrinsic response study below we place a nominal 6-mm gas layer around
+that reference plane and extrapolate the saved GEANT state across it.  This is
+NOT yet the exact per-chamber installed geometry: the current station layout
+staggers individual chamber gas volumes in z.  Exact event-by-event chamber
+entry/exit and gas Edep require replay through the current chamber geometry.
 
 Stage-C Garfield coordinates:
   u = detector/global Y (across wires)
@@ -110,8 +115,9 @@ def main():
             if pz == 0:
                 continue
 
-            # Historical station plane is the gas centre. In Garfield v the
-            # gas centre is +1 mm for a -2/+4 mm asymmetric gap.
+            # For this intrinsic nominal-segment study we centre a 6-mm gas
+            # layer on the historical station reference. In Garfield v the
+            # wire plane is offset so the gas centre is +1 mm for -2/+4 mm.
             v_center = 0.5 * (args.gap_plus_mm - args.gap_minus_mm)
             v_a = -args.gap_minus_mm
             v_b = +args.gap_plus_mm
@@ -180,7 +186,7 @@ def main():
                 "time_ns": "nan",
             })
 
-    print("Historical GEANT station-plane -> MWPC gas segments COMPLETE")
+    print("Historical GEANT station-plane -> nominal MWPC gas segments COMPLETE")
     print(f"  input tracks              : {len(rows)}")
     print(f"  backward pz tracks        : {n_backward}")
     print(f"  max |z-plane reference|   : {max_plane_dz:.6g} cm")
@@ -188,6 +194,7 @@ def main():
     print(f"  output                    : {args.output}")
     print()
     print("NOTE: edep is NaN because the historical LocalTrajectoryAudit did not store gas Edep.")
+    print("      These are nominal intrinsic 6-mm segments, not exact staggered chamber crossings.")
     print("      Wire-lattice phase uses global Y directly; a constant phase offset is still arbitrary.")
 
 
