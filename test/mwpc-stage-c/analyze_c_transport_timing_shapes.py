@@ -200,13 +200,11 @@ def main():
 
     reps = []
     for tu, tv, label in targets:
-        candidates = sorted(
-            all_rows,
-            key=lambda r: (
-                abs(r["u_center_mm"] - tu) +
-                abs(r["v_center_mm"] - tv)
-            ),
-        )
+        candidates = [
+            r for r in all_rows
+            if abs(r["u_center_mm"] - tu) < 1.e-9
+            and abs(r["v_center_mm"] - tv) < 1.e-9
+        ]
         if not candidates:
             continue
         base = dict(candidates[0])
