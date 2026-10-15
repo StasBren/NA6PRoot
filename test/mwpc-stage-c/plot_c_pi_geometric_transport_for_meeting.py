@@ -329,9 +329,61 @@ def main():
     ax.bar(x + width / 2, garf_pct, width, label="after Garfield")
     ax.set_xticks(x, categories)
     ax.set_ylabel("Events [%]")
-    ax.set_title("Microscopic transport changes the event wire multiplicity")
+    ax.set_title("Microscopic wire occupancy before electronics threshold")
     ax.legend()
     save(fig, args.output_dir / "pi_08_event_wire_multiplicity.png")
+
+
+    # ------------------------------------------------------------------
+    # 9. Threshold sensitivity of the microscopic multi-wire fraction.
+    # ------------------------------------------------------------------
+    # "Active wire" above means >=1 collected primary electron.  A real VMM
+    # channel has avalanche gain and a discriminator threshold, so the measured
+    # multi-wire fraction cannot be identified with that microscopic occupancy.
+    # Scan a simple proxy threshold in collected primary electrons per wire.
+    thresholds = np.asarray([1, 2, 3, 5, 10, 15, 20], dtype=int)
+    by_crossing_wire = defaultdict(list)
+    for r in tw:
+        by_crossing_wire[ii(r, "crossing_id")].append(
+            ii(r, "garfield_collected_electrons")
+        )
+
+    threshold_multi = []
+    for threshold in thresholds:
+        active_multi = 0
+        for r in tc:
+            cid = ii(r, "crossing_id")
+            n_active = sum(
+                n >= threshold for n in by_crossing_wire.get(cid, [])
+            )
+            active_multi += int(n_active >= 2)
+        threshold_multi.append(active_multi / len(tc))
+
+    fig, ax = plt.subplots(figsize=(7.2, 5.2))
+    ax.plot(
+        thresholds,
+        100.0 * np.asarray(threshold_multi),
+        marker="o",
+        linewidth=2,
+    )
+    ax.set_xlabel("Proxy threshold per wire [collected primary electrons]")
+    ax.set_ylabel("Events with >=2 wires [%]")
+    ax.set_ylim(bottom=0)
+    ax.set_title("Multi-wire fraction is threshold dependent")
+    ax.text(
+        0.98, 0.96,
+        "No avalanche gain or VMM discriminator model yet",
+        transform=ax.transAxes,
+        ha="right", va="top",
+    )
+    save(fig, args.output_dir / "pi_09_multiwire_threshold_scan.png")
+
+    # Event-topology transition counts for presentation notes.
+    transition_1_to_multi = int(np.sum((geom_counts == 1) & (garf_counts > 1)))
+    transition_multi_to_1 = int(np.sum((geom_counts > 1) & (garf_counts == 1)))
+    dominant_changed = int(np.sum(
+        np.asarray([ii(r, "dominant_wire_changed") for r in tc]) > 0
+    ))
 
     # Numerical summary for presentation notes.
     out_summary = args.output_dir / "pi_plot_summary.txt"
@@ -353,6 +405,14 @@ def main():
         f.write(f"two_cell_events={len(minor_rows)}\n")
         f.write(f"garfield_multiwire_fraction={np.mean(garf_counts > 1):.9g}\n")
         f.write(f"geometric_multiwire_fraction={np.mean(geom_counts > 1):.9g}\n")
+        f.write(f"transition_1wire_to_multi={transition_1_to_multi}\n")
+        f.write(f"transition_multi_to_1wire={transition_multi_to_1}\n")
+        f.write(f"dominant_wire_changed={dominant_changed}\n")
+        f.write(f"mean_event_collection_fraction={np.mean([ff(r, 'collection_fraction') for r in tc]):.9g}\n")
+        f.write(f"mean_event_F100={np.mean([ff(r, 'fraction_collected_before_100ns') for r in tc]):.9g}\n")
+        f.write(f"mean_event_F200={np.mean([ff(r, 'fraction_collected_before_200ns') for r in tc]):.9g}\n")
+        for threshold, frac in zip(thresholds, threshold_multi):
+            f.write(f"multiwire_fraction_threshold_ge_{threshold}e={frac:.9g}\n")
     print("  wrote:", out_summary)
 
 
