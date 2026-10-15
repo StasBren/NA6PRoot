@@ -90,12 +90,9 @@ def load_transport(path: Path):
             f"Incomplete transport map: {len(missing)} missing boxes."
         )
 
-    trials = {len(v) for v in boxes.values()}
-    if len(trials) != 1:
-        raise SystemExit(
-            "Transport boxes have unequal trial counts: "
-            + str(sorted(trials))
-        )
+    trial_counts = [len(v) for v in boxes.values()]
+    if any(n < 1 for n in trial_counts):
+        raise SystemExit("Transport map contains an empty box.")
 
     return boxes, {
         "iu_min": iu_values[0],
@@ -108,7 +105,9 @@ def load_transport(path: Path):
         "v_min_edge": vs[0] - 0.5 * dv,
         "u_max_edge": us[-1] + 0.5 * du,
         "v_max_edge": vs[-1] + 0.5 * dv,
-        "trials_per_box": next(iter(trials)),
+        "trials_per_box_min": min(trial_counts),
+        "trials_per_box_max": max(trial_counts),
+        "trials_per_box_unique": sorted(set(trial_counts)),
     }
 
 
@@ -146,7 +145,18 @@ def main():
         f"  box grid                    : {meta['n_u']} x {meta['n_v']} "
         f"({meta['du']:.3g} x {meta['dv']:.3g} mm)"
     )
-    print(f"  microscopic trials / box    : {meta['trials_per_box']}")
+    if meta["trials_per_box_min"] == meta["trials_per_box_max"]:
+        print(
+            f"  microscopic trials / box    : "
+            f"{meta['trials_per_box_min']}"
+        )
+    else:
+        print(
+            f"  microscopic trials / box    : "
+            f"{meta['trials_per_box_min']} .. "
+            f"{meta['trials_per_box_max']} "
+            f"(hybrid map; levels={meta['trials_per_box_unique']})"
+        )
     print(
         f"  u coverage [mm]             : "
         f"{meta['u_min_edge']:.3g} .. {meta['u_max_edge']:.3g}"
