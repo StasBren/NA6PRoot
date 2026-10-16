@@ -1,5 +1,7 @@
 # Stage C input datasets
 
+For the canonical inventory of **where the large/local simulation files live on the workstation**, see [`LOCAL_DATA_INVENTORY.md`](LOCAL_DATA_INVENTORY.md). That file also records the current PI-study runtime outputs and their statistics.
+
 Stage C intentionally separates **persistent transport inputs** from the
 microscopic-response code.
 
