@@ -7,8 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO"
 
-mode="$1"
-if [[ $# -eq 0 ]]; then mode="smoke"; else shift; fi
+mode="smoke"
+if [[ $# -gt 0 ]]; then mode="$1"; shift; fi
 
 python3 "$SCRIPT_DIR/test_checkerboard_projection.py"
 
