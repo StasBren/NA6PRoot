@@ -17,6 +17,39 @@ from make_pi_checkerboard_figures import (
 from mwpc_checkerboard_projection import NX
 
 
+def check_shared_physical_axes():
+    shared = allocate(2., "shared")
+    station_fit = allocate(2., "station")
+    for station in range(6):
+        assert np.array_equal(shared[station]["xedges"], shared[0]["xedges"])
+        assert np.array_equal(shared[station]["yedges"], shared[0]["yedges"])
+        assert shared[station]["spatial"].shape == shared[0]["spatial"].shape
+    assert station_fit[0]["spatial"].shape != station_fit[5]["spatial"].shape
+    assert abs(shared[0]["xedges"][0] + 575.04 / 2.) < 1.e-6
+    assert abs(shared[0]["xedges"][-1] - 575.04 / 2.) < 1.e-6
+    assert abs(shared[0]["yedges"][0] + 485. / 2.) < 1.e-6
+    assert abs(shared[0]["yedges"][-1] - 485. / 2.) < 1.e-6
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    for station in (0, 2, 5):
+        data = shared[station]
+        data["spatial"][10, 10] = 1
+        data["chamber_counts"][0, 0] = 1
+        plot_spatial(axes[0], data, station)
+        plot_modules(axes[1], data, station)
+        expected_x = tuple(data["xedges"][[0, -1]])
+        expected_y = tuple(data["yedges"][[0, -1]])
+        assert np.allclose(axes[0].get_xlim(), expected_x)
+        assert np.allclose(axes[1].get_xlim(), expected_x)
+        assert np.allclose(axes[0].get_ylim(), expected_y)
+        assert np.allclose(axes[1].get_ylim(), expected_y)
+        fig.canvas.draw()
+        axes[0].cla()
+        axes[1].cla()
+    plt.close(fig)
+    print("PASS: MS0/MS2/MS5 use same physical XY limits in both map panels")
+
+
 def check_color_norm():
     values = np.asarray([0., 1., 4., 9., 1000.])
     norm, clipped = build_color_norm(values, "sqrt", .75)
@@ -54,6 +87,7 @@ def check_color_norm():
 
 
 def main():
+    check_shared_physical_axes()
     check_color_norm()
     # Two neighboring modules in MS2; same muon crosses both.
     station = 2
