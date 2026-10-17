@@ -1022,7 +1022,7 @@ mechanical wire origin and wire count still require PI confirmation.
 Three physical-grid phases are simulated: -1, 0, +1 mm, using matched
 underlying ionisation and microscopic response random quantiles.
 
-**Step 1: smoke test (new output directory, no large plots)**
+**Step 1: smoke test (separate directory; skips 894 per-chamber details)**
 
 ```bash
 bash test/mwpc-stage-c/run_pi_fixed_wire_atlas.sh smoke
