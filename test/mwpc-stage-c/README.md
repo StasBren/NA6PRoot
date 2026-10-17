@@ -750,3 +750,69 @@ folded back into one wire cell and store the integer wire offset separately.
 
 The next stage folds these synthetic clusters with the Garfield transport map:
 `P(wire|u,v)`, drift time, and conditional wire-arrival angle.
+
+
+## PI checkerboard occupancy + incidence angles (18 + 6 figures)
+
+The historic high-statistics MNP33 bore production supplies transported muon
+states at the station reference planes. The checkerboard projector maps those
+states onto the current 298 staggered sensitive gas boxes without rerunning Geant4.
+
+**Step 1 — ensure full checkerboard projection CSVs exist:**
+
+```bash
+bash test/mwpc-stage-c/run_c_checkerboard_projection.sh full
+```
+
+This generates six `crossings_<source>_ms2_<z>.csv` files plus `modules.csv`
+and `stations.csv` under `test_runs/mwpc_stage_c/checkerboard_full/`.
+
+**Step 2 — make PI-ready figures without rerunning the projection:**
+
+```bash
+bash test/mwpc-stage-c/run_pi_checkerboard_figures.sh
+```
+
+The runner first checks geometry and multi-chamber counting with
+`test_checkerboard_projection.py` and `test_pi_checkerboard_figures.py`.
+Default results: `test_runs/mwpc_stage_c/pi_checkerboard_figures/`.
+
+- `occupancy/`: **18** separate images (3 channels x MS0..MS5), PNG and PDF.
+  Each is a two-panel figure: global XY hit density (counts/cm²) on the left,
+  and raw counts per chamber annotated with A/B/C/D checkerboard layer on the
+  right. **Every gas-volume crossing gets a spatial hit**, so one muon
+  crossing two staggered chambers increments both modules and produces two
+  spatial hits.
+- `angles/`: **6** images (3 channels x theta_u/theta_w), each with six
+  station panels, PNG and PDF. **One angle entry per contributing
+  (job,event,track,station)**, irrespective of chamber crossing multiplicity.
+  Common angular range/normalization across stations within each figure;
+  panels show mean, standard deviation and P95 of |theta|.
+- `pi_station_crossing_summary.csv`: unique muons, chamber crossings, and
+  counts for 1,2,3,4,5+ chamber intersections.
+- `pi_muon_angles_summary.csv`: angular statistics per source/station.
+- `READ_ME_FIRST.txt`: settings, approximate wire count, and caveats.
+
+The full figure producer checks **each individual chamber count** against
+`modules.csv` and unique-muon/station totals against `stations.csv`.
+It fails on disagreement.
+
+To compare the historic reference position of MS2=550 cm while preserving
+the current code baseline of MS2=530 cm:
+
+```bash
+bash test/mwpc-stage-c/run_pi_checkerboard_figures.sh \
+  --ms2-z 550 \
+  --out test_runs/mwpc_stage_c/pi_checkerboard_figures_ms2_550
+```
+
+These are geometric straight-line projections from the historical transported
+states, **not** actual Geant4 gas hits in the current 298-chamber material
+geometry, calibrated wire signals, or physical Pb-Pb event occupancy rates.
+Do not interpret preselected muon reference states as unbiased efficiency.
+
+The 4-mm reference anode pitch along global Y gives about **128 wire
+intervals per standard** chamber (51.20 cm active Y), and **77 per MS0**
+narrow chamber (30.72 cm active Y, rounded). A provisional system estimate
+is 32 x 77 + 266 x 128 = **36,512** anode wires; physical edge/wire-origin
+counting must be confirmed with the PI.
