@@ -121,8 +121,21 @@ def main():
         assert np.all(expo[:, 52] == 1)
         assert np.all(expo[:, 1] == 0)
         assert np.isnan(vals[0, 1, 0, 0])
-        assert np.all(counts[:, 0, :] <= expo[:, 0, None])
-        assert np.all(counts[:, 52, :] <= expo[:, 52, None])
+        # A chamber crossing may activate two or more DIFFERENT wires.
+        # Consequently the SUM of per-wire activations is NOT bounded by
+        # the number of chamber crossings. Each individual wire's count is.
+        for det in (0, 52):
+            n = n_wires(LOOKUP[det].station)
+            active = vals[:, det, :n, :]
+            assert np.all(np.isfinite(active))
+            assert np.all((active >= 0.) & (active <= 1.))
+            # Both stricter conditions are subsets of >=1 collected e-.
+            assert np.all(active[:, :, 1] <= active[:, :, 0])
+            assert np.all(active[:, :, 2] <= active[:, :, 0])
+            # A single crossing can contribute to as many as n wires.
+            assert np.all(counts[:, det, :] <= expo[:, det, None] * n)
+        # The core physical invariant is already independently enforced
+        # for EVERY wire by load_wire_csv: 0 <= n_wire <= chamber crossings.
         with (output / "pi_fixed_wire_station_multiplicity.csv").open() as f:
             rows = list(csv.DictReader(f))
         for source in SOURCES:
