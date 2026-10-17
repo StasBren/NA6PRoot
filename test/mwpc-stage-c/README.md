@@ -9,6 +9,10 @@ Do not reimplement those pieces inside Stage C.
 
 ## One-branch workflow
 
+**Remote code-edit workflow:** The assistant changes and commits source files
+on GitHub directly; the local WSL user only executes `git pull` and bash
+commands. Do not ask the user to paste patches or manually copy source files.
+
 Use only this branch for new Stage-C work:
 
 ```bash
@@ -816,3 +820,38 @@ intervals per standard** chamber (51.20 cm active Y), and **77 per MS0**
 narrow chamber (30.72 cm active Y, rounded). A provisional system estimate
 is 32 x 77 + 266 x 128 = **36,512** anode wires; physical edge/wire-origin
 counting must be confirmed with the PI.
+
+
+### Occupancy color contrast
+
+The 18 PI occupancy figures use sqrt color normalization by default, with
+an upper color limit at the 99.5th percentile of nonempty bins. Bins
+with zero hits are white; bins above the limit use the maximum color
+with a colorbar extension. Raw hit counts are unchanged and colorbars
+show physical values rather than transformed intensities.
+
+No new Geant4 transport or checkerboard projection is needed to update
+the plots. Re-use the full checkerboard CSVs and run:
+
+```bash
+bash test/mwpc-stage-c/run_pi_checkerboard_figures.sh
+```
+
+To show faint occupancy with a logarithmic scale in a separate folder:
+
+```bash
+bash test/mwpc-stage-c/run_pi_checkerboard_figures.sh \
+  --occupancy-scale log \
+  --out test_runs/mwpc_stage_c/pi_checkerboard_figures_log
+```
+
+To retain the full color range with no high-end saturation:
+
+```bash
+bash test/mwpc-stage-c/run_pi_checkerboard_figures.sh \
+  --occupancy-scale sqrt --occupancy-clip-quantile 1 \
+  --out test_runs/mwpc_stage_c/pi_checkerboard_figures_sqrt_noclip
+```
+
+The old linear color scale is also available with
+`--occupancy-scale linear`. The mode and quantile are labelled on each map.
