@@ -14,6 +14,10 @@ from pi_fixed_wire_occupancy import (
     n_wires, nominal_wire_index, positions,
 )
 from plot_pi_fixed_wire_atlas import load_wire_csv
+from prepare_pi_wire_geometry_controls import produce
+from plot_pi_wire_physical_validation_v2 import (
+    load_geometric, station_figure, contact_figure, detailed_figure,
+)
 
 
 def save_csv(path, fields, rows):
@@ -101,6 +105,7 @@ def main():
                     "gas_center_z_cm": z,
                     "gas_path_mm": 6.01,
                     "theta_u_deg": 3.8,
+                    "x_in_cm": ch.x-.05, "x_out_cm": ch.x+.05,
                 })
             save_csv(
                 inp / f"crossings_{src}_ms2_530.csv",
@@ -146,6 +151,39 @@ def main():
             ]
             assert sum(total) == 2
         print("PASS: full 3-channel/298-detector accounting, wire CSV integrity")
+        # Regression for the improved physics presentation: XY trajectory
+        # control and independently computed geometric wire profiles.
+        control = output / "physical_validation"
+        produce(inp, control)
+        geometric = load_geometric(control / "pi_geom_wire_counts.csv", expo)
+        assert geometric.shape == (3, 298, 128)
+        assert geometric[0, 0].sum() >= 1
+        assert geometric[0, 52].sum() >= 1
+        assert geometric[0, 1].sum() == 0
+        xy = np.load(control / "pi_crossing_density_xy.npz")
+        assert sum(xy[f"{SOURCES[0]}_MS{st}"].sum() for st in range(6)) == 2
+        # One station and chamber rendering in the same plotting functions
+        # used by the real atlas; avoids 894 untested PNGs after long run.
+        reconstructed = np.zeros((3, 298, 128, 3), dtype=np.int64)
+        for src_i in range(3):
+            for det, chamber in LOOKUP.items():
+                n = expo[src_i, det]
+                if n:
+                    nw = n_wires(chamber.station)
+                    reconstructed[src_i, det, :nw, :] = np.rint(
+                        vals[src_i, det, :nw, :] * n
+                    ).astype(np.int64)
+        testing = control / "atlas_v2"
+        for dirname in ("station_validation", "contact_sheets", "chamber_profiles"):
+            (testing / dirname).mkdir(parents=True)
+        station_figure(testing / "station_validation", 0, 0, expo,
+                       geometric, reconstructed, xy, 200., 200.)
+        contact_figure(testing / "contact_sheets", 0, 0, expo,
+                       geometric, reconstructed)
+        detailed_figure(testing / "chamber_profiles", 0, LOOKUP[0],
+                        expo, geometric, reconstructed)
+        assert len(list(testing.rglob("*.png"))) == 3
+        print("PASS: XY density + geometric/collected overlay and real PNG rendering")
         print("PASS: three phase runs, all 3 response conditions, smoke output")
 
 
