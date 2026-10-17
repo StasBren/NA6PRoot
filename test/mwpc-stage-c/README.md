@@ -941,3 +941,66 @@ or detector/acceptance selection.
 This restores the analysis using an **independent saved sample**, not
 the exact lost PNGs or necessarily the exact old 20k production. ROOT
 is required; a short smoke run should be inspected before full processing.
+
+
+## PI extended 2.5-hour study: collected wire multiplicity PER MODULE
+
+This run processes **every individual 3D projected chamber crossing** from
+`checkerboard_full/crossings_<channel>_ms2_530.csv`. If a muon intersects
+two checkerboard modules, it contributes two separate gas-response crossings,
+one to each `det_id`. Data are not averaged across stations for the PI
+deliverable. Baseline station Z uses MS2=530 cm.
+
+The fast model samples a Poisson number of ionisation clusters along the
+actual gas path using the existing 2+4 mm Heed density; cluster electron
+multiplicities use the saved empirical Heed distribution. Each primary
+electron receives a sampled single-electron Garfield wire, collection
+flag and drift time from the 20x30 transport-box map. By default the
+script automatically chooses the enhanced hybrid high-stat boundary map
+if it already exists; otherwise uses the available complete 50-electron
+map (it will NEVER start a new Garfield scan on its own).
+
+Before running on high-stat inputs, a fully synthetic regression test
+checks per-chamber IDs, the 600-box map, random sampling, checkpoint
+restart determinism, and 298-module probability normalization.
+
+```bash
+bash test/mwpc-stage-c/run_pi_per_chamber_response.sh smoke
+bash test/mwpc-stage-c/run_pi_per_chamber_response.sh full
+```
+
+`smoke` processes just the first 100 source crossings in a separate output
+folder. `full` runs for at most ~2.5 hours per invocation with checkpoints
+every 10k processed chamber crossings, then can be resumed by repeating
+the same command. Runtime depends on the WSL hardware and saved
+transport map; it may finish sooner or need multiple sessions.
+
+Results: `test_runs/mwpc_stage_c/pi_per_chamber_response/`:
+
+- `wire_crossings_<source>.csv`: sampled per-chamber crossing response,
+  including geometric wire cells, Heed clusters, electrons collected per
+  crossing, wires with >=1/2/5/10 collected primary electrons and wires
+  with electron arrivals by 100/200 ns.
+- `pi_wire_multiplicity_per_chamber.csv`: **298 modules x 3 channels**
+  with per-module probabilities `P_nwire_0/1/2/3/4/5plus`, >=2,
+  >=3, rough electron-count threshold sensitivities, timing and means.
+  Includes `processed_chamber_crossings` and `expected_all_crossings`,
+  so incompletely processed stations cannot be mistaken for final results.
+- `checkpoint_<source>.json`: durable source progress with RNG state;
+  rerunning the same command resumes deterministically.
+- `complete_<source>.ok`: written only after this source's full
+  298-module crossing counts agree exactly with `modules.csv`.
+- `settings.json`: immutable input paths, random seed, geometry conventions
+  and explicit limitations.
+
+**Physics caveats:** These are STILL straight-line projected chamber
+crossings, not updated Geant4 hit/Edep production. The reference Garfield
+map is B=0 with asymmetric [-2,+4] mm gas gap. An explicit +1 mm
+coordinate offset aligns the six-mm symmetric projected gas box with
+that asymmetric simulation; this does not create the same actual
+electric field in a symmetric chamber. Wire phase is randomized per
+crossing because exact wire origins are not available, and boundary
+losses are not simulated. This is a *primary-electron collection*
+distribution, NOT measured wire efficiency: no gain fluctuation,
+electronic threshold, ion drift pulse shaping or noise is included.
+The >=2/5/10 electron thresholds are only a sensitivity diagnostic.
