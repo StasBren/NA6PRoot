@@ -121,7 +121,11 @@ def overview(out, arr, exp, source_i, station, norm, cmap, saturated):
             ))
             ax.text(ch.x, ch.y + gy/2 - 2.5, f"{ch.det_id}:{ch.layer}",
                     ha="center", va="top", fontsize=5.2, color=".3", zorder=6)
-        lc = LineCollection(segments, cmap=cmap, norm=norm,
+        # Do not share a matplotlib Normalize object between figures or
+        # artists: older distro Matplotlib colorbars can retain weak
+        # callback references and emit 'KeyError: changed' at GC.
+        local_norm = Normalize(vmin=norm.vmin, vmax=norm.vmax, clip=False)
+        lc = LineCollection(segments, cmap=cmap, norm=local_norm,
                             linewidths=2.8, zorder=3)
         lc.set_array(np.asarray(values))
         ax.add_collection(lc)
@@ -189,7 +193,9 @@ def contact_sheet(out, arr, exp, source_i, station, norm, cmap, saturated):
         vals = arr[source_i, ch.det_id, :n, :]
         ax.imshow(
             np.ma.masked_invalid(vals), origin="lower", interpolation="nearest",
-            aspect="auto", norm=norm, cmap=cmap,
+            aspect="auto",
+            norm=Normalize(vmin=norm.vmin, vmax=norm.vmax, clip=False),
+            cmap=cmap,
         )
         ax.set_title(f"{ch.det_id}:{ch.layer}  N={exp[source_i,ch.det_id]}",
                      fontsize=7, pad=1)
@@ -201,7 +207,10 @@ def contact_sheet(out, arr, exp, source_i, station, norm, cmap, saturated):
         "Three columns per chamber: >=1e, >=5e, <=100 ns",
         fontsize=14,
     )
-    sm = ScalarMappable(norm=norm, cmap=cmap)
+    sm = ScalarMappable(
+        norm=Normalize(vmin=norm.vmin, vmax=norm.vmax, clip=False),
+        cmap=cmap,
+    )
     fig.colorbar(sm, ax=list(axes.ravel()), shrink=.55,
                  label="P per chamber crossing",
                  extend="max" if saturated else "neither")
