@@ -46,10 +46,18 @@ def footprint(station):
     return width, height
 
 
-def allocate(bin_cm):
+def allocate(bin_cm, xy_range="shared"):
+    """Common centred physical XY frame for all stations, unless overridden."""
+    if xy_range not in ("shared", "station"):
+        raise ValueError(f"Unknown xy_range: {xy_range}")
+    shared_width = max(footprint(st)[0] for st in range(6))
+    shared_height = max(footprint(st)[1] for st in range(6))
     data = {}
     for station in range(6):
-        width, height = footprint(station)
+        width, height = (
+            (shared_width, shared_height) if xy_range == "shared"
+            else footprint(station)
+        )
         nxb, nyb = ceil(width / bin_cm), ceil(height / bin_cm)
         data[station] = {
             "chamber_counts": np.zeros((NY[station], NX[station]), dtype=np.int64),
@@ -263,28 +271,44 @@ def plot_spatial(ax, data, station, mode="sqrt", upper_quantile=0.995):
 
 
 def plot_modules(ax, data, station, mode="sqrt", upper_quantile=0.995):
+    """Per-chamber crossing counts positioned at their exact physical XY centres.
+
+    Each colored tile represents one module centre (Voronoi-style), not the
+    full gas-volume polygon: neighboring gas volumes overlap by 3 cm and
+    may independently register the same muon.
+    """
     counts = data["chamber_counts"]
     norm, saturated = build_color_norm(counts, mode, upper_quantile)
-    image = ax.imshow(
-        np.ma.masked_less_equal(counts, 0),
-        origin="lower", interpolation="nearest", aspect="equal",
-        norm=norm, cmap=occupancy_cmap(),
+    pitch_x = GAS_X_CM - OVERLAP_CM
+    pitch_y = (MS0_GAS_Y_CM if station == 0 else GAS_Y_CM) - OVERLAP_CM
+    x_boundaries = (np.arange(NX[station] + 1) - NX[station] / 2) * pitch_x
+    y_boundaries = (np.arange(NY[station] + 1) - NY[station] / 2) * pitch_y
+    image = ax.pcolormesh(
+        x_boundaries, y_boundaries, np.ma.masked_less_equal(counts, 0),
+        norm=norm, cmap=occupancy_cmap(), shading="flat",
     )
+    width, height = footprint(station)
+    ax.add_patch(Rectangle(
+        (-width / 2, -height / 2), width, height,
+        fill=False, linewidth=0.7, edgecolor="0.5",
+    ))
     for ch in GEOMETRY[station]:
         count = counts[ch.row, ch.col]
         intensity = float(norm(float(count))) if count else 0.0
-        label_color = ("0.35" if count == 0
-                       else "white" if intensity < .63 else "black")
+        label_color = (
+            "0.35" if count == 0
+            else "white" if intensity < .63 else "black"
+        )
         ax.text(
-            ch.col, ch.row, ch.layer,
-            ha="center", va="center",
+            ch.x, ch.y, ch.layer, ha="center", va="center",
             fontsize=6.2 if station >= 4 else 8,
             color=label_color, alpha=.85,
         )
-    ax.set_xticks(range(NX[station]))
-    ax.set_yticks(range(NY[station]))
-    ax.set_xlabel("Module column (X)")
-    ax.set_ylabel("Module row (Y)")
+    ax.set_xlim(float(data["xedges"][0]), float(data["xedges"][-1]))
+    ax.set_ylim(float(data["yedges"][0]), float(data["yedges"][-1]))
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_xlabel("Global X (cm), along wires")
+    ax.set_ylabel("Global Y (cm), across wires")
     ax.set_title(
         f"Crossings / chamber; A/B/C/D = stagger layer ({mode} scale)",
         fontsize=11,
@@ -332,7 +356,6 @@ def make_occupancy_figures(
         )
         stem = f"hitmap_{source}_MS{station}_ms2_{int(scenario)}"
         fig.savefig(folder / (stem + ".png"), dpi=175)
-        fig.savefig(folder / (stem + ".pdf"))
         plt.close(fig)
 
 
@@ -411,7 +434,6 @@ def make_angle_figures(output_dir, source, entries, scenario):
             f"_ms2_{int(scenario)}"
         )
         fig.savefig(folder / (stem + ".png"), dpi=175)
-        fig.savefig(folder / (stem + ".pdf"))
         plt.close(fig)
     return rows
 
@@ -427,6 +449,15 @@ def write_csv(path, rows):
 
 def run(args):
     args.out.mkdir(parents=True, exist_ok=True)
+    # Remove only PDFs produced by older versions of this script.
+    # Keeping them would misleadingly suggest current figures have PDF peers.
+    for directory, pattern in (
+        (args.out / "occupancy", "hitmap_*_MS*_ms2_*.pdf"),
+        (args.out / "angles", "angles_*_ms2_*.pdf"),
+    ):
+        if directory.is_dir():
+            for old_pdf in directory.glob(pattern):
+                old_pdf.unlink()
     station_rows, angle_rows = [], []
     full_run = args.limit_per_source == 0
     for source in SOURCES:
@@ -438,7 +469,7 @@ def run(args):
                 f"Missing {filename}; run "
                 "run_c_checkerboard_projection.sh full first"
             )
-        entries = allocate(args.bin_cm)
+        entries = allocate(args.bin_cm, args.xy_range)
         print(f"Reading {filename} ...", flush=True)
         n_groups = consume_crossings(
             filename, entries, args.limit_per_source
@@ -492,7 +523,11 @@ def run(args):
     (args.out / "READ_ME_FIRST.txt").write_text(
         "NA60+/DiCE MWPC checkerboard: PI geometry/angle figures\n"
         "===================================================\n\n"
-        "18 occupancy figures = 3 dimuon channels x 6 stations.\n"
+        "18 occupancy figures = 3 dimuon channels x 6 stations. PNG only.\n"
+        f"XY axis framing: {args.xy_range}; same physical XY limits across "
+        "all six stations when set to shared.\n"
+        "Chamber counts use tiles centered on real XY positions; "
+        "the physical sensitive gas rectangles can overlap.\n"
         f"Occupancy color scale: {args.occupancy_scale}, "
         f"upper quantile of positive bins: {args.occupancy_clip_quantile}.\n"
         "Bins above the displayed color maximum are saturated and marked "
@@ -502,7 +537,7 @@ def run(args):
         "  LEFT: spatial density of gas-crossing midpoints. "
         "ONE entry PER CHAMBER CROSSING.\n"
         "  RIGHT: counts per chamber; A/B/C/D are checkerboard Z levels.\n"
-        "6 angle figures = 3 channels x theta_u/theta_w, "
+        "6 angle figures in PNG = 3 channels x theta_u/theta_w, "
         "each with MS0..MS5.\n"
         "  Angles use ONE entry per accepted muon/station, "
         "even for multi-chamber crossings.\n\n"
@@ -524,7 +559,7 @@ def run(args):
         encoding="utf-8",
     )
     print(
-        f"Saved 18 dual-panel occupancy figures, "
+        f"Saved 18 PNG dual-panel occupancy figures, "
         f"6 angle figures, 2 CSV summaries: {args.out}"
     )
 
@@ -545,6 +580,11 @@ def main():
     ap.add_argument(
         "--bin-cm", type=float, default=2.,
         help="Spatial 2D hitmap bin width [cm]",
+    )
+    ap.add_argument(
+        "--xy-range", choices=("shared", "station"), default="shared",
+        help="Global physical X/Y axes: shared across stations (default) "
+             "or fitted individually to each station",
     )
     ap.add_argument(
         "--limit-per-source", type=int, default=0,
