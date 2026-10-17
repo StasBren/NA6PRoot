@@ -1004,3 +1004,119 @@ losses are not simulated. This is a *primary-electron collection*
 distribution, NOT measured wire efficiency: no gain fluctuation,
 electronic threshold, ion drift pulse shaping or noise is included.
 The >=2/5/10 electron thresholds are only a sensitivity diagnostic.
+
+
+## PI fixed-grid wire occupancy atlas (18 + 894 + 18 PNGs)
+
+PI's chamber-by-chamber physical consistency request is addressed by a
+**fixed, finite anode grid**, so the nominal physical wire number is stable
+across crossings in the same chamber. Every checkerboard gas crossing
+contributes to its own `det_id`, even when the same muon also intersects
+another staggered chamber.
+
+Anode pitch is 4 mm, with the nominal wire positions symmetrically
+centred inside each module's sensitive Y span. The working assumptions
+are **77 wires on each of the 32 narrow MS0 chambers**, and **128 on
+each of the remaining 266 chambers**, or 36,512 in total. Exact
+mechanical wire origin and wire count still require PI confirmation.
+Three physical-grid phases are simulated: -1, 0, +1 mm, using matched
+underlying ionisation and microscopic response random quantiles.
+
+**Step 1: smoke test (new output directory, no large plots)**
+
+```bash
+bash test/mwpc-stage-c/run_pi_fixed_wire_atlas.sh smoke
+```
+
+**Step 2: full production on the already saved checkerboard crossings,
+Heed library and Garfield transport map**
+
+```bash
+bash test/mwpc-stage-c/run_pi_fixed_wire_atlas.sh full
+```
+
+The runner first tests synthetic physical-wire indexing, finite edge
+handling and independent per-source chamber counters. The full run
+recomputes the fast *sampling/folding* of Heed+Garfield response on all
+~2.49M projected gas-volume crossings. It does **not** rerun Geant4,
+Heed microscopic tracks, or Garfield transport. Runtime depends on
+CPU and especially on writing 894 detailed PNGs.
+
+Primary output directory:
+`test_runs/mwpc_stage_c/pi_fixed_wire_maps/`.
+
+- `station_overview/`: 18 PNG station maps, three conditions on the
+  same global physical XY axes with the actual checkerboard gas outlines.
+  For readability, each colored short horizontal stripe is the
+  **mean firing probability of up to eight neighboring anodes**,
+  not a single anode.
+- `per_chamber/<source>/MS<n>/wire_DET<id>.png`: **894 PNGs**,
+  three true per-anode profiles for each source/module, including modules
+  with no accepted muons (marked as such).
+- `contact_sheets/`: 18 contact sheets, showing the three criteria
+  and the fine per-anode profiles simultaneously across all modules
+  in a station.
+- `physics_summary/`: 3 channel-wise plots each of station
+  multiplicity, P(>=2 anodes) vs absolute incident theta_u,
+  and -1/0/+1 mm wire-grid phase sensitivity (9 PNGs).
+- `pi_fixed_wire_counts.csv`: 109,536 nominal per-anode rows,
+  with actual `station,det_id,row,col,layer,wire_index,y_global_cm`
+  and three counts plus fractions per chamber crossing.
+- `pi_fixed_wire_station_multiplicity.csv`: 0/1/2/3/4/5+
+  active-anode distribution for geometric, >=1e, >=5e and
+  first-100ns interpretations at each station, including all phases.
+- `pi_fixed_wire_angle_response.csv`: P(>=2 active anodes) vs
+  |theta_u| by source, station, condition and wire-grid phase.
+- `pi_fixed_wire_settings.json`: all inputs, seed, wire-grid definition
+  and physics approximations.
+
+The three signal definitions **are not electronics discriminators**:
+`>=1e` = at least one collected primary electron on the wire;
+`>=5e` = at least five collected primary electrons;
+`<=100ns` = at least one collected primary electron reaching it
+within 100 ns in the saved Garfield response. We do not include
+avalanche gain fluctuations, ion motion, capacitive cathode signal,
+front-end threshold, mechanical edge-field distortion, or noise.
+
+The prior Stage-C statistical module multiplicity sample randomly
+shifted wire phase for **each crossing**, which was adequate for
+global multiplicity but cannot label individual physical wires.
+The atlas is a new fold of the same reference gas projections with
+a **stationary module-local grid**. The finite grid excludes Garfield
+responses reaching nonexistent edge wires; these lost electron counts
+are separately reported in the wire CSV.
+
+Color normalization is shared across the **six stations within each
+channel** and all three conditions, with the 99.5th percentile
+of nonzero wire probabilities as the color ceiling; colorbars have
+an extension when saturated. Do not compare raw colors between
+different dimuon channels without reading their numeric colorbars.
+
+## Recover the Stage-C Garfield drift-time (u,v) grid figure
+
+Previously computed timing information is in the baseline
+`test_runs/mwpc_stage_c/c_transport_box_map_gm2p0_gp4p0/`:
+
+- `c_transport_box_electrons.csv`: individual launch boxes and drift times
+- `c_transport_box_summary.csv`: 600 box means, standard deviations,
+  medians and 16%/84% drift time quantiles.
+
+The advanced **hybrid** transport map contains all 600 grid boxes,
+with 2000 electron trials in each of 120 boundary boxes and 50 trials
+in each of the other 480 boxes:
+`c_transport_box_map_hybrid_boundary_2p4/c_transport_box_electrons.csv`.
+
+To reconstruct four 2D heat maps (mean/median collected-electron
+drift time; collection fraction; fraction collected within 100 ns)
+from whichever existing complete map is available:
+
+```bash
+bash test/mwpc-stage-c/run_c_drift_time_grid.sh
+```
+
+PNG and 600-row CSV:
+`test_runs/mwpc_stage_c/c_drift_grid_figures/`.
+
+The printed image title explicitly labels the conditional vs
+unconditional probabilities: mean and median use collected electrons
+only; 100-ns fraction uses *all launched electrons* as denominator.
