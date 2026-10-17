@@ -20,6 +20,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
+from matplotlib.colors import LogNorm, Normalize, PowerNorm
 
 from mwpc_checkerboard_projection import (
     SOURCES, NX, NY, GAS_X_CM, GAS_Y_CM, MS0_GAS_Y_CM,
@@ -199,13 +200,52 @@ def validate(source, entries, input_dir, scenario, complete):
             )
 
 
-def plot_spatial(ax, data, station):
+def build_color_norm(values, mode="sqrt", upper_quantile=0.995):
+    """Normalize raw occupancy without altering its counts.
+
+    The percentile is calculated over strictly positive bins, so empty area
+    does not dilute the high-end cutoff. Saturated bins are explicitly
+    signalled by the colorbar's 'extend=max' indicator.
+    """
+    arr = np.asarray(values, dtype=float)
+    positive = arr[np.isfinite(arr) & (arr > 0)]
+    if positive.size == 0:
+        return Normalize(vmin=0.0, vmax=1.0), False
+
+    maximum = float(positive.max())
+    upper = (float(np.quantile(positive, upper_quantile))
+             if upper_quantile < 1.0 else maximum)
+    upper = max(upper, float(positive.min()))
+    clipped = maximum > upper + max(1.e-12, abs(maximum) * 1.e-12)
+
+    if mode == "linear":
+        return Normalize(vmin=0.0, vmax=upper), clipped
+    if mode == "sqrt":
+        return PowerNorm(gamma=0.5, vmin=0.0, vmax=upper), clipped
+    if mode == "log":
+        lower = float(positive.min())
+        if upper <= lower:
+            upper = lower * (1.0 + 1.e-6)
+        return LogNorm(vmin=lower, vmax=upper), clipped
+    raise ValueError(f"Unknown color normalization mode: {mode}")
+
+
+def occupancy_cmap():
+    cmap = plt.get_cmap("viridis").copy()
+    cmap.set_bad("white")  # genuinely empty bins have no hits
+    return cmap
+
+
+def plot_spatial(ax, data, station, mode="sqrt", upper_quantile=0.995):
     xe, ye = data["xedges"], data["yedges"]
     pixel_area = (xe[1] - xe[0]) * (ye[1] - ye[0])
+    values = data["spatial"] / pixel_area
+    norm, saturated = build_color_norm(values, mode, upper_quantile)
     image = ax.imshow(
-        data["spatial"] / pixel_area,
+        np.ma.masked_less_equal(values, 0),
         origin="lower", interpolation="nearest",
         extent=[xe[0], xe[-1], ye[0], ye[-1]], aspect="equal",
+        norm=norm, cmap=occupancy_cmap(),
     )
     for ch in GEOMETRY[station]:
         half_y = (MS0_GAS_Y_CM if station == 0 else GAS_Y_CM) / 2
@@ -215,59 +255,80 @@ def plot_spatial(ax, data, station):
         ))
     ax.set_xlabel("Global X (cm), along wires")
     ax.set_ylabel("Global Y (cm), across wires")
-    ax.set_title("Spatial hit density (every chamber crossing)", fontsize=11)
-    return image
-
-
-def plot_modules(ax, data, station):
-    counts = data["chamber_counts"]
-    image = ax.imshow(
-        counts, origin="lower", interpolation="nearest", aspect="equal"
+    ax.set_title(
+        f"Spatial hit density (per chamber crossing; {mode} scale)",
+        fontsize=11,
     )
-    peak = int(counts.max())
+    return image, saturated
+
+
+def plot_modules(ax, data, station, mode="sqrt", upper_quantile=0.995):
+    counts = data["chamber_counts"]
+    norm, saturated = build_color_norm(counts, mode, upper_quantile)
+    image = ax.imshow(
+        np.ma.masked_less_equal(counts, 0),
+        origin="lower", interpolation="nearest", aspect="equal",
+        norm=norm, cmap=occupancy_cmap(),
+    )
     for ch in GEOMETRY[station]:
         count = counts[ch.row, ch.col]
-        frac = count / peak if peak else 0.
+        intensity = float(norm(float(count))) if count else 0.0
+        label_color = ("0.35" if count == 0
+                       else "white" if intensity < .63 else "black")
         ax.text(
             ch.col, ch.row, ch.layer,
             ha="center", va="center",
             fontsize=6.2 if station >= 4 else 8,
-            color="white" if frac < .52 else "black", alpha=.75,
+            color=label_color, alpha=.85,
         )
     ax.set_xticks(range(NX[station]))
     ax.set_yticks(range(NY[station]))
     ax.set_xlabel("Module column (X)")
     ax.set_ylabel("Module row (Y)")
     ax.set_title(
-        "Crossings / chamber; letter = stagger layer", fontsize=11
+        f"Crossings / chamber; A/B/C/D = stagger layer ({mode} scale)",
+        fontsize=11,
     )
-    return image
+    return image, saturated
 
 
-def make_occupancy_figures(output_dir, source, entries, scenario):
+def make_occupancy_figures(
+    output_dir, source, entries, scenario, mode="sqrt", upper_quantile=0.995,
+):
     folder = output_dir / "occupancy"
     folder.mkdir(parents=True, exist_ok=True)
     for station, data in entries.items():
         fig, axs = plt.subplots(
             1, 2, figsize=(14.4, 6.5), layout="constrained"
         )
-        image = plot_spatial(axs[0], data, station)
-        fig.colorbar(
-            image, ax=axs[0], shrink=.8, label="Crossings / cm$^2$"
+        image, clipped = plot_spatial(
+            axs[0], data, station, mode, upper_quantile
         )
-        image = plot_modules(axs[1], data, station)
         fig.colorbar(
-            image, ax=axs[1], shrink=.8, label="Crossings / module"
+            image, ax=axs[0], shrink=.8, label="Crossings / cm$^2$",
+            extend="max" if clipped else "neither",
+        )
+        image, clipped_modules = plot_modules(
+            axs[1], data, station, mode, upper_quantile
+        )
+        fig.colorbar(
+            image, ax=axs[1], shrink=.8, label="Crossings / module",
+            extend="max" if clipped_modules else "neither",
         )
         n_muon = data["n_muons"]
         n_hits = data["n_crossings"]
         p_multi = data["n_multi"] / n_muon if n_muon else 0.
+        limit_label = (
+            f"positive-bin P{100 * upper_quantile:g}" if upper_quantile < 1.0
+            else "full range"
+        )
         fig.suptitle(
             f"{CHANNEL_LABELS[source]} | MS{station} | "
             f"298-module checkerboard | MS2 at {scenario:.0f} cm\n"
             f"{n_hits:,} chamber crossings from {n_muon:,} distinct muons | "
-            f"multi-module muons: {p_multi:.1%}",
-            fontsize=14,
+            f"multi-module muons: {p_multi:.1%} | "
+            f"{mode} colors, {limit_label}",
+            fontsize=12,
         )
         stem = f"hitmap_{source}_MS{station}_ms2_{int(scenario)}"
         fig.savefig(folder / (stem + ".png"), dpi=175)
@@ -410,7 +471,8 @@ def run(args):
                 flush=True,
             )
         make_occupancy_figures(
-            args.out, source, entries, args.ms2_z
+            args.out, source, entries, args.ms2_z,
+            args.occupancy_scale, args.occupancy_clip_quantile,
         )
         angle_rows.extend(
             make_angle_figures(args.out, source, entries, args.ms2_z)
@@ -431,6 +493,12 @@ def run(args):
         "NA60+/DiCE MWPC checkerboard: PI geometry/angle figures\n"
         "===================================================\n\n"
         "18 occupancy figures = 3 dimuon channels x 6 stations.\n"
+        f"Occupancy color scale: {args.occupancy_scale}, "
+        f"upper quantile of positive bins: {args.occupancy_clip_quantile}.\n"
+        "Bins above the displayed color maximum are saturated and marked "
+        "by a colorbar extension. The counts themselves are unchanged.\n"
+        "Empty bins are white. Colorbar labels retain original physical "
+        "counts, not transformed intensities.\n"
         "  LEFT: spatial density of gas-crossing midpoints. "
         "ONE entry PER CHAMBER CROSSING.\n"
         "  RIGHT: counts per chamber; A/B/C/D are checkerboard Z levels.\n"
@@ -482,12 +550,24 @@ def main():
         "--limit-per-source", type=int, default=0,
         help="Muon/station groups per channel: smoke only",
     )
+    ap.add_argument(
+        "--occupancy-scale", choices=("sqrt", "linear", "log"),
+        default="sqrt",
+        help="Color normalization for occupancy plots (default: sqrt)",
+    )
+    ap.add_argument(
+        "--occupancy-clip-quantile", type=float, default=0.995,
+        help="Upper color-limit quantile of positive bins (default: .995); "
+             "1.0 means no clipping",
+    )
     args = ap.parse_args()
     if args.bin_cm <= 0 or args.limit_per_source < 0:
         ap.error(
             "--bin-cm must be positive and "
             "--limit-per-source must be non-negative"
         )
+    if not 0 < args.occupancy_clip_quantile <= 1:
+        ap.error("--occupancy-clip-quantile must be in (0, 1]")
     run(args)
 
 
