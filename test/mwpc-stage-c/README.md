@@ -896,3 +896,48 @@ bash test/mwpc-stage-c/run_pi_checkerboard_figures.sh \
   --xy-range station \
   --out test_runs/mwpc_stage_c/pi_checkerboard_figures_station_range
 ```
+
+
+## Reconstruct original dimuon momentum/rapidity distributions from saved ROOT
+
+The older `test/mwpc-dimuon-validation/analyzeMWPCDimuon.C` implemented
+`kinematics_{Jpsi,Phi,Omega}.png` with generated parent momentum, parent
+`pT`, parent rapidity, daughter-muon momentum and daughter-muon `pT`.
+The previous 20k-event image files need not be present: the historical
+large MNP33 bore production has six `MCKine.root` files (two chunks x
+200k generated parent events/channel in aggregate). Rebuild from those
+existing ROOT files with the independent macro
+`recover_bore_dimuon_kinematics.C`.
+
+```bash
+bash test/mwpc-stage-c/run_recover_bore_dimuon_kinematics.sh smoke
+bash test/mwpc-stage-c/run_recover_bore_dimuon_kinematics.sh full
+```
+
+These commands do **not** rerun Geant4 or Garfield. The smoke mode
+processes the first 200 ROOT events **per chunk** for compilation and
+schema checks, and should not be used for physical interpretation.
+The full mode processes all stored events. The runner sources the
+pre-existing `~/na6p/env.sh` only if `root` is not on PATH.
+
+Results: `test_runs/mwpc_stage_c/recovered_dimuon_kinematics/`
+(or `_smoke/` for the test):
+
+- `kinematics_Jpsi.png`, `kinematics_Phi.png`, `kinematics_Omega.png`:
+  generated **parent p/pT/y**, daughter muon **p/pT/y**, and
+  **daughter theta_u/theta_w at production** (8 panels plus statistics).
+- `kinematics_truth_summary.csv`: number of events, generated parents,
+  direct muon pairs, missing pairs, and maximum four-momentum closure.
+
+**Scope:** These are generator-level parent/daughter distributions
+read back from the historical transport files. No downstream bore or
+chamber selection is applied. They are *not* the same as Stage-C
+accepted muon angular distributions, which select muons that
+geometrically cross sensitive gas. Generated muon angles can
+be compared with MS0 crossing angles to diagnose whether
+J/psi's two-peaked angle spectrum is due to decay kinematics
+or detector/acceptance selection.
+
+This restores the analysis using an **independent saved sample**, not
+the exact lost PNGs or necessarily the exact old 20k production. ROOT
+is required; a short smoke run should be inspected before full processing.
