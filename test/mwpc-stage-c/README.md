@@ -781,14 +781,14 @@ The runner first checks geometry and multi-chamber counting with
 `test_checkerboard_projection.py` and `test_pi_checkerboard_figures.py`.
 Default results: `test_runs/mwpc_stage_c/pi_checkerboard_figures/`.
 
-- `occupancy/`: **18** separate images (3 channels x MS0..MS5), PNG and PDF.
+- `occupancy/`: **18** separate PNG images (3 channels x MS0..MS5).
   Each is a two-panel figure: global XY hit density (counts/cm²) on the left,
   and raw counts per chamber annotated with A/B/C/D checkerboard layer on the
   right. **Every gas-volume crossing gets a spatial hit**, so one muon
   crossing two staggered chambers increments both modules and produces two
   spatial hits.
 - `angles/`: **6** images (3 channels x theta_u/theta_w), each with six
-  station panels, PNG and PDF. **One angle entry per contributing
+  station panels, PNG only. **One angle entry per contributing
   (job,event,track,station)**, irrespective of chamber crossing multiplicity.
   Common angular range/normalization across stations within each figure;
   panels show mean, standard deviation and P95 of |theta|.
@@ -855,3 +855,44 @@ bash test/mwpc-stage-c/run_pi_checkerboard_figures.sh \
 
 The old linear color scale is also available with
 `--occupancy-scale linear`. The mode and quantile are labelled on each map.
+
+
+### Shared XY frames and PNG-only PI figures
+
+By default both halves of each occupancy figure use the **same global
+physical X/Y range for all six stations**, based on the largest active
+gas footprint across the spectrometer: X = [-287.52, +287.52] cm and
+Y = [-242.50, +242.50] cm. This shows the smaller MS0/MS1 stations with
+empty outer space instead of artificially filling the whole frame.
+
+The left-hand spatial-density map uses identical XY bin edges and
+physical bin areas across stations. The right-hand module-count map
+is now also drawn in global X/Y centimetres rather than incomparable
+row/column indices. Module tiles are centred on the true installed
+gas XY positions. Each tile visualizes a module's crossing total;
+the true 3-cm gas overlap is preserved in the counts but cannot be
+depicted as disjoint rectangular colored tiles.
+
+The color norm remains independently determined per figure (sqrt
+with 99.5th-percentile high-end saturation by default); hence equal
+colors do NOT automatically mean equal numeric occupancy between
+different station figures. Read colorbar values when comparing absolute
+chamber hit rates.
+
+Output is **PNG only**. When rerun in an existing result directory,
+the script removes older PDFs matching only its own previously generated
+occupancy and angle filename patterns, leaving unrelated files alone.
+
+Default shared-frame run:
+
+```bash
+bash test/mwpc-stage-c/run_pi_checkerboard_figures.sh
+```
+
+To compare to the old station-fitted layout in a separate directory:
+
+```bash
+bash test/mwpc-stage-c/run_pi_checkerboard_figures.sh \
+  --xy-range station \
+  --out test_runs/mwpc_stage_c/pi_checkerboard_figures_station_range
+```
