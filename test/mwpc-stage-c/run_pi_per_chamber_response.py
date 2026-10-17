@@ -422,11 +422,10 @@ def main():
         default=Path("test_runs/mwpc_stage_c/c_heed_library_2p4/heed_2p4_clusters.csv"),
     )
     ap.add_argument(
-        "--garfield", type=Path,
-        default=Path(
-            "test_runs/mwpc_stage_c/c_transport_box_map_hybrid_boundary_2p4/"
-            "c_transport_box_electrons.csv"
-        ),
+        "--garfield", type=Path, default=None,
+        help="Override Garfield transport-box file. By default use the "
+             "hybrid high-stat boundary map if it exists, otherwise the "
+             "verified full 50-trials-per-box baseline.",
     )
     ap.add_argument(
         "--out", type=Path,
@@ -440,11 +439,28 @@ def main():
     args = ap.parse_args()
     if args.hours <= 0 or args.checkpoint_every <= 0:
         ap.error("hours and checkpoint-every must be positive")
+    if args.max_per_source < 0:
+        ap.error("--max-per-source must be nonnegative")
+    if args.garfield is None:
+        hybrid = Path(
+            "test_runs/mwpc_stage_c/c_transport_box_map_hybrid_boundary_2p4/"
+            "c_transport_box_electrons.csv"
+        )
+        baseline = Path(
+            "test_runs/mwpc_stage_c/c_transport_box_map_gm2p0_gp4p0/"
+            "c_transport_box_electrons.csv"
+        )
+        args.garfield = hybrid if hybrid.is_file() else baseline
+        print(f"Automatic Garfield map selection: {args.garfield}", flush=True)
     inputs = [args.heed_tracks, args.heed_clusters, args.garfield,
               args.crossings / "modules.csv"]
     missing = [str(p) for p in inputs if not p.is_file()]
     if missing:
         ap.error("Required existing files missing:\n" + "\n".join(missing))
+    for source in SOURCES:
+        expected_crossings = args.crossings / f"crossings_{source}_ms2_530.csv"
+        if not expected_crossings.is_file():
+            ap.error(f"Missing checkerboard crossing input: {expected_crossings}")
     args.out.mkdir(parents=True, exist_ok=True)
     descriptor = args.out / "settings.json"
     values = {
