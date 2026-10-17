@@ -6,13 +6,55 @@ import csv
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.colors import LogNorm, Normalize, PowerNorm
+
 from make_pi_checkerboard_figures import (
     GEOMETRY, allocate, consume_crossings, validate,
+    build_color_norm, plot_modules, plot_spatial,
 )
 from mwpc_checkerboard_projection import NX
 
 
+def check_color_norm():
+    values = np.asarray([0., 1., 4., 9., 1000.])
+    norm, clipped = build_color_norm(values, "sqrt", .75)
+    assert isinstance(norm, PowerNorm) and clipped
+    assert norm(1.) < norm(4.) < norm(9.)
+    linear, clipped = build_color_norm(values, "linear", 1.)
+    assert isinstance(linear, Normalize) and not clipped
+    assert abs(float(linear(1000.)) - 1.) < 1.e-12
+    log_norm, clipped = build_color_norm(values, "log", .75)
+    assert isinstance(log_norm, LogNorm) and clipped
+    assert log_norm(1.) < log_norm(4.) < log_norm(9.)
+    empty, clipped = build_color_norm(np.zeros(10), "sqrt", .995)
+    assert isinstance(empty, Normalize) and not clipped
+
+    sample = allocate(2.)[2]
+    sample["spatial"][10, 10] = 200
+    sample["spatial"][10, 11] = 1
+    sample["chamber_counts"][2, 2] = 300
+    sample["chamber_counts"][2, 3] = 1
+    fig, axes = plt.subplots(1, 2)
+    for mode in ("linear", "sqrt", "log"):
+        spatial, clipped_spatial = plot_spatial(
+            axes[0], sample, 2, mode, .5
+        )
+        modules, clipped_modules = plot_modules(
+            axes[1], sample, 2, mode, .5
+        )
+        assert spatial is not None and clipped_spatial
+        assert modules is not None and clipped_modules
+        fig.canvas.draw()
+        axes[0].cla()
+        axes[1].cla()
+    plt.close(fig)
+    print("PASS: sqrt, log and linear normalization + clipping render correctly")
+
+
 def main():
+    check_color_norm()
     # Two neighboring modules in MS2; same muon crosses both.
     station = 2
     a = GEOMETRY[station][3 * NX[station] + 2]
