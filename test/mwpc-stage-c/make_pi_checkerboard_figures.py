@@ -1,0 +1,495 @@
+#!/usr/bin/env python3
+"""Make PI-ready NA60+/DiCE checkerboard maps and accepted-muon angle spectra.
+
+Inputs: Stage-C reconstructed gas crossings, one row per MODULE crossing.
+Source production was historical GEANT4 reference-plane trajectories; results
+are straight-line geometrical projections, not direct GEANT4 chamber hits.
+Requires numpy and matplotlib, but not ROOT, Garfield or pandas.
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+from collections import Counter
+from itertools import groupby
+from math import ceil, isfinite
+from pathlib import Path
+
+import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+
+from mwpc_checkerboard_projection import (
+    SOURCES, NX, NY, GAS_X_CM, GAS_Y_CM, MS0_GAS_Y_CM,
+    OVERLAP_CM, build_chambers,
+)
+
+CHANNEL_LABELS = {
+    "jpsi40-bore": "J/psi", "phi40-bore": "phi", "omega40-bore": "omega",
+}
+ANGLE_VARIABLES = ("theta_u_deg", "theta_w_deg")
+ANGLE_LABELS = {
+    "theta_u_deg": r"$\theta_u$ (across wires)",
+    "theta_w_deg": r"$\theta_w$ (along wires)",
+}
+WIRE_PITCH_CM = 0.4
+GEOMETRY = build_chambers()
+
+
+def footprint(station):
+    gas_y = MS0_GAS_Y_CM if station == 0 else GAS_Y_CM
+    width = GAS_X_CM + (NX[station] - 1) * (GAS_X_CM - OVERLAP_CM)
+    height = gas_y + (NY[station] - 1) * (gas_y - OVERLAP_CM)
+    return width, height
+
+
+def allocate(bin_cm):
+    data = {}
+    for station in range(6):
+        width, height = footprint(station)
+        nxb, nyb = ceil(width / bin_cm), ceil(height / bin_cm)
+        data[station] = {
+            "chamber_counts": np.zeros((NY[station], NX[station]), dtype=np.int64),
+            "spatial": np.zeros((nyb, nxb), dtype=np.int64),
+            "xedges": np.linspace(-width / 2, width / 2, nxb + 1),
+            "yedges": np.linspace(-height / 2, height / 2, nyb + 1),
+            "angles": {field: [] for field in ANGLE_VARIABLES},
+            "n_muons": 0, "n_crossings": 0, "n_multi": 0,
+            "multiplicity": Counter(), "det_count": Counter(),
+        }
+    return data
+
+
+def track_key(row):
+    return (row["job"], row["event"], row["track"], row["station"])
+
+
+def consume_crossings(path, entries, limit_groups=0):
+    """A source CSV is ordered by reference track. Module hits for a muon
+    and station are contiguous, as emitted by mwpc_checkerboard_projection.py."""
+    required = {
+        "job", "event", "track", "station", "det_id", "row", "col", "layer",
+        "x_in_cm", "y_in_cm", "x_out_cm", "y_out_cm",
+        "theta_u_deg", "theta_w_deg",
+    }
+    with path.open(newline="", encoding="utf-8") as stream:
+        reader = csv.DictReader(stream)
+        missing = required.difference(reader.fieldnames or [])
+        if missing:
+            raise ValueError(f"{path}: missing columns {sorted(missing)}")
+        processed = 0
+        for key, records in groupby(reader, track_key):
+            if limit_groups and processed >= limit_groups:
+                break
+            processed += 1
+            station = int(key[3])
+            if station not in entries:
+                raise ValueError(f"Invalid station {station}")
+            data = entries[station]
+            det_ids = set()
+            first = True
+            for row in records:
+                if first:
+                    for field in ANGLE_VARIABLES:
+                        theta = float(row[field])
+                        if not isfinite(theta):
+                            raise ValueError(f"Invalid angle {field}: {theta}")
+                        data["angles"][field].append(theta)
+                    data["n_muons"] += 1
+                    first = False
+
+                det_id = int(row["det_id"])
+                if det_id in det_ids:
+                    raise ValueError(
+                        f"Repeated det_id={det_id} for reference state {key}"
+                    )
+                det_ids.add(det_id)
+                rr, cc = int(row["row"]), int(row["col"])
+                if not (0 <= rr < NY[station] and 0 <= cc < NX[station]):
+                    raise ValueError(f"Invalid module row/col: {row}")
+                chamber = GEOMETRY[station][rr * NX[station] + cc]
+                if chamber.det_id != det_id or chamber.layer != row["layer"]:
+                    raise ValueError(f"Geometry mismatch for MS{station} det_id={det_id}")
+
+                data["chamber_counts"][rr, cc] += 1
+                data["det_count"][det_id] += 1
+                data["n_crossings"] += 1
+
+                # IMPORTANT: one spatial entry for EACH gas-volume crossing.
+                # A muon crossing two chambers contributes two spatial entries.
+                x = .5 * (float(row["x_in_cm"]) + float(row["x_out_cm"]))
+                y = .5 * (float(row["y_in_cm"]) + float(row["y_out_cm"]))
+                xe, ye = data["xedges"], data["yedges"]
+                if not (xe[0] - 1e-6 <= x <= xe[-1] + 1e-6 and
+                        ye[0] - 1e-6 <= y <= ye[-1] + 1e-6):
+                    raise ValueError(
+                        f"Midpoint outside MS{station} footprint: ({x}, {y})"
+                    )
+                ix = min(len(xe) - 2, max(
+                    0, int(np.searchsorted(xe, x, side="right") - 1)))
+                iy = min(len(ye) - 2, max(
+                    0, int(np.searchsorted(ye, y, side="right") - 1)))
+                data["spatial"][iy, ix] += 1
+
+            mult = len(det_ids)
+            if not mult:
+                raise AssertionError(f"Empty muon/station group: {key}")
+            data["multiplicity"][mult] += 1
+            data["n_multi"] += int(mult >= 2)
+    return processed
+
+
+def validate(source, entries, input_dir, scenario, complete):
+    """Internal sum rules and independent check against Stage-C projector."""
+    for station, data in entries.items():
+        hits = data["n_crossings"]
+        assert int(data["chamber_counts"].sum()) == hits
+        assert int(data["spatial"].sum()) == hits
+        assert sum(k * v for k, v in data["multiplicity"].items()) == hits
+        assert sum(data["multiplicity"].values()) == data["n_muons"]
+        assert all(len(data["angles"][a]) == data["n_muons"]
+                   for a in ANGLE_VARIABLES)
+
+    if not complete:
+        return
+
+    station_file = input_dir / "stations.csv"
+    if not station_file.is_file():
+        raise FileNotFoundError(
+            f"Missing full-run cross-check table: {station_file}"
+        )
+    with station_file.open(newline="", encoding="utf-8") as stream:
+        rows = [r for r in csv.DictReader(stream)
+                if r["source"] == source
+                and float(r["scenario_ms2_z_cm"]) == scenario]
+    if len(rows) != 6:
+        raise ValueError(f"Expected six station rows for {source}")
+    for row in rows:
+        station = int(row["station"])
+        data = entries[station]
+        expected_hits = int(row["chamber_crossings_total"])
+        expected_muons = int(row["projected_muons_with_gas"])
+        if (data["n_crossings"] != expected_hits
+                or data["n_muons"] != expected_muons):
+            raise ValueError(
+                f"MS{station} {source}: stations.csv says "
+                f"{expected_hits} hits/{expected_muons} muons, "
+                f"but reconstruction has "
+                f"{data['n_crossings']} hits/{data['n_muons']} muons"
+            )
+
+    module_file = input_dir / "modules.csv"
+    if not module_file.is_file():
+        raise FileNotFoundError(
+            f"Missing full-run cross-check table: {module_file}"
+        )
+    with module_file.open(newline="", encoding="utf-8") as stream:
+        rows = [r for r in csv.DictReader(stream)
+                if r["source"] == source
+                and float(r["scenario_ms2_z_cm"]) == scenario]
+    if len(rows) != 298:
+        raise ValueError(f"Expected 298 module rows for {source}")
+    for row in rows:
+        st, det = int(row["station"]), int(row["det_id"])
+        if int(row["muon_crossings"]) != entries[st]["det_count"][det]:
+            raise ValueError(
+                f"MS{st}, module {det}: crossings differ from modules.csv"
+            )
+
+
+def plot_spatial(ax, data, station):
+    xe, ye = data["xedges"], data["yedges"]
+    pixel_area = (xe[1] - xe[0]) * (ye[1] - ye[0])
+    image = ax.imshow(
+        data["spatial"] / pixel_area,
+        origin="lower", interpolation="nearest",
+        extent=[xe[0], xe[-1], ye[0], ye[-1]], aspect="equal",
+    )
+    for ch in GEOMETRY[station]:
+        half_y = (MS0_GAS_Y_CM if station == 0 else GAS_Y_CM) / 2
+        ax.add_patch(Rectangle(
+            (ch.x - GAS_X_CM / 2, ch.y - half_y), GAS_X_CM, 2 * half_y,
+            fill=False, linewidth=.45, edgecolor="white", alpha=.28,
+        ))
+    ax.set_xlabel("Global X (cm), along wires")
+    ax.set_ylabel("Global Y (cm), across wires")
+    ax.set_title("Spatial hit density (every chamber crossing)", fontsize=11)
+    return image
+
+
+def plot_modules(ax, data, station):
+    counts = data["chamber_counts"]
+    image = ax.imshow(
+        counts, origin="lower", interpolation="nearest", aspect="equal"
+    )
+    peak = int(counts.max())
+    for ch in GEOMETRY[station]:
+        count = counts[ch.row, ch.col]
+        frac = count / peak if peak else 0.
+        ax.text(
+            ch.col, ch.row, ch.layer,
+            ha="center", va="center",
+            fontsize=6.2 if station >= 4 else 8,
+            color="white" if frac < .52 else "black", alpha=.75,
+        )
+    ax.set_xticks(range(NX[station]))
+    ax.set_yticks(range(NY[station]))
+    ax.set_xlabel("Module column (X)")
+    ax.set_ylabel("Module row (Y)")
+    ax.set_title(
+        "Crossings / chamber; letter = stagger layer", fontsize=11
+    )
+    return image
+
+
+def make_occupancy_figures(output_dir, source, entries, scenario):
+    folder = output_dir / "occupancy"
+    folder.mkdir(parents=True, exist_ok=True)
+    for station, data in entries.items():
+        fig, axs = plt.subplots(
+            1, 2, figsize=(14.4, 6.5), layout="constrained"
+        )
+        image = plot_spatial(axs[0], data, station)
+        fig.colorbar(
+            image, ax=axs[0], shrink=.8, label="Crossings / cm$^2$"
+        )
+        image = plot_modules(axs[1], data, station)
+        fig.colorbar(
+            image, ax=axs[1], shrink=.8, label="Crossings / module"
+        )
+        n_muon = data["n_muons"]
+        n_hits = data["n_crossings"]
+        p_multi = data["n_multi"] / n_muon if n_muon else 0.
+        fig.suptitle(
+            f"{CHANNEL_LABELS[source]} | MS{station} | "
+            f"298-module checkerboard | MS2 at {scenario:.0f} cm\n"
+            f"{n_hits:,} chamber crossings from {n_muon:,} distinct muons | "
+            f"multi-module muons: {p_multi:.1%}",
+            fontsize=14,
+        )
+        stem = f"hitmap_{source}_MS{station}_ms2_{int(scenario)}"
+        fig.savefig(folder / (stem + ".png"), dpi=175)
+        fig.savefig(folder / (stem + ".pdf"))
+        plt.close(fig)
+
+
+def make_angle_figures(output_dir, source, entries, scenario):
+    """Six station panels; one value per unique accepted muon/station."""
+    folder = output_dir / "angles"
+    folder.mkdir(parents=True, exist_ok=True)
+    rows = []
+    for field in ANGLE_VARIABLES:
+        xlim = 40 if field == "theta_u_deg" else 60
+        edges = np.linspace(
+            -xlim, xlim, 161 if xlim == 40 else 241
+        )
+        heights, means, stds, q95s, n_out = [], [], [], [], []
+        for station in range(6):
+            angles = np.asarray(entries[station]["angles"][field])
+            hist, _ = np.histogram(angles, bins=edges)
+            density = (
+                hist / (len(angles) * (edges[1] - edges[0]))
+                if len(angles) else hist
+            )
+            heights.append(density)
+            means.append(float(angles.mean()) if len(angles) else np.nan)
+            stds.append(float(angles.std()) if len(angles) else np.nan)
+            q95s.append(float(np.quantile(np.abs(angles), .95))
+                        if len(angles) else np.nan)
+            n_out.append(int(np.count_nonzero(
+                (angles < edges[0]) | (angles > edges[-1])
+            )))
+
+        ymax = max((float(v.max()) for v in heights), default=1.) * 1.15
+        if ymax <= 0:
+            ymax = 1.
+        fig, axs = plt.subplots(
+            2, 3, figsize=(14, 8.7),
+            sharex=True, sharey=True, layout="constrained",
+        )
+        for station, ax in enumerate(axs.flat):
+            ax.stairs(heights[station], edges, fill=True, alpha=.65)
+            ax.axvline(0, color="0.35", lw=.9, ls="--")
+            ax.set_ylim(0, ymax)
+            ax.set_title(
+                f"MS{station} — N={entries[station]['n_muons']:,}"
+            )
+            ax.text(
+                .96, .94,
+                f"mean={means[station]:+.2f}°\n"
+                f"σ={stds[station]:.2f}°\n"
+                f"P95 |θ|={q95s[station]:.2f}°",
+                transform=ax.transAxes, ha="right", va="top",
+                fontsize=9,
+                bbox={"facecolor": "white", "alpha": .85,
+                      "edgecolor": "none"},
+            )
+            if station >= 3:
+                ax.set_xlabel(ANGLE_LABELS[field] + " [deg]")
+            if station % 3 == 0:
+                ax.set_ylabel("Density (1/degree)")
+            rows.append({
+                "source": source, "ms2_z_cm": scenario,
+                "station": station, "axis": field,
+                "unique_muons": entries[station]["n_muons"],
+                "mean_deg": means[station], "std_deg": stds[station],
+                "p95_abs_deg": q95s[station],
+                "out_of_display_range": n_out[station],
+            })
+        fig.suptitle(
+            f"{CHANNEL_LABELS[source]} | accepted muon incidence angles | "
+            f"{ANGLE_LABELS[field]}\n"
+            "ONE entry per muon/station "
+            "(multi-chamber tracks counted once)",
+            fontsize=14,
+        )
+        stem = (
+            f"angles_{source}_{field.replace('_deg', '')}"
+            f"_ms2_{int(scenario)}"
+        )
+        fig.savefig(folder / (stem + ".png"), dpi=175)
+        fig.savefig(folder / (stem + ".pdf"))
+        plt.close(fig)
+    return rows
+
+
+def write_csv(path, rows):
+    if not rows:
+        raise ValueError(f"Cannot write empty summary {path}")
+    with path.open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(stream, fieldnames=rows[0].keys())
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def run(args):
+    args.out.mkdir(parents=True, exist_ok=True)
+    station_rows, angle_rows = [], []
+    full_run = args.limit_per_source == 0
+    for source in SOURCES:
+        filename = (
+            args.input / f"crossings_{source}_ms2_{int(args.ms2_z)}.csv"
+        )
+        if not filename.is_file():
+            raise FileNotFoundError(
+                f"Missing {filename}; run "
+                "run_c_checkerboard_projection.sh full first"
+            )
+        entries = allocate(args.bin_cm)
+        print(f"Reading {filename} ...", flush=True)
+        n_groups = consume_crossings(
+            filename, entries, args.limit_per_source
+        )
+        validate(
+            source, entries, args.input, args.ms2_z, full_run
+        )
+        for st, data in entries.items():
+            n_muon, n_hits = data["n_muons"], data["n_crossings"]
+            row = {
+                "source": source, "ms2_z_cm": args.ms2_z,
+                "station": st,
+                "unique_muon_station_crossings": n_muon,
+                "chamber_crossings": n_hits,
+                "extra_chamber_crossings": n_hits - n_muon,
+                "muons_with_2plus_chambers": data["n_multi"],
+                "multi_chamber_muon_fraction":
+                    data["n_multi"] / n_muon if n_muon else np.nan,
+            }
+            for k in (1, 2, 3, 4):
+                row[f"muons_with_{k}_chambers"] = data["multiplicity"][k]
+            row["muons_with_5plus_chambers"] = sum(
+                v for k, v in data["multiplicity"].items() if k >= 5
+            )
+            station_rows.append(row)
+            print(
+                f"  MS{st}: {n_muon:,} unique muons, "
+                f"{n_hits:,} chamber crossings, "
+                f"{data['n_multi']/n_muon:.2%} multi-chamber",
+                flush=True,
+            )
+        make_occupancy_figures(
+            args.out, source, entries, args.ms2_z
+        )
+        angle_rows.extend(
+            make_angle_figures(args.out, source, entries, args.ms2_z)
+        )
+        print(
+            f"  Processed {n_groups:,} contributing "
+            "muon/station groups",
+            flush=True,
+        )
+
+    write_csv(
+        args.out / "pi_station_crossing_summary.csv", station_rows
+    )
+    write_csv(
+        args.out / "pi_muon_angles_summary.csv", angle_rows
+    )
+    (args.out / "READ_ME_FIRST.txt").write_text(
+        "NA60+/DiCE MWPC checkerboard: PI geometry/angle figures\n"
+        "===================================================\n\n"
+        "18 occupancy figures = 3 dimuon channels x 6 stations.\n"
+        "  LEFT: spatial density of gas-crossing midpoints. "
+        "ONE entry PER CHAMBER CROSSING.\n"
+        "  RIGHT: counts per chamber; A/B/C/D are checkerboard Z levels.\n"
+        "6 angle figures = 3 channels x theta_u/theta_w, "
+        "each with MS0..MS5.\n"
+        "  Angles use ONE entry per accepted muon/station, "
+        "even for multi-chamber crossings.\n\n"
+        f"MS2 baseline z = {args.ms2_z:.0f} cm.\n"
+        "Standard gas 66.56x51.20 cm, narrow MS0 66.56x30.72 cm.\n"
+        "Module grid: 4x8, 4x5, 6x7, 6x7, 8x9, 9x10 = 298 modules.\n"
+        "Active overlap X/Y=3 cm; stagger A/B/C/D = -6,-2,+2,+6 cm.\n"
+        "Wires along X; 4 mm wire pitch in reference Garfield model.\n"
+        "Approx. wires: standard 128, MS0 77 (rounded).\n"
+        "Approx. total: 36,512 wires, pending edge/wire-origin design.\n\n"
+        "LIMITATIONS: Historical GEANT4 states projected by straight lines "
+        "onto the new gas boxes.\n"
+        "NOT direct gas hits from the updated geometry; "
+        "not real Edep or readout efficiency.\n"
+        "Each source simulated separately; no physical luminosity "
+        "normalization or unbiased efficiency.\n"
+        "Normal full run cross-checks stations.csv and modules.csv.\n"
+        "Smoke-prefix mode skips checks against full production tables.\n",
+        encoding="utf-8",
+    )
+    print(
+        f"Saved 18 dual-panel occupancy figures, "
+        f"6 angle figures, 2 CSV summaries: {args.out}"
+    )
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument(
+        "--input", type=Path,
+        default=Path("test_runs/mwpc_stage_c/checkerboard_full"),
+    )
+    ap.add_argument(
+        "--out", type=Path,
+        default=Path("test_runs/mwpc_stage_c/pi_checkerboard_figures"),
+    )
+    ap.add_argument(
+        "--ms2-z", type=float, choices=[530., 550.], default=530.,
+    )
+    ap.add_argument(
+        "--bin-cm", type=float, default=2.,
+        help="Spatial 2D hitmap bin width [cm]",
+    )
+    ap.add_argument(
+        "--limit-per-source", type=int, default=0,
+        help="Muon/station groups per channel: smoke only",
+    )
+    args = ap.parse_args()
+    if args.bin_cm <= 0 or args.limit_per_source < 0:
+        ap.error(
+            "--bin-cm must be positive and "
+            "--limit-per-source must be non-negative"
+        )
+    run(args)
+
+
+if __name__ == "__main__":
+    main()
