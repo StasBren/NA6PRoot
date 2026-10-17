@@ -13,6 +13,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -167,8 +168,8 @@ void processChunk(const std::string& fileName, int parentPDG,
       if (std::isfinite(rapidity(mu))) h.daughterY.Fill(rapidity(mu));
       // Same angular convention used in Stage-C muon station studies.
       if (mu.Pz() > 0.) {
-        h.daughterThetaU.Fill(std::atan2(mu.Py(), mu.Pz()) * 180. / M_PI);
-        h.daughterThetaW.Fill(std::atan2(mu.Px(), mu.Pz()) * 180. / M_PI);
+        h.daughterThetaU.Fill(std::atan2(mu.Py(), mu.Pz()) * (180. / std::acos(-1.)));
+        h.daughterThetaW.Fill(std::atan2(mu.Px(), mu.Pz()) * (180. / std::acos(-1.)));
       }
       px += mu.Px();
       py += mu.Py();
@@ -226,12 +227,12 @@ void drawOne(const Channel& channel, Histograms& h, const Counts& c,
   canvas.SaveAs(output.c_str());
 }
 
-void checkOverflow(const Histograms& h, const Channel& channel)
+void checkOverflow(Histograms& h, const Channel& channel)
 {
   // Warn about hidden axis overflow rather than silently plotting truncated
   // tails. No physics result is declared verified when substantial overflow
   // occurs.
-  const auto& all = const_cast<Histograms&>(h).all();
+  const auto all = h.all();
   for (auto* hist : all) {
     const double overflow = hist->GetBinContent(hist->GetNbinsX() + 1);
     const double underflow = hist->GetBinContent(0);
