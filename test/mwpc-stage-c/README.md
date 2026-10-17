@@ -1120,3 +1120,70 @@ PNG and 600-row CSV:
 The printed image title explicitly labels the conditional vs
 unconditional probabilities: mean and median use collected electrons
 only; 100-ns fraction uses *all launched electrons* as denominator.
+
+
+## Physics-first PI wire atlas V2 (after visual review)
+
+The original 18 station wire images and 894 chamber details are kept.
+The improved **V2** avoids interpreting a row of horizontal wire stripes
+as spatial muon XY density; an anode wire intrinsically integrates along X.
+
+V2 reads the complete already-computed `pi_fixed_wire_counts.csv`
+**without resampling Heed/Garfield**, plus the original projected
+`checkerboard_full/crossings_<source>_ms2_530.csv`. A deterministic
+geometry-control pass counts the true finite anode cells intersected
+by each projected gas track and constructs real XY crossing histograms
+from gas-segment midpoints, preserving gas-volume det_id.
+
+Preview (all real data, just 18 station + 18 contact figures):
+
+```bash
+bash test/mwpc-stage-c/run_pi_wire_validation_v2.sh preview
+```
+
+After reviewing, make 894 corrected per-chamber profile sheets as well:
+
+```bash
+bash test/mwpc-stage-c/run_pi_wire_validation_v2.sh full
+```
+
+Outputs remain **separate from V1**, under:
+
+`test_runs/mwpc_stage_c/pi_fixed_wire_maps/physical_validation/`.
+
+- `pi_geom_wire_counts.csv`: 109,536 rows of physical anode cell
+  geometric-hit counts (source,station,det_id,wire_index), with a
+  chamber crossing denominator.
+- `pi_crossing_density_xy.npz`: 18 real XY crossing-density histograms
+  on a physical 5-cm bin grid, with their own bin edges.
+- `atlas_v2/station_validation/`: 18 **six-panel** figures, for each
+  source/station: real XY track crossing density; geometric cells
+  crossed; Garfield anodes collecting >=1 or >=5 primary electrons;
+  electrons collected within 100ns; and response-minus-geometry
+  on a common physical wire coordinate.
+- `atlas_v2/contact_sheets/`: 18 station-wide grids of sparklines
+  overlaying gray geometry, orange collected >=1e, and blue >=5e;
+  chamber IDs and crossing statistics are labeled; red rims explicitly
+  warn when a chamber has fewer than 100 projected crossings.
+- `atlas_v2/chamber_profiles/`: 894 detailed PNGs each comparing
+  the same anode indices across geometry, >=1e, >=5e, and <=100ns;
+  low-stat chambers are flagged instead of silently overstated.
+
+**Improved semantics.** In station-level wire maps, the color is
+anode activation count per **10,000 chamber gas-volume crossings in
+the same channel/station**. This is an *overall occupancy/rate*
+map, not a conditional module efficiency. On the individual chamber
+sheet, the vertical axis is activation probability per **crossing
+of that specific chamber**. The two denominators must not be
+conflated. Each wire runs along X so no apparent X localization
+should be inferred from long colored lines. The true XY information
+is shown in a dedicated panel. The physical view zooms to each
+station, with the SAME axis range across the three channels for a
+given station. No physically meaningful single-anode X resolution
+is claimed.
+
+**Validation scope.** The geometric and anode-response comparisons
+still use the saved GEANT **reference-plane states** extrapolated
+into the staggered 298 gas boxes, not native Geant4 MWPC gas Edep.
+The 77/128 anodes, mechanical Y origin, and use of the reference
+B=0 and asymmetric Garfield 2+4mm transport map remain nominal.
