@@ -95,7 +95,7 @@ def shared_extent():
     return max(widths), max(heights)
 
 
-def overview(out, arr, exp, source_i, station, norm, cmap):
+def overview(out, arr, exp, source_i, station, norm, cmap, saturated):
     src = SOURCES[source_i]
     fig, axes = plt.subplots(1, 3, figsize=(20, 7), layout="constrained")
     width, height = shared_extent()
@@ -132,7 +132,8 @@ def overview(out, arr, exp, source_i, station, norm, cmap):
         ax.set_ylabel("Global Y [cm], across wires")
         ax.set_title(CAPTIONS[k], fontsize=11)
         ax.grid(False)
-        fig.colorbar(lc, ax=ax, shrink=.65, label="Fraction of module crossings")
+        fig.colorbar(lc, ax=ax, shrink=.65, label="Fraction of module crossings",
+                     extend="max" if saturated else "neither")
     number = int(np.sum(exp[source_i, [c.det_id for c in GEOM[station]]]))
     fig.suptitle(
         f"{LABELS[src]}  |  MS{station}  |  {number:,} chamber crossings  |  "
@@ -177,7 +178,7 @@ def details(out, arr, exp, source_i, ch):
     plt.close(fig)
 
 
-def contact_sheet(out, arr, exp, source_i, station, norm, cmap):
+def contact_sheet(out, arr, exp, source_i, station, norm, cmap, saturated):
     src = SOURCES[source_i]
     nx, ny = NX[station], NY[station]
     fig, axes = plt.subplots(ny, nx, figsize=(nx * 2.5, ny * 1.65),
@@ -202,7 +203,8 @@ def contact_sheet(out, arr, exp, source_i, station, norm, cmap):
     )
     sm = ScalarMappable(norm=norm, cmap=cmap)
     fig.colorbar(sm, ax=list(axes.ravel()), shrink=.55,
-                 label="P per chamber crossing")
+                 label="P per chamber crossing",
+                 extend="max" if saturated else "neither")
     path = out / "contact_sheets" / f"wire_contacts_{src}_MS{station}.png"
     fig.savefig(path, dpi=120)
     plt.close(fig)
@@ -329,8 +331,8 @@ def main():
             f"high-end clipping={clipped}", flush=True,
         )
         for st in range(6):
-            overview(args.input, arr, exp, i, st, norm, cmap)
-            contact_sheet(args.input, arr, exp, i, st, norm, cmap)
+            overview(args.input, arr, exp, i, st, norm, cmap, clipped)
+            contact_sheet(args.input, arr, exp, i, st, norm, cmap, clipped)
             if not args.no_details:
                 for ch in GEOM[st]:
                     details(args.input, arr, exp, i, ch)
