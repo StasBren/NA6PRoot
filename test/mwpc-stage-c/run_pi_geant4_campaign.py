@@ -38,7 +38,7 @@ from pathlib import Path
 CHANNELS = ("Jpsi", "Phi", "Omega")
 BASE_SEED = {"Jpsi": 202610181, "Phi": 202710181, "Omega": 202810181}
 ESSENTIAL = ("MCKine.root", "HitsMuonSpec.root", "geometry.root",
-             "na6pLayout.ini")
+             "MuonReferencePlanes.root", "na6pLayout.ini")
 STUDY = "pi_geant4_hit_validation_v1"
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
@@ -115,6 +115,8 @@ def setup(args):
         "physics_settings": "beam.energyPerNucleon=40",
         "digitization": False,
         "gas_step_diagnostics": True,
+        "portable_reference_plane_audit": True,
+        "reference_plane_schedule": "280..900cm/10cm + 365,430,495cm",
         "generator": str(generator),
         "generator_sha256": sha256(generator),
         "hook": str(hook),
@@ -160,6 +162,10 @@ def setup(args):
                     "x,p, accumulated Edep and time; gasStepsMuonSpec tree "
                     "stores positive-Edep step positions and momenta"
                 ),
+                "MuonReferencePlanes.root": (
+                    "Geometry-independent 10-cm Z-grid muon transport snapshots "
+                    "(linearly interpolated Geant4 steps; unremapped track IDs)"
+                ),
                 "geometry.root": "Geometry of THIS run, needed for correct local axes",
                 "na6pLayout.ini": "Exact NA6PRoot configurable layout snapshot",
             },
@@ -173,6 +179,9 @@ def setup(args):
                 "Forced signal dimuons are not absolute physical rates",
                 "Reusing identical RNG seed in changed geometry does not "
                 "guarantee identical individual particle trajectories",
+                "Virtual Z-plane positions and momenta are linearly "
+                "interpolated WITHIN actual Geant4 steps; they are not new "
+                "sensitive detector hits or exact physics crossings",
                 "Existing historical LocalTrajectoryAudit.root reference-plane "
                 "data are a distinct independent dataset, not event-matched",
             ],
@@ -180,8 +189,9 @@ def setup(args):
         write_json_atomic(manifest_path, manifest)
     print("CAMPAIGN:", suite, flush=True)
     print(
-        "Edep steps enabled. Every completed chunk retains original "
-        "MCKine.root, HitsMuonSpec.root, geometry.root, layout INI.",
+        "Edep steps AND passive muon reference planes enabled. Every "
+        "completed chunk retains truth, gas hits, spatial steps, Z-plane "
+        "snapshots, geometry, and layout INI.",
         flush=True,
     )
     return suite, inputs
@@ -245,12 +255,16 @@ def simulate(args, suite, inputs):
                 "original_event_range_in_campaign": [
                     part*args.chunk_size, part*args.chunk_size+n,
                 ],
-                "env": {"NA6P_MWPC_STORE_GAS_STEPS": "1"},
+                "env": {
+                    "NA6P_MWPC_STORE_GAS_STEPS": "1",
+                    "NA6P_MWPC_STORE_REFERENCE_PLANES": "1",
+                },
                 "notes":"Each chunk has distinct random seed; event indices "
                         "inside ROOT are local to that chunk.",
             })
             env = os.environ.copy()
             env["NA6P_MWPC_STORE_GAS_STEPS"] = "1"
+            env["NA6P_MWPC_STORE_REFERENCE_PLANES"] = "1"
             log = out / "simulation.log"
             print(
                 f"RUN {channel} chunk{part+1:04d}: "
@@ -300,6 +314,7 @@ def simulate(args, suite, inputs):
                 "completed_utc":dt.datetime.now(dt.timezone.utc).isoformat(),
                 "output_sha256":checksums,
                 "verified_gas_step_tree":True,
+                "verified_virtual_muon_plane_tree":True,
             })
             count_new += 1
             print(
