@@ -1774,3 +1774,67 @@ The new anode-specific code is separated from the cathode strip Stage-B
 algorithms. Reusable genuine Stage-A gain statistics are consumed by
 the importer rather than duplicating avalanche physics. The user's
 large Geant4 output is always treated as an immutable transport library.
+
+
+### ALL 201 real-Geant4 chunks: PI chamber Edep, entrance/exit angles, overlap QA
+
+The completed full campaign has 67 chunks/source and 200,000 events/source
+(600,000 total). Its audited 59,046,706 passively interpolated muon Z-plane
+states and 7,671,338 positive-Edep Geant4 gas steps are immutable raw
+transport evidence. The successful new native first-chunk exporter selected
+29,488 / 23,301 / 21,533 true **muon** gas-hit rows for J/psi/phi/omega
+out of 3,000 generated events/source.
+
+New read-only, resumable \`pi_native_full_campaign_qa.py\` covers **all native
+chamber gas-hit segments**, not the old approximate geometry projections.
+It uses \`export_c_geant_muon_crossings.C\` with the ACTUAL source/chunk-specific
+MCKine truth PDG join and TGeo transformed local entry/exit momenta.
+The analysis runs at most ONE temporary CSV at a time (no huge full-run CSV)
+and saves per-chunk QA checkpoints. Re-running skips verified completed
+checkpoint chunks. Its input checks include frozen campaign completion and
+source ROOT file sizes/mtime. The checkpoint epoch binds both exporter and
+analyzer source revisions.
+
+Run one first chunk per channel with synthetic conservation tests:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_native_full_qa.sh first
+
+Check for \`PASS: PI FULL native gas Edep...\`. Then run all 67 chunks/channel:
+
+    bash test/mwpc-stage-c/run_pi_native_full_qa.sh all
+
+Outputs:
+
+    test_runs/mwpc_stage_c/pi_native_full_quality/
+      pi_native_all_chamber_quality.csv    # every 298 det ID * all 3 sources
+      pi_native_all_station_quality.csv    # six stations * 3 sources
+      pi_native_all_histograms.csv         # per module Edep/angles/path bins
+      pi_native_all_QA_report.json
+      checkpoints/                         # resumes after power/interruption
+
+Each chamber reports true muon gas-hit frequency, energy and path length,
+fraction with Edep>0, approximate Pearson Edep-vs-length correlation and
+physics flags. The histogram table contains conditional distributions
+for eight variables: Edep, gas path, theta_u/w **in and out**, and
+wrapped theta_out-minus-theta_in. Each bin retains its exact edges and
+counts. Station summaries distinguish:
+- distinct remapped muon tracks with gas hits in the station;
+- the number visiting **two or more separate physical chambers**;
+- extra distinct chamber crossings beyond the first per track;
+- multiple hit segments in the **same** chamber (do not conflate with
+  physical detector overlap).
+
+This is **NOT the complete PI deliverable yet**: the analyzer contains
+no Garfield electrons, drift-time acceptance, avalanche gain, hardware
+trigger, or per-wire 0/1/2/3/4+ probabilities. Those are the separately
+defined anode-response layers. In addition, a muon with a hit in active gas
+is not identical to every muon incident on a station reference plane.
+The true "per station incoming muon" denominator must be extracted
+separately from the new MuonReferencePlanes.root snapshots and must
+not be silently replaced with gas-crossing tracks or generated events.
+
+The full run computes with existing ROOT files ONLY and performs NO
+Geant4 transportation, Garfield electron avalanche or cathode simulation.
+It may take a while to read all 201 saved chunks, but will resume safely.
