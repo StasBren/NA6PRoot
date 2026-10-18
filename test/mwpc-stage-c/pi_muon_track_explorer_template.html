@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NA60+ · Muon Track Explorer</title>
+<style>
+:root{--bg:#0b1220;--panel:#122237;--ink:#e7f1fa;--sub:#a4bace;--line:#34516a;--a:#53d8c6;--b:#f9b25b;--dull:#5c7185}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px system-ui,-apple-system,"Segoe UI",sans-serif;margin:0}
+header{padding:18px max(18px,3vw);background:linear-gradient(120deg,#172f4b,#0f1b2b);border-bottom:1px solid var(--line)}
+h1{font-size:22px;margin:4px 0 7px}
+h2{font-size:15px;margin:0}
+p{color:var(--sub);font-size:12px;line-height:1.5}
+.kicker{letter-spacing:1.6px;font-weight:700;font-size:10px;color:var(--a)}
+a{color:#7ee1e8}
+label{display:block;font-size:11px;color:var(--sub);margin-bottom:4px}
+select,button{background:#1b3450;color:var(--ink);border:1px solid #4c6880;border-radius:7px;padding:8px 9px;font:inherit;cursor:pointer}
+select{max-width:100%;min-width:135px}
+button:hover,select:hover{border-color:#88d7db}
+button:focus-visible,select:focus-visible{outline:2px solid var(--a);outline-offset:2px}
+button:disabled{opacity:.35;cursor:not-allowed}
+.controls{padding:14px max(18px,3vw);display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.controls>div{min-width:120px}
+.controls .grow{flex:1}
+.notice{margin:0 max(18px,3vw) 14px;background:#182b40;border-left:3px solid #f1af60;border-radius:4px;padding:11px 14px;line-height:1.5;color:#cfdeeb;font-size:12px}
+.layout{display:grid;grid-template-columns:minmax(350px,1.18fr) minmax(340px,1fr);gap:14px;padding:0 max(18px,3vw) 20px}
+.panel{background:var(--panel);border:1px solid #304960;border-radius:11px;overflow:hidden;min-width:0}
+.head{padding:12px 14px;border-bottom:1px solid #304960;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.contents{padding:12px 15px}
+.muted{color:var(--sub);font-size:12px;line-height:1.5}
+.big{font-size:18px;font-weight:700}
+.stations{padding:0 max(18px,3vw) 15px;display:grid;grid-template-columns:repeat(6,minmax(70px,1fr));gap:8px}
+.station{display:flex;flex-direction:column;gap:5px;text-align:left;padding:11px 9px;min-width:0;background:#13253a}
+.station.active{border-color:var(--a);background:#1e4250}
+.station .n{font-size:20px;font-weight:700}
+.station .short{font-size:11px;color:var(--sub)}
+.traces{display:grid;grid-template-columns:1fr;gap:12px}
+.traces svg{display:block;width:100%;height:205px;background:#0d1d31;border:1px solid #293c51;border-radius:6px}
+#plan{display:block;width:100%;min-height:365px;height:45vh;max-height:600px;background:#0c1d30;border:1px solid #293c51;border-radius:6px;cursor:crosshair}
+#wiremap{display:block;width:100%;height:530px;background:#0c1d30;border:1px solid #293c51;border-radius:6px}
+#wireRows{max-height:210px;overflow:auto;display:grid;gap:6px;margin-top:9px}
+.wireRow{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:6px 9px;border:1px solid #28445b;border-radius:6px}
+.statline{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;margin:9px 0 12px;font-size:12px;color:var(--sub)}
+.two{display:grid;grid-template-columns:minmax(210px,.85fr) minmax(240px,1fr);gap:14px}
+.chip{color:var(--a);font-weight:650}
+.legend{display:flex;gap:13px;flex-wrap:wrap;font-size:12px;color:var(--sub);margin-top:7px}
+.point{display:inline-block;width:11px;height:5px;vertical-align:middle;margin-right:4px;background:var(--a)}
+.point.plus{background:var(--b)}
+.foot{padding:0 max(18px,3vw) 30px;color:var(--sub);font-size:12px;line-height:1.7}
+@media(max-width:1050px){.layout,.two{grid-template-columns:1fr}.stations{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:550px){.stations{grid-template-columns:repeat(2,1fr)}.controls{gap:8px}#plan{height:370px}}
+</style>
+</head>
+<body>
+<header>
+<div class="kicker">NA60+ · DI-CE MWPC · EVENT DISPLAY</div>
+<h1>Muon Track Explorer</h1>
+<p>Один мюон, реальные исторические опорные состояния и проекции на газовые объёмы. При наличии Heed/Garfield — одна симуляция сбора электронов по фиксированным анодам.</p>
+<a href="pi_station_interactive.html">← Вернуться к статистическим картам станций</a>
+</header>
+<div class="controls">
+ <div><label for="source">Канал</label><select id="source"></select></div>
+ <div class="grow"><label for="event">Сгенерированное событие (job / event)</label><select id="event"></select></div>
+ <div><label for="track">Мюон из события</label><select id="track"></select></div>
+ <div><button id="prev">← Предыдущее</button> <button id="next">Следующее →</button></div>
+</div>
+<div class="notice" id="caveat">Нет реального электронного триггера: Heed/Garfield показывает сбор первичных электронов, не полный сигнал на электронике. Между станциями показаны соединительные отрезки, не истинные Geant4 steps.</div>
+<div class="stations" id="stations"></div>
+<div class="layout">
+<section class="panel">
+ <div class="head"><h2>Траектории в проекциях X(Z) и Y(Z)</h2><span class="muted" id="eventInfo"></span></div>
+ <div class="contents traces">
+  <svg xmlns="http://www.w3.org/2000/svg" id="xz" viewBox="0 0 540 205" aria-label="Координата X по оси Z"></svg>
+  <svg xmlns="http://www.w3.org/2000/svg" id="yz" viewBox="0 0 540 205" aria-label="Координата Y по оси Z"></svg>
+  <div class="legend"><span><span class="point"></span> μ⁻ (PDG 13)</span><span><span class="point plus"></span> μ⁺ (PDG −13)</span><span>Нажми точку или кнопку станции</span></div>
+ </div>
+</section>
+<section class="panel">
+ <div class="head"><h2 id="stationTitle">Станция MS0 — камера</h2><span class="muted" id="selectedStats"></span></div>
+ <div class="contents">
+  <svg xmlns="http://www.w3.org/2000/svg" id="plan" viewBox="-200 -200 400 400" aria-label="Модули MWPC и попадания выбранного мюона"></svg>
+  <p class="muted">Прямоугольники — газовые площади камер в XY; подсвеченные — геометрически пересечённые этим треком. Нажми камеру для подробностей.</p>
+ </div>
+</section>
+</div>
+<div class="layout">
+<section class="panel">
+ <div class="head"><h2>Аноды выбранного газового пересечения</h2>
+   <div><label for="criterion">Подсветить аноды</label>
+   <select id="criterion">
+    <option value="e1">≥1 собранный электрон</option>
+    <option value="e5">≥5 собранных электронов</option>
+    <option value="t100">≥1 электрон до 100 нс</option>
+    <option value="geom">Пересечённые геометрические ячейки</option>
+   </select></div></div>
+ <div class="contents two">
+  <div>
+   <div class="big" id="hitTitle">—</div>
+   <div class="muted" id="hitInfo"></div>
+   <div class="statline" id="wireStats"></div>
+   <div class="muted">Светлые линии — проволоки с выбранным критерием; серые — остальные. Реальная MWPC использует индуцированный сигнал и порог — это здесь ещё не вычислено.</div>
+   <div id="wireRows"></div>
+  </div>
+  <svg xmlns="http://www.w3.org/2000/svg" id="wiremap" viewBox="0 0 360 520" aria-label="Нумерованные аноды с индивидуальным собранным зарядом"></svg>
+ </div>
+</section>
+<section class="panel">
+ <div class="head"><h2>Что означает выбранное пересечение?</h2></div>
+ <div class="contents">
+  <p><strong>Геометрия</strong> — пересечение прямолинейного продолжения исторического Geant4-трека с номинальным газовым объёмом одной камеры. Магнитный изгиб и рассеяние между сохранёнными опорными состояниями здесь не вычисляются.</p>
+  <p><strong>Первичная ионизация</strong> — распределение кластеров по Heed вдоль сегмента. При выборе разных событий меняется реализованное распределение кластеров.</p>
+  <p><strong>Сбор заряда</strong> — выбор конечного анода для каждого первичного электрона из сохранённой Garfield-карты транспорта (B=0, приближённое сопоставление зазоров).</p>
+  <p><strong>Срабатывание электроники</strong> потребовало бы лавинного усиления, weighting fields/сигнала Shockley–Ramo, интеграции, шумов и порога. Эта модель пока не реализована. Даже ≥5 собранных электронов — не аппаратный порог.</p>
+  <p>Отсутствие подсветки станции означает только то, что в этой выборке не найдено **пересечение газа**, а не то, что частица обязательно не пересекла её опорную плоскость.</p>
+ </div>
+</section>
+</div>
+<div class="foot">
+Каждая запись помечена исходными source/job/event/track/PDG. Набор событий детерминированно выбран из исторических CSV и дополнительно отранжирован для интересных траекторий — не используйте его для статистических вероятностей. На основе нового Geant4-рана позднее можно подключить настоящие газовые хиты, энерговыделение и детальные положения мюона.
+</div>
+<script id="trackData" type="application/json">__PI_TRACK_DATA__</script>
+<script>
+"use strict";
+(function(){
+const D=JSON.parse(document.getElementById("trackData").textContent);
+const $=id=>document.getElementById(id),NS="http://www.w3.org/2000/svg";
+const names={"jpsi40-bore":"J/ψ · 40 AGeV","phi40-bore":"φ · 40 AGeV","omega40-bore":"ω · 40 AGeV"};
+const state={source:Object.keys(D.sources)[0],ei:0,ti:0,station:0,det:null,criterion:D.meta.chargeModel?"e1":"geom"};
+const selectedColor="#53d8c6",otherColor="#f9b25b";
+function node(tag,attrs,parent){const e=document.createElementNS(NS,tag);for(const key in (attrs||{}))e.setAttribute(key,attrs[key]);if(parent)parent.appendChild(e);return e}
+function label(v,x,y,attrs,root){const e=node("text",Object.assign({x,y,fill:"#bbccdd","font-size":10},attrs||{}),root);e.textContent=v;return e}
+function ev(){return D.sources[state.source][state.ei]}
+function mu(){return ev().tracks[state.ti]}
+function sign(p){return p===13?"μ⁻":p===-13?"μ⁺":"μ"}
+function hue(p){return p===13?selectedColor:otherColor}
+function n(v){return Number(v).toLocaleString("ru-RU")}
+function fmt(v,k){return Number(v).toFixed(k)}
+function pointsByStation(t,st){return t.points.filter(p=>p.st===st)}
+function average(a,k){return a.reduce((s,p)=>s+p[k],0)/a.length}
+function chosenHit(){return mu().points.find(p=>p.st===state.station&&p.det===state.det)||null}
+function selectBox(id,items,selected){const element=$(id);element.replaceChildren();for(const o of items){const option=document.createElement("option");option.value=String(o.value);option.textContent=o.text;element.appendChild(option)}element.value=String(selected)}
+function changeSource(value){
+ state.source=value;state.ei=0;state.ti=0;state.station=0;state.det=null;
+ renderAll();
+}
+function changeEvent(i){state.ei=Math.max(0,Math.min(i,D.sources[state.source].length-1));state.ti=0;state.station=0;state.det=null;renderAll()}
+function changeTrack(i){state.ti=i;state.station=0;state.det=null;renderAll()}
+function chooseStation(st){state.station=st;const pts=pointsByStation(mu(),st);state.det=pts.length?pts[0].det:null;renderAll()}
+function getActive(hit,criterion){
+ if(!hit)return[];
+ if(criterion==="geom")return hit.geom;
+ if(!hit.charges)return[];
+ return hit.charges.filter(r=>criterion==="e1"?r[1]>=1:criterion==="e5"?r[1]>=5:r[2]>=1).map(r=>r[0]);
+}
+function renderToolbar(){
+ selectBox("source",Object.keys(D.sources).map(src=>({value:src,text:names[src]})),state.source);
+ const events=D.sources[state.source];
+ selectBox("event",events.map((e,i)=>({value:i,text:"#"+(i+1)+": job "+e.job+" / event "+e.event+" · "+e.hitStations+" MS"})),state.ei);
+ selectBox("track",ev().tracks.map((t,i)=>({value:i,text:sign(t.pdg)+" · track "+t.id+" · "+t.stations.length+" станций с газом"})),state.ti);
+ $("prev").disabled=state.ei===0;
+ $("next").disabled=state.ei===events.length-1;
+ $("criterion").value=state.criterion;
+ $("criterion").querySelectorAll("option").forEach(o=>{o.disabled=!D.meta.chargeModel&&o.value!=="geom"});
+ $("eventInfo").textContent="job "+ev().job+" / event "+ev().event+" · "+ev().tracks.length+" трек(а)";
+ $("caveat").textContent=D.meta.chargeModel?
+  "Heed/Garfield: реальные сохранённые модели первичной ионизации и дрейфа, но ОДНА стохастическая реализация для выбранного трека. Никаких измеренных срабатываний, лавинного усиления или порога электроники. Линия между газовыми точками — интерполяция, не Geant4-траектория.":
+  "Режим ТОЛЬКО ГЕОМЕТРИИ. Не загружены Heed/Garfield модели сбора заряда. Можно подсвечивать лишь геометрически пересечённые области проволок. Линии между станциями не настоящая непрерывная Geant4-траектория.";
+}
+function renderStations(){
+ const root=$("stations");root.replaceChildren();
+ for(let st=0;st<6;st++){
+  const hits=pointsByStation(mu(),st),b=document.createElement("button");
+  b.className="station"+(state.station===st?" active":"");
+  const number=document.createElement("strong");number.textContent="MS"+st;
+  const count=document.createElement("span");count.className="n";count.textContent=hits.length?String(hits.length):"—";
+  const sub=document.createElement("span");sub.className="short";sub.textContent=hits.length?hits.map(x=>"DET"+String(x.det).padStart(3,"0")).join(", "):"Газовых пересечений нет";
+  b.append(number,count,sub);b.onclick=()=>chooseStation(st);root.appendChild(b);
+ }
+}
+function trace(svgId,axis,title){
+ const root=$(svgId);root.replaceChildren();
+ const zs=D.meta.stationZcm,zmin=280,zmax=880;
+ const values=ev().tracks.flatMap(t=>t.points.map(p=>p[axis])).filter(Number.isFinite);
+ const range=Math.max(10,...values.map(Math.abs))*1.18;
+ const xpos=z=>44+(z-zmin)/(zmax-zmin)*475;
+ const ypos=v=>104-v/range*76;
+ for(const st of [0,1,2,3,4,5]){
+  const x=xpos(zs[st]);
+  node("line",{x1:x,y1:26,x2:x,y2:178,stroke:"#415970","stroke-width":.8,"stroke-dasharray":"3 3"},root);
+  label("MS"+st,x,192,{"text-anchor":"middle"},root);
+ }
+ for(const v of [-range,0,range]){
+  const y=ypos(v);node("line",{x1:40,y1:y,x2:526,y2:y,stroke:v===0?"#5e7790":"#2f465a","stroke-width":.8},root);
+  label(fmt(v,0),35,y+3,{"text-anchor":"end"},root);
+ }
+ label(title,46,14,{"font-weight":"700","font-size":12,fill:"#f2f7fa"},root);
+ label("Z, см",520,204,{"text-anchor":"end"},root);
+ ev().tracks.forEach((track,i)=>{
+  const stations=[...new Set(track.points.map(p=>p.st))].sort((a,b)=>a-b);
+  const samples=stations.map(st=>({st,pts:pointsByStation(track,st)}));
+  const active=i===state.ti;
+  const rgb=hue(track.pdg),segments=samples.map(item=>
+    xpos(average(item.pts,"z")).toFixed(2)+","+ypos(average(item.pts,axis)).toFixed(2));
+  if(segments.length>1)
+   node("polyline",{points:segments.join(" "),stroke:rgb,fill:"none",
+     "stroke-width":active?3.3:1.6,opacity:active?1:.45,"stroke-linecap":"round"},root);
+  for(const {st,pts} of samples){
+   const x=xpos(average(pts,"z")),y=ypos(average(pts,axis));
+   const pt=node("circle",{cx:x,cy:y,r:active?5.5:3.8,fill:rgb,
+     stroke:st===state.station&&active?"#fff":"none","stroke-width":2,
+     opacity:active?1:.6,cursor:"pointer"},root);
+   node("title",{},pt).textContent=sign(track.pdg)+", MS"+st+", "+
+     pts.length+" газовых камер";
+   pt.addEventListener("click",()=>{state.ti=i;chooseStation(st)});
+  }
+ });
+}
+function renderPlan(){
+ const root=$("plan");root.replaceChildren();
+ const geo=D.geometry[state.station],hits=pointsByStation(mu(),state.station);
+ const byDet=new Map(hits.map(p=>[p.det,p]));
+ const hy=state.station===0?15.36:25.6,hx=33.28;
+ const x0=Math.min(...geo.map(g=>g.x-hx)),x1=Math.max(...geo.map(g=>g.x+hx));
+ const y0=Math.min(...geo.map(g=>-g.y-hy)),y1=Math.max(...geo.map(g=>-g.y+hy));
+ const pad=Math.max(x1-x0,y1-y0)*.07;
+ root.setAttribute("viewBox",[x0-pad,y0-pad,x1-x0+2*pad,y1-y0+2*pad].join(" "));
+ for(const g of geo){
+  const hit=byDet.get(g.det),sel=hit&&state.det===g.det;
+  const group=node("g",{"data-det":g.det},root);
+  node("rect",{x:g.x-hx,y:-g.y-hy,width:2*hx,height:2*hy,
+    fill:hit?"#1b746e":"#1b3248",
+    "fill-opacity":hit?.6:.55,
+    stroke:sel?"#ffe2a6":hit?"#5fe1c2":"#6f879d",
+    "stroke-width":sel?2.8:hit?1.8:.6},group);
+  const f=Math.max(.8,(x1-x0)/300);
+  label(String(g.det),g.x,-g.y+f*1.5,{"text-anchor":"middle",
+    "font-size":f*4,fill:hit?"#f6fff8":"#a8bfd5"},group);
+  const overlay=node("rect",{x:g.x-hx,y:-g.y-hy,width:2*hx,height:2*hy,
+    fill:"transparent",cursor:hit?"pointer":"default"},group);
+  if(hit){overlay.onclick=()=>{state.det=g.det;renderPlan();renderHit()}}
+  node("title",{},overlay).textContent="DET"+g.det+(hit?
+    " — muon gas crossing; click for anodes":" — no sampled gas crossing");
+ }
+ $("stationTitle").textContent="Станция MS"+state.station+": расположение газовых модулей";
+ $("selectedStats").textContent=hits.length+" пересечений у выбранного мюона";
+}
+function renderHit(){
+ const root=$("wiremap");root.replaceChildren();
+ const hit=chosenHit(),rows=$("wireRows");rows.replaceChildren();
+ if(!hit){
+  $("hitTitle").textContent="Газовых пересечений нет";
+  $("hitInfo").textContent="Выбранный мюон не имеет сохранённой проекции на газовый объём ни одной камеры MS"+state.station+". Это не равнозначно отсутствию трека на станции.";
+  $("wireStats").textContent="";
+  label("Нет выбранного пересечения",180,250,{"text-anchor":"middle","font-size":14},root);
+  return;
+ }
+ const nWire=hit.st===0?77:128;
+ const active=getActive(hit,state.criterion),set=new Set(active);
+ const charge=new Map((hit.charges||[]).map(row=>[row[0],row]));
+ $("hitTitle").textContent="DET"+String(hit.det).padStart(3,"0")+" · "+hit.layer+" · MS"+hit.st;
+ $("hitInfo").textContent="Газовый сегмент: z="+fmt(hit.zIn,3)+"…"+fmt(hit.zOut,3)+
+  " см, x="+fmt(hit.x,2)+" см, y="+fmt(hit.y,2)+" см. "+
+  "Длина "+fmt(hit.length,2)+" мм, p="+fmt(hit.p,2)+" ГэВ/c. "+
+  "θᵤ="+fmt(hit.thetaU,2)+"°, θ𝓌="+fmt(hit.thetaW,2)+"°. "+
+  (hit.charges?"Первичных кластеров: "+hit.nClusters+
+    "; потеря за пределами конечной сетки: "+hit.lostElectrons+" e.":"");
+ $("wireStats").textContent="Активных анодов по критерию: "+active.length+
+  " из "+nWire+". Геометрических ячеек на пути: "+hit.geom.length+".";
+ const top=19,spacing=478/nWire;
+ for(let i=0;i<nWire;i++){
+  const j=nWire-1-i,y=top+(i+.5)*spacing,chargeRow=charge.get(j);
+  const c=chargeRow?chargeRow[1]:0,early=chargeRow?chargeRow[2]:0;
+  const on=set.has(j);
+  const line=node("line",{x1:43,y1:y,x2:311,y2:y,
+    stroke:on?"#58d6c6":"#3b566d",
+    "stroke-width":on?Math.max(2.3,spacing*.8):.8,
+    opacity:on?1:.36},root);
+  node("title",{},line).textContent="Анод "+j+
+   ": собранные электроны "+c+", до 100нс "+early+
+   ", выбранный критерий "+(on?"ДА":"нет");
+  if(i%8===0||i===nWire-1){
+   label(String(j),35,y+3,{"text-anchor":"end","font-size":10},root);
+  }
+ }
+ const info=active.length?active.slice(0,140):[];
+ for(const wire of info){
+  const line=document.createElement("div");line.className="wireRow";
+  const data=charge.get(wire)||[wire,0,0];
+  const left=document.createElement("strong");left.textContent="Анод №"+wire;
+  const right=document.createElement("span");right.className="chip";
+  right.textContent=hit.charges?
+     data[1]+" e собрано · "+data[2]+" e ≤100 нс":"геометрическая ячейка";
+  line.append(left,right);rows.append(line);
+ }
+ if(!active.length){
+  const z=document.createElement("p");z.className="muted";
+  z.textContent="При выбранном критерии нет активных анодов для этого сегмента.";
+  rows.append(z);
+ }
+}
+function renderAll(){
+ renderToolbar();renderStations();trace("xz","x","X(Z), см");
+ trace("yz","y","Y(Z), см");
+ if(state.det===null){
+  const initial=pointsByStation(mu(),state.station);
+  state.det=initial.length?initial[0].det:null;
+ }
+ renderPlan();renderHit();
+}
+$("source").onchange=e=>changeSource(e.target.value);
+$("event").onchange=e=>changeEvent(Number(e.target.value));
+$("track").onchange=e=>changeTrack(Number(e.target.value));
+$("criterion").onchange=e=>{state.criterion=e.target.value;renderHit()};
+$("prev").onclick=()=>changeEvent(state.ei-1);
+$("next").onclick=()=>changeEvent(state.ei+1);
+renderAll();
+})();
+</script>
+</body>
+</html>
