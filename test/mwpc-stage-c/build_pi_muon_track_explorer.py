@@ -110,7 +110,9 @@ def describe_row(row, models, analog=False, gain_bank=None):
         lam, marks, transport = models
         seed = stable_u64("track-explorer-Heed-Garfield-v1",
                           row["source"], row["job"], row["event"],
-                          row["track"], station, det)
+                          row["track"], station, det,
+                          *([row["hit_index"]] if row.get("native_hit")=="1"
+                            else []))
         rng = np.random.default_rng(seed)
         sampler=(cluster_native_gas_segment
                  if row.get("native_hit")=="1" else cluster_segment)
@@ -129,6 +131,8 @@ def describe_row(row, models, analog=False, gain_bank=None):
             anode_rng=np.random.default_rng(stable_u64(
                 "PI_ANODE_SURROGATE_V1",row["source"],row["job"],
                 row["event"],row["track"],station,det,
+                *([row["hit_index"]] if row.get("native_hit")=="1"
+                  else [])
             ))
             endpoints=zip(wire_ids.tolist(),arrival_times.tolist())
             result["anodeSignals"]=digitize_hit(
