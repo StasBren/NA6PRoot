@@ -1214,3 +1214,51 @@ MS1..5 wire indices 0..127. Increasing indices run along global Y (across
 wires); each wire extends along global X. Chamber XY outlines are staggered
 in Z according to A/B/C/D. **Exact first wire position and readout thresholds
 are not mechanically/electronically confirmed.**
+
+
+## Interactive standalone station dashboard (offline browser application)
+
+For a PI walkthrough, the existing **full data**, not synthetic demonstration
+curves, can be explored in a standalone HTML file that needs **no website,
+server, npm, ROOT or external CDNs**.
+
+Run once after completing the fixed-wire atlas and geometric controls:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git switch feature/mwpc-stage-c
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_station_dashboard.sh
+
+The runner executes a synthetic end-to-end regression (all 298 modules,
+3 source types, 36,512 nominal wires per source), checks syntax and builds
+a single file, opening it with Windows Explorer if WSL interop is available:
+
+    test_runs/mwpc_stage_c/pi_fixed_wire_maps/pi_station_interactive.html
+
+Features:
+- source switch J/psi, phi, omega; station switch MS0..MS5;
+- **Muon spatial mode**: 5x5-cm XY crossing footprint OR chamber counts
+  overlaid with actual nominal A/B/C/D chamber outlines;
+- **Wire mode**: physical horizontal anode lines coloured by activity;
+  selectable >=1 collected primary electron / >=5 / first 100ns / geometric;
+  group by 1, 4 or 8 adjacent real anodes for station overview;
+- selectable normalization **per actual chamber gas crossing**,
+  **per transported incoming station-reference muon**, or
+  **per 10,000 station chamber crossings**. The choice is explicit;
+- click a real detector ID; inspect its 77/128 distinct wire indices and
+  4 aligned response/geometric profiles; hover wire groups for numerics;
+- zoom/pan the station view, export the selected diagram as SVG and the
+  selected detector's exact per-wire counts as CSV;
+- warnings for zero-exposure and low-statistic modules.
+
+Input files (also validated against modules.csv/stations.csv and each other):
+- checkerboard_full/modules.csv and stations.csv
+- pi_fixed_wire_maps/pi_fixed_wire_counts.csv
+- pi_fixed_wire_maps/physical_validation/pi_geom_wire_counts.csv
+- pi_fixed_wire_maps/physical_validation/pi_crossing_density_xy.npz
+
+This is a **review UI**, not a replacement for full Geant4 hit/Edep production.
+The spatial hit map uses midpoint of projected gas-box intersections, not
+final digitized hits. The wire coloured stripes integrate over all X along
+the wire; do not treat their apparent XY extent as reconstructed muon X.
+The current nominal fixed wire grid is not a verified mechanical blueprint.
