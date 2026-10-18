@@ -58,6 +58,9 @@ export PATH="$_stagec_prefix/bin:$PATH"
 export LD_LIBRARY_PATH="$_stagec_prefix/lib:${LD_LIBRARY_PATH:-}"
 export ROOT_INCLUDE_PATH="$_stagec_prefix/include:${ROOT_INCLUDE_PATH:-}"
 export NA6P_STAGEC_INSTALL_PREFIX="$_stagec_prefix"
+# Match the canonical installed init.sh.in project-root variable; field,
+# geometry and any external ROOT macros must see the same installation.
+export NA6PROOT_ROOT="$_stagec_prefix"
 hash -r
 _active_sim="$(command -v na6psim)"
 _active_parallel="$(command -v na6psim_parallel)"
