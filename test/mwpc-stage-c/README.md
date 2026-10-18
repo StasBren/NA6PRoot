@@ -1407,3 +1407,14 @@ successful run, the existing
 test/mwpc-stage-c/export_c_geant_muon_crossings.C
 now additionally exports px/py/pz-out, theta_u/w-in/out and delta-theta;
 the native saved ROOT hit object remains authoritative.
+
+
+**Worker provenance and disk space.** In addition to the per-chunk
+merged ROOT files, the campaign now preserves original per-worker ROOT
+subruns under each chunk's raw_workers/ directory. This is deliberate:
+the diagnostic gasStepsMuonSpec event/track labels are written before
+MCKine remapping and may be worker-local. Keeping raw workers guarantees
+we can reconstruct the worker-specific event namespace and align native
+steps with parent truth later. Expect more disk use than the merged-only
+ROOT output (roughly up to twice the raw data, geometry/log dependent).
+Do not delete raw_workers/ for PI studies relying on particle ancestry.
