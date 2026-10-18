@@ -131,6 +131,7 @@ def setup(args):
         "events_per_source": args.events_per_source,
         "chunk_size": args.chunk_size,
         "workers": args.workers,
+        "preserve_original_worker_subruns": True,
         "channels": list(CHANNELS),
         "base_seeds": BASE_SEED,
         "physics_settings": "beam.energyPerNucleon=40",
@@ -199,6 +200,9 @@ def setup(args):
                 "MuonSpec hit vectors may store REMAPPED track IDs. "
                 "Never join without handling the remapping.",
                 "Saved gas-step diagnostics only include positive-Edep steps",
+                "Merged gas-step event/track IDs are not guaranteed to match "
+                "MCKine remapped IDs. Separate raw_workers/workerNNN are "
+                "retained to preserve unambiguous worker-local linkage.",
                 "Forced signal dimuons are not absolute physical rates",
                 "Reusing identical RNG seed in changed geometry does not "
                 "guarantee identical individual particle trajectories",
@@ -262,6 +266,7 @@ def simulate(args, suite, inputs):
             out.mkdir()
             command = [
                 sim, "--workers", str(args.workers),
+                "--keep-worker-output",
                 "-n", str(n), "-r", str(seed),
                 "-g", (f'{inputs["generator"]}+'
                        f'(1,"{channel}",0.,5.,0.,6.,false)'),
@@ -282,6 +287,15 @@ def simulate(args, suite, inputs):
                     "NA6P_MWPC_STORE_GAS_STEPS": "1",
                     "NA6P_MWPC_STORE_REFERENCE_PLANES": "1",
                 },
+                "worker_n_events": [
+                    n // args.workers + (1 if i < n % args.workers else 0)
+                    for i in range(min(n, args.workers))
+                ],
+                "worker_notes": (
+                    "Original ROOT files are preserved per worker under "
+                    "raw_workers/ so original/retained track IDs and event "
+                    "offsets are not lost in merged diagnostic trees."
+                ),
                 "notes":"Each chunk has distinct random seed; event indices "
                         "inside ROOT are local to that chunk.",
             })
@@ -304,6 +318,33 @@ def simulate(args, suite, inputs):
                     f"Geant4 failed rc={result.returncode} ({log}).\n"
                     + "\n".join(log.read_text(errors="replace").splitlines()[-30:])
                 )
+            # Preserve all worker-specific ROOT files, not just merged ROOT.
+            # The optional gasStepsMuonSpec tree was filled BEFORE track
+            # remapping and uses worker-local event indices; without original
+            # worker files a post-merge event/track join would be ambiguous.
+            kept = [
+                row.split("kept worker output:", 1)[1].strip()
+                for row in log.read_text(errors="replace").splitlines()
+                if "kept worker output:" in row
+            ]
+            if len(kept) != 1:
+                raise RuntimeError(
+                    "Cannot find exactly one preserved worker directory in "
+                    f"{log}; refusing to discard worker-local truth"
+                )
+            worker_root = Path(kept[0]).resolve()
+            if (worker_root.parent != out.parent or
+                    not worker_root.name.startswith("." + out.name + "_workers_")):
+                raise RuntimeError(
+                    f"Unrecognized wrapper worker directory: {worker_root}"
+                )
+            if not all((worker_root / f"worker{i:03d}").is_dir()
+                       for i in range(min(n, args.workers))):
+                raise RuntimeError(
+                    f"Missing raw worker subdirectories: {worker_root}"
+                )
+            shutil.move(str(worker_root), str(out / "raw_workers"))
+
             missing = [
                 f for f in ESSENTIAL
                 if not (out/f).is_file() or (out/f).stat().st_size==0
@@ -338,6 +379,7 @@ def simulate(args, suite, inputs):
                 "output_sha256":checksums,
                 "verified_gas_step_tree":True,
                 "verified_virtual_muon_plane_tree":True,
+                "original_worker_subruns_preserved":True,
             })
             count_new += 1
             print(
