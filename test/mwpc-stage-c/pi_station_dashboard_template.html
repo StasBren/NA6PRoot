@@ -240,7 +240,11 @@ function renderStation(){
   $("legendUnit").textContent=state.denom==="station"?"активаций / 10k пересечений станции":
     state.denom==="incident"?"на входящего мюона":"на пересечение камеры";
  }
- for (const g of geom) {
+ // Draw the selected detector last so its outline stays visible despite
+ // checkerboard XY overlaps.
+ const ordered=geom.filter(g=>g.id!==state.selected).concat(
+   geom.filter(g=>g.id===state.selected));
+ for (const g of ordered) {
   const group=svgNode("g",{"data-det":g.id},svg);
   const selected=g.id===state.selected;
   let fill="rgba(19,34,53,0.13)";
@@ -383,14 +387,19 @@ $("saveCSV").onclick=csvSelected;
 svg.addEventListener("wheel",evt=>{evt.preventDefault();zoom(evt.deltaY<0?.85:1.18);},{passive:false});
 svg.addEventListener("pointerdown",evt=>{
  if(evt.button!==0)return;
- svg.setPointerCapture(evt.pointerId);
- state.drag={x:evt.clientX,y:evt.clientY,view:[...state.view],moved:false};
+ // Delay pointer capture until a real drag. Immediate capture on the
+ // SVG root would retarget ordinary chamber clicks away from their rectangles.
+ state.drag={x:evt.clientX,y:evt.clientY,view:[...state.view],moved:false,
+             pointerId:evt.pointerId,captured:false};
  svg.classList.add("panning");
 });
 svg.addEventListener("pointermove",evt=>{
  if(!state.drag)return;
  const dx=evt.clientX-state.drag.x,dy=evt.clientY-state.drag.y;
- if(Math.abs(dx)+Math.abs(dy)>5)state.drag.moved=true;
+ if(Math.abs(dx)+Math.abs(dy)>5 && !state.drag.moved){
+  state.drag.moved=true;
+  try {svg.setPointerCapture(state.drag.pointerId);state.drag.captured=true;} catch(_){}
+ }
  if(state.drag.moved){
   const rect=svg.getBoundingClientRect(),v=state.drag.view;
   state.view=[v[0]-dx*v[2]/rect.width,v[1]-dy*v[3]/rect.height,v[2],v[3]];
