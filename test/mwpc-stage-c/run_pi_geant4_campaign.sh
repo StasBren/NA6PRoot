@@ -15,6 +15,10 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 cd "$REPO"
+python3 -m py_compile "$HERE/run_pi_geant4_campaign.py" || {
+ echo "Geant4 campaign Python syntax check failed" >&2
+ exit 2
+}
 MODE="smoke"
 if [[ $# -gt 0 ]]; then MODE="$1"; shift; fi
 case "$MODE" in
