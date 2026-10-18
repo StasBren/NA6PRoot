@@ -1653,3 +1653,124 @@ available. The charge view simulates PRIMARY-electron collection; a
 real electronics-fired-channel model remains a future stage requiring
 avalanche charge gain, induced current/weighting fields, shaping,
 threshold, noise and cross talk.
+
+
+
+## Anode-only electronics development after the 200k/channel Geant4 production
+
+The user requested the strongest possible **anode-only** event response model
+with no cathode U/V strip simulation. This is now divided into three auditable
+layers and **does not overwrite the frozen Geant4 campaign**.
+
+### First: verify what "long run finished" means
+
+Because the native production was launched with a 2.5-hour *per-invocation*
+budget, ending is NOT sufficient proof that all 200k events per source ran.
+Run a fast **READ-ONLY** metadata/root-validator audit:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git switch feature/mwpc-stage-c
+    git pull --ff-only
+    python3 test/mwpc-stage-c/audit_pi_geant4_campaign.py
+
+The audit prints completion counters Jpsi/Phi/Omega, verified Geant4 Edep
+step entries and interpolated muon reference-plane states from existing ROOT
+validator logs, and requires a separate campaign completion certificate.
+A complete run displays FINAL CAMPAIGN STATUS: COMPLETE. If it says
+INCOMPLETE, inspect the missing chunks; the runner can be resumed with
+the **exact original command**, including 200000/3000/4/2.5. Do NOT
+switch this campaign's original configuration to another total.
+
+### Second: native Geant4 gas hits in the Track Explorer
+
+Use the FIRST **validated merged** 3000-event chunk of EACH of the three
+sources to inspect actual gas detector response (read only). This prototype
+avoids huge all-chunk CSV exports before the native dataset has been checked:
+
+    bash test/mwpc-stage-c/run_pi_native_anode_first_chunk.sh
+
+This script:
+- runs no new Geant4 or Garfield microscopic jobs;
+- activates the correct installed NA6PRoot-mwpc ROOT library environment;
+- exports true Geant4 MWPC gas hits from HitsMuonSpec.root and
+  geometry.root with the preexisting TGeo local-frame converter;
+- **JOINS TParticle PDG** by remapped hit trackID to the matching
+  MCKine.root tracks branch, within that merged chunk;
+- excludes all nonmuon hits and preserves exact Geant4 actual Edep,
+  entry/exit and local u/v, times and 3-momentum for that specific hit;
+- samples Heed electron clusters from the existing Heed library
+  *independently*, NOT by converting Edep into a fake exact electron count;
+- selects up to 32 interesting native same-event groups/channel,
+  then samples existing Garfield electron transport endpoints, including
+  individual drift times, for a fixed nominal 77/128-wire 4-mm-pitch grid;
+- applies the explicitly preliminary anode-only gain/electronics surrogate;
+- saves/opens a separate page:
+
+    test_runs/mwpc_stage_c/pi_fixed_wire_maps/pi_muon_track_explorer_native.html
+
+Native export logs and first-chunk true muon-hit CSVs are preserved under:
+
+    test_runs/mwpc_stage_c/pi_native_anode_first_chunk/
+
+This is a new dataset. The historical projected-crossing event explorer
+remains unchanged at pi_muon_track_explorer.html. The native page explicitly
+labels true Geant4 gas hits and independent Edep. The links connecting
+true chamber hit midpoints between stations are VISUAL, not step trajectories.
+
+### Third: anode-only preliminary analog/digital response
+
+pi_anode_digitizer.py consumes individual saved Garfield endpoint times and
+the fixed anode channel number. It draws an independent positive avalanche
+gain for every primary electron; zero-gain avalanches remain zero. It
+can use the original **unconditioned** Phase-A gain-fluctuation CSV with
+collected_on_wire values INCLUDING ZERO, via the builder option
+--anode-gain-csv /path/to/gain_fluctuations.csv; otherwise it uses a
+clearly labelled **UNCALIBRATED** gamma/Polya distribution.
+
+The stored configurable fast response then approximates the fast electron
+and much slower ion-induced charge, convolves these *SURROGATE* currents
+with a normalized nominal CR-RC shaper, converts to hypothetical mV
+and adds reproducibly seeded sample noise. It saves an mV waveform for
+each wire that collected at least one primary electron (not 128 traces
+per every chamber, so noise-only hits are not yet in the efficiency).
+The browser redraws the waveform and firing pattern INSTANTLY when the
+user changes the threshold.
+
+Defaults are ONLY illustrative (not Stage A/B calibrated detector truth):
+mean gain 10000, shape 1.5, zero-avalanche probability 5%, prompt
+fraction 20%, fast current 5 ns, ion current 1200 ns, front-end
+peaking 80 ns, conversion 0.35 mV/fC, RMS Gaussian sampled noise
+0.35 mV and nominal threshold 5 mV. These values must be replaced
+by a real **anode Shockley-Ramo weighting field/current impulse** and
+measured ASIC timing/noise/threshold before quoting predictions.
+
+The default historical charge viewer also now contains this anode-only
+study-level voltage waveform:
+
+    bash test/mwpc-stage-c/run_pi_muon_track_explorer.sh
+
+For faster/no-anode runs, the underlying Python builder supports
+--no-anode-digitizer. The geometry-only runner bypasses Heed/Garfield
+entirely. The anode model does **not** calculate cathode strip waveforms,
+U/V stereo coordinates, strip sharing, strip thresholds or cathode CoG.
+
+### Physical next validation before final numerical claims
+
+1. Validate long-run per-source gas hit rates, Edep/path/angular
+   distributions and geometric bias, especially low-exposure chambers.
+2. Obtain or calculate an UNCONDITIONED electron-gain ensemble for the
+   actual 30-um wire, 4-mm pitch, gas mix, field and HV; do not reuse
+   Stage-B conditioned-nonzero avalanche visualization as gain statistics.
+3. Generate a genuine anode weighting-field Shockley-Ramo
+   **single avalanche** current library (electron AND ion signals);
+   compare with direct microscopic Garfield on controlled few-electron
+   crossings, then replace the surrogate impulse.
+4. Obtain preamplifier transfer function/shaping, equivalent noise charge
+   and discriminator/TOT settings from PI/electronics colleagues.
+5. Simulate noise-only channels and any electronic cross talk before
+   estimating final single-wire efficiency or fake hit multiplicity.
+
+The new anode-specific code is separated from the cathode strip Stage-B
+algorithms. Reusable genuine Stage-A gain statistics are consumed by
+the importer rather than duplicating avalanche physics. The user's
+large Geant4 output is always treated as an immutable transport library.
