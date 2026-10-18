@@ -6,6 +6,7 @@
 #include <TParticle.h>
 
 class NA6PMCStack;
+class NA6PMuonReferenceAudit;
 class NA6PGenerator;
 class TFile;
 class TTree;
@@ -27,7 +28,7 @@ class NA6PMC : public TVirtualMCApplication
   void BeginPrimary() override;
   void FinishPrimary() override;
   void Stepping() override;
-  void PreTrack() override {}
+  void PreTrack() override;
   void PostTrack() override {}
 
   void setupUserVertex(const std::string& s);
@@ -64,6 +65,7 @@ class NA6PMC : public TVirtualMCApplication
   void addSpecialParticles();
 
   std::unique_ptr<NA6PMCStack> mStack{};
+  std::unique_ptr<NA6PMuonReferenceAudit> mMuonReferenceAudit{};
   std::unique_ptr<NA6PGenerator> mGenerator{};
 
   std::unique_ptr<TMethodCall> mUserVertexMethod;
