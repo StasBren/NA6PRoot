@@ -55,8 +55,27 @@ def main():
         write(gf, geometric)
         np.savez_compressed(xyf, **arrays)
         destination = root/"interactive.html"
+        # An already completed historical per-module Heed/Garfield fold
+        # used a different randomized phase on every gas crossing.
+        # Validate all 894 PDFs, including zero-exposure chambers.
+        legacy_csv = root/"random_phase_module_probabilities.csv"
+        legacy = []
+        for row in modules:
+            n = row["muon_crossings"]
+            legacy.append({
+                "source": row["source"], "station": row["station"],
+                "det_id": row["det_id"],
+                "completed_source": 1,
+                "processed_chamber_crossings": n,
+                "expected_all_crossings": n,
+                **{f"P_nwire_{k}":
+                   (0.5 if k in ("0", "1") else 0.) if n else float("nan")
+                   for k in ("0", "1", "2", "3", "4", "5plus")},
+            })
+        write(legacy_csv, legacy)
         generate(Namespace(
             crossings=crossings, wire_counts=wf, geom_counts=gf, xy=xyf,
+            legacy_multiplicity=legacy_csv,
             template=Path(__file__).with_name("pi_station_dashboard_template.html"),
             out=destination))
         html = destination.read_text(encoding="utf-8")
@@ -67,6 +86,13 @@ def main():
         assert len(data["chambers"][SOURCES[0]]) == 298
         assert len(data["chambers"][SOURCES[0]]["17"]["e1"]) == 77
         assert len(data["chambers"][SOURCES[0]]["52"]["e1"]) == 128
+        assert data["multiplicity_sources"]["random_phase_available"]
+        assert not data["multiplicity_sources"]["fixed_grid_available"]
+        assert data["chambers"][SOURCES[0]]["17"]["legacyMultiplicity"] == [
+            0.5, 0.5, 0., 0., 0., 0.
+        ]
+        assert "legacyMultiplicity" not in data["chambers"][SOURCES[0]]["1"]
+        print("PASS: 894 validated completed legacy random-phase module PDFs")
         print("PASS: 3 sources, 6 stations, 298 chambers and 109536 anodes")
         print("PASS: 18 XY histograms and standalone embedded HTML")
 
