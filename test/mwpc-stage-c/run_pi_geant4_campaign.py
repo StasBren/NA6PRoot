@@ -118,6 +118,33 @@ def setup(args):
     if simlib is None:
         raise RuntimeError("Native executable does not link to expected libsimLib.so")
 
+    # The shell wrapper selects the CMake install prefix of this checkout.
+    # Freeze and CHECK all THREE paths. A mix of an old loader path and the
+    # new executable may otherwise pass some diagnostics and silently
+    # contaminate long-run reference and Edep samples.
+    active_prefix = os.environ.get("NA6P_STAGEC_INSTALL_PREFIX")
+    if active_prefix:
+        prefix = Path(active_prefix).resolve()
+        wanted = {
+            "na6psim": prefix / "bin" / "na6psim",
+            "na6psim_parallel": prefix / "bin" / "na6psim_parallel",
+            "libsimLib.so": prefix / "lib" / "libsimLib.so",
+        }
+        actual = {
+            "na6psim": Path(sim),
+            "na6psim_parallel": Path(parallel),
+            "libsimLib.so": Path(simlib),
+        }
+        for name, expected in wanted.items():
+            if actual[name].resolve() != expected.resolve():
+                raise RuntimeError(
+                    f"Stage-C install mix: {name} loaded from "
+                    f"{actual[name]}, expected {expected}. "
+                    "Do not run Geant4 until executable, parallel wrapper "
+                    "and shared library originate from the SAME installation."
+                )
+        print("Stage-C executable, parallel wrapper and simLib: SAME INSTALL", flush=True)
+
     # The first smoke run had an apparently successful Geant4 process but
     # lacked BOTH the new passive audit and the modern MWPC hit output.
     # Verify that the ACTUALLY LOADED shared library, not merely the Git
