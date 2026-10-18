@@ -128,7 +128,13 @@ void export_c_geant_muon_crossings(
       << "u_in_mm,v_in_mm,w_in_mm,u_out_mm,v_out_mm,w_out_mm,"
       << "px_in_GeV,py_in_GeV,pz_in_GeV,"
       << "pu_in_GeV,pv_in_GeV,pw_in_GeV,"
-      << "path_length_mm,edep_GeV,edep_eV,time_ns\n";
+      << "path_length_mm,edep_GeV,edep_eV,time_ns,"
+      << "px_out_GeV,py_out_GeV,pz_out_GeV,"
+      << "pu_out_GeV,pv_out_GeV,pw_out_GeV,"
+      << "theta_u_in_deg,theta_w_in_deg,"
+      << "theta_u_out_deg,theta_w_out_deg,"
+      << "delta_theta_u_deg,delta_theta_w_deg,"
+      << "status_start,status_end\n";
 
   std::map<int, SensorFrame> frames;
   Long64_t rows = 0;
@@ -172,6 +178,18 @@ void export_c_geant_muon_crossings(
           h.getPXIn(), h.getPYIn(), h.getPZIn(),
           pu, pv, pw);
 
+      double pu1, pv1, pw1;
+      masterVectorToGarfield(
+          frame.localToMaster,
+          h.getPXOut(), h.getPYOut(), h.getPZOut(),
+          pu1, pv1, pw1);
+
+      constexpr double deg = 180. / 3.14159265358979323846;
+      const double thetaUIn = std::atan2(pu, pv) * deg;
+      const double thetaWIn = std::atan2(pw, pv) * deg;
+      const double thetaUOut = std::atan2(pu1, pv1) * deg;
+      const double thetaWOut = std::atan2(pw1, pv1) * deg;
+
       const double du = u1 - u0;
       const double dv = v1 - v0;
       const double dw = w1 - w0;
@@ -188,7 +206,14 @@ void export_c_geant_muon_crossings(
           << h.getPXIn() << "," << h.getPYIn() << "," << h.getPZIn() << ","
           << pu << "," << pv << "," << pw << ","
           << length << "," << edep << "," << 1.e9 * edep << ","
-          << h.getTime() << "\n";
+          << h.getTime() << ","
+      << h.getPXOut() << "," << h.getPYOut() << "," << h.getPZOut() << ","
+      << pu1 << "," << pv1 << "," << pw1 << ","
+      << thetaUIn << "," << thetaWIn << ","
+      << thetaUOut << "," << thetaWOut << ","
+      << (thetaUOut - thetaUIn) << "," << (thetaWOut - thetaWIn) << ","
+      << static_cast<int>(h.getStatusStart()) << ","
+      << static_cast<int>(h.getStatusEnd()) << "\n";
 
       ++rows;
       sumEdep += edep;
