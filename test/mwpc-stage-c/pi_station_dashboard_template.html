@@ -203,7 +203,18 @@ function tooltipCh(g){
    "<br>На входящего мюона: "+pct(s.incident?n/s.incident:NaN)+
    "<br>Центр: X="+g.x.toFixed(2)+" см, Y="+g.y.toFixed(2)+" см";
 }
-function selectCh(id){state.selected=id;state.wire=0;renderStation();renderDetail();}
+function selectCh(id,wireIndex){
+ state.selected=id;state.wire=wireIndex===undefined?0:wireIndex;
+ renderStation();renderDetail();
+}
+function localAnodeAtEvent(evt,g) {
+ const p=svg.createSVGPoint();
+ p.x=evt.clientX;p.y=evt.clientY;
+ const q=p.matrixTransform(svg.getScreenCTM().inverse());
+ const n=chamber(g.id).e1.length;
+ const globalY=-q.y;
+ return Math.max(0,Math.min(n-1,Math.round((globalY-g.y)/.4+(n-1)/2)));
+}
 function renderStation(){
  svg.replaceChildren();
  const s=stationData(),geom=geometry(),gy=state.station===0?30.72:51.2, hx=66.56/2,hy=gy/2;
@@ -279,9 +290,27 @@ function renderStation(){
   const overlay=svgNode("rect", {x:g.x-hx,y:-g.y-hy,width:2*hx,height:2*hy,
       fill:"transparent",stroke:"none",cursor:"pointer"},group);
   overlay.addEventListener("pointerenter",evt=>tipShow(evt,tooltipCh(g)));
-  overlay.addEventListener("pointermove",tipMove);
+  overlay.addEventListener("pointermove",evt=>{
+    if(state.drag?.moved){tipHide();return;}
+    if(state.mode==="wires"){
+      const j=localAnodeAtEvent(evt,g);
+      const start=Math.floor(j/state.group)*state.group;
+      const v=chamber(g.id)[state.metric];
+      const end=Math.min(start+state.group,v.length);
+      const total=v.slice(start,end).reduce((a,b)=>a+b,0);
+      const ave=total/(end-start);
+      const rate=getRate(ave,g.id);
+      const formula=state.denom==="station"?
+        rate.toFixed(3)+" / 10k пересечений станции":pct(rate);
+      tipShow(evt,tooltipCh(g)+"<br>Проволоки: "+start+"–"+(end-1)+
+         "<br>Средняя частота: "+formula);
+    } else {tipMove(evt);}
+  });
   overlay.addEventListener("pointerleave",tipHide);
-  overlay.addEventListener("click",evt=>{if(!state.drag?.moved)selectCh(g.id);});
+  overlay.addEventListener("click",evt=>{
+    if(state.drag?.moved)return;
+    selectCh(g.id,state.mode==="wires"?localAnodeAtEvent(evt,g):0);
+  });
  }
  updateView();
 }
