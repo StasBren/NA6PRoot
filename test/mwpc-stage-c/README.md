@@ -1262,3 +1262,94 @@ The spatial hit map uses midpoint of projected gas-box intersections, not
 final digitized hits. The wire coloured stripes integrate over all X along
 the wire; do not treat their apparent XY extent as reconstructed muon X.
 The current nominal fixed wire grid is not a verified mechanical blueprint.
+
+
+## Geometry-change-resistant validation strategy and native Geant4 benchmark
+
+**Two distinct datasets, with different validity domains.**
+
+1. Historical high-stat **transport/reference-state library** (200k generated
+   dimuon events per channel) is already in the separate MNP33 archive; see
+   LOCAL_DATA_INVENTORY.md. Its LocalTrajectoryAudit.root and MCKine.root
+   can be reprojected cheaply to alternate candidate chamber placements.
+   These projected crossings do NOT reproduce new chamber material scattering
+   or gas ionization/Edep, and do not replace true Geant4 chamber hits.
+   The historical transport had its OWN upstream apparatus/material settings.
+2. New **native Geant4 current-MWPC benchmark** runs the actual 298-chamber
+   geometry with source dimuons and preserves native ROOT truth and gas hits.
+   It freezes/chunks output for reproducibility, but it is NOT transport
+   geometry-independent when the chamber material/layout changes. It is a
+   baseline for validating faster alternative layouts and for calculating
+   Edep/angle/individual gas-step distributions. The detailed wire pitch,
+   zero position, threshold and pulse model may be varied offline using these
+   saved actual gas-hit segments and deposited-charge diagnostics.
+
+A safety-first, resumable run is now available; **run a 3-events/channel
+smoke test first** (also compiles the ROOT generator/hook before parallel runs):
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git switch feature/mwpc-stage-c
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_geant4_campaign.sh smoke
+
+Then launch longer 40-AGeV native Geant4 production; arguments are
+total generated parent dimuon events/channel, events per atomic chunk,
+workers in parallel and approximate wall-clock budget in hours:
+
+    bash test/mwpc-stage-c/run_pi_geant4_campaign.sh full 30000 3000 4 2.5
+
+The default is 30k J/psi + 30k phi + 30k omega generated events, stored
+in 3000-event chunks. The runner stops *between* chunks when the time
+budget expires, may overshoot that time by one chunk, and resumes via the
+EXACT SAME command. Never rename the suite directory or change parameters
+mid-campaign. For different physics/geometries use a fresh separate suite.
+
+Optional detached launch after smoke success:
+
+    mkdir -p test_runs/mwpc_stage_c
+    nohup bash test/mwpc-stage-c/run_pi_geant4_campaign.sh full 30000 3000 4 2.5 \
+      > test_runs/mwpc_stage_c/pi_geant4_campaign.log 2>&1 &
+    tail -f test_runs/mwpc_stage_c/pi_geant4_campaign.log
+
+Campaign lives in:
+
+    test_runs/mwpc_stage_c/pi_geant4_hit_validation_v1/
+
+It contains frozen manifest campaign.json, source/channel/chunk directories,
+full command and simulator logs, per-chunk ROOT checks, SHA256 output
+digests and completed.json atomic chunk checkpoints.
+
+**Files preserved in each completed chunk:**
+- MCKine.root: original generator parents and retained daughters, including
+  the kept signal muon ancestors enforced by mwpcDimuonHooks.C;
+- HitsMuonSpec.root: native TTree hitsMuonSpec and gasStepsMuonSpec, the
+  latter enabled by NA6P_MWPC_STORE_GAS_STEPS=1;
+- geometry.root: exact TGeo geometry for interpreting gas local coordinates;
+- na6pLayout.ini: the exact layout/configuration saved by that Geant4 run.
+
+Modern NA6PBaseHit ALREADY stores three-momentum at entry AND at exit.
+The updated export_c_geant_muon_crossings.C can export local theta_u/w
+at entry/exit, their difference, true length and hit Edep, as well as
+positions and status bits. The real ROOT records stay the authoritative
+unreduced source.
+
+**Important join caveat:** The optional gasStepsMuonSpec diagnostic is filled
+during Geant4 stepping, before final NA6PMC track remapping. Its trackID is
+the original stepping/stack ID. MuonSpec hit vectors and MCKine retained IDs
+may use remapped IDs. Do NOT join these trees using those raw IDs alone.
+The step tree can be analysed separately spatially and by detector; for
+track-wise linkage a remapping-aware export is required.
+
+**Validation:** The campaign checks every chunk has all four mandatory files,
+equal truth/hit TTree event counts, tracks and MuonSpec branches, and the
+gasStepsMuonSpec tree with spatial and Edep branches. A missing diagnostic
+tree likely means the locally installed libsimLib was not rebuilt from this
+Stage-C branch; STOP and fix the build before any long run. Failed or
+interrupted chunks are never reported as complete. They are archived under
+_interrupted_* before retry, not deleted.
+
+The saved step-level data allow new wire-grid or readout variants to be
+compared without replaying Geant4 WHEN THE GAS AND PASSIVE MATERIAL
+GEOMETRY REMAIN THE SAME. Moving/replacing MWPC material changes multiple
+scattering and energy loss: the corresponding true detector-hit/Edep
+distributions must be rerun or approximated and explicitly labeled.
