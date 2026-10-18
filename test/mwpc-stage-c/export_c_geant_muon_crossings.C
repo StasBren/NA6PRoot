@@ -2,6 +2,7 @@
 
 #include <TFile.h>
 #include <TGeoManager.h>
+#include <TGeoPhysicalNode.h>  // TGeoPNEntry::GetPath(), not defined by TGeoManager.h
 #include <TGeoMatrix.h>
 #include <TTree.h>
 #include <TParticle.h>
