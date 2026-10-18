@@ -1448,3 +1448,30 @@ For manual confirmation, if needed:
 
 Do not launch full production until smoke shows PI_GEANT_CHUNK_PASS
 for all three channels.
+
+
+### Old vs MWPC installed prefixes (confirmed in user build log)
+
+The default login environment may still resolve **the old**:
+
+    ~/na6p/install/NA6PRoot/bin/na6psim
+
+even after a fully successful build and install of **this branch**:
+
+    ~/na6p/install/NA6PRoot-mwpc/bin/na6psim
+
+The campaign runner now sources activate_pi_stagec_env.sh and uses the
+single CMake build whose CMAKE_HOME_DIRECTORY is the active Git checkout.
+It prepends THAT install prefix to PATH, LD_LIBRARY_PATH and
+ROOT_INCLUDE_PATH, and sets NA6PROOT_ROOT for the subprocess only.
+The Python preflight verifies that the executable, wrapper and ACTUALLY
+loaded simLib are from the exact same prefix. Old NA6PRoot remains intact.
+
+After a previously successful compile/install, do **not** rebuild again:
+
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_geant4_campaign.sh smoke
+
+The failed old smoke run is archived automatically when its library hashes
+differ; no manual cleanup. Do not run full until all 3 channel smoke
+chunks pass their ROOT object and tree checks.
