@@ -1621,3 +1621,35 @@ projections, not native current-geometry Geant4 gas hits.
 The display is intentionally separate from native 200k/channel new Geant4
 campaign outputs; later the viewer can import the new actual MWPC gas
 hits/Edep after track-ID and parallel-worker ancestry reconciliation.
+
+### Muon Track Explorer visual validation and anode zoom
+
+The browser display was verified by a user-provided full-page screenshot
+in Chrome/Windows+WSL. With two valid MWPC gas crossings at the final
+station, the viewer previously rendered all 128 wires at once; this was
+accurate but made one active anode almost impossible to inspect.
+
+The new viewer defaults to **Вблизи активных (±10)**, displaying a
+CONTIGUOUS window of real numbered 4-mm-pitch anodes around the selected
+active wires, intersected geometric cells and projected gas midpoint.
+Select **Все 77/128 анодов** to revert to the full detector anode span.
+In the focused view the annotations show collected electrons per anode,
+or within 100 ns when the corresponding timing criterion is selected.
+An amber dashed guide marks the projected Y position of the gas midpoint,
+not a measured reconstructed coordinate.
+
+On the station XY geometry view a dot drawn over the chamber rectangles
+now locates each projected gas crossing; selecting either point opens the
+respective module. Symbol size is VISUAL, not a physical spot radius.
+
+To refresh the stored HTML without stopping the long Geant4 production,
+rerun the previously validated builder (does not modify Geant4 outputs):
+
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_muon_track_explorer.sh
+
+If memory/CPU resources are constrained, `geometry-only` remains
+available. The charge view simulates PRIMARY-electron collection; a
+real electronics-fired-channel model remains a future stage requiring
+avalanche charge gain, induced current/weighting fields, shaping,
+threshold, noise and cross talk.
