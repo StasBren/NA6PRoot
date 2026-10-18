@@ -5,6 +5,7 @@
 # A smoke run is required before going long (also precompiles ROOT macros).
 #
 #   bash test/mwpc-stage-c/run_pi_geant4_campaign.sh smoke
+#   bash test/mwpc-stage-c/run_pi_geant4_campaign.sh parallel-smoke
 #   bash test/mwpc-stage-c/run_pi_geant4_campaign.sh full
 #
 # Optional full arguments: events_per_source chunk_size workers hours
@@ -33,6 +34,13 @@ case "$MODE" in
    fi
    python3 "$HERE/run_pi_geant4_campaign.py" --mode smoke
    ;;
+ parallel-smoke)
+   if [[ $# -gt 0 ]]; then
+     echo "Parallel smoke takes no extra arguments" >&2
+     exit 2
+   fi
+   python3 "$HERE/run_pi_geant4_campaign.py" --mode parallel-smoke
+   ;;
  full)
    EVENTS="30000"
    CHUNK="3000"
@@ -51,7 +59,7 @@ case "$MODE" in
      --chunk-size "$CHUNK" --workers "$WORKERS" --hours "$HOURS"
    ;;
  *)
-   echo "Usage: bash $0 smoke | full [events_per_source] [chunk_size] [workers] [hours]" >&2
+   echo "Usage: bash $0 smoke | parallel-smoke | full [events_per_source] [chunk_size] [workers] [hours]" >&2
    exit 2
    ;;
 esac
