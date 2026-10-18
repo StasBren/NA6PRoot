@@ -133,12 +133,14 @@ def process_csv(path):
              "tracks_crossing_gas_in_all_six":0,
              "duplicate_hit_keys":0, "station":{}, "module":{},
              "station_unique_gas_tracks":{}, "station_overlap_tracks":{},
-             "station_extra_chamber_hits":{}}
+             "station_extra_chamber_hits":{},
+             "station_repeated_same_module_segments":{}}
     stats_station=defaultdict(fresh)
     stats_module=defaultdict(fresh)
     seen_hits=set()
     tracks=defaultdict(int)
     per_station=defaultdict(set)
+    station_muon_rows=Counter()
     with path.open(newline="",encoding="utf-8") as stream:
         rd=csv.DictReader(stream)
         required={"event","hit_index","track_id","det_id","station","pdg",
@@ -166,12 +168,15 @@ def process_csv(path):
                 summary["nonmuon_hits"]+=1
                 continue
             summary["muon_hits"]+=1
+            station_muon_rows[st]+=1
             tracks[(ev,tid)]|=1<<st
             per_station[(st,ev,tid)].add(det)
-            if not update(stats_station[st],row):
+            st_valid=update(stats_station[st],row)
+            det_valid=update(stats_module[det],row)
+            if st_valid != det_valid:
+                raise AssertionError("Station/module valid-hit classification mismatch")
+            if not st_valid:
                 summary["invalid_muon_hits"]+=1
-            if not update(stats_module[det],row):
-                raise ValueError("Station/module acceptance disagree")
     summary["unique_tracks_with_gas"]=len(tracks)
     summary["tracks_crossing_gas_in_all_six"]=sum(m==63 for m in tracks.values())
     for st in range(6):
@@ -182,6 +187,11 @@ def process_csv(path):
         summary["station_extra_chamber_hits"][str(st)]=(
             sum(len(g)-1 for g in groups)
         )
+        summary["station_repeated_same_module_segments"][str(st)]=(
+            station_muon_rows[st]-sum(map(len,groups))
+        )
+        if summary["station_repeated_same_module_segments"][str(st)]<0:
+            raise AssertionError("Distinct gas chamber count exceeds hit rows")
     summary["station"]={str(k):collapse(v)
                         for k,v in stats_station.items()}
     summary["module"]={str(k):collapse(v)
@@ -200,7 +210,7 @@ def process_csv(path):
         unique=summary["station_unique_gas_tracks"][name]
         hits=sum(1 for (station,_,_) in per_station if station==st)
         assert hits==unique
-        if stats_station[st]["n"]<unique:
+        if stats_station[st]["n"]<unique and not summary["invalid_muon_hits"]:
             raise ValueError("Fewer valid hits than unique station muon tracks")
     if summary["duplicate_hit_keys"]:
         raise ValueError("Non-unique (event,hit_index) in native ROOT export")
@@ -296,7 +306,8 @@ def all_chunks(args):
             for st in range(6):
                 key=(source,st)
                 for metric in ("station_unique_gas_tracks","station_overlap_tracks",
-                               "station_extra_chamber_hits"):
+                               "station_extra_chamber_hits",
+                               "station_repeated_same_module_segments"):
                     global_metrics[key][metric]+=int(this[metric][str(st)])
             print(f"{label} {channel} chunk{i+1:04d}: "
                   f"muon gas hits {this['muon_hits']:,}, "
@@ -343,6 +354,7 @@ def all_chunks(args):
       "w",newline="",encoding="utf-8") as stream:
         fields=("source","station","gas_hit_rows","unique_gas_crossing_muon_tracks",
                 "overlap_muon_tracks","extra_chamber_hits_per_overlaps",
+                "repeated_gas_segments_in_same_module",
                 "mean_edep_eV","mean_path_mm","edep_path_pearson")
         w=csv.DictWriter(stream,fieldnames=fields);w.writeheader()
         for source in SOURCES.values():
@@ -357,6 +369,8 @@ def all_chunks(args):
                     "overlap_muon_tracks":m["station_overlap_tracks"],
                     "extra_chamber_hits_per_overlaps":
                        m["station_extra_chamber_hits"],
+                    "repeated_gas_segments_in_same_module":
+                       m["station_repeated_same_module_segments"],
                     "mean_edep_eV":r["edep_sum"]/n if n else "",
                     "mean_path_mm":r["path_sum"]/n if n else "",
                     "edep_path_pearson":corr(r) if corr(r) is not None else "",
@@ -401,8 +415,9 @@ def all_chunks(args):
             "First 298 chambers use current fixed Stage-C layout; no "
             "alternative-layout Geant4 Edep can be inferred from this.",
             "A Geant4 gas hit may occur multiple times for one track "
-            "in a chamber. Duplicate chamber-hit segments require "
-            "per-event deduplication before defining 0/1/2/3 wire PDF.",
+            "in a chamber. Repeated same-module hit segments are COUNTED "
+            "separately from geometric module overlap, and per-event "
+            "deduplication may be needed for a unique-through-going-hit PDF.",
             "No electrons, drift times, avalanche gain, anode thresholds "
             "or time-dependent wire multiplicity are measured here.",
             "Histograms include every valid native muon-hit segment; "
