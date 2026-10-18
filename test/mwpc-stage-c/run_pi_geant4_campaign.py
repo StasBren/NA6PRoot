@@ -118,6 +118,29 @@ def setup(args):
     if simlib is None:
         raise RuntimeError("Native executable does not link to expected libsimLib.so")
 
+    # The first smoke run had an apparently successful Geant4 process but
+    # lacked BOTH the new passive audit and the modern MWPC hit output.
+    # Verify that the ACTUALLY LOADED shared library, not merely the Git
+    # checkout, contains the new optional instrumentation BEFORE spending
+    # time generating events.
+    with open(simlib, "rb") as library:
+        binary = library.read()
+    absent_features = [
+        marker for marker in (
+            "NA6P_MWPC_STORE_REFERENCE_PLANES",
+            "NA6P_MWPC_STORE_GAS_STEPS",
+        ) if marker.encode("ascii") not in binary
+    ]
+    del binary
+    if absent_features:
+        raise RuntimeError(
+            "Loaded libsimLib.so lacks compiled Stage-C diagnostics: "
+            f"{', '.join(absent_features)}. Loaded library: {simlib}. "
+            "Git pull does not rebuild the simulator. Run "
+            "'bash test/mwpc-stage-c/rebuild_pi_geant4_stagec.sh' "
+            "and repeat smoke; do NOT launch full production."
+        )
+
     # Preserve the magnetic-field and transport-cut input versions, not
     # merely the executable binary. A modified installed field map would
     # otherwise silently invalidate track reuse across campaign chunks.
@@ -169,12 +192,27 @@ def setup(args):
     if manifest_path.is_file():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if manifest.get("frozen_inputs") != inputs:
-            raise RuntimeError(
-                "Found different frozen simulation settings/executable. "
-                f"Refusing to mix runs under {suite}. "
-                "Use a different --suite or restore original tools/settings."
-            )
-    else:
+            if (args.mode == "smoke" and
+                not any(suite.rglob("completed.json"))):
+                # Rebuilding after a failed diagnostic smoke test changes the
+                # frozen library hash. Archive, never delete, the failed
+                # smoke campaign and start a fresh one automatically.
+                stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                archived = suite.with_name(suite.name + "_failed_" + stamp)
+                suite.rename(archived)
+                print(
+                    "Archived failed smoke with old binary/configuration:",
+                    archived, flush=True,
+                )
+                suite.mkdir(parents=True)
+                manifest_path = suite / "campaign.json"
+            else:
+                raise RuntimeError(
+                    "Found different frozen simulation settings/executable. "
+                    f"Refusing to mix runs under {suite}. "
+                    "Use a different --suite or restore original tools/settings."
+                )
+    if not manifest_path.is_file():
         try:
             commit = subprocess.check_output(
                 ["git", "-C", str(REPO), "rev-parse", "HEAD"],
@@ -362,9 +400,38 @@ def simulate(args, suite, inputs):
                 if not (out/f).is_file() or (out/f).stat().st_size==0
             ]
             if missing:
+                produced = sorted(
+                    p.name for p in out.glob("*")
+                    if p.is_file() and p.name.endswith((".root", ".ini"))
+                )
+                worker_details = []
+                for worker in sorted((out / "raw_workers").glob("worker*")):
+                    names = sorted(p.name for p in worker.glob("*.root"))
+                    source_log = worker / "na6psim.log"
+                    relevant = []
+                    if source_log.is_file():
+                        relevant = [
+                            line.strip()[:260] for line in
+                            source_log.read_text(
+                                errors="replace"
+                            ).splitlines()
+                            if any(keyword in line.lower() for keyword in (
+                                "muonspec", "gas-step", "reference plane",
+                                "referenceplanes", "error", "fatal",
+                                "warning", "will store", "module:",
+                            ))
+                        ][-35:]
+                    worker_details.append(
+                        f"{worker.name}: ROOT={names}\n" +
+                        "\n".join(relevant)
+                    )
                 raise RuntimeError(
-                    f"Geant4 did not produce mandatory outputs {missing}. "
-                    f"See {log}"
+                    f"Geant4 completed but mandatory files absent: {missing}\n"
+                    f"Output directory ROOT/INI files: {produced}\n"
+                    "Worker-specific diagnostics:\n" +
+                    "\n".join(worker_details) +
+                    f"\nSee also {log}. In particular, check that the "
+                    "current stage-C simulator was rebuilt and loaded."
                 )
             # ROOT checks event counts, object branches and the gas-step tree.
             validator = f'{inputs["validator"]}+("{out}",{n})'
