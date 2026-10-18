@@ -1558,3 +1558,66 @@ It creates `pi_fixed_wire_module_multiplicity.csv` for all 3 channels,
 when available, so its six-bin bar graph will then be consistent with
 the fixed-wire heatmap. The old PDFs remain a cross-check, never
 silently spliced with the fixed-wire probabilities.
+
+
+
+### Muon Track Explorer: browse individual muons and candidate collected anodes
+
+A separate new **offline event display** is implemented in
+pi_muon_track_explorer_template.html and
+build_pi_muon_track_explorer.py. The existing station statistics dashboard
+links to it. The builder consumes *existing historical 2.49M projected gas
+crossing CSV rows* but deterministically selects an EVENT-level subset,
+preserving (source, job, event, track, PDG) identity and therefore the
+mu+ and mu- candidates in the same event when both are present.
+
+**While native Geant4 is busy**, inspect trajectories/geometrical anode
+cells only without loading Heed/Garfield:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_muon_track_explorer.sh geometry-only
+
+**To see individual charge-collection outcomes** from the ALREADY saved
+Heed cluster library and Garfield transport lookup (no new Garfield or
+native Geant4), run after sufficient CPU/RAM is free:
+
+    bash test/mwpc-stage-c/run_pi_muon_track_explorer.sh
+
+Both commands write and open:
+
+    test_runs/mwpc_stage_c/pi_fixed_wire_maps/pi_muon_track_explorer.html
+
+The new interactive display includes:
+- source selector J/psi / phi / omega, paired mu+/mu- selection by
+  genuine same source/job/event, next/previous sampled events;
+- two projected trajectories X(Z), Y(Z), as polylines through ACTUAL
+  saved-reference projected gas intersection midpoints (the lines
+  between stations are NOT actual Geant4 step paths);
+- six station buttons, with actual gas modules traversed by the
+  selected projected track highlighted in XY;
+- selection of a crossed detector module; visualization of ALL 77/128
+  fixed nominal anodes and individual collected-primary-electron count;
+- geometric wire cells, >=1 collected electron, >=5 electrons, and
+  >=1 electron within 100 ns as distinct selectors.
+
+The Heed+stored-Garfield charge table is generated ONLY for displayed
+crossings and is one reproducible stochastic realization, individually
+seeded using SHA256(source,job,event,track,station,det). It does not
+pretend that the old aggregate occupancy map recorded individual
+per-event wire identities, nor does it treat fixed-nominal anode counts
+as a HARDWARE fired-channel simulation. Model intentionally excludes
+avalanche gain, Shockley-Ramo signal and shaping, electronics noise,
+threshold, and cross talk.
+
+Importantly, all display event choices are deterministically curated
+for interesting crossings, not representative of the source population.
+No physics probabilities should be inferred by counting events shown.
+No gas crossing in MSn is NOT evidence the track did not cross that
+reference plane, since historical input only includes GAS intersection
+records. The 6 station trajectory joins are from reference-state
+projections, not native current-geometry Geant4 gas hits.
+
+The display is intentionally separate from native 200k/channel new Geant4
+campaign outputs; later the viewer can import the new actual MWPC gas
+hits/Edep after track-ID and parallel-worker ancestry reconciliation.
