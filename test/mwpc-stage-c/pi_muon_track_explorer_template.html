@@ -320,7 +320,7 @@ function renderHit(){
    label(String(j),35,y+3,{"text-anchor":"end","font-size":10},root);
   }
   if(on && count<=40 && hit.charges && state.criterion!=="geom"){
-   label(c+" e",317,y+3,{"text-anchor":"end","font-size":10,
+   label((state.criterion==="t100"?early:c)+" e",317,y+3,{"text-anchor":"end","font-size":10,
      fill:"#74ead9","font-weight":"650"},root);
   }
  }
