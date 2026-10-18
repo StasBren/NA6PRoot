@@ -24,6 +24,7 @@ select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset
 .switch button.selected{background:var(--accent);color:#08202b}
 button.action{background:#1c304a;border:1px solid #445975;border-radius:7px;padding:8px 12px}
 button.action:hover{background:#294360}
+.normalizationNotice{margin:0 max(20px,3vw) 10px;border-left:3px solid #58d0c5;background:#142b3d;padding:9px 12px;border-radius:5px;color:#c4d7e6;font-size:12px;line-height:1.5}
 .cards{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;padding:8px max(20px,3vw) 15px}
 .stat{border:1px solid var(--line);background:var(--panel);border-radius:11px;padding:12px 15px}
 .stat .label{color:var(--muted);font-size:11px;margin-bottom:6px}
@@ -79,6 +80,7 @@ button.action:hover{background:#294360}
  <div class="field hidden" id="denomField"><label for="denom">Нормировка активности</label><select id="denom"><option value="chamber">На пересечение камеры</option><option value="incident">На входящий мюон станции</option><option value="station">На 10 000 пересечений станции</option></select></div>
  <div class="field hidden" id="groupField"><label for="groupN">Проволок на цветную линию</label><select id="groupN"><option value="1">1</option><option value="4" selected>4</option><option value="8">8</option></select></div>
 </div>
+<div id="normalizationNotice" class="normalizationNotice hidden" role="status" aria-live="polite"></div>
 <div class="cards">
  <div class="stat"><div class="label">Мюонов на опорной плоскости станции</div><div class="value" id="nIncident">—</div></div>
  <div class="stat"><div class="label">Мюонов, пересекших хотя бы одну камеру</div><div class="value" id="nAccepted">—</div></div>
@@ -175,6 +177,24 @@ function setControls(){
  for(const id of ["metricField","denomField","groupField"]) $(id).classList.toggle("hidden",state.mode!=="wires");
  $("modeHits").classList.toggle("selected",state.mode==="spatial");
  $("modeWires").classList.toggle("selected",state.mode==="wires");
+ const notice=$("normalizationNotice");
+ notice.classList.toggle("hidden",state.mode!=="wires");
+ if(state.mode==="wires"){
+   const s=stationData();
+   const relation="Оба режима используют общий знаменатель для всех камер станции: "+
+     "картина цветов одинакова из-за автоматической цветовой шкалы (P98), меняются только числа.";
+   if(state.denom==="incident"){
+     notice.textContent="Активность = N(активаций анода) / "+nf(s.incident)+
+       " входящих мюонов станции. "+relation;
+   } else if(state.denom==="station"){
+     notice.textContent="Активность = 10 000 × N(активаций анода) / "+nf(s.crossings)+
+       " пересечений газовых камер станции. "+relation;
+   } else {
+     notice.textContent="Активность = N(активаций анода) / N(пересечений данной камеры). "+
+       "Знаменатель различается между камерами, поэтому рисунок может измениться. "+
+       "Цветовая шкала автоматически нормируется для выбранной станции.";
+   }
+ }
 }
 function physicalView(){
  const gs=geometry(),gy=state.station===0?30.72:51.2,hx=66.56/2,hy=gy/2;
