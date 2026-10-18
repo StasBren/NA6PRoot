@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NA60+ · MWPC Stage C · интерактивная станция</title>
+<style>
+:root{--bg:#0b1220;--panel:#132137;--panel2:#172943;--line:#314359;--text:#ecf2f9;--muted:#a5b9ce;--accent:#51c9d9;--orange:#ffc05e;--red:#ec7984}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px}
+button,select{font:inherit;color:var(--text);cursor:pointer}
+header{background:linear-gradient(115deg,#162a45,#101c30 70%);border-bottom:1px solid var(--line);padding:18px max(20px,3vw)}
+h1{font-size:22px;letter-spacing:.15px;margin:0 0 5px}
+h2{font-size:16px;margin:0 0 7px}
+p{margin:0;color:var(--muted);line-height:1.45}
+header .tag{color:#66d3df;letter-spacing:1.7px;font-size:11px;font-weight:700;margin-bottom:7px}
+.toolbar{display:flex;gap:12px;align-items:end;flex-wrap:wrap;padding:16px max(20px,3vw) 10px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:11px;color:var(--muted);letter-spacing:.2px}
+select{background:#1c304a;border:1px solid #48627e;padding:8px 11px;min-width:130px;border-radius:8px}
+select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.switch{display:flex;background:#192940;padding:4px;border-radius:10px;border:1px solid var(--line);gap:2px}
+.switch button{border:0;border-radius:7px;background:none;padding:8px 12px;font-weight:600;color:var(--muted)}
+.switch button.selected{background:var(--accent);color:#08202b}
+button.action{background:#1c304a;border:1px solid #445975;border-radius:7px;padding:8px 12px}
+button.action:hover{background:#294360}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;padding:8px max(20px,3vw) 15px}
+.stat{border:1px solid var(--line);background:var(--panel);border-radius:11px;padding:12px 15px}
+.stat .label{color:var(--muted);font-size:11px;margin-bottom:6px}
+.stat .value{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.layout{display:grid;grid-template-columns:minmax(420px,1.48fr) minmax(350px,1fr);gap:14px;padding:0 max(20px,3vw) 24px}
+.panel{border-radius:12px;border:1px solid var(--line);background:var(--panel);min-width:0;overflow:hidden}
+.panelHeader{padding:13px 16px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.small{font-size:11px;color:var(--muted)}
+.stationBoard{padding:9px;background:radial-gradient(ellipse at center,#162943,#0b1729)}
+#stationSVG{display:block;width:100%;height:min(66vh,760px);min-height:430px;touch-action:none;cursor:grab}
+#stationSVG.panning{cursor:grabbing}
+.boardFooter{display:flex;align-items:center;flex-wrap:wrap;justify-content:space-between;padding:10px 15px;gap:8px;border-top:1px solid var(--line)}
+.legend{display:flex;align-items:center;gap:8px;max-width:100%}
+.grad{width:118px;height:12px;border-radius:4px;background:linear-gradient(to right,#253d50,#20748b,#f9ba63,#fff0a8)}
+.key{font-size:10px;color:var(--muted)}
+.detail{padding:14px 16px}
+#detailTitle{font-size:18px;font-weight:700;margin-bottom:4px}
+.moduleMeta{color:var(--muted);font-size:12px;line-height:1.55;margin-bottom:12px}
+#profileSVG{display:block;width:100%;height:235px;background:#102035;border:1px solid #2b4158;border-radius:8px}
+.chartLegend{display:flex;gap:10px;flex-wrap:wrap;margin:9px 0;font-size:11px;color:var(--muted)}
+.chartLegend span:before{content:"";display:inline-block;width:14px;height:3px;margin-right:5px;vertical-align:middle;background:var(--swatch)}
+.wirePanel{margin-top:12px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.wireHead,.wireRow{display:grid;grid-template-columns:44px 1fr 68px 68px 68px;gap:5px;align-items:center;padding:5px 9px;font-size:11px;font-variant-numeric:tabular-nums}
+.wireHead{background:#21354d;color:#b7c9db;position:sticky;top:0;z-index:2}
+.wireList{height:330px;overflow:auto;background:#0d192b}
+.wireRow{border-bottom:1px solid #26354a;cursor:pointer;min-height:23px}
+.wireRow:hover{background:#263c55}
+.wireRow.chosen{background:#294d5a}
+.wireLine{display:block;height:3px;min-width:15px;border-radius:2px;background:#4f687e}
+.wireLine.hot{background:var(--orange)}
+.info{padding:13px max(20px,3vw) 30px;color:#b3c4d5;font-size:12px;line-height:1.55}
+.notice{border-left:3px solid var(--orange);padding:9px 14px;background:#192637;border-radius:3px;max-width:1250px;margin:0 0 12px}
+#tip{display:none;pointer-events:none;position:fixed;z-index:30;background:#eff5fa;color:#122438;border:1px solid #a3bacc;border-radius:7px;box-shadow:0 8px 25px #0007;max-width:300px;padding:9px 12px;font-size:12px;line-height:1.45}
+#tip strong{color:#0a3149}
+.hidden{display:none!important}
+#warning{color:#ffb5a1;font-size:12px}
+@media(max-width:1060px){.layout{grid-template-columns:1fr}.cards{grid-template-columns:repeat(2,1fr)}#stationSVG{height:500px}}
+@media(max-width:620px){.toolbar,.cards,.layout{padding-left:12px;padding-right:12px}.cards{grid-template-columns:repeat(2,1fr)}.stat .value{font-size:16px}.wireHead,.wireRow{grid-template-columns:32px 1fr 54px 54px 54px;font-size:10px}}
+</style>
+</head>
+<body>
+<header>
+<div class="tag">NA60+ · MUON SPECTROMETER · STAGE C</div>
+<h1>Интерактивная карта MWPC-станций</h1>
+<p>Геометрия пересечений мюонов и сбор первичных электронов на отдельных анодах. Нажми на камеру, чтобы увидеть её профиль и пронумерованные проволоки.</p>
+</header>
+<div class="toolbar">
+ <div class="field"><label for="source">Источник мюонов</label><select id="source"><option value="jpsi40-bore">J/ψ (40 AGeV)</option><option value="phi40-bore">φ (40 AGeV)</option><option value="omega40-bore">ω (40 AGeV)</option></select></div>
+ <div class="field"><label for="station">Станция</label><select id="station"></select></div>
+ <div class="field"><label>Режим</label><div class="switch"><button id="modeHits" class="selected">Пересечения мюонов</button><button id="modeWires">Аноды</button></div></div>
+ <div class="field" id="spaceField"><label for="spatialLayer">Пространственный слой</label><select id="spatialLayer"><option value="xy">Плотность XY (5 см)</option><option value="modules">Пересечения по камерам</option></select></div>
+ <div class="field hidden" id="metricField"><label for="metric">Считаем активной проволоку</label><select id="metric"><option value="e1">≥1 собранный электрон</option><option value="e5">≥5 собранных электронов</option><option value="t100">≥1 электрон до 100 нс</option><option value="geom">Геометрически пересечена</option></select></div>
+ <div class="field hidden" id="denomField"><label for="denom">Нормировка активности</label><select id="denom"><option value="chamber">На пересечение камеры</option><option value="incident">На входящий мюон станции</option><option value="station">На 10 000 пересечений станции</option></select></div>
+ <div class="field hidden" id="groupField"><label for="groupN">Проволок на цветную линию</label><select id="groupN"><option value="1">1</option><option value="4" selected>4</option><option value="8">8</option></select></div>
+</div>
+<div class="cards">
+ <div class="stat"><div class="label">Мюонов на опорной плоскости станции</div><div class="value" id="nIncident">—</div></div>
+ <div class="stat"><div class="label">Мюонов, пересекших хотя бы одну камеру</div><div class="value" id="nAccepted">—</div></div>
+ <div class="stat"><div class="label">Всего пересечений газовых камер</div><div class="value" id="nCrossings">—</div></div>
+ <div class="stat"><div class="label">Камер с ≥1 пересечением</div><div class="value" id="nActive">—</div></div>
+</div>
+<div class="layout">
+<section class="panel">
+ <div class="panelHeader"><div><h2 id="boardTitle">Станция MS0</h2><span class="small" id="boardSubtitle">Вид вдоль оси пучка; X вправо, Y вверх</span></div>
+   <div style="display:flex;gap:5px"><button class="action" id="zoomIn" title="Приблизить">＋</button><button class="action" id="zoomOut" title="Отдалить">－</button><button class="action" id="zoomReset">Сбросить масштаб</button></div>
+ </div>
+ <div class="stationBoard"><svg xmlns="http://www.w3.org/2000/svg" id="stationSVG" role="img" aria-label="Интерактивная геометрия станции MWPC"></svg></div>
+ <div class="boardFooter"><div class="legend"><span class="key">0</span><span class="grad" id="colorGradient"></span><span class="key" id="legendMax">max</span><span class="key" id="legendUnit">пересечений / 25 см²</span></div><button class="action" id="saveSVG">Сохранить вид станции (SVG)</button></div>
+</section>
+<section class="panel">
+ <div class="panelHeader"><div><h2>Выбранная камера</h2><span class="small">Кликни на прямоугольник станции</span></div><button class="action" id="saveCSV">CSV камеры</button></div>
+ <div class="detail">
+   <div id="detailTitle">DET017</div><div class="moduleMeta" id="detailMeta"></div>
+   <div id="warning"></div>
+   <svg xmlns="http://www.w3.org/2000/svg" id="profileSVG" viewBox="0 0 520 230" aria-label="Профиль проволок камеры"></svg>
+   <div class="chartLegend"><span style="--swatch:#a5b3c1">Геометрия</span><span style="--swatch:#ffc05e">≥1e</span><span style="--swatch:#58d0c5">≥5e</span><span style="--swatch:#d18df0">≤100 нс</span></div>
+   <div class="small" id="detailSummary"></div>
+   <div class="wirePanel">
+     <div class="wireHead"><span>№</span><span>Положение / активность</span><span>≥1e</span><span>≥5e</span><span>100 нс</span></div>
+     <div class="wireList" id="wireList"></div>
+   </div>
+ </div>
+</section>
+</div>
+<div class="info">
+ <div class="notice"><strong>Физические ограничения:</strong> это проекции исторических Geant4-состояний мюонов на номинальные газовые объёмы, а не настоящие новые Geant4 gas hits. «Активность» означает сбор первичных электронов по Heed/Garfield, без газового усиления и порога электроники. MS0: аноды 0–76; MS1–MS5: 0–127. Шаг 4 мм и точное смещение сетки пока номинальные.</div>
+ <div>В режиме XY серые/бирюзовые ячейки отображают положение пересечения в плоскости станции. В режиме анодов линии тянутся вдоль X, но <strong>не содержат информации о координате попадания вдоль X</strong>. Для пересечения нескольких перекрывающихся камер счётчик увеличивается в каждой камере. <span id="datasetInfo"></span></div>
+</div>
+<div id="tip"></div>
+<script id="stationData" type="application/json">__PI_STATION_DATA__</script>
+<script>
+"use strict";
+(function () {
+const D = JSON.parse(document.getElementById("stationData").textContent);
+const $ = id => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+const nf = n => Number(n).toLocaleString("ru-RU");
+const pct = n => Number.isFinite(n) ? (100*n).toFixed(n<.01?2:1)+"%" : "—";
+const nameMap = {"jpsi40-bore":"J/ψ","phi40-bore":"φ","omega40-bore":"ω"};
+const state = {source:"jpsi40-bore",station:0,mode:"spatial",layer:"xy",metric:"e1",denom:"chamber",group:4,selected:17,wire:36,view:null,drag:null};
+let chartCache = null;
+const svg = $("stationSVG");
+const tooltip = $("tip");
+function svgNode(tag, attrs, parent) {
+ const e=document.createElementNS(NS,tag);
+ if(attrs) for(const k in attrs) e.setAttribute(k,attrs[k]);
+ if(parent)parent.appendChild(e);
+ return e;
+}
+function textNode(content,x,y,attrs,parent) {
+ const e=svgNode("text",Object.assign({x:x,y:y},attrs||{}),parent);
+ e.textContent=content;return e;
+}
+function stationData() { return D.stations[state.source][state.station]; }
+function geometry() { return D.geometry[state.station]; }
+function chamber(id) { return D.chambers[state.source][id]; }
+function exposure(id) { return chamber(id).n; }
+function getRate(count,id) {
+ const s=stationData(),n=exposure(id);
+ const denom=state.denom==="chamber"?n:state.denom==="incident"?s.incident:s.crossings;
+ if(!denom) return NaN;
+ return count/denom*(state.denom==="station"?10000:1);
+}
+function scale(value,maxval){
+ if(!Number.isFinite(value)||maxval<=0||value<=0)return 0;
+ return Math.min(1,Math.sqrt(value/maxval));
+}
+function color(v,max){
+ if(!Number.isFinite(v)||v<=0)return "#2b4256";
+ const q=scale(v,max);
+ if(q<.4){const z=q/.4;return "hsl("+(196-6*z)+", "+(58+14*z)+"%, "+(24+18*z)+"%)";}
+ if(q<.76){const z=(q-.4)/.36;return "hsl("+(190-153*z)+", 85%, "+(42+19*z)+"%)";}
+ const z=(q-.76)/.24;return "hsl("+(37+8*z)+", 98%, "+(61+23*z)+"%)";
+}
+function stats(){
+ const s=stationData();
+ $("nIncident").textContent=nf(s.incident);
+ $("nAccepted").textContent=nf(s.withGas);
+ $("nCrossings").textContent=nf(s.crossings);
+ $("nActive").textContent=geometry().filter(g=>exposure(g.id)>0).length+" / "+geometry().length;
+ $("boardTitle").textContent="MS"+state.station+" · "+nameMap[state.source]+" · "+(state.mode==="spatial"?"пространственные пересечения":"сбор на анодах");
+ $("boardSubtitle").textContent=state.mode==="spatial" ?
+  "X вдоль анодов; Y поперёк анодов. Кликни на камеру." :
+  "Каждая горизонтальная линия — 1/4/8 анодов, X не локализуется.";
+ $("datasetInfo").textContent="Исходный набор: "+D.description+".";
+}
+function setControls(){
+ $("spaceField").classList.toggle("hidden",state.mode!=="spatial");
+ for(const id of ["metricField","denomField","groupField"]) $(id).classList.toggle("hidden",state.mode!=="wires");
+ $("modeHits").classList.toggle("selected",state.mode==="spatial");
+ $("modeWires").classList.toggle("selected",state.mode==="wires");
+}
+function physicalView(){
+ const gs=geometry(),gy=state.station===0?30.72:51.2,hx=66.56/2,hy=gy/2;
+ const xlo=Math.min(...gs.map(g=>g.x-hx)),xhi=Math.max(...gs.map(g=>g.x+hx));
+ const ylo=Math.min(...gs.map(g=>-g.y-hy)),yhi=Math.max(...gs.map(g=>-g.y+hy));
+ let m=Math.max(xhi-xlo,yhi-ylo)*.065;
+ return [xlo-m,ylo-m,xhi-xlo+2*m,yhi-ylo+2*m];
+}
+function updateView(){if(!state.view)state.view=physicalView();svg.setAttribute("viewBox",state.view.join(" "));}
+function resetView(){state.view=physicalView();updateView();}
+function zoom(f){
+ const v=state.view||physicalView(),cx=v[0]+v[2]/2,cy=v[1]+v[3]/2;
+ state.view=[cx-v[2]*f/2,cy-v[3]*f/2,v[2]*f,v[3]*f];updateView();
+}
+function tipShow(evt,html){tooltip.innerHTML=html;tooltip.style.display="block";tipMove(evt);}
+function tipMove(evt){
+ let x=evt.clientX+16,y=evt.clientY+14;
+ x=Math.min(x,innerWidth-310);y=Math.min(y,innerHeight-110);
+ tooltip.style.left=Math.max(0,x)+"px";tooltip.style.top=Math.max(0,y)+"px";
+}
+function tipHide(){tooltip.style.display="none";}
+function tooltipCh(g){
+ const n=exposure(g.id),s=stationData();
+ return "<strong>DET"+String(g.id).padStart(3,"0")+" · "+g.layer+"</strong><br>MS"+state.station+", ряд "+g.row+", колонка "+g.col+
+   "<br>Пересечений: "+nf(n)+
+   "<br>На входящего мюона: "+pct(s.incident?n/s.incident:NaN)+
+   "<br>Центр: X="+g.x.toFixed(2)+" см, Y="+g.y.toFixed(2)+" см";
+}
+function selectCh(id){state.selected=id;state.wire=0;renderStation();renderDetail();}
+function renderStation(){
+ svg.replaceChildren();
+ const s=stationData(),geom=geometry(),gy=state.station===0?30.72:51.2, hx=66.56/2,hy=gy/2;
+ if(state.mode==="spatial" && state.layer==="xy"){
+  const b=s.xy;
+  const arr=b.counts.flat().filter(v=>v>0),cap=arr.length?Math.max(1,arr.sort((a,b)=>a-b)[Math.floor(.99*(arr.length-1))]):1;
+  for(let j=0;j<b.counts.length;j++) for(let i=0;i<b.counts[j].length;i++){
+   const z=b.counts[j][i];if(z<=0)continue;
+   svgNode("rect", {x:b.xedges[i], y:-b.yedges[j+1],width:b.xedges[i+1]-b.xedges[i],
+     height:b.yedges[j+1]-b.yedges[j],fill:color(z,cap),opacity:.91,"pointer-events":"none"},svg);
+  }
+  $("legendMax").textContent=nf(cap);
+  $("legendUnit").textContent="пересечений / 25 см² (цвет: sqrt)";
+ }
+ let cap=1;
+ if(state.mode==="spatial" && state.layer==="modules"){
+  cap=Math.max(1,...geom.map(g=>exposure(g.id)));
+  $("legendUnit").textContent="пересечений / камеру";
+  $("legendMax").textContent=nf(cap);
+ }
+ if(state.mode==="wires"){
+  const values=[];
+  for(const g of geom){
+   const c=chamber(g.id),ns=c[state.metric];
+   for(let j=0;j<ns.length;j+=state.group){
+    const ave=ns.slice(j,j+state.group).reduce((a,b)=>a+b,0)/Math.min(state.group,ns.length-j);
+    const r=getRate(ave,g.id);
+    if(Number.isFinite(r) && r>0)values.push(r);
+   }
+  }
+  values.sort((a,b)=>a-b);
+  cap=values.length?Math.max(values[Math.floor(values.length*.98)],1e-8):1;
+  $("legendMax").textContent=state.denom==="station"?cap.toFixed(2):pct(cap);
+  $("legendUnit").textContent=state.denom==="station"?"активаций / 10k пересечений станции":
+    state.denom==="incident"?"на входящего мюона":"на пересечение камеры";
+ }
+ for (const g of geom) {
+  const group=svgNode("g",{"data-det":g.id},svg);
+  const selected=g.id===state.selected;
+  let fill="rgba(19,34,53,0.13)";
+  if(state.mode==="spatial" && state.layer==="modules")
+    fill=exposure(g.id)===0?"#263345":color(exposure(g.id),cap);
+  if(state.mode==="wires" && exposure(g.id)===0)fill="#152236";
+  svgNode("rect",{x:g.x-hx,y:-g.y-hy,width:2*hx,height:2*hy,fill:fill,
+    stroke:selected?"#62dbe6":"#879bad","stroke-width":selected?2.5:.62,
+    "stroke-opacity":selected?1:.75},group);
+  if(state.mode==="wires"){
+   const v=chamber(g.id)[state.metric],step=state.group,yStart=state.station===0?-15.2:-25.4;
+   for(let j=0;j<v.length;j+=step){
+    const end=Math.min(v.length,j+step),ave=v.slice(j,end).reduce((a,b)=>a+b,0)/(end-j);
+    const rate=getRate(ave,g.id);
+    const yLocal=(j+(end-j-1)/2-(v.length-1)/2)*.4;
+    const line=svgNode("line",{
+      x1:g.x-hx+.8,x2:g.x+hx-.8,y1:-g.y-yLocal,y2:-g.y-yLocal,
+      stroke:color(rate,cap),"stroke-width":Math.min(2.6,1.2+step*.11),opacity:.96
+    },group);
+    line.addEventListener("pointerenter",evt=>tipShow(evt,tooltipCh(g)+
+     "<br>Аноды "+j+"–"+(end-1)+"<br>Средняя активность: "+
+      (state.denom==="station"?rate.toFixed(3)+" / 10k":pct(rate))));
+    line.addEventListener("pointermove",tipMove);line.addEventListener("pointerleave",tipHide);
+   }
+  }
+  textNode(String(g.id),g.x,-g.y+2,{
+   "text-anchor":"middle","font-size":state.station>=4?5:4,
+   "font-weight":selected?750:550,
+   fill:selected?"#ffffff":state.mode==="spatial"&&state.layer==="modules"?"#e8f4f9":"#a3bdcd",
+   "pointer-events":"none"},group);
+  // Transparent clickable overlay; label and cell lines remain visible.
+  const overlay=svgNode("rect", {x:g.x-hx,y:-g.y-hy,width:2*hx,height:2*hy,
+      fill:"transparent",stroke:"none",cursor:"pointer"},group);
+  overlay.addEventListener("pointerenter",evt=>tipShow(evt,tooltipCh(g)));
+  overlay.addEventListener("pointermove",tipMove);
+  overlay.addEventListener("pointerleave",tipHide);
+  overlay.addEventListener("click",evt=>{if(!state.drag?.moved)selectCh(g.id);});
+ }
+ updateView();
+}
+function pathFor(arr,n,ymax,color,root,extra){
+ const px=j=>40+(j/(n-1))*456;
+ const py=y=>178-y/ymax*145;
+ const pts=[];
+ for(let i=0;i<n;i++) if(Number.isFinite(arr[i]))pts.push(px(i).toFixed(2)+","+py(arr[i]).toFixed(2));
+ if(pts.length)svgNode("polyline",Object.assign({points:pts.join(" "),fill:"none",stroke:color,"stroke-width":"1.8","stroke-linejoin":"round"},extra||{}),root);
+}
+function renderDetail(){
+ const g=geometry().find(x=>x.id===state.selected)||geometry()[0];
+ if(!g)return;
+ const c=chamber(g.id),n=c.n,L=c.e1.length;
+ $("detailTitle").textContent="DET"+String(g.id).padStart(3,"0")+" · MS"+state.station+" · слой "+g.layer;
+ $("detailMeta").textContent="Ряд "+g.row+", колонка "+g.col+" · центр X="+g.x.toFixed(2)+
+   " см, Y="+g.y.toFixed(2)+" см · "+nf(n)+" пересечений · "+L+" номинальных анодов (0–"+(L-1)+")";
+ $("warning").textContent=n===0?"Нет пересечений — вероятности не определены.":n<100?"Малая статистика: отдельные пики могут быть случайными.":"";
+ const plot=$("profileSVG");plot.replaceChildren();
+ const curves=["geom","e1","e5","t100"].map(key=>c[key].map(v=>n?v/n:NaN));
+ const ymax=n?Math.max(.005,...curves.flat().filter(Number.isFinite))*1.12:1;
+ const labels=[0,ymax/2,ymax],colors=["#a5b3c1","#ffc05e","#58d0c5","#d18df0"];
+ [32,105,178].forEach((y,k)=>{
+  svgNode("line",{x1:40,y1:y,x2:498,y2:y,stroke:"#37536b","stroke-width":".7"},plot);
+  textNode(pct(labels[2-k]),35,y+3,{"text-anchor":"end","font-size":"10",fill:"#bfd0de"},plot);
+ });
+ for(let i=0;i<L;i+=L===77?10:20){
+  const x=40+i/(L-1)*456;
+  svgNode("line",{x1:x,y1:28,x2:x,y2:178,stroke:"#2d455c","stroke-width":".5"},plot);
+  textNode(String(i),x,193,{"text-anchor":"middle","font-size":"10",fill:"#bfd0de"},plot);
+ }
+ curves.forEach((v,k)=>pathFor(v,L,ymax,colors[k],plot));
+ const marker=40+state.wire/(L-1)*456;
+ svgNode("line",{x1:marker,x2:marker,y1:30,y2:178,stroke:"#f7faff","stroke-dasharray":"3 4","stroke-width":"1.3"},plot);
+ textNode("Номер проволоки →",274,216,{"text-anchor":"middle","font-size":"11",fill:"#c6d5e0"},plot);
+ plot.onclick=evt=>{
+  const rect=plot.getBoundingClientRect(),fraction=Math.min(1,Math.max(0,(evt.clientX-rect.left)/rect.width));
+  state.wire=Math.max(0,Math.min(L-1,Math.round(((fraction*520-40)/456)*(L-1))));
+  renderDetail();
+  const row=$("wireList").querySelector('[data-wire="'+state.wire+'"]');
+  if(row)row.scrollIntoView({block:"nearest"});
+ };
+ $("detailSummary").textContent=n?"Среднее число активных анодов на пересечение (≥1e): "+
+   (c.e1.reduce((a,b)=>a+b,0)/n).toFixed(3)+
+   ". Сумма вероятностей проволок может быть больше 1.":"Все отдельные вероятности не определены при N=0.";
+ const rows=$("wireList");rows.replaceChildren();
+ for(let j=0;j<L;j++){
+  const item=document.createElement("div");item.className="wireRow"+(j===state.wire?" chosen":"");item.dataset.wire=j;
+  const Y=g.y+(j-(L-1)/2)*.4;
+  const p=n?c.e1[j]/n:NaN;
+  const tag=document.createElement("strong");tag.textContent=String(j).padStart(3,"0");item.appendChild(tag);
+  const bar=document.createElement("span");bar.style.display="flex";bar.style.alignItems="center";bar.style.gap="7px";
+  const line=document.createElement("span");line.className="wireLine"+(p>.02?" hot":"");
+  line.style.width=Math.max(16,Math.min(100,pct(p)==="—"?16:24+p*900))+"px";
+  const local=document.createElement("span");local.textContent="Y "+Y.toFixed(1)+" см";
+  bar.appendChild(line);bar.appendChild(local);item.appendChild(bar);
+  for(const name of ["e1","e5","t100"]){
+    const val=document.createElement("span");val.textContent=n?pct(c[name][j]/n):"—";item.appendChild(val);
+  }
+  item.onclick=()=>{state.wire=j;renderDetail();};
+  rows.appendChild(item);
+ }
+}
+function renderAll(){setControls();stats();renderStation();renderDetail();}
+function savedSvg(){
+ const clone=svg.cloneNode(true);
+ clone.setAttribute("xmlns",NS);
+ clone.setAttribute("width","1200");clone.setAttribute("height","900");
+ const txt=new XMLSerializer().serializeToString(clone);
+ const b=new Blob([txt],{type:"image/svg+xml;charset=utf-8"}); download(b,"NA60_MS"+state.station+"_"+state.source+"_"+state.mode+".svg");
+}
+function download(blob,name){
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function csvSelected(){
+ const g=geometry().find(x=>x.id===state.selected),c=chamber(g.id);
+ const lines=["source,station,det_id,layer,wire_index,wire_Y_global_cm,chamber_crossings,n_geom,n_ge1e,n_ge5e,n_le100ns"];
+ for(let j=0;j<c.e1.length;j++){
+   lines.push([state.source,state.station,g.id,g.layer,j,(g.y+(j-(c.e1.length-1)/2)*.4).toFixed(4),
+     c.n,c.geom[j],c.e1[j],c.e5[j],c.t100[j]].join(","));
+ }
+ download(new Blob(["\ufeff"+lines.join("\n")],{type:"text/csv;charset=utf-8"}),
+   "MWPC_MS"+state.station+"_DET"+g.id+"_"+state.source+".csv");
+}
+$("station").replaceChildren();
+for(let i=0;i<6;i++){const o=document.createElement("option");o.value=i;o.textContent="MS"+i+" · "+D.geometry[i].length+" камер";$("station").appendChild(o);}
+$("station").value=0;
+$("source").onchange=e=>{state.source=e.target.value;state.selected=geometry()[0].id;resetView();renderAll();};
+$("station").onchange=e=>{state.station=Number(e.target.value);state.selected=geometry()[Math.floor(geometry().length/2)].id;state.wire=0;resetView();renderAll();};
+$("modeHits").onclick=()=>{state.mode="spatial";renderAll();};
+$("modeWires").onclick=()=>{state.mode="wires";renderAll();};
+$("spatialLayer").onchange=e=>{state.layer=e.target.value;renderAll();};
+$("metric").onchange=e=>{state.metric=e.target.value;renderAll();};
+$("denom").onchange=e=>{state.denom=e.target.value;renderAll();};
+$("groupN").onchange=e=>{state.group=Number(e.target.value);renderAll();};
+$("zoomIn").onclick=()=>zoom(.72);
+$("zoomOut").onclick=()=>zoom(1.39);
+$("zoomReset").onclick=resetView;
+$("saveSVG").onclick=savedSvg;
+$("saveCSV").onclick=csvSelected;
+svg.addEventListener("wheel",evt=>{evt.preventDefault();zoom(evt.deltaY<0?.85:1.18);},{passive:false});
+svg.addEventListener("pointerdown",evt=>{
+ if(evt.button!==0)return;
+ svg.setPointerCapture(evt.pointerId);
+ state.drag={x:evt.clientX,y:evt.clientY,view:[...state.view],moved:false};
+ svg.classList.add("panning");
+});
+svg.addEventListener("pointermove",evt=>{
+ if(!state.drag)return;
+ const dx=evt.clientX-state.drag.x,dy=evt.clientY-state.drag.y;
+ if(Math.abs(dx)+Math.abs(dy)>5)state.drag.moved=true;
+ if(state.drag.moved){
+  const rect=svg.getBoundingClientRect(),v=state.drag.view;
+  state.view=[v[0]-dx*v[2]/rect.width,v[1]-dy*v[3]/rect.height,v[2],v[3]];
+  updateView();tipHide();
+ }
+});
+svg.addEventListener("pointerup",()=>{
+ svg.classList.remove("panning");
+ if(state.drag){const held=state.drag;setTimeout(()=>{if(state.drag===held)state.drag=null;},0);}
+});
+svg.addEventListener("pointercancel",()=>{state.drag=null;svg.classList.remove("panning")});
+state.selected=17;
+renderAll();
+})();
+</script>
+</body>
+</html>
