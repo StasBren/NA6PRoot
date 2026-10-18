@@ -15,6 +15,10 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 cd "$REPO"
+# Always use the installed native executable AND libsimLib built from THIS
+# checkout. The user's default ~/na6p/install/NA6PRoot may be legacy.
+# The activation affects this subshell only, not the user's login profile.
+source "$HERE/activate_pi_stagec_env.sh"
 python3 -m py_compile "$HERE/run_pi_geant4_campaign.py" || {
  echo "Geant4 campaign Python syntax check failed" >&2
  exit 2
