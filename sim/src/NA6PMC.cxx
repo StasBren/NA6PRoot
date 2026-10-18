@@ -6,6 +6,7 @@
 #include "NA6PModule.h"
 #include "NA6PGenerator.h"
 #include "NA6PMCStack.h"
+#include "NA6PMuonReferenceAudit.h"
 #include "StringUtils.h"
 #include "MiscUtils.h"
 #include "KeyValParam.h"
@@ -29,6 +30,7 @@
 #include <functional>
 #include <regex>
 #include <unistd.h>
+#include <cstdlib>
 
 using Str = na6p::utils::Str;
 
@@ -41,6 +43,8 @@ NA6PMC::NA6PMC(const char* name, const char* title) : TVirtualMCApplication(name
 
 NA6PMC::~NA6PMC()
 {
+  // Complete the optional reference-track ROOT output before shutdown.
+  mMuonReferenceAudit.reset();
   closeKineOutput();
   NA6PDetector::instance().closeHitsOutput();
   LOGP(info, "NA6PMC application terminated.");
@@ -192,6 +196,9 @@ void NA6PMC::BeginEvent()
   mStack->clear();
   clearHits();
   mMCTracks.clear();
+  if (mMuonReferenceAudit) {
+    mMuonReferenceAudit->beginEvent();
+  }
   if (mGenerator) {
     mGenerator->clear();
   }
@@ -227,9 +234,28 @@ void NA6PMC::FinishPrimary()
   }
 }
 
+void NA6PMC::PreTrack()
+{
+  // Optional geometry-independent virtual plane monitor. Never changes
+  // the transported particle or introduces artificial detector material.
+  if (mMuonReferenceAudit) {
+    auto* mc = TVirtualMC::GetMC();
+    mMuonReferenceAudit->preTrack(
+        static_cast<int>(mEvCount + mEventOffset),
+        mStack->GetCurrentTrackNumber(), mc->TrackPid());
+  }
+}
+
 void NA6PMC::Stepping()
 {
-  // Implement per-step processing logic here
+  // The reference-plane audit observes ALL muon steps, even outside
+  // sensitive volumes. It interpolates crossed Z planes within steps.
+  if (mMuonReferenceAudit) {
+    auto* mc = TVirtualMC::GetMC();
+    mMuonReferenceAudit->step(
+        static_cast<int>(mEvCount + mEventOffset),
+        mStack->GetCurrentTrackNumber(), mc->TrackPid());
+  }
   if (!TVirtualMC::GetMC()->TrackCharge()) {
     return;
   }
@@ -395,6 +421,13 @@ void NA6PMC::init()
   }
   createKineOutput(dir);
   NA6PDetector::instance().createHitsOutput(dir);
+
+  const char* refAuditFlag = std::getenv("NA6P_MWPC_STORE_REFERENCE_PLANES");
+  if (refAuditFlag && refAuditFlag[0] != '0') {
+    mMuonReferenceAudit = std::make_unique<NA6PMuonReferenceAudit>(dir);
+    LOGP(info, "MWPC layout-independent reference plane muon states enabled: "
+               "MuonReferencePlanes.root (10-cm grid, 365/430/495 cm)");
+  }
 }
 
 void NA6PMC::clearHits()
