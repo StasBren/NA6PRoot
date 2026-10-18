@@ -54,6 +54,6 @@ void validate_pi_geant4_chunk(const char* directory, int expectedEvents)
   }
   std::cout << "PI_GEANT_CHUNK_PASS events=" << expectedEvents
             << " gasSteps=" << st->GetEntriesFast()
-            << " trees OK | " << dir << '\n';
+            << " trees OK | " << dir << std::endl;
   gSystem->Exit(0);
 }
