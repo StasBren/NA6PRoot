@@ -46,6 +46,10 @@ button.action:hover{background:#294360}
 #profileSVG{display:block;width:100%;height:235px;background:#102035;border:1px solid #2b4158;border-radius:8px}
 .chartLegend{display:flex;gap:10px;flex-wrap:wrap;margin:9px 0;font-size:11px;color:var(--muted)}
 .chartLegend span:before{content:"";display:inline-block;width:14px;height:3px;margin-right:5px;vertical-align:middle;background:var(--swatch)}
+.multBlock{margin-top:14px;padding:12px;background:#102035;border:1px solid #2b4158;border-radius:8px}
+.multTitle{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.multTitle strong{font-size:13px}
+#multSVG{width:100%;height:190px}
 .wirePanel{margin-top:12px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .wireHead,.wireRow{display:grid;grid-template-columns:44px 1fr 68px 68px 68px;gap:5px;align-items:center;padding:5px 9px;font-size:11px;font-variant-numeric:tabular-nums}
 .wireHead{background:#21354d;color:#b7c9db;position:sticky;top:0;z-index:2}
@@ -103,6 +107,18 @@ button.action:hover{background:#294360}
    <svg xmlns="http://www.w3.org/2000/svg" id="profileSVG" viewBox="0 0 520 230" aria-label="Профиль проволок камеры"></svg>
    <div class="chartLegend"><span style="--swatch:#a5b3c1">Геометрия</span><span style="--swatch:#ffc05e">≥1e</span><span style="--swatch:#58d0c5">≥5e</span><span style="--swatch:#d18df0">≤100 нс</span></div>
    <div class="small" id="detailSummary"></div>
+   <div class="multBlock">
+     <div class="multTitle"><strong>Сколько анодов активно при одном попадании?</strong>
+       <select id="multMetric">
+        <option value="e1">Garfield ≥1e</option>
+        <option value="e5">Garfield ≥5e</option>
+        <option value="t100">До 100 нс</option>
+        <option value="geom">Геометрия</option>
+       </select>
+     </div>
+     <svg xmlns="http://www.w3.org/2000/svg" id="multSVG" viewBox="0 0 520 184" aria-label="Кратность активных анодов выбранной камеры"></svg>
+     <p class="small" id="multInfo"></p>
+   </div>
    <div class="wirePanel">
      <div class="wireHead"><span>№</span><span>Положение / активность</span><span>≥1e</span><span>≥5e</span><span>100 нс</span></div>
      <div class="wireList" id="wireList"></div>
@@ -125,7 +141,7 @@ const NS = "http://www.w3.org/2000/svg";
 const nf = n => Number(n).toLocaleString("ru-RU");
 const pct = n => Number.isFinite(n) ? (100*n).toFixed(n<.01?2:1)+"%" : "—";
 const nameMap = {"jpsi40-bore":"J/ψ","phi40-bore":"φ","omega40-bore":"ω"};
-const state = {source:"jpsi40-bore",station:0,mode:"spatial",layer:"xy",metric:"e1",denom:"chamber",group:4,selected:17,wire:36,view:null,drag:null};
+const state = {source:"jpsi40-bore",station:0,mode:"spatial",layer:"xy",metric:"e1",denom:"chamber",group:4,selected:17,wire:36,multMetric:"e1",view:null,drag:null};
 let chartCache = null;
 const svg = $("stationSVG");
 const tooltip = $("tip");
@@ -341,6 +357,36 @@ function pathFor(arr,n,ymax,color,root,extra){
  for(let i=0;i<n;i++) if(Number.isFinite(arr[i]))pts.push(px(i).toFixed(2)+","+py(arr[i]).toFixed(2));
  if(pts.length)svgNode("polyline",Object.assign({points:pts.join(" "),fill:"none",stroke:color,"stroke-width":"1.8","stroke-linejoin":"round"},extra||{}),root);
 }
+function renderMultiplicity(c) {
+ const canvas=$("multSVG");canvas.replaceChildren();
+ const sums=c.multiplicity&&c.multiplicity[state.multMetric];
+ if(!sums){
+   $("multInfo").textContent="Для этой камеры ещё нет таблицы фиксированной кратности. "+
+     "После нового Heed/Garfield fold появится P(0,1,2,3,4,≥5) с тем же набором проволок.";
+   textNode("Нет новой таблицы кратности",260,91,
+     {"text-anchor":"middle",fill:"#bdcedb","font-size":"14"},canvas);
+   return;
+ }
+ const n=c.n;
+ if(n<=0){
+   $("multInfo").textContent="У камеры нет пересечений; вероятности не определены.";
+   return;
+ }
+ const probs=sums.map(v=>v/n),maximum=Math.max(.05,...probs);
+ for(let i=0;i<6;i++){
+   const x=45+i*76,barwidth=49;
+   const h=137*probs[i]/maximum;
+   svgNode("rect",{x:x,y:148-h,width:barwidth,height:h,
+     fill:i===2?"#56d1c4":"#f5b65a",rx:3},canvas);
+   textNode(["0","1","2","3","4","5+"][i],x+24.5,166,
+     {"text-anchor":"middle","font-size":"12",fill:"#dbe8f3"},canvas);
+   textNode(pct(probs[i]),x+24.5,Math.max(11,145-h-7),
+     {"text-anchor":"middle","font-size":"11",fill:"#eaf2f8"},canvas);
+ }
+ $("multInfo").textContent="Условная вероятность на одно пересечение этой камеры. "+
+   "N="+nf(n)+"; P(≥2)="+pct(probs.slice(2).reduce((a,b)=>a+b,0))+
+   ". Нулевая кратность включена; 5+ объединены в последнюю категорию.";
+}
 function renderDetail(){
  const g=geometry().find(x=>x.id===state.selected)||geometry()[0];
  if(!g)return;
@@ -376,6 +422,7 @@ function renderDetail(){
  $("detailSummary").textContent=n?"Среднее число активных анодов на пересечение (≥1e): "+
    (c.e1.reduce((a,b)=>a+b,0)/n).toFixed(3)+
    ". Сумма вероятностей проволок может быть больше 1.":"Все отдельные вероятности не определены при N=0.";
+ renderMultiplicity(c);
  const rows=$("wireList");rows.replaceChildren();
  for(let j=0;j<L;j++){
   const item=document.createElement("div");item.className="wireRow"+(j===state.wire?" chosen":"");item.dataset.wire=j;
@@ -427,6 +474,7 @@ $("modeWires").onclick=()=>{state.mode="wires";renderAll();};
 $("spatialLayer").onchange=e=>{state.layer=e.target.value;renderAll();};
 $("metric").onchange=e=>{state.metric=e.target.value;renderAll();};
 $("denom").onchange=e=>{state.denom=e.target.value;renderAll();};
+$("multMetric").onchange=e=>{state.multMetric=e.target.value;renderDetail();};
 $("groupN").onchange=e=>{state.group=Number(e.target.value);renderAll();};
 $("zoomIn").onclick=()=>zoom(.72);
 $("zoomOut").onclick=()=>zoom(1.39);
