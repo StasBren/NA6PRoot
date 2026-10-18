@@ -21,10 +21,10 @@ def main():
         "edep_eV","path_length_mm","theta_u_in_deg",
         "theta_u_out_deg","theta_w_in_deg","theta_w_out_deg",
     ]
-    base=dict(event=0,track_id=18,pdg=13,edep_eV=1200.,
-              path_length_mm=6.,"theta_u_in_deg":1.,
-              "theta_u_out_deg":1.05,
-              "theta_w_in_deg":0.5,"theta_w_out_deg":.7)
+    base=dict(event=0, track_id=18, pdg=13, edep_eV=1200.,
+              path_length_mm=6., theta_u_in_deg=1.,
+              theta_u_out_deg=1.05,
+              theta_w_in_deg=0.5, theta_w_out_deg=.7)
     with TemporaryDirectory(prefix="native_full_pi_qa_") as temporary:
         p=Path(temporary)/"mock.csv"
         records=[
