@@ -88,7 +88,7 @@ def main():
         assert len(data["chambers"][SOURCES[0]]["52"]["e1"]) == 128
         assert data["multiplicity_sources"]["random_phase_available"]
         assert not data["multiplicity_sources"]["fixed_grid_available"]
-        assert data["chambers"][SOURCES[0]]["17"]["legacyMultiplicity"] == [
+        assert data["chambers"][SOURCES[0]]["0"]["legacyMultiplicity"] == [
             0.5, 0.5, 0., 0., 0., 0.
         ]
         assert "legacyMultiplicity" not in data["chambers"][SOURCES[0]]["1"]
