@@ -259,7 +259,11 @@ def all_chunks(args):
     codepath=HERE/"export_c_geant_muon_crossings.C"
     # Epoch freezes content-derived exporter revision. Results generated
     # using different macro versions CANNOT share one output directory.
-    epoch=hashlib.sha256(codepath.read_bytes()).hexdigest()
+    # The checkpoint binds BOTH the native ROOT exporter and aggregation
+    # semantics. A change to either invalidates old cached summaries.
+    epoch=hashlib.sha256(
+        codepath.read_bytes()+b"\0"+Path(__file__).read_bytes()
+    ).hexdigest()
     root=os.environ.get("PI_ROOT_EXECUTABLE","root")
     combined=defaultdict(fresh)
     module=defaultdict(fresh)
