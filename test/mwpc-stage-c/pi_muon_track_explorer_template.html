@@ -93,6 +93,11 @@ button:disabled{opacity:.35;cursor:not-allowed}
     <option value="e5">≥5 собранных электронов</option>
     <option value="t100">≥1 электрон до 100 нс</option>
     <option value="geom">Пересечённые геометрические ячейки</option>
+   </select></div>
+   <div><label for="wireScale">Масштаб сетки</label>
+   <select id="wireScale">
+    <option value="focus">Вблизи активных (±10)</option>
+    <option value="full">Все 77/128 анодов</option>
    </select></div></div>
  <div class="contents two">
   <div>
@@ -126,7 +131,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
 const D=JSON.parse(document.getElementById("trackData").textContent);
 const $=id=>document.getElementById(id),NS="http://www.w3.org/2000/svg";
 const names={"jpsi40-bore":"J/ψ · 40 AGeV","phi40-bore":"φ · 40 AGeV","omega40-bore":"ω · 40 AGeV"};
-const state={source:Object.keys(D.sources)[0],ei:0,ti:0,station:0,det:null,criterion:D.meta.chargeModel?"e1":"geom"};
+const state={source:Object.keys(D.sources)[0],ei:0,ti:0,station:0,det:null,criterion:D.meta.chargeModel?"e1":"geom",wireScale:"focus"};
 const selectedColor="#53d8c6",otherColor="#f9b25b";
 function node(tag,attrs,parent){const e=document.createElementNS(NS,tag);for(const key in (attrs||{}))e.setAttribute(key,attrs[key]);if(parent)parent.appendChild(e);return e}
 function label(v,x,y,attrs,root){const e=node("text",Object.assign({x,y,fill:"#bbccdd","font-size":10},attrs||{}),root);e.textContent=v;return e}
@@ -161,6 +166,7 @@ function renderToolbar(){
  $("prev").disabled=state.ei===0;
  $("next").disabled=state.ei===events.length-1;
  $("criterion").value=state.criterion;
+ $("wireScale").value=state.wireScale;
  $("criterion").querySelectorAll("option").forEach(o=>{o.disabled=!D.meta.chargeModel&&o.value!=="geom"});
  $("eventInfo").textContent="job "+ev().job+" / event "+ev().event+" · "+ev().tracks.length+" трек(а)";
  $("caveat").textContent=D.meta.chargeModel?
@@ -225,6 +231,9 @@ function renderPlan(){
  const y0=Math.min(...geo.map(g=>-g.y-hy)),y1=Math.max(...geo.map(g=>-g.y+hy));
  const pad=Math.max(x1-x0,y1-y0)*.07;
  root.setAttribute("viewBox",[x0-pad,y0-pad,x1-x0+2*pad,y1-y0+2*pad].join(" "));
+ // Gas rectangles are drawn first; the true projected gas-segment
+ // positions are drawn LAST so neighboring overlapping chambers cannot
+ // obscure which candidate detector a chosen point belongs to.
  for(const g of geo){
   const hit=byDet.get(g.det),sel=hit&&state.det===g.det;
   const group=node("g",{"data-det":g.det},root);
@@ -241,6 +250,19 @@ function renderPlan(){
   if(hit){overlay.onclick=()=>{state.det=g.det;renderPlan();renderHit()}}
   node("title",{},overlay).textContent="DET"+g.det+(hit?
     " — muon gas crossing; click for anodes":" — no sampled gas crossing");
+ }
+ // XY positions come from each projected gas-segment midpoint (not wires).
+ // Radius is a DISPLAY symbol in global-cm viewBox, not a physical spot size.
+ const markerR=Math.max(2.4,(x1-x0)*.009);
+ for(const hit of hits){
+  const selected=state.det===hit.det;
+  const group=node("g",{},root);
+  const p=node("circle",{cx:hit.x,cy:-hit.y,r:selected?markerR*1.28:markerR,
+    fill:selected?"#ffe6a5":"#51daca",stroke:"#061927",
+    "stroke-width":markerR*.33,cursor:"pointer"},group);
+  node("title",{},p).textContent="Мюон, газовый сегмент DET"+hit.det+
+    "; XY=("+fmt(hit.x,2)+", "+fmt(hit.y,2)+") см. Нажми для выбора.";
+  p.addEventListener("click",()=>{state.det=hit.det;renderPlan();renderHit()});
  }
  $("stationTitle").textContent="Станция MS"+state.station+": расположение газовых модулей";
  $("selectedStats").textContent=hits.length+" пересечений у выбранного мюона";
@@ -267,22 +289,56 @@ function renderHit(){
     "; потеря за пределами конечной сетки: "+hit.lostElectrons+" e.":"");
  $("wireStats").textContent="Активных анодов по критерию: "+active.length+
   " из "+nWire+". Геометрических ячеек на пути: "+hit.geom.length+".";
- const top=19,spacing=478/nWire;
- for(let i=0;i<nWire;i++){
-  const j=nWire-1-i,y=top+(i+.5)*spacing,chargeRow=charge.get(j);
+ // Focus mode shows a CONTIGUOUS, real part of the numbered anode
+ // grid, not a rescaled picture of artificially fewer wires.
+ // Include the actual projected gas location in the focus window even if
+ // no electrons were collected (P0 is a meaningful outcome).
+ const selectedGeometry=D.geometry[hit.st].find(g=>g.det===hit.det);
+ const localYmm=10*(hit.y-selectedGeometry.y);
+ const hitIndex=(localYmm/4)+(nWire-1)/2;
+ const centre=Math.max(0,Math.min(nWire-1,Math.round(hitIndex)));
+ const interesting=[...active,...hit.geom,centre];
+ const low=Math.max(0,Math.min(...interesting)-10);
+ const high=Math.min(nWire-1,Math.max(...interesting)+10);
+ const first=state.wireScale==="focus"?low:0;
+ const last=state.wireScale==="focus"?high:nWire-1;
+ const count=last-first+1,top=19,spacing=478/count;
+ label("№ "+first+"…"+last+" / "+nWire+" анодов",192,13,
+   {"text-anchor":"middle","font-size":12,"font-weight":650},root);
+ for(let i=0;i<count;i++){
+  const j=last-i,y=top+(i+.5)*spacing,chargeRow=charge.get(j);
   const c=chargeRow?chargeRow[1]:0,early=chargeRow?chargeRow[2]:0;
   const on=set.has(j);
   const line=node("line",{x1:43,y1:y,x2:311,y2:y,
     stroke:on?"#58d6c6":"#3b566d",
-    "stroke-width":on?Math.max(2.3,spacing*.8):.8,
+    "stroke-width":on?Math.max(2.3,Math.min(spacing*.65,8)):.8,
     opacity:on?1:.36},root);
   node("title",{},line).textContent="Анод "+j+
-   ": собранные электроны "+c+", до 100нс "+early+
-   ", выбранный критерий "+(on?"ДА":"нет");
-  if(i%8===0||i===nWire-1){
+    ": собранные электроны "+c+", до 100нс "+early+
+    ", выбранный критерий "+(on?"ДА":"нет");
+  if(count<=35||i%8===0||i===count-1){
    label(String(j),35,y+3,{"text-anchor":"end","font-size":10},root);
   }
+  if(on && count<=40 && hit.charges && state.criterion!=="geom"){
+   label(c+" e",317,y+3,{"text-anchor":"end","font-size":10,
+     fill:"#74ead9","font-weight":"650"},root);
+  }
  }
+ // Mark the continuous Y position of the projected gas segment relative to
+ // fixed 4-mm wire pitch. It is NOT a measured strip/centroid coordinate.
+ if(hitIndex>=first-.5&&hitIndex<=last+.5){
+  const markerY=top+(last-hitIndex+.5)*spacing;
+  node("line",{x1:43,y1:markerY,x2:310,y2:markerY,
+    stroke:"#f1b25b","stroke-width":"1.5",
+    "stroke-dasharray":"4 4",opacity:.9},root);
+  node("title",{},node("circle",{cx:321,cy:markerY,r:4,
+    fill:"#f1b25b"},root)).textContent=
+    "Геометрическое положение середины газового сегмента, между анодами";
+ }
+ label(state.wireScale==="focus"?
+   "Увеличен фрагмент реальной сетки — смещение 4 мм между соседними анодами":
+   "Обзор всей номинальной проволочной сетки",180,515,
+   {"text-anchor":"middle","font-size":9},root);
  const info=active.length?active.slice(0,140):[];
  for(const wire of info){
   const line=document.createElement("div");line.className="wireRow";
@@ -312,6 +368,7 @@ $("source").onchange=e=>changeSource(e.target.value);
 $("event").onchange=e=>changeEvent(Number(e.target.value));
 $("track").onchange=e=>changeTrack(Number(e.target.value));
 $("criterion").onchange=e=>{state.criterion=e.target.value;renderHit()};
+$("wireScale").onchange=e=>{state.wireScale=e.target.value;renderHit()};
 $("prev").onclick=()=>changeEvent(state.ei-1);
 $("next").onclick=()=>changeEvent(state.ei+1);
 renderAll();
