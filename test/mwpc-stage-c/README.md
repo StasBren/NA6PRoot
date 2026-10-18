@@ -1475,3 +1475,35 @@ After a previously successful compile/install, do **not** rebuild again:
 The failed old smoke run is archived automatically when its library hashes
 differ; no manual cleanup. Do not run full until all 3 channel smoke
 chunks pass their ROOT object and tree checks.
+
+
+### Required four-worker parallel smoke before long production
+
+The one-worker, three-events/channel smoke test covers native Geant4 ROOT
+serialization and the reference-plane observer. It does NOT exercise merging
+and event offsets from four independent workers. A separate fixed
+12-events/channel, four-worker regression now checks exactly that pathway:
+
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_geant4_campaign.sh parallel-smoke
+
+This is kept strictly separate under
+
+    test_runs/mwpc_stage_c/pi_geant4_hit_validation_v1_parallel_smoke/
+
+The ordinary full campaign output remains
+
+    test_runs/mwpc_stage_c/pi_geant4_hit_validation_v1/
+
+Require three PASS lines and CAMPAIGN_COMPLETE before starting 30k/channel
+with four workers. The test checks the merged mckine/hitsMuonSpec ROOT entry
+counts, the nonempty mandatory ROOT files, the Geant4 gas-step and
+MuonReferencePlanes trees, and original per-worker output directories.
+
+Long campaign:
+
+    bash test/mwpc-stage-c/run_pi_geant4_campaign.sh full 30000 3000 4 2.5
+
+The final argument is the approximate *per-invocation* wall-clock budget,
+checked at chunk boundaries; another invocation with the exact same command
+resumes from completed checkpoints. It can overshoot by the running chunk.
