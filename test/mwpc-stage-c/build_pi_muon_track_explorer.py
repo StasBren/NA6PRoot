@@ -29,7 +29,8 @@ import numpy as np
 
 from mwpc_checkerboard_projection import SOURCES, build_chambers
 from pi_fixed_wire_occupancy import (
-    cluster_segment, collected_electron_endpoints, n_wires, nominal_wire_index,
+    cluster_segment, cluster_native_gas_segment,
+    collected_electron_endpoints, n_wires, nominal_wire_index,
 )
 from pi_anode_digitizer import (
     AnodeConfig, digitize_hit, empirical_gains,
@@ -50,10 +51,13 @@ def stable_u64(*parts):
 def nominal_geometry_anodes(row):
     station = int(row["station"])
     n = n_wires(station)
-    local = np.array([
-        (float(row["y_in_cm"]) - float(row["chamber_center_y_cm"])) * 10.,
-        (float(row["y_out_cm"]) - float(row["chamber_center_y_cm"])) * 10.,
-    ])
+    if row.get("native_hit") == "1":
+        local=np.array([float(row["u_in_mm"]),float(row["u_out_mm"])])
+    else:
+        local = np.array([
+            (float(row["y_in_cm"]) - float(row["chamber_center_y_cm"])) * 10.,
+            (float(row["y_out_cm"]) - float(row["chamber_center_y_cm"])) * 10.,
+        ])
     a, b = nominal_wire_index(local, station, 0.0)
     return list(range(max(0, min(int(a), int(b))),
                       min(n - 1, max(int(a), int(b))) + 1))
@@ -98,6 +102,9 @@ def describe_row(row, models, analog=False, gain_bank=None):
         "geom":nominal_geometry_anodes(row),
         "charges":None, "lostElectrons":None, "nClusters":None,
         "anodeSignals":None,
+        "isRealGeantGasHit":row.get("native_hit")=="1",
+        "edep_eV":float(row["edep_eV"]) if row.get("native_hit")=="1" else None,
+        "time_ns":float(row["time_ns"]) if row.get("native_hit")=="1" else None,
     }
     if models is not None:
         lam, marks, transport = models
@@ -105,7 +112,9 @@ def describe_row(row, models, analog=False, gain_bank=None):
                           row["source"], row["job"], row["event"],
                           row["track"], station, det)
         rng = np.random.default_rng(seed)
-        u, v, ncl, _ = cluster_segment(row, rng, lam, marks)
+        sampler=(cluster_native_gas_segment
+                 if row.get("native_hit")=="1" else cluster_segment)
+        u, v, ncl, _ = sampler(row, rng, lam, marks)
         wire_ids, arrival_times, lost = collected_electron_endpoints(
             u,v,station,0.,transport,rng.random(u.size)
         )
@@ -237,7 +246,12 @@ def build(args):
             ] for station in GEOMETRY
         ],
         "meta":{
-            "sample":"SHA256 deterministic event sample of historical MS2=530cm gas projections; display is curated, NOT a random detector-physics sample",
+            "dataKind":getattr(args,"data_kind","historical"),
+            "sample":(
+                "CURATED true current-geometry Geant4 gas hits: parent chunk, "
+                "MCKine-associated muon PDG, actual module gas entry/exit and Edep"
+            ) if getattr(args,"data_kind","historical")=="native" else
+                "SHA256 deterministic event sample of historical MS2=530cm gas projections; display is curated, NOT a random detector-physics sample",
             "sampleModulo":args.sample_modulo,
             "chargeModel":models is not None,
             "anodeSignalModel":analog,
@@ -255,7 +269,11 @@ def build(args):
             "nSources":len(SOURCES),
             "stationZcm":[300.,340.,530.,590.,810.,850.],
             "geometryModel":"nominal checkerboard, finite MS0 77 wires / other stations 128, pitch 4mm",
-            "trajectoryModel":"line segments joining gas-crossing midpoints, NOT true Geant4 steps or exact bending between stations",
+            "trajectoryModel":(
+                "Lines JOIN true native Geant4 gas-hit midpoints; connections "
+                "between chambers are only visual guides, not step histories."
+            ) if getattr(args,"data_kind","historical")=="native" else
+                "line segments joining projected gas-crossing midpoints, NOT true Geant4 steps or exact bending between stations",
             "electronModel":"one deterministic event-seeded Heed Poisson/cluster and stored Garfield single-electron transport realization, B=0 reference, 6mm gap mapping",
             "electronicsModel":"NOT implemented: no avalanche gain, induced-current weighting field, shaping, threshold, cross talk or noise",
             "meaningMissingStation":"No projected GAS crossing for selected track; does not prove it did not physically traverse the station plane",
@@ -283,6 +301,8 @@ def main():
     ap.add_argument("--heed-clusters",type=Path,default=Path(
         "test_runs/mwpc_stage_c/c_heed_library_2p4/heed_2p4_clusters.csv"))
     ap.add_argument("--garfield",type=Path,default=None)
+    ap.add_argument("--data-kind",choices=("historical","native"),
+                    default="historical")
     ap.add_argument("--sample-modulo",type=int,default=2048)
     ap.add_argument("--max-events-per-source",type=int,default=44)
     ap.add_argument("--no-anode-digitizer",action="store_true",
