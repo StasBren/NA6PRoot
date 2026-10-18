@@ -150,6 +150,22 @@ def main():
                 and float(r["phase_mm"]) == 0
             ]
             assert sum(total) == 2
+        with (output / "pi_fixed_wire_module_multiplicity.csv").open() as f:
+            per_module = list(csv.DictReader(f))
+        assert len(per_module) == 3 * 298 * 3 * 4
+        for row in per_module:
+            n = int(row["crossings"])
+            assert n == int(row["reference_expected_crossings"])
+            bins = [int(row["N" + category]) for category in
+                    ("0", "1", "2", "3", "4", "5plus")]
+            assert sum(bins) == n
+            probabilities = [float(row["P" + category]) for category in
+                             ("0", "1", "2", "3", "4", "5plus")]
+            if n:
+                assert abs(sum(probabilities)-1.) < 1e-12
+            else:
+                assert all(math.isnan(p) for p in probabilities)
+        print("PASS: PI per-module P0/P1/P2/P3/P4/P5+ for all 298 chambers")
         print("PASS: full 3-channel/298-detector accounting, wire CSV integrity")
         # Regression for the improved physics presentation: XY trajectory
         # control and independently computed geometric wire profiles.
