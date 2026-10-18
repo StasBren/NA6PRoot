@@ -228,6 +228,69 @@ def load_optional_module_multiplicity(path, chambers):
     return True
 
 
+def load_legacy_random_phase_multiplicity(path, chambers):
+    """Validate existing FULL historical random-phase per-hit Heed/Garfield fold.
+
+    The older fold samples a NEW wire-grid phase for every gas crossing,
+    so these multiplicity values must NEVER be passed off as originating
+    from the nominal fixed-anode occupancy displayed in the wire plot.
+    No new Garfield, Heed, or Geant4 jobs are run here.
+    """
+    if not path.is_file():
+        print("No complete historical per-module multiplicity found:", path)
+        return False
+    categories = ("0", "1", "2", "3", "4", "5plus")
+    seen = set()
+    with path.open(newline="", encoding="utf-8") as stream:
+        reader = csv.DictReader(stream)
+        required = {
+            "source", "station", "det_id",
+            "completed_source", "processed_chamber_crossings",
+            "expected_all_crossings",
+            *(f"P_nwire_{category}" for category in categories),
+        }
+        if not required.issubset(reader.fieldnames or []):
+            raise ValueError(
+                "Existing random-phase multiplicity summary lacks columns: "
+                f"{sorted(required - set(reader.fieldnames or []))}"
+            )
+        for row in reader:
+            src, det = row["source"], int(row["det_id"])
+            key = (src, det)
+            if key in seen or src not in chambers or str(det) not in chambers[src]:
+                raise ValueError(f"Duplicate/unknown historical chamber key: {key}")
+            seen.add(key)
+            chamber = chambers[src][str(det)]
+            crossing_count = int(row["processed_chamber_crossings"])
+            if (int(row["completed_source"]) != 1 or
+                crossing_count != int(row["expected_all_crossings"]) or
+                crossing_count != chamber["n"] or
+                int(row["station"]) != CHAMBERS[det].station):
+                raise ValueError(
+                    f"Old per-module random-phase sample incomplete or "
+                    f"geometry mismatched: {key}; refusing to mix data"
+                )
+            probabilities = [
+                float(row[f"P_nwire_{category}"]) for category in categories
+            ]
+            if crossing_count:
+                if (not all(math.isfinite(p) and 0 <= p <= 1
+                            for p in probabilities) or
+                    abs(sum(probabilities)-1) > 1.e-8):
+                    raise ValueError(f"Invalid old multiplicity PDF: {key}")
+                chamber["legacyMultiplicity"] = probabilities
+            else:
+                if not all(math.isnan(p) for p in probabilities):
+                    raise ValueError(f"Invalid zero-hit multiplicity PDF: {key}")
+    if len(seen) != len(SOURCES) * len(CHAMBERS):
+        raise ValueError("Incomplete legacy per-module table")
+    print(
+        "Embedded 894 VERIFIED historical random-phase chamber PDFs: "
+        "physically DIFFERENT wire-grid origin assumption from fixed-wire map"
+    )
+    return True
+
+
 def generate(args):
     files = [
         args.wire_counts, args.geom_counts, args.crossings/"modules.csv",
@@ -244,7 +307,16 @@ def generate(args):
     mult = getattr(args, "module_multiplicity", None)
     if mult is None:
         mult = args.wire_counts.with_name("pi_fixed_wire_module_multiplicity.csv")
-    load_optional_module_multiplicity(mult, chambers)
+    fixed_loaded = load_optional_module_multiplicity(mult, chambers)
+    legacy_path = getattr(args, "legacy_multiplicity", None)
+    if legacy_path is None:
+        legacy_path = Path(
+            "test_runs/mwpc_stage_c/pi_per_chamber_response/"
+            "pi_wire_multiplicity_per_chamber.csv"
+        )
+    legacy_loaded = load_legacy_random_phase_multiplicity(
+        legacy_path, chambers
+    )
     stations = stations_payload(args.crossings/"stations.csv", args.xy, counts)
     data = {
         "description": "200 000 событий/канал в историческом наборе; MS2=530 см",
@@ -252,6 +324,16 @@ def generate(args):
         "geometry": geometry_payload(),
         "stations": stations,
         "chambers": chambers,
+        "multiplicity_sources": {
+            "fixed_grid_available": fixed_loaded,
+            "random_phase_available": legacy_loaded,
+            "fixed_grid_definition": "fixed finite 77/128 wire anodes; phase 0 mm",
+            "random_phase_definition": (
+                "original fully processed legacy per-hit fold; each "
+                "crossing has independent uniform random wire phase; "
+                "does not use a fixed finite physical anode grid"
+            ),
+        },
         "limitations": [
             "Historical Geant4 station reference states, not native gas hits",
             "Station and module gas crossings can double-count tracks at overlaps",
@@ -295,6 +377,15 @@ def main():
                     default=folder/"physical_validation/pi_geom_wire_counts.csv")
     ap.add_argument("--xy", type=Path,
                     default=folder/"physical_validation/pi_crossing_density_xy.npz")
+    ap.add_argument(
+        "--legacy-multiplicity", type=Path, default=Path(
+            "test_runs/mwpc_stage_c/pi_per_chamber_response/"
+            "pi_wire_multiplicity_per_chamber.csv"
+        ), help="Optional COMPLETED historical per-chamber random-phase "
+                "multiplicity CSV (no microscopic rerun)"
+    )
+    ap.add_argument("--module-multiplicity", type=Path, default=None,
+                    help="Optional NEW per-chamber fixed-wire multiplicity CSV")
     ap.add_argument("--template", type=Path,
                     default=stage_c/"pi_station_dashboard_template.html")
     ap.add_argument("--out", type=Path,
