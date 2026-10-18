@@ -1353,3 +1353,57 @@ compared without replaying Geant4 WHEN THE GAS AND PASSIVE MATERIAL
 GEOMETRY REMAIN THE SAME. Moving/replacing MWPC material changes multiple
 scattering and energy loss: the corresponding true detector-hit/Edep
 distributions must be rerun or approximated and explicitly labeled.
+
+
+### NEW: reference-plane library written by the modern Geant4 campaign
+
+To make the **new** production useful for changing the *placement* and
+acceptance of the MWPC modules, the branch now has an optional passive
+muon-trajectory auditor in NA6PMC and NA6PMuonReferenceAudit.h. It is
+enabled by NA6P_MWPC_STORE_REFERENCE_PLANES=1 and writes the fifth mandatory
+file for each chunk:
+
+    MuonReferencePlanes.root
+
+The Planes tree contains global position and momentum of each transported
+muon at virtual Z slices **280..900 cm every 10 cm** plus the magnet
+reference planes 365/430/495 cm. Each row stores event/track/PDG,
+plane index, direction and the endpoints of the actual Geant4 step used
+for interpolation. The states are **linearly interpolated between
+actual Geant4 steps**. The observer introduces no material, no step
+limiter and no particle cuts. The track ID is the *original* stack ID,
+prior to MCKine track ID remapping. Reusing these data requires correct
+event/track mapping, and is valid for prospective layouts only as an
+approximation when the chamber material budget changes.
+
+Unlike the separate historical archive, these virtual-plane tracks and
+native gas hits come from the **SAME NEW Geant4 campaign**; event and
+chunk identifiers can be retained together for cross checks.
+
+Since this is new native compiled C++ code, **rebuild/install the current
+feature branch before running the smoke test**:
+
+    bash test/mwpc-stage-c/rebuild_pi_geant4_stagec.sh
+    bash test/mwpc-stage-c/run_pi_geant4_campaign.sh smoke
+
+The rebuild helper requires an existing cached CMake build tree for
+THIS exact source path and refuses to guess an unrelated build. Supported
+paths include the checkout's build/, the documented NA6PBUILDDIR,
+and customary ~/na6p/build variants. If none matches, it stops safely
+without starting a multi-hour job; review the error and locate the
+original CMake build instead of creating duplicate installations.
+
+The smoke test now requires and validates BOTH auxiliary outputs:
+- gasStepsMuonSpec (in HitsMuonSpec.root) from NA6P_MWPC_STORE_GAS_STEPS=1
+- Planes (in MuonReferencePlanes.root) from NA6P_MWPC_STORE_REFERENCE_PLANES=1.
+
+The preserved five mandatory chunk outputs are MCKine.root,
+HitsMuonSpec.root, geometry.root, MuonReferencePlanes.root, and
+na6pLayout.ini. The simulator binary AND loaded libsimLib.so hashes are
+frozen in campaign.json to ensure resumed chunks do not mix versions.
+
+To analyze actual module entry/exit momentum and local angles after a
+successful run, the existing
+test/mwpc-stage-c/export_c_geant_muon_crossings.C
+now additionally exports px/py/pz-out, theta_u/w-in/out and delta-theta;
+the native saved ROOT hit object remains authoritative.
