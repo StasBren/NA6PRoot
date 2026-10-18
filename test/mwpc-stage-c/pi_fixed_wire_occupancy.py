@@ -159,6 +159,12 @@ def calc(args):
     edge_electrons = np.zeros((3, 298), dtype=np.int64)
     # [source, station, phase, metric, wire multiplicity category (0..4,5+)]
     mult = np.zeros((3, 6, 3, len(METRICS), 6), dtype=np.int64)
+    # [source, exact physical detector, grid phase, criterion, 0..4/5+]
+    # This directly implements PI's P(0/1/2/3/4/5+ anodes | ONE gas hit)
+    # for EVERY real det_id, unlike the older station-only averages.
+    module_mult = np.zeros(
+        (3, 298, len(PHASES), len(METRICS), 6), dtype=np.int64
+    )
     # per-theta bin [source, station, theta bin, phase, metric] -> (#>=2)
     angle_num = np.zeros((3, 6, len(ANGLE_EDGES) - 1, 3, len(METRICS)), dtype=np.int64)
     angle_den = np.zeros((3, 6, len(ANGLE_EDGES) - 1), dtype=np.int64)
@@ -207,6 +213,8 @@ def calc(args):
                     )
                     for metric_i, value in enumerate(values):
                         mult[source_i, st, iphase, metric_i, min(value, 5)] += 1
+                        module_mult[source_i, det, iphase, metric_i,
+                                    min(value, 5)] += 1
                         angle_num[source_i, st, itheta, iphase, metric_i] += value >= 2
                     if iphase == 1:
                         n = n_wires(st)
@@ -294,6 +302,53 @@ def calc(args):
                                 if n else math.nan
                             ),
                         })
+    # Exact finite-wire multiplicity per physical gas chamber. Keep all
+    # zero-hit modules in output with undefined (NaN) conditional P values.
+    # This table is derived from the SAME per-crossing fold as wire_counts,
+    # unlike the historical random-phase per-module report.
+    with (out / "pi_fixed_wire_module_multiplicity.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as f:
+        fields = (
+            "source", "station", "det_id", "row", "col", "layer",
+            "phase_mm", "condition", "crossings", "reference_expected_crossings",
+            "N0", "N1", "N2", "N3", "N4", "N5plus",
+            "P0", "P1", "P2", "P3", "P4", "P5plus",
+            "P_ge2", "low_stats_lt100",
+        )
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        for isrc, src in enumerate(SOURCES):
+            for det, ch in sorted(LOOKUP.items()):
+                nhits = int(hits[isrc, det])
+                for ip, phase in enumerate(PHASES):
+                    for im, metric in enumerate(METRICS):
+                        bins = module_mult[isrc, det, ip, im]
+                        if int(bins.sum()) != nhits:
+                            raise ValueError(
+                                f"Module multiplicity sum mismatch "
+                                f"{src} DET{det} phase={phase} {metric}"
+                            )
+                        if nhits and int(bins[1:].sum()) > nhits:
+                            raise AssertionError("Invalid chamber multiplicity")
+                        writer.writerow({
+                            "source": src, "station": ch.station,
+                            "det_id": det, "row": ch.row,
+                            "col": ch.col, "layer": ch.layer,
+                            "phase_mm": phase, "condition": metric,
+                            "crossings": nhits,
+                            "reference_expected_crossings": expected[src, det],
+                            **{f"N{k}": int(bins[j]) for j,k in enumerate(
+                                ("0","1","2","3","4","5plus")
+                            )},
+                            **{f"P{k}": (bins[j]/nhits if nhits else math.nan)
+                               for j,k in enumerate(
+                                   ("0","1","2","3","4","5plus")
+                               )},
+                            "P_ge2": bins[2:].sum()/nhits if nhits else math.nan,
+                            "low_stats_lt100": int(nhits < 100),
+                        })
+
     with (out / "pi_fixed_wire_angle_response.csv").open(
         "w", newline="", encoding="utf-8"
     ) as f:
@@ -343,7 +398,8 @@ def calc(args):
         encoding="utf-8",
     )
     print(
-        f"Saved per-anode counts and station/angle summaries under {out}",
+        f"Saved per-anode counts, per-module 0/1/2/3/4/5+ "
+        f"multiplicity, station and angle summaries under {out}",
         flush=True,
     )
 
