@@ -1507,3 +1507,54 @@ Long campaign:
 The final argument is the approximate *per-invocation* wall-clock budget,
 checked at chunk boundaries; another invocation with the exact same command
 resumes from completed checkpoints. It can overshoot by the running chunk.
+
+
+### Per-chamber wire multiplicity inside the interactive station app
+
+The app now shows the full (P(N_{​anodes}=0,1,2,3,4,5+)) for the
+**selected physical chamber**, conditional on a projected gas crossing.
+A new `spatialLayer = p2` colors every module by its local probability
+of **at least two collected anodes** using a fixed absolute 0–50% color
+scale to compare source channels and stations.
+
+**Immediate result with NO microscopic or Geant4 recalculation:**
+the earlier completed
+`test_runs/mwpc_stage_c/pi_per_chamber_response/pi_wire_multiplicity_per_chamber.csv`
+contains all 3*298 old per-module PDFs. The builder checks
+`completed_source=1`, that observed/existing exposure exactly matches
+the nominal module histogram, and that (P0+P1+...+P5plus=1). It
+automatically embeds these results, clearly marked as the **HISTORICAL
+RANDOM-PHASE** model. That model randomized wire-grid origin per gas
+crossing, and did not clip out-of-gas anode destinations to a finite
+77/128-element grid. Hence these histograms must NOT be interpreted
+as the distribution of the already visualized fixed numbered wires.
+
+You can generate the upgraded HTML while the native Geant4 campaign is
+running; this does not rerun Heed, Garfield or Geant4 and reads only
+existing small summary and fixed-wire count files:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_station_dashboard.sh
+
+Then in the UI select: "Пересечения мюонов" -> "Кратность: P(≥2
+активных анодов)"; click any module to view the complete six-bin
+probability histogram and its binomial 1-sigma statistical uncertainty
+on P(≥2). For modules with zero simulated exposure the histogram is
+correctly undefined, rather than artificially zero.
+
+**Later**, after the long Geant4 production has finished, derive
+exact per-module (N0/N1/.../N5plus) for the same fixed nominal wire
+grid as the per-anode maps:
+
+    bash test/mwpc-stage-c/run_pi_module_multiplicity.sh
+
+That script does a NEW slow Heed/Garfield empirical *fold* over the
+2.49 million existing historical projected gas crossings, but does
+NOT rerun native Geant4 or microscopic Garfield electron trajectories.
+It creates `pi_fixed_wire_module_multiplicity.csv` for all 3 channels,
+298 det IDs, 3 mechanical phases and 4 definitions (geometric, ≥1e,
+≥5e, ≤100 ns). The builder prioritizes its **nominal 0-mm phase**
+when available, so its six-bin bar graph will then be consistent with
+the fixed-wire heatmap. The old PDFs remain a cross-check, never
+silently spliced with the fixed-wire probabilities.
