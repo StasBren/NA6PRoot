@@ -4,6 +4,7 @@
 #include <TGeoManager.h>
 #include <TGeoMatrix.h>
 #include <TTree.h>
+#include <TParticle.h>
 
 #include <cmath>
 #include <fstream>
@@ -79,7 +80,8 @@ void masterVectorToGarfield(const TGeoHMatrix& m,
 void export_c_geant_muon_crossings(
     const char* hitsFile = "HitsMuonSpec.root",
     const char* geometryFile = "geometry.root",
-    const char* outputCsv = "c_geant_gas_crossings.csv")
+    const char* outputCsv = "c_geant_gas_crossings.csv",
+    const char* kineFile = "")
 {
   TFile geomIn(geometryFile, "READ");
   if (geomIn.IsZombie()) {
@@ -116,6 +118,26 @@ void export_c_geant_muon_crossings(
     return;
   }
 
+  // Hits are REMAPPED to MCKine kept-track indices. Use their matching
+  // merged chunk MCKine tree (NOT gasSteps original-stack track IDs).
+  // Truth connection is optional for older 3-argument callers.
+  std::unique_ptr<TFile> kineIn;
+  TTree* ktree = nullptr;
+  std::vector<TParticle>* tracks = nullptr;
+  if (kineFile && kineFile[0]) {
+    kineIn.reset(TFile::Open(kineFile, "READ"));
+    if (!kineIn || kineIn->IsZombie()) {
+      std::cerr << "Missing input kine file " << kineFile << "\n";
+      return;
+    }
+    ktree = dynamic_cast<TTree*>(kineIn->Get("mckine"));
+    if (!ktree || ktree->SetBranchAddress("tracks", &tracks) < 0 ||
+        ktree->GetEntries() != tree->GetEntries()) {
+      std::cerr << "Cannot align MCKine tracks and MuonSpec events\n";
+      return;
+    }
+  }
+
   std::ofstream out(outputCsv);
   if (!out) {
     std::cerr << "Could not create " << outputCsv << "\n";
@@ -134,7 +156,7 @@ void export_c_geant_muon_crossings(
       << "theta_u_in_deg,theta_w_in_deg,"
       << "theta_u_out_deg,theta_w_out_deg,"
       << "delta_theta_u_deg,delta_theta_w_deg,"
-      << "status_start,status_end\n";
+      << "status_start,status_end,pdg,mother_track_id\n";
 
   std::map<int, SensorFrame> frames;
   Long64_t rows = 0;
@@ -143,11 +165,30 @@ void export_c_geant_muon_crossings(
   const Long64_t nEvents = tree->GetEntries();
   for (Long64_t event = 0; event < nEvents; ++event) {
     tree->GetEntry(event);
+    if (ktree) {
+      ktree->GetEntry(event);
+      if (!tracks) {
+        std::cerr << "MCKine missing tracks at event " << event << "\n";
+        return;
+      }
+    }
     if (!hits) continue;
 
     for (size_t ih = 0; ih < hits->size(); ++ih) {
       const auto& h = hits->at(ih);
       const int detID = h.getDetectorID();
+      int pdg = 0, mother = -1;
+      if (ktree) {
+        const int tid = h.getTrackID();
+        if (tid < 0 || static_cast<size_t>(tid) >= tracks->size()) {
+          std::cerr << "MuonSpec trackID=" << tid
+                    << " not in retained MCKine for event " << event
+                    << ", size=" << tracks->size() << "\n";
+          return;
+        }
+        pdg = tracks->at(tid).GetPdgCode();
+        mother = tracks->at(tid).GetFirstMother();
+      }
 
       auto it = frames.find(detID);
       if (it == frames.end()) {
@@ -213,7 +254,8 @@ void export_c_geant_muon_crossings(
       << thetaUOut << "," << thetaWOut << ","
       << (thetaUOut - thetaUIn) << "," << (thetaWOut - thetaWIn) << ","
       << static_cast<int>(h.getStatusStart()) << ","
-      << static_cast<int>(h.getStatusEnd()) << "\n";
+      << static_cast<int>(h.getStatusEnd()) << ","
+      << pdg << "," << mother << "\n";
 
       ++rows;
       sumEdep += edep;
@@ -226,5 +268,6 @@ void export_c_geant_muon_crossings(
       << "  hit/crossing rows   : " << rows << "\n"
       << "  detector frames     : " << frames.size() << "\n"
       << "  total Edep [eV]     : " << 1.e9 * sumEdep << "\n"
+      << "  MCKine PDG join     : " << (ktree ? "enabled" : "not requested") << "\n"
       << "  wrote               : " << outputCsv << "\n";
 }
