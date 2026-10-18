@@ -21,6 +21,7 @@ import csv
 import hashlib
 import json
 import math
+from dataclasses import asdict
 from collections import defaultdict
 from pathlib import Path
 
@@ -28,7 +29,10 @@ import numpy as np
 
 from mwpc_checkerboard_projection import SOURCES, build_chambers
 from pi_fixed_wire_occupancy import (
-    cluster_segment, electronic_response, n_wires, nominal_wire_index,
+    cluster_segment, collected_electron_endpoints, n_wires, nominal_wire_index,
+)
+from pi_anode_digitizer import (
+    AnodeConfig, digitize_hit, empirical_gains,
 )
 from run_pi_per_chamber_response import read_garfield, read_heed
 
@@ -69,7 +73,7 @@ def get_models(args):
     return lam, marks, transport
 
 
-def describe_row(row, models):
+def describe_row(row, models, analog=False, gain_bank=None):
     station, det = int(row["station"]), int(row["det_id"])
     if LOOKUP[det].station != station:
         raise ValueError("Inconsistent detector/station in projected crossings")
@@ -93,6 +97,7 @@ def describe_row(row, models):
         "length":round(float(row["gas_path_mm"]),4),
         "geom":nominal_geometry_anodes(row),
         "charges":None, "lostElectrons":None, "nClusters":None,
+        "anodeSignals":None,
     }
     if models is not None:
         lam, marks, transport = models
@@ -101,11 +106,25 @@ def describe_row(row, models):
                           row["track"], station, det)
         rng = np.random.default_rng(seed)
         u, v, ncl, _ = cluster_segment(row, rng, lam, marks)
-        counts, early, lost = electronic_response(
+        wire_ids, arrival_times, lost = collected_electron_endpoints(
             u,v,station,0.,transport,rng.random(u.size)
         )
+        nwire=n_wires(station)
+        counts=np.bincount(wire_ids,minlength=nwire)
+        early_mask=(np.isfinite(arrival_times) &
+                    (arrival_times >= 0.) & (arrival_times <= 100.))
+        early=np.bincount(wire_ids[early_mask],minlength=nwire)
         if np.any(early > counts):
             raise ValueError("Drift-time count cannot exceed collected charge")
+        if analog:
+            anode_rng=np.random.default_rng(stable_u64(
+                "PI_ANODE_SURROGATE_V1",row["source"],row["job"],
+                row["event"],row["track"],station,det,
+            ))
+            endpoints=zip(wire_ids.tolist(),arrival_times.tolist())
+            result["anodeSignals"]=digitize_hit(
+                endpoints,anode_rng,AnodeConfig(),gain_bank
+            )
         result["charges"] = [
             [int(j),int(counts[j]),int(early[j])]
             for j in np.flatnonzero(counts)
@@ -168,6 +187,11 @@ def build(args):
     # Defer loading existing Garfield lookup until after selection; no new
     # microscopic transport is run.
     models = get_models(args)
+    analog=bool(models is not None and not getattr(
+        args, "no_anode_digitizer",False
+    ))
+    gain_path=getattr(args,"anode_gain_csv",None)
+    gain_bank=empirical_gains(gain_path) if (analog and gain_path) else None
     sources = {}
     for src in SOURCES:
         ranked=[]
@@ -185,7 +209,8 @@ def build(args):
         for score,_,(job,event),group in ranked[:args.max_events_per_source]:
             tracks=[]
             for (track,pdg),rows in sorted(group.items()):
-                points=[describe_row(row,models) for row in rows]
+                points=[describe_row(row,models,analog,gain_bank)
+                        for row in rows]
                 points.sort(key=lambda p:(p["z"],p["det"]))
                 if points:
                     tracks.append({
@@ -215,6 +240,18 @@ def build(args):
             "sample":"SHA256 deterministic event sample of historical MS2=530cm gas projections; display is curated, NOT a random detector-physics sample",
             "sampleModulo":args.sample_modulo,
             "chargeModel":models is not None,
+            "anodeSignalModel":analog,
+            "anodeModel":(
+                "STUDY ONLY: Stage-A unconditioned empirical gas gain"
+                if gain_bank is not None else
+                "STUDY ONLY: uncalibrated Polya gas gain plus zero-gain fraction"
+            ) if analog else None,
+            "anodeElectronicsParameters":asdict(AnodeConfig()) if analog else None,
+            "anodeWaveformPhysics":(
+                "PARAMETRIC anode fast electron + slow positive-ion current, "
+                "nominal CR-RC amplifier and fixed seeded white-noise samples. "
+                "NOT true anode Shockley-Ramo field or prototype calibration."
+            ) if analog else None,
             "nSources":len(SOURCES),
             "stationZcm":[300.,340.,530.,590.,810.,850.],
             "geometryModel":"nominal checkerboard, finite MS0 77 wires / other stations 128, pitch 4mm",
@@ -232,7 +269,8 @@ def build(args):
     args.out.parent.mkdir(parents=True,exist_ok=True)
     args.out.write_text(template.replace(marker,data),encoding="utf-8")
     print(f"PASS: Track Explorer: {sum(map(len,sources.values()))} real "
-          f"source/job/event groups, Garfield charge model={models is not None}")
+          f"source/job/event groups, Garfield charge model={models is not None}, "
+          f"anode surrogate waveforms={analog}")
     print(f"Open: {args.out.resolve()} ({args.out.stat().st_size/1048576:.1f} MiB)")
 
 
@@ -247,6 +285,13 @@ def main():
     ap.add_argument("--garfield",type=Path,default=None)
     ap.add_argument("--sample-modulo",type=int,default=2048)
     ap.add_argument("--max-events-per-source",type=int,default=44)
+    ap.add_argument("--no-anode-digitizer",action="store_true",
+                    help="Keep Garfield collected electron counts but no "
+                         "parametric analog anode waveforms")
+    ap.add_argument("--anode-gain-csv",type=Path,default=None,
+                    help="Unconditioned Phase A single seed gain ensemble "
+                         "with collected_on_wire column (including zeros). "
+                         "Otherwise a named UNCALIBRATED Polya model is used.")
     ap.add_argument("--geometry-only",action="store_true",
                     help="Avoid loading Heed/Garfield and show geometric anode cells only")
     ap.add_argument("--template",type=Path,default=HERE/"pi_muon_track_explorer_template.html")
