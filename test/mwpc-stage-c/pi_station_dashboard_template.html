@@ -79,7 +79,7 @@ button.action:hover{background:#294360}
  <div class="field"><label for="source">Источник мюонов</label><select id="source"><option value="jpsi40-bore">J/ψ (40 AGeV)</option><option value="phi40-bore">φ (40 AGeV)</option><option value="omega40-bore">ω (40 AGeV)</option></select></div>
  <div class="field"><label for="station">Станция</label><select id="station"></select></div>
  <div class="field"><label>Режим</label><div class="switch"><button id="modeHits" class="selected">Пересечения мюонов</button><button id="modeWires">Аноды</button></div></div>
- <div class="field" id="spaceField"><label for="spatialLayer">Пространственный слой</label><select id="spatialLayer"><option value="xy">Плотность XY (5 см)</option><option value="modules">Пересечения по камерам</option></select></div>
+ <div class="field" id="spaceField"><label for="spatialLayer">Пространственный слой</label><select id="spatialLayer"><option value="xy">Плотность XY (5 см)</option><option value="modules">Пересечения по камерам</option><option value="p2">Кратность: P(≥2 активных анодов)</option></select></div>
  <div class="field hidden" id="metricField"><label for="metric">Считаем активной проволоку</label><select id="metric"><option value="e1">≥1 собранный электрон</option><option value="e5">≥5 собранных электронов</option><option value="t100">≥1 электрон до 100 нс</option><option value="geom">Геометрически пересечена</option></select></div>
  <div class="field hidden" id="denomField"><label for="denom">Нормировка активности</label><select id="denom"><option value="chamber">На пересечение камеры</option><option value="incident">На входящий мюон станции</option><option value="station">На 10 000 пересечений станции</option></select></div>
  <div class="field hidden" id="groupField"><label for="groupN">Проволок на цветную линию</label><select id="groupN"><option value="1">1</option><option value="4" selected>4</option><option value="8">8</option></select></div>
@@ -176,6 +176,14 @@ function color(v,max){
  if(q<.76){const z=(q-.4)/.36;return "hsl("+(190-153*z)+", 85%, "+(42+19*z)+"%)";}
  const z=(q-.76)/.24;return "hsl("+(37+8*z)+", 98%, "+(61+23*z)+"%)";
 }
+function moduleP2(detID) {
+ const c=chamber(detID),n=c.n;
+ if(!n)return NaN;
+ const fixed=c.multiplicity&&c.multiplicity.e1;
+ if(fixed)return fixed.slice(2).reduce((a,b)=>a+b,0)/n;
+ const random=c.legacyMultiplicity;
+ return random?random.slice(2).reduce((a,b)=>a+b,0):NaN;
+}
 function stats(){
  const s=stationData();
  $("nIncident").textContent=nf(s.incident);
@@ -194,7 +202,16 @@ function setControls(){
  $("modeHits").classList.toggle("selected",state.mode==="spatial");
  $("modeWires").classList.toggle("selected",state.mode==="wires");
  const notice=$("normalizationNotice");
- notice.classList.toggle("hidden",state.mode!=="wires");
+ const showingP2=state.mode==="spatial" && state.layer==="p2";
+ notice.classList.toggle("hidden",state.mode!=="wires" && !showingP2);
+ if(showingP2){
+  const model=D.multiplicity_sources?.fixed_grid_available?
+    "При наличии новых данных — фиксированная номинальная сетка; иначе историческая модель.":
+    "ИСТОРИЧЕСКАЯ модель: случайная фаза 4-мм сетки для КАЖДОГО пересечения, не физически закреплённые аноды.";
+  notice.textContent="Цвет = P(≥2 анода, собравших ≥1 электрон | газовое пересечение камеры). "+
+    "Единая шкала 0–50% для сравнения станций. "+model+
+    " Камеры без статистики серые.";
+ }
  if(state.mode==="wires"){
    const s=stationData();
    const relation="Оба режима используют общий знаменатель для всех камер станции: "+
@@ -237,7 +254,9 @@ function tooltipCh(g){
  return "<strong>DET"+String(g.id).padStart(3,"0")+" · "+g.layer+"</strong><br>MS"+state.station+", ряд "+g.row+", колонка "+g.col+
    "<br>Пересечений: "+nf(n)+
    "<br>На входящего мюона: "+pct(s.incident?n/s.incident:NaN)+
-   "<br>Центр: X="+g.x.toFixed(2)+" см, Y="+g.y.toFixed(2)+" см";
+   "<br>Центр: X="+g.x.toFixed(2)+" см, Y="+g.y.toFixed(2)+" см"+
+   (state.mode==="spatial"&&state.layer==="p2"?
+      "<br>Вероятность ≥2 анодов (≥1e): "+pct(moduleP2(g.id)):"");
 }
 function selectCh(id,wireIndex){
  state.selected=id;state.wire=wireIndex===undefined?0:wireIndex;
@@ -266,6 +285,11 @@ function renderStation(){
   $("legendUnit").textContent="пересечений / 25 см² (цвет: sqrt)";
  }
  let cap=1;
+ if(state.mode==="spatial" && state.layer==="p2"){
+  cap=.5; // Identical fixed absolute probability scale across sources/stations.
+  $("legendUnit").textContent="P(≥2 анода, ≥1e) на пересечение камеры";
+  $("legendMax").textContent="50%";
+ }
  if(state.mode==="spatial" && state.layer==="modules"){
   cap=Math.max(1,...geom.map(g=>exposure(g.id)));
   $("legendUnit").textContent="пересечений / камеру";
@@ -297,6 +321,10 @@ function renderStation(){
   let fill="rgba(19,34,53,0.13)";
   if(state.mode==="spatial" && state.layer==="modules")
     fill=exposure(g.id)===0?"#263345":color(exposure(g.id),cap);
+  if(state.mode==="spatial" && state.layer==="p2"){
+    const p2=moduleP2(g.id);
+    fill=Number.isFinite(p2)?color(p2,.5):"#263345";
+  }
   if(state.mode==="wires" && exposure(g.id)===0)fill="#152236";
   svgNode("rect",{x:g.x-hx,y:-g.y-hy,width:2*hx,height:2*hy,fill:fill,
     stroke:selected?"#62dbe6":"#879bad","stroke-width":selected?2.5:.62,
@@ -320,7 +348,7 @@ function renderStation(){
   textNode(String(g.id),g.x,-g.y+2,{
    "text-anchor":"middle","font-size":state.station>=4?5:4,
    "font-weight":selected?750:550,
-   fill:selected?"#ffffff":state.mode==="spatial"&&state.layer==="modules"?"#e8f4f9":"#a3bdcd",
+   fill:selected?"#ffffff":state.mode==="spatial"&&["modules","p2"].includes(state.layer)?"#e8f4f9":"#a3bdcd",
    "pointer-events":"none"},group);
   // Transparent clickable overlay; label and cell lines remain visible.
   const overlay=svgNode("rect", {x:g.x-hx,y:-g.y-hy,width:2*hx,height:2*hy,
