@@ -85,17 +85,20 @@ def cluster_segment(row, rng, lam, marks):
     return u_mm, v_mm, ncl, path
 
 
-def electronic_response(u_mm, v_mm, station, phase, lookup, random01):
-    """Count electrons deposited by each finite anode (no gain/electronics).
+def collected_electron_endpoints(u_mm, v_mm, station, phase,
+                                 lookup, random01):
+    """Return individual finite-grid (wire_id, drift_time_ns) electron endpoints.
 
-    Return wire-index arrays, per-wire electron counts, <=100ns counts and
-    separately the number of collected electrons landing beyond finite wires.
+    Preserve measured Garfield lookup time per SELECTED primary-electron draw,
+    rather than only reducing it to a per-wire count. Unknown timing remains
+    NaN and MUST NOT be silently replaced with prompt (t=0) electrons.
+    Zero-gain and actual signal threshold are different later stages.
     """
     offsets, sizes, response = lookup
     n = n_wires(station)
     if not u_mm.size:
-        return np.zeros(n, dtype=np.int32), np.zeros(n, dtype=np.int32), 0
-
+        return (np.empty(0, dtype=np.int64),
+                np.empty(0, dtype=np.float64), 0)
     closest = nominal_wire_index(u_mm, station, phase)
     local = u_mm - (closest - (n - 1.) / 2.) * PITCH - phase
     iu = np.clip(np.floor((local + 2.) / .2).astype(np.int64), 0, 19)
@@ -109,9 +112,18 @@ def electronic_response(u_mm, v_mm, station, phase, lookup, random01):
     dest = closest + trials[:, 1].astype(np.int64)
     inside = collected & (dest >= 0) & (dest < n)
     edge_loss = int(np.count_nonzero(collected & ~inside))
-    counts = np.bincount(dest[inside], minlength=n).astype(np.int32)
-    early = inside & np.isfinite(trials[:, 2]) & (trials[:, 2] >= 0.) & (trials[:, 2] <= 100.)
-    early_counts = np.bincount(dest[early], minlength=n).astype(np.int32)
+    return dest[inside], trials[inside, 2], edge_loss
+
+
+def electronic_response(u_mm, v_mm, station, phase, lookup, random01):
+    """Reduce same individual endpoint draws to current Stage-C occupancies."""
+    n = n_wires(station)
+    dest, times, edge_loss = collected_electron_endpoints(
+        u_mm, v_mm, station, phase, lookup, random01
+    )
+    counts = np.bincount(dest, minlength=n).astype(np.int32)
+    early_mask = np.isfinite(times) & (times >= 0.) & (times <= 100.)
+    early_counts = np.bincount(dest[early_mask], minlength=n).astype(np.int32)
     return counts, early_counts, edge_loss
 
 
