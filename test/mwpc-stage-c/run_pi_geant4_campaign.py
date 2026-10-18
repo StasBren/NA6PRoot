@@ -118,6 +118,17 @@ def setup(args):
     if simlib is None:
         raise RuntimeError("Native executable does not link to expected libsimLib.so")
 
+    # Preserve the magnetic-field and transport-cut input versions, not
+    # merely the executable binary. A modified installed field map would
+    # otherwise silently invalidate track reuse across campaign chunks.
+    data_dir = Path(sim).parent.parent / "share" / "data"
+    field_inputs = {}
+    for item in ("MEP48_field_map.inp", "mnp33_fieldmap_5cm.dat",
+                 "simcuts.dat"):
+        file = data_dir / item
+        if file.is_file():
+            field_inputs[str(file.resolve())] = sha256(file)
+
     generator = REPO / "test/genDimuonBgEvent.C"
     hook = REPO / "test/mwpc-dimuon-validation/mwpcDimuonHooks.C"
     validator = HERE / "validate_pi_geant4_chunk.C"
@@ -148,6 +159,7 @@ def setup(args):
         "simulator_sha256": sha256(Path(sim)),
         "loaded_libsimLib": simlib,
         "loaded_libsimLib_sha256": sha256(Path(simlib)),
+        "installed_field_and_cut_sha256": field_inputs,
         "parallel_runner": parallel,
         "parallel_runner_sha256": sha256(Path(parallel)),
         "root": root,
