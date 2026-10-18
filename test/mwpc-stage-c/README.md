@@ -1418,3 +1418,33 @@ we can reconstruct the worker-specific event namespace and align native
 steps with parent truth later. Expect more disk use than the merged-only
 ROOT output (roughly up to twice the raw data, geometry/log dependent).
 Do not delete raw_workers/ for PI studies relying on particle ancestry.
+
+
+### Diagnosing missing native Geant4 hit and reference-plane files
+
+If smoke reports missing HitsMuonSpec.root and MuonReferencePlanes.root
+despite na6psim_parallel reporting exit code zero, this is NOT a valid run.
+A stale installed libsimLib.so or alternative active-detector layout is
+the main possibility. Git pull does NOT rebuild installed C++ code.
+
+The updated campaign verifies that the *actual dynamically linked*
+libsimLib.so contains both native Stage-C diagnostic markers BEFORE
+starting Geant4. If missing, rebuild this branch with the existing
+CMake build tree, then retry smoke:
+
+    git pull --ff-only
+    bash test/mwpc-stage-c/rebuild_pi_geant4_stagec.sh
+    bash test/mwpc-stage-c/run_pi_geant4_campaign.sh smoke
+
+A failed smoke with old frozen binary hashes is safely archived under
+a sibling smoke_failed_timestamp directory if no chunks completed.
+Completed runs are NEVER silently mixed across binary/config changes.
+If a post-run file check fails, the exception now lists actual ROOT
+files and extracts relevant lines from preserved worker logs.
+
+For manual confirmation, if needed:
+
+    tail -n 90 test_runs/mwpc_stage_c/pi_geant4_hit_validation_v1_smoke/jpsi/chunk0001/raw_workers/worker000/na6psim.log
+
+Do not launch full production until smoke shows PI_GEANT_CHUNK_PASS
+for all three channels.
