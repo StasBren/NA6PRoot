@@ -194,6 +194,40 @@ def stations_payload(path, xy_file, module_counts):
     return payload
 
 
+def load_optional_module_multiplicity(path, chambers):
+    """Embed nominal-phase 0/1/2/3/4/5+ distributions, if recomputed."""
+    if not path.is_file():
+        print("Per-module fixed-wire multiplicity not yet generated:", path)
+        return False
+    keys = {"geom": "geom", "ge1e": "e1",
+            "ge5e": "e5", "le100ns": "t100"}
+    seen = set()
+    with path.open(newline="", encoding="utf-8") as stream:
+        for row in csv.DictReader(stream):
+            if abs(float(row["phase_mm"])) > 1.e-9:
+                continue
+            src, det = row["source"], int(row["det_id"])
+            label = keys.get(row["condition"])
+            if src not in chambers or str(det) not in chambers[src] or not label:
+                raise ValueError("Unexpected module-multiplicity key")
+            key = (src, det, label)
+            if key in seen:
+                raise ValueError(f"Duplicate module-multiplicity record: {key}")
+            seen.add(key)
+            c = chambers[src][str(det)]
+            if c["n"] != int(row["crossings"]):
+                raise ValueError(f"Module multiplicity denominator mismatch {key}")
+            bins = [int(row["N" + cat]) for cat in
+                    ("0", "1", "2", "3", "4", "5plus")]
+            if any(x < 0 for x in bins) or sum(bins) != c["n"]:
+                raise ValueError(f"Invalid module multiplicity distribution {key}")
+            c.setdefault("multiplicity", {})[label] = bins
+    if len(seen) != 3 * 298 * 4:
+        raise ValueError("Incomplete nominal-phase module multiplicity table")
+    print(f"Embedded {len(seen)} nominal per-module multiplicity rows")
+    return True
+
+
 def generate(args):
     files = [
         args.wire_counts, args.geom_counts, args.crossings/"modules.csv",
@@ -207,6 +241,10 @@ def generate(args):
         )
     counts = load_module_counts(args.crossings/"modules.csv")
     chambers = load_wire_tables(args.wire_counts, args.geom_counts, counts)
+    mult = getattr(args, "module_multiplicity", None)
+    if mult is None:
+        mult = args.wire_counts.with_name("pi_fixed_wire_module_multiplicity.csv")
+    load_optional_module_multiplicity(mult, chambers)
     stations = stations_payload(args.crossings/"stations.csv", args.xy, counts)
     data = {
         "description": "200 000 событий/канал в историческом наборе; MS2=530 см",
