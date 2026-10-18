@@ -19,6 +19,7 @@ CROSSINGS="$STUDY/crossings"
 mkdir -p "$EXPORT" "$CROSSINGS"
 python3 -m py_compile \
  "$HERE/prepare_pi_native_hit_explorer.py" \
+ "$HERE/analyze_pi_native_hits.py" \
  "$HERE/build_pi_muon_track_explorer.py" \
  "$HERE/pi_anode_digitizer.py" \
  "$HERE/test_pi_anode_digitizer.py"
@@ -54,6 +55,8 @@ done
 
 python3 "$HERE/prepare_pi_native_hit_explorer.py" \
  --export-dir "$EXPORT" --out "$CROSSINGS" --chunk chunk0001
+python3 "$HERE/analyze_pi_native_hits.py" \
+ --crossings "$CROSSINGS" --out "$STUDY/summaries"
 
 # Use each actual Geant4 gas crossing and PDG, then resample ionisation
 # with existing Heed and Garfield single-electron lookups.
