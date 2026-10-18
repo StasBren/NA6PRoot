@@ -23,6 +23,7 @@ python3 -m py_compile \
  "$HERE/pi_anode_digitizer.py" \
  "$HERE/test_pi_anode_digitizer.py"
 python3 "$HERE/test_pi_anode_digitizer.py"
+python3 "$HERE/test_pi_native_anode_pipeline.py"
 for channel in jpsi phi omega; do
   CHUNK="$SUITE/$channel/chunk0001"
   if [[ ! -f "$CHUNK/completed.json" ]]; then
