@@ -73,14 +73,20 @@ def require_program(name):
 
 
 def setup(args):
-    if args.mode == "smoke":
-        if args.events_per_source != 3 or args.chunk_size != 3:
+    if args.mode in ("smoke", "parallel-smoke"):
+        parallel_smoke = args.mode == "parallel-smoke"
+        expected_n = 12 if parallel_smoke else 3
+        expected_workers = 4 if parallel_smoke else 1
+        if (args.events_per_source != expected_n or
+            args.chunk_size != expected_n):
             raise RuntimeError(
-                "Smoke mode requires its fixed 3-event test settings"
+                f"{args.mode} requires its fixed "
+                f"{expected_n}-event test settings"
             )
         suite = (REPO / "test_runs/mwpc_stage_c" /
-                 (STUDY + "_smoke")).resolve()
-        args.workers = 1
+                 (STUDY + ("_parallel_smoke" if parallel_smoke
+                            else "_smoke"))).resolve()
+        args.workers = expected_workers
         args.hours = 0.
     else:
         suite = (REPO / "test_runs/mwpc_stage_c" /
@@ -219,7 +225,7 @@ def setup(args):
     if manifest_path.is_file():
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if manifest.get("frozen_inputs") != inputs:
-            if (args.mode == "smoke" and
+            if (args.mode in ("smoke", "parallel-smoke") and
                 not any(suite.rglob("completed.json"))):
                 # Rebuilding after a failed diagnostic smoke test changes the
                 # frozen library hash. Archive, never delete, the failed
@@ -505,7 +511,8 @@ def simulate(args, suite, inputs):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--mode",choices=["smoke","full"],required=True)
+    ap.add_argument("--mode",choices=["smoke","parallel-smoke","full"],
+                    required=True)
     ap.add_argument("--events-per-source",type=int,default=None)
     ap.add_argument("--chunk-size",type=int,default=None)
     ap.add_argument("--workers",type=int,default=4)
@@ -515,9 +522,15 @@ def main():
                     help="Fresh custom output directory for changed settings")
     args = ap.parse_args()
     if args.events_per_source is None:
-        args.events_per_source = 3 if args.mode=="smoke" else 30000
+        args.events_per_source = (
+            3 if args.mode == "smoke" else
+            12 if args.mode == "parallel-smoke" else 30000
+        )
     if args.chunk_size is None:
-        args.chunk_size = 3 if args.mode=="smoke" else 3000
+        args.chunk_size = (
+            3 if args.mode == "smoke" else
+            12 if args.mode == "parallel-smoke" else 3000
+        )
     suite,inputs = setup(args)
     lock=(suite/".campaign.lock").open("a")
     try:
