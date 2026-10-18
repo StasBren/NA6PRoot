@@ -52,18 +52,14 @@ echo "Reconfiguring to include the new simulator reference-audit header..."
 cmake -S "$REPO" -B "$BUILD"
 echo "Building and installing updated Geant4 simulator and simLib..."
 cmake --build "$BUILD" --target install --parallel 4
-EXE="$(command -v na6psim || true)"
-if [[ -z "$EXE" ]]; then
- echo "ERROR: built/installed but na6psim is not in PATH" >&2
+# Success concerns the target built and installed from THIS checkout.
+# A login shell may still point to the OLD NA6PRoot installation, but
+# run_pi_geant4_campaign.sh now activates THIS prefix automatically.
+if [[ ! -x "$PREFIX/bin/na6psim" ||
+      ! -x "$PREFIX/bin/na6psim_parallel" ||
+      ! -f "$PREFIX/lib/libsimLib.so" ]]; then
+ echo "ERROR: Stage-C installed files incomplete at $PREFIX" >&2
  exit 5
 fi
-EXE="$(readlink -f "$EXE")"
-PREFIXBIN="$(readlink -m "$PREFIX/bin/na6psim")"
-if [[ "$EXE" != "$PREFIXBIN" ]]; then
- echo "WARNING: selected na6psim is NOT from just-rebuilt installation." >&2
- echo "  selected: $EXE" >&2
- echo "  expected: $PREFIXBIN" >&2
- echo "Activate the rebuilt installation before smoke/full production." >&2
- exit 6
-fi
-echo "PASS: rebuilt na6psim selected from correct install."
+echo "PASS: rebuilt Stage-C na6psim and libsimLib installed at $PREFIX"
+echo "The PI campaign wrapper will select this installation automatically."
