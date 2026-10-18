@@ -97,6 +97,27 @@ def setup(args):
     require_program("hadd")
     root = require_program("root")
 
+    # Freeze the actual dynamically loaded detector library too; changing
+    # libsimLib.so without changing na6psim would otherwise silently mix
+    # ROOT hits from different module construction/stepping code versions.
+    try:
+        dynamic = subprocess.check_output(
+            ["ldd", sim], text=True, stderr=subprocess.STDOUT,
+            timeout=15,
+        )
+    except Exception as exc:
+        raise RuntimeError("Could not inspect native simulator library bindings") from exc
+    simlib = None
+    for row in dynamic.splitlines():
+        if "libsimLib.so" in row and "=>" in row:
+            candidate = row.split("=>", 1)[1].strip().split()[0]
+            if candidate == "not" or not Path(candidate).is_file():
+                raise RuntimeError("libsimLib.so missing in runtime loader path")
+            simlib = str(Path(candidate).resolve())
+            break
+    if simlib is None:
+        raise RuntimeError("Native executable does not link to expected libsimLib.so")
+
     generator = REPO / "test/genDimuonBgEvent.C"
     hook = REPO / "test/mwpc-dimuon-validation/mwpcDimuonHooks.C"
     validator = HERE / "validate_pi_geant4_chunk.C"
@@ -124,6 +145,8 @@ def setup(args):
         "validator": str(validator),
         "simulator": sim,
         "simulator_sha256": sha256(Path(sim)),
+        "loaded_libsimLib": simlib,
+        "loaded_libsimLib_sha256": sha256(Path(simlib)),
         "parallel_runner": parallel,
         "parallel_runner_sha256": sha256(Path(parallel)),
         "root": root,
