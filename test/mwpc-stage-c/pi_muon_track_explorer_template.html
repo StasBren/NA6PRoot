@@ -40,7 +40,12 @@ button:disabled{opacity:.35;cursor:not-allowed}
 #plan{display:block;width:100%;min-height:365px;height:45vh;max-height:600px;background:#0c1d30;border:1px solid #293c51;border-radius:6px;cursor:crosshair}
 #wiremap{display:block;width:100%;height:530px;background:#0c1d30;border:1px solid #293c51;border-radius:6px}
 #wireRows{max-height:210px;overflow:auto;display:grid;gap:6px;margin-top:9px}
-.wireRow{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:6px 9px;border:1px solid #28445b;border-radius:6px}
+.wireRow{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:6px 9px;border:1px solid #28445b;border-radius:6px;cursor:pointer}
+.wireRow:hover{border-color:#74babb}
+.signalControls{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:8px 0}
+.signalControls input[type=range]{width:min(210px,38vw);accent-color:#54d4c5;cursor:pointer}
+.signalControls strong{color:#77dfd4}
+#anodeWave{display:block;width:100%;height:240px;background:#0c1d30;border:1px solid #293c51;border-radius:7px}
 .statline{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;margin:9px 0 12px;font-size:12px;color:var(--sub)}
 .two{display:grid;grid-template-columns:minmax(210px,.85fr) minmax(240px,1fr);gap:14px}
 .chip{color:var(--a);font-weight:650}
@@ -93,6 +98,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
     <option value="e5">≥5 собранных электронов</option>
     <option value="t100">≥1 электрон до 100 нс</option>
     <option value="geom">Пересечённые геометрические ячейки</option>
+    <option value="fired">Модель электроники: превышен порог</option>
    </select></div>
    <div><label for="wireScale">Масштаб сетки</label>
    <select id="wireScale">
@@ -108,6 +114,23 @@ button:disabled{opacity:.35;cursor:not-allowed}
    <div id="wireRows"></div>
   </div>
   <svg xmlns="http://www.w3.org/2000/svg" id="wiremap" viewBox="0 0 360 520" aria-label="Нумерованные аноды с индивидуальным собранным зарядом"></svg>
+ </div>
+</section>
+<section class="panel">
+ <div class="head"><h2>Анодный сигнал и дискриминатор — предварительная модель</h2></div>
+ <div class="contents">
+  <div class="signalControls">
+    <div><label for="anodeChoice">Анод с первичными электронами</label>
+         <select id="anodeChoice"></select></div>
+    <div><label for="anodeThreshold">Условный порог, мВ</label>
+         <input id="anodeThreshold" type="range" min="1" max="40" step=".5" value="5"></div>
+    <strong id="anodeThresholdLabel">5.0 мВ</strong>
+  </div>
+  <svg xmlns="http://www.w3.org/2000/svg" id="anodeWave" viewBox="0 0 540 220"
+       aria-label="Моделируемое временное напряжение анодного канала с изменяемым порогом"></svg>
+  <div class="statline" id="anodeReadout"></div>
+  <p class="muted" id="anodeWarning">Условный, ещё не калиброванный анодный weighting-current шаблон, Polya-усиление и CR-RC электроника.
+  Для физических предсказаний необходимы Garfield Shockley–Ramo анода и реальные параметры ASIC.</p>
  </div>
 </section>
 <section class="panel">
@@ -131,7 +154,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
 const D=JSON.parse(document.getElementById("trackData").textContent);
 const $=id=>document.getElementById(id),NS="http://www.w3.org/2000/svg";
 const names={"jpsi40-bore":"J/ψ · 40 AGeV","phi40-bore":"φ · 40 AGeV","omega40-bore":"ω · 40 AGeV"};
-const state={source:Object.keys(D.sources)[0],ei:0,ti:0,station:0,det:null,criterion:D.meta.chargeModel?"e1":"geom",wireScale:"focus"};
+const state={source:Object.keys(D.sources)[0],ei:0,ti:0,station:0,det:null,criterion:D.meta.chargeModel?"e1":"geom",wireScale:"focus",anodeWire:null,threshold:5};
 const selectedColor="#53d8c6",otherColor="#f9b25b";
 function node(tag,attrs,parent){const e=document.createElementNS(NS,tag);for(const key in (attrs||{}))e.setAttribute(key,attrs[key]);if(parent)parent.appendChild(e);return e}
 function label(v,x,y,attrs,root){const e=node("text",Object.assign({x,y,fill:"#bbccdd","font-size":10},attrs||{}),root);e.textContent=v;return e}
@@ -146,15 +169,18 @@ function average(a,k){return a.reduce((s,p)=>s+p[k],0)/a.length}
 function chosenHit(){return mu().points.find(p=>p.st===state.station&&p.det===state.det)||null}
 function selectBox(id,items,selected){const element=$(id);element.replaceChildren();for(const o of items){const option=document.createElement("option");option.value=String(o.value);option.textContent=o.text;element.appendChild(option)}element.value=String(selected)}
 function changeSource(value){
- state.source=value;state.ei=0;state.ti=0;state.station=0;state.det=null;
+ state.source=value;state.ei=0;state.ti=0;state.station=0;state.det=null;state.anodeWire=null;
  renderAll();
 }
-function changeEvent(i){state.ei=Math.max(0,Math.min(i,D.sources[state.source].length-1));state.ti=0;state.station=0;state.det=null;renderAll()}
-function changeTrack(i){state.ti=i;state.station=0;state.det=null;renderAll()}
-function chooseStation(st){state.station=st;const pts=pointsByStation(mu(),st);state.det=pts.length?pts[0].det:null;renderAll()}
+function changeEvent(i){state.ei=Math.max(0,Math.min(i,D.sources[state.source].length-1));state.ti=0;state.station=0;state.det=null;state.anodeWire=null;renderAll()}
+function changeTrack(i){state.ti=i;state.station=0;state.det=null;state.anodeWire=null;renderAll()}
+function chooseStation(st){state.station=st;const pts=pointsByStation(mu(),st);state.det=pts.length?pts[0].det:null;state.anodeWire=null;renderAll()}
 function getActive(hit,criterion){
  if(!hit)return[];
  if(criterion==="geom")return hit.geom;
+ if(criterion==="fired")return Object.entries(hit.anodeSignals||{})
+  .filter(([k,v])=>v.samples_mV.some(a=>a>=state.threshold))
+  .map(([k,v])=>Number(k));
  if(!hit.charges)return[];
  return hit.charges.filter(r=>criterion==="e1"?r[1]>=1:criterion==="e5"?r[1]>=5:r[2]>=1).map(r=>r[0]);
 }
@@ -167,7 +193,10 @@ function renderToolbar(){
  $("next").disabled=state.ei===events.length-1;
  $("criterion").value=state.criterion;
  $("wireScale").value=state.wireScale;
- $("criterion").querySelectorAll("option").forEach(o=>{o.disabled=!D.meta.chargeModel&&o.value!=="geom"});
+ $("criterion").querySelectorAll("option").forEach(o=>{
+  o.disabled=(!D.meta.chargeModel&&o.value!=="geom")||
+    (o.value==="fired"&&!D.meta.anodeSignalModel);
+ });
  $("eventInfo").textContent="job "+ev().job+" / event "+ev().event+" · "+ev().tracks.length+" трек(а)";
  $("caveat").textContent=D.meta.chargeModel?
   "Heed/Garfield: реальные сохранённые модели первичной ионизации и дрейфа, но ОДНА стохастическая реализация для выбранного трека. Никаких измеренных срабатываний, лавинного усиления или порога электроники. Линия между газовыми точками — интерполяция, не Geant4-траектория.":
@@ -247,7 +276,7 @@ function renderPlan(){
     "font-size":f*4,fill:hit?"#f6fff8":"#a8bfd5"},group);
   const overlay=node("rect",{x:g.x-hx,y:-g.y-hy,width:2*hx,height:2*hy,
     fill:"transparent",cursor:hit?"pointer":"default"},group);
-  if(hit){overlay.onclick=()=>{state.det=g.det;renderPlan();renderHit()}}
+  if(hit){overlay.onclick=()=>{state.det=g.det;state.anodeWire=null;renderPlan();renderHit()}}
   node("title",{},overlay).textContent="DET"+g.det+(hit?
     " — muon gas crossing; click for anodes":" — no sampled gas crossing");
  }
@@ -262,7 +291,7 @@ function renderPlan(){
     "stroke-width":markerR*.33,cursor:"pointer"},group);
   node("title",{},p).textContent="Мюон, газовый сегмент DET"+hit.det+
     "; XY=("+fmt(hit.x,2)+", "+fmt(hit.y,2)+") см. Нажми для выбора.";
-  p.addEventListener("click",()=>{state.det=hit.det;renderPlan();renderHit()});
+  p.addEventListener("click",()=>{state.det=hit.det;state.anodeWire=null;renderPlan();renderHit()});
  }
  $("stationTitle").textContent="Станция MS"+state.station+": расположение газовых модулей";
  $("selectedStats").textContent=hits.length+" пересечений у выбранного мюона";
@@ -275,6 +304,7 @@ function renderHit(){
   $("hitInfo").textContent="Выбранный мюон не имеет сохранённой проекции на газовый объём ни одной камеры MS"+state.station+". Это не равнозначно отсутствию трека на станции.";
   $("wireStats").textContent="";
   label("Нет выбранного пересечения",180,250,{"text-anchor":"middle","font-size":14},root);
+  renderAnodeSignal();
   return;
  }
  const nWire=hit.st===0?77:128;
@@ -347,13 +377,91 @@ function renderHit(){
   const right=document.createElement("span");right.className="chip";
   right.textContent=hit.charges?
      data[1]+" e собрано · "+data[2]+" e ≤100 нс":"геометрическая ячейка";
-  line.append(left,right);rows.append(line);
+  line.append(left,right);
+  if(hit.anodeSignals && hit.anodeSignals[String(wire)]){
+   line.onclick=()=>{state.anodeWire=wire;renderAnodeSignal()};
+   line.title="Открыть осциллограмму анода №"+wire;
+  }
+  rows.append(line);
  }
  if(!active.length){
   const z=document.createElement("p");z.className="muted";
   z.textContent="При выбранном критерии нет активных анодов для этого сегмента.";
   rows.append(z);
  }
+ renderAnodeSignal();
+}
+function renderAnodeSignal(){
+ const root=$("anodeWave");root.replaceChildren();
+ const details=$("anodeReadout");
+ const selection=$("anodeChoice");selection.replaceChildren();
+ const hit=chosenHit(),signals=hit?.anodeSignals;
+ const config=D.meta.anodeElectronicsParameters||{};
+ $("anodeThresholdLabel").textContent=state.threshold.toFixed(1)+" мВ";
+ $("anodeThreshold").value=state.threshold;
+ if(!signals||Object.keys(signals).length===0){
+  label(D.meta.anodeSignalModel?
+    "Нет собранных первичных электронов в выбранной камере":
+    "Анодная модель пока не рассчитывалась",270,110,
+    {"text-anchor":"middle","font-size":14},root);
+  details.textContent="Анодных осциллограмм нет.";
+  return;
+ }
+ const keys=Object.keys(signals).map(Number).sort((a,b)=>a-b);
+ if(!keys.includes(state.anodeWire)){
+  const preferred=getActive(hit,"e1");
+  state.anodeWire=preferred.length?preferred[0]:keys[0];
+ }
+ for(const wire of keys){
+  const opt=document.createElement("option");
+  opt.value=wire;opt.textContent="Анод №"+wire;
+  selection.appendChild(opt);
+ }
+ selection.value=state.anodeWire;
+ const sig=signals[String(state.anodeWire)];
+ const v=sig.samples_mV;
+ const dt=config.sampling_ns||10;
+ const maxX=(v.length-1)*dt;
+ const ymax=Math.max(state.threshold*1.15,4,...v)*1.18;
+ const xpos=t=>46+470*t/maxX;
+ const ypos=y=>173-137*y/ymax;
+ for(let tick=0;tick<=4;tick++){
+  const amp=ymax*tick/4,y=ypos(amp);
+  node("line",{x1:46,y1:y,x2:518,y2:y,stroke:"#334e65",
+    "stroke-width":.8},root);
+  label(amp.toFixed(0),40,y+3,{"text-anchor":"end"},root);
+ }
+ for(let tick=0;tick<=4;tick++){
+  const tm=maxX*tick/4;
+  label(tm.toFixed(0),xpos(tm),187,{"text-anchor":"middle"},root);
+ }
+ label("V, мВ",48,13,{"font-weight":700},root);
+ label("t, нс",517,209,{"text-anchor":"end"},root);
+ const polygon=v.map((y,i)=>xpos(i*dt).toFixed(2)+","+
+   ypos(y).toFixed(2)).join(" ");
+ node("polyline",{points:polygon,stroke:"#5ce0cc",fill:"none",
+    "stroke-width":2.1,"stroke-linejoin":"round"},root);
+ node("line",{x1:46,x2:518,y1:ypos(state.threshold),y2:ypos(state.threshold),
+    stroke:"#efb066","stroke-width":1.6,"stroke-dasharray":"5 5"},root);
+ const ix=v.findIndex(a=>a>=state.threshold),fired=ix>=0;
+ if(fired){
+  const t=ix*dt;
+  node("line",{x1:xpos(t),x2:xpos(t),y1:26,y2:173,
+   stroke:"#f7ca85","stroke-dasharray":"3 5",opacity:.7},root);
+ }
+ const tot=v.filter(a=>a>=state.threshold).length*dt;
+ details.textContent="Анод №"+state.anodeWire+" · "+
+   sig.nPrimaryCollected+" первичных e · Q лавины = "+
+   sig.avalancheCharge_fC.toFixed(2)+" фКл · "+
+   "пик "+sig.peak_mV.toFixed(2)+" мВ · "+
+   (fired?"МОДЕЛЬ: ПОРОГ ПРЕВЫШЕН в "+(ix*dt).toFixed(0)+" нс":
+    "МОДЕЛЬ: ПОРОГ НЕ ПРЕВЫШЕН")+
+   " · время над порогом "+tot.toFixed(0)+" нс";
+ $("anodeWarning").textContent=
+   "ТОЛЬКО предварительная параметрическая модель: "+
+   D.meta.anodeModel+". "+
+   "Временная форма: "+D.meta.anodeWaveformPhysics+
+   " Не учитывается шумовое срабатывание на анодах без собранных электронов.";
 }
 function renderAll(){
  renderToolbar();renderStations();trace("xz","x","X(Z), см");
@@ -369,6 +477,8 @@ $("event").onchange=e=>changeEvent(Number(e.target.value));
 $("track").onchange=e=>changeTrack(Number(e.target.value));
 $("criterion").onchange=e=>{state.criterion=e.target.value;renderHit()};
 $("wireScale").onchange=e=>{state.wireScale=e.target.value;renderHit()};
+$("anodeChoice").onchange=e=>{state.anodeWire=Number(e.target.value);renderAnodeSignal()};
+$("anodeThreshold").oninput=e=>{state.threshold=Number(e.target.value);renderHit()};
 $("prev").onclick=()=>changeEvent(state.ei-1);
 $("next").onclick=()=>changeEvent(state.ei+1);
 renderAll();
