@@ -85,6 +85,34 @@ def cluster_segment(row, rng, lam, marks):
     return u_mm, v_mm, ncl, path
 
 
+def cluster_native_gas_segment(row, rng, lam, marks):
+    """Heed population on a TRUE Geant4 native chamber gas entry/exit line.
+
+    The actual gas hit, path length and TGeo local coordinates come from the
+    new Geant4 material geometry. The ionization model is STILL an independent
+    Heed empirical resampling, NOT the Geant4 Edep converted into electrons.
+    The +1mm shift maps [-3,+3] to the legacy Garfield [-2,+4]mm gap; this is
+    ONLY a reference drift-geometry approximation.
+    """
+    path=float(row["gas_path_mm"])
+    if not (math.isfinite(path) and 0 < path < 1000):
+        raise ValueError(f"Invalid native gas path {path}")
+    ncl=int(rng.poisson(lam*path))
+    if ncl==0:
+        return np.empty(0),np.empty(0),0,path
+    mult=marks[rng.integers(len(marks),size=ncl)]
+    fractions=np.repeat(rng.random(ncl),mult)
+    u0,u1=float(row["u_in_mm"]),float(row["u_out_mm"])
+    v0,v1=float(row["v_in_mm"]),float(row["v_out_mm"])
+    u=u0+fractions*(u1-u0)
+    v=v0+fractions*(v1-v0)+1.
+    if v.size and (v.min()<-2.05 or v.max()>4.05):
+        raise ValueError(
+            f"Native local gas-to-Garfield gap mismatch: {v.min()}..{v.max()}"
+        )
+    return u,v,ncl,path
+
+
 def collected_electron_endpoints(u_mm, v_mm, station, phase,
                                  lookup, random01):
     """Return individual finite-grid (wire_id, drift_time_ns) electron endpoints.
