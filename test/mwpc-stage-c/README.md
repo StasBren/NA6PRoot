@@ -1187,3 +1187,30 @@ still use the saved GEANT **reference-plane states** extrapolated
 into the staggered 298 gas boxes, not native Geant4 MWPC gas Edep.
 The 77/128 anodes, mechanical Y origin, and use of the reference
 B=0 and asymmetric Garfield 2+4mm transport map remain nominal.
+
+
+## PI project status and literally numbered physical wires
+
+A task-by-task audit of the PI's requested simulation outputs, exact
+interpretation of wire-rate denominators, physical caveats and next modern
+Geant4 runs is maintained in
+**test/mwpc-stage-c/PI_STATUS_AND_TALK.md**.
+
+A reproducible schematic of an entire station with each chamber's real
+Stage-C det_id and stagger layer is now available. Example MS0 DET17
+includes a second image with **all 77 nominal anodes literally numbered
+0..76**, each with three measured-in-model collection probabilities.
+
+    bash test/mwpc-stage-c/run_pi_station_numbered_anodes.sh
+
+Optional other physical detector and channel:
+
+    bash test/mwpc-stage-c/run_pi_station_numbered_anodes.sh 52 phi40-bore
+
+Output: test_runs/mwpc_stage_c/pi_fixed_wire_maps/pi_explanation/.
+
+These are nominal, centred 4-mm-pitch anode grids: MS0 wire indices 0..76;
+MS1..5 wire indices 0..127. Increasing indices run along global Y (across
+wires); each wire extends along global X. Chamber XY outlines are staggered
+in Z according to A/B/C/D. **Exact first wire position and readout thresholds
+are not mechanically/electronically confirmed.**
