@@ -108,7 +108,7 @@ button.action:hover{background:#294360}
    <div class="chartLegend"><span style="--swatch:#a5b3c1">Геометрия</span><span style="--swatch:#ffc05e">≥1e</span><span style="--swatch:#58d0c5">≥5e</span><span style="--swatch:#d18df0">≤100 нс</span></div>
    <div class="small" id="detailSummary"></div>
    <div class="multBlock">
-     <div class="multTitle"><strong>Сколько анодов активно при одном попадании?</strong>
+     <div class="multTitle"><strong>Сколько разных анодов активно при одном пересечении газа?</strong>
        <select id="multMetric">
         <option value="e1">Garfield ≥1e</option>
         <option value="e5">Garfield ≥5e</option>
@@ -359,20 +359,28 @@ function pathFor(arr,n,ymax,color,root,extra){
 }
 function renderMultiplicity(c) {
  const canvas=$("multSVG");canvas.replaceChildren();
- const sums=c.multiplicity&&c.multiplicity[state.multMetric];
- if(!sums){
-   $("multInfo").textContent="Для этой камеры ещё нет таблицы фиксированной кратности. "+
-     "После нового Heed/Garfield fold появится P(0,1,2,3,4,≥5) с тем же набором проволок.";
-   textNode("Нет новой таблицы кратности",260,91,
+ const n=c.n;
+ if(n<=0){
+   $("multInfo").textContent="У камеры нет пересечений с газом; P(N) не определена.";
+   textNode("Нет пересечений камеры",260,91,
      {"text-anchor":"middle",fill:"#bdcedb","font-size":"14"},canvas);
    return;
  }
- const n=c.n;
- if(n<=0){
-   $("multInfo").textContent="У камеры нет пересечений; вероятности не определены.";
+ const exact=c.multiplicity&&c.multiplicity[state.multMetric];
+ // The old complete 2.5M-hit per-module dataset RANDOMIZED wire phase
+ // independently for EACH gas crossing. It is a useful physical control,
+ // not the probability distribution of this module's fixed visible anodes.
+ const legacy=(!exact && state.multMetric==="e1")?c.legacyMultiplicity:null;
+ if(!exact&&!legacy){
+   $("multInfo").textContent="Нет готовой кратности по этому критерию для "+
+     "фиксированной сетки данной камеры. Можно рассчитать позже из "+
+     "сохранённых проекций и Heed/Garfield — без нового Geant4.";
+   textNode("Таблица кратности ещё не готова",260,91,
+     {"text-anchor":"middle",fill:"#bdcedb","font-size":"14"},canvas);
    return;
  }
- const probs=sums.map(v=>v/n),maximum=Math.max(.05,...probs);
+ const probs=exact?exact.map(v=>v/n):legacy;
+ const maximum=Math.max(.05,...probs);
  for(let i=0;i<6;i++){
    const x=45+i*76,barwidth=49;
    const h=137*probs[i]/maximum;
@@ -383,9 +391,17 @@ function renderMultiplicity(c) {
    textNode(pct(probs[i]),x+24.5,Math.max(11,145-h-7),
      {"text-anchor":"middle","font-size":"11",fill:"#eaf2f8"},canvas);
  }
- $("multInfo").textContent="Условная вероятность на одно пересечение этой камеры. "+
-   "N="+nf(n)+"; P(≥2)="+pct(probs.slice(2).reduce((a,b)=>a+b,0))+
-   ". Нулевая кратность включена; 5+ объединены в последнюю категорию.";
+ const p2=probs.slice(2).reduce((a,b)=>a+b,0);
+ const standardError=Math.sqrt(p2*(1-p2)/n);
+ const tag=exact?"ФИКСИРОВАННАЯ сетка 4 мм (фаза 0 мм)":
+   "ИСТОРИЧЕСКАЯ модель: случайная фаза 4-мм сетки НА КАЖДОЕ пересечение";
+ $("multInfo").textContent=tag+". N="+nf(n)+
+   "; P(≥2)="+pct(p2)+" ± "+(100*standardError).toFixed(2)+
+   " процентных пункта (1σ, статистика пересечений). "+
+   "P(0) включена, 5+ объединены."+
+   (legacy?" Внимание: эти вероятности НЕ соответствуют фиксированным "+
+     "пронумерованным проволокам на верхнем графике; "+
+     "они не учитывают потери за краем конечной сетки.":"");
 }
 function renderDetail(){
  const g=geometry().find(x=>x.id===state.selected)||geometry()[0];
