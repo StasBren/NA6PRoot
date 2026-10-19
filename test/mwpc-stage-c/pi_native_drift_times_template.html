@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NA60+ · Время дрейфа к анодам · Native Geant4</title>
+<style>
+:root{color-scheme:dark;--bg:#0a1424;--panel:#11253b;--edge:#36516a;--text:#eaf5fd;--muted:#b2c5d6;--a:#54cbbb;--b:#e7ad65}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px system-ui,-apple-system,"Segoe UI",sans-serif}
+header,.controls,main,footer{padding:16px max(18px,3vw)}header{background:#152a43}
+h1{font-size:24px;margin:5px 0}h2{font-size:16px;margin:0 0 10px}p{color:var(--muted);font-size:12px;line-height:1.6}
+a{color:#7ce8e3}.tag{letter-spacing:2px;color:var(--a);font-size:10px;font-weight:700}
+.controls{display:flex;flex-wrap:wrap;gap:15px;align-items:end}.controls>div{min-width:120px}
+label{display:block;color:var(--muted);font-size:11px;margin-bottom:5px}
+select{background:#1d3857;color:var(--text);border:1px solid #58748b;border-radius:6px;padding:8px;font-size:13px;max-width:100%}
+.note{margin:0 max(18px,3vw) 13px;padding:12px;background:#1e3345;border-left:4px solid var(--b);color:#dbe7f1;font-size:12px;line-height:1.6;border-radius:4px}
+main{padding-top:0;display:grid;grid-template-columns:1fr 1fr;gap:15px}
+.panel{border:1px solid var(--edge);border-radius:10px;background:var(--panel);padding:14px;min-width:0}
+.panel.full{grid-column:1/-1}.stats{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;margin-bottom:14px}
+.stat{padding:7px 12px;background:#183348;border-radius:6px;border:1px solid #344e64}.stat strong{font-size:17px;display:block;margin-bottom:2px}.stat small{color:var(--muted)}
+svg{width:100%;height:300px;background:#0c1d30;border-radius:5px;display:block;overflow:visible}
+table{border-collapse:collapse;width:100%;font-size:12px;font-variant-numeric:tabular-nums}
+th,td{text-align:right;padding:9px 7px;border-bottom:1px solid #334b62}th:first-child,td:first-child{text-align:left}th{color:#c8d8e7}
+tr.mark{background:#264047}
+footer{color:var(--muted);font-size:11px;line-height:1.7}
+@media(max-width:850px){main{grid-template-columns:1fr}.panel.full{grid-column:auto}}
+</style>
+</head>
+<body>
+<header><div class="tag">NA60+ · MWPC · HEED/GARFIELD ANODE TIMING</div>
+<h1>Время дрейфа электронов к анодам</h1>
+<p>Первичная ионизация по Heed на <strong>настоящих газовых сегментах Geant4</strong>; времена прибытия взяты из сохранённой Garfield-карты одиночных электронов.</p>
+<a href="pi_station_interactive.html">← Картa MWPC</a> ·
+<a href="pi_muon_track_explorer_native.html">← Muon Track Explorer (настоящие хиты)</a>
+</header>
+<div class="controls">
+<div><label for="src">Канал</label><select id="src"></select></div>
+<div><label for="station">Станция</label><select id="station"></select></div>
+<div><label for="det">Камера</label><select id="det"></select></div>
+<div><label for="limit">Временной диапазон графика</label>
+<select id="limit"><option value="500">0–500 нс</option><option value="1000" selected>0–1000 нс</option><option value="2000">0–2000 нс</option></select></div>
+</div>
+<div class="note"><strong>Только первые 3 000 событий каждого канала.</strong> Это не сводка времени по полным 200 000 событиям и не время срабатывания реального электронного канала. Все хиты мюонов из первого чанка каждого источника учтены, в том числе газовые пересечения без собранных электронов. Углы, Edep, число первичных электронов и длины газовых сегментов могут отличаться между каналами.</div>
+<main>
+<section class="panel full">
+<h2 id="histTitle">Распределение индивидуальных времен дрейфа</h2>
+<div id="stats" class="stats"></div>
+<svg id="hist" viewBox="0 0 820 300" aria-label="PDF времени прибытия электронов на анод, шаг 20 нс"></svg>
+<p>Каждый электрон, собранный на конечном аноде, даёт одно значение времени дрейфа. Высота столбца — доля электронов в интервале 20 нс среди всех собранных с известным временем. Времена за правой границей показанного диапазона не выбрасываются из знаменателя. Пунктир отмечает 100 нс.</p>
+</section>
+<section class="panel">
+<h2>Вероятность ≥2 активных анодов и временное окно</h2>
+<svg id="curve" viewBox="0 0 500 300" aria-label="Зависимость вероятности двух активных анодов от времени отсечения"></svg>
+<p>Знаменатель — число <strong>настоящих газовых хит-сегментов Geant4</strong> в выбранной станции или камере, включая N=0. Здесь «активный анод» означает ≥1 <strong>первичный собранный электрон</strong>, а не электронный порог.</p>
+</section>
+<section class="panel">
+<h2>Полная кратность по временному окну</h2>
+<table><thead><tr><th>Окно</th><th>P0</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5+</th><th>P(≥2)</th></tr></thead>
+<tbody id="pdf"></tbody></table>
+<p>«Все» — все собранные электроны независимо от наличия измеренного времени. Окно 100 нс относится к дрейфу электрона, <strong>не</strong> к сигналу на выходе электроники.</p>
+</section>
+</main>
+<footer>
+Сырые результаты: <code>pi_native_drift_time_histograms.csv</code> и <code>pi_native_time_window_multiplicity.csv</code> в каталоге <code>test_runs/mwpc_stage_c/pi_native_drift_time_first_chunk/</code>.
+Поскольку используется сохранённая Garfield-карта B=0 и приближённое отображение газового зазора 6 мм на 2+4 мм, кривые являются прогнозом модели отклика, а не непосредственно измеренными временами. Для полной статистики всех 201 чанков необходим отдельный полный Heed/Garfield-fold.
+</footer>
+<script id="timingData" type="application/json">__TIMING_PAYLOAD__</script>
+<script>
+"use strict";
+(function(){
+const D=JSON.parse(document.getElementById("timingData").textContent);
+const NS="http://www.w3.org/2000/svg", $=id=>document.getElementById(id);
+const state={src:D.sources[0],station:0,det:"all",limit:1000};
+const names={"jpsi40-bore":"J/ψ","phi40-bore":"φ","omega40-bore":"ω"};
+function elem(tag,attrs,parent){const n=document.createElementNS(NS,tag);
+ for(const k in attrs)n.setAttribute(k,attrs[k]);if(parent)parent.appendChild(n);return n;}
+function txt(value,x,y,attrs,root){const t=elem("text",Object.assign({x,y,fill:"#c8deeb","font-size":11},attrs||{}),root);t.textContent=value;return t;}
+function pct(v){return (100*v).toFixed(v<.001?3:2)+"%";}
+function bucket(){
+ return state.det==="all"?D.station[state.src][state.station]:D.modules[state.src][state.det];
+}
+function options(id,pairs,value){const el=$(id);el.replaceChildren();
+ for(const [key,name] of pairs){const o=document.createElement("option");o.value=String(key);o.textContent=name;el.append(o)}el.value=String(value);}
+function renderSelector(){
+ options("src",D.sources.map(src=>[src,names[src]]),state.src);
+ options("station",[0,1,2,3,4,5].map(st=>[st,"MS"+st]),state.station);
+ const items=[["all","Все камеры MS"+state.station]];
+ for(const [det,station] of Object.entries(D.geometry)){
+  if(station===state.station)items.push([det,"DET"+det]);
+ }
+ items.sort((a,b)=>a[0]==="all"?-1:b[0]==="all"?1:Number(a[0])-Number(b[0]));
+ options("det",items,state.det);
+ $("limit").value=String(state.limit);
+}
+function stats(b){
+ const div=$("stats");div.replaceChildren();
+ const cells=[
+  ["Газовых хитов",b.n.toLocaleString("ru-RU")],
+  ["Собрано электронов",b.collected.toLocaleString("ru-RU")],
+  ["Известное t дрейфа",b.validTimes.toLocaleString("ru-RU")],
+  ["t отсутствует",b.unknownTimes.toLocaleString("ru-RU")],
+  ["Потери на краях анодов",b.edgeLoss.toLocaleString("ru-RU")],
+  ["Хиты без собранных e⁻",b.zeroCollectedHits.toLocaleString("ru-RU")]
+ ];
+ for(const [name,value] of cells){const e=document.createElement("div");e.className="stat";
+  const v=document.createElement("strong");v.textContent=value;
+  const caption=document.createElement("small");caption.textContent=name;
+  e.append(v,caption);div.append(e)}
+}
+function renderHist(b){
+ const root=$("hist");root.replaceChildren();
+ $("histTitle").textContent="Распределение tдрейфа — "+
+    (state.det==="all"?"MS"+state.station:"DET"+state.det)+" · "+names[state.src];
+ const bins=state.limit/20,vals=b.hist.slice(0,bins);
+ const denom=Math.max(1,b.validTimes);
+ const heights=vals.map(v=>100*v/denom);
+ const max=Math.max(0.1,...heights)*1.18;
+ const x=t=>50+720*t/state.limit;
+ const y=v=>254-210*v/max;
+ for(let i=0;i<=4;i++){
+  const value=max*i/4;
+  elem("line",{x1:49,x2:770,y1:y(value),y2:y(value),
+    stroke:"#4b6176","stroke-width":.7},root);
+  txt(value.toFixed(2)+"%",43,y(value)+3,{"text-anchor":"end"},root);
+ }
+ for(const t of [0,100,200,400,600,800,1000,1400,1800,2000].filter(t=>t<=state.limit)){
+  txt(String(t),x(t),275,{"text-anchor":"middle"},root);
+ }
+ for(let i=0;i<bins;i++){
+  const h=Math.max(0,254-y(heights[i]));
+  const bar=elem("rect",{x:x(20*i)+.8,y:y(heights[i]),
+    width:720/bins-1.6,height:h,fill:"#55c9b9"},root);
+  elem("title",{},bar).textContent=(20*i)+"–"+(20*(i+1))+
+    " нс: "+vals[i]+" электронов, "+pct(vals[i]/denom);
+ }
+ if(state.limit>=100){
+  elem("line",{x1:x(100),x2:x(100),y1:28,y2:254,
+    stroke:"#f0ae61","stroke-width":2,"stroke-dasharray":"5 4"},root);
+  txt("100 нс",x(100)+5,17,{fill:"#f0ae61"},root);
+ }
+ txt("t дрейфа, нс",760,293,{"text-anchor":"end","font-size":12},root);
+ txt("% / 20 нс",8,17,{"font-size":12},root);
+ const shown=vals.reduce((a,v)=>a+v,0);
+ txt("В окне 0–"+state.limit+" нс: "+pct(shown/denom)+
+     " валидных времён; остальные вне диапазона",775,18,
+     {"text-anchor":"end","font-size":10,fill:"#b5c7d7"},root);
+}
+function renderCurve(b){
+ const root=$("curve");root.replaceChildren();
+ const count=b.n;
+ const values=b.multiplicity.map(row=>count?row.slice(2).reduce((a,v)=>a+v,0)/count:0);
+ const x=i=>48+i*85, y=p=>245-210*p;
+ for(const v of [0,.25,.5,.75,1]){
+  elem("line",{x1:45,x2:470,y1:y(v),y2:y(v),
+   stroke:"#486178","stroke-width":.7},root);
+  txt(pct(v),40,y(v)+4,{"text-anchor":"end"},root);
+ }
+ const p=values.map((v,i)=>x(i)+","+y(v)).join(" ");
+ elem("polyline",{points:p,fill:"none",stroke:"#59d2c0","stroke-width":3},root);
+ values.forEach((v,i)=>{
+  const dot=elem("circle",{cx:x(i),cy:y(v),r:4.5,fill:i===1?"#f2b468":"#58cebe"},root);
+  elem("title",{},dot).textContent=D.windows[i]+" нс: "+pct(v);
+  txt(D.windows[i]==="all"?"Все":D.windows[i],
+      x(i),267,{"text-anchor":"middle"},root);
+  txt(pct(v),x(i),Math.max(16,y(v)-10),
+      {"text-anchor":"middle","font-size":10},root);
+ });
+ txt("Окно t (нс), 'Все' = без временного отсечения",
+     462,292,{"text-anchor":"end","font-size":10},root);
+}
+function renderPDF(b){
+ const el=$("pdf");el.replaceChildren();
+ b.multiplicity.forEach((counts,i)=>{
+  const tr=document.createElement("tr");if(i===1)tr.className="mark";
+  const total=b.n,p2=counts.slice(2).reduce((a,v)=>a+v,0);
+  const values=[D.windows[i]==="all"?"Все":D.windows[i]+" нс",
+   ...counts.map(v=>total?pct(v/total):"—"),total?pct(p2/total):"—"];
+  values.forEach(v=>{const td=document.createElement("td");td.textContent=v;tr.appendChild(td)});
+  el.appendChild(tr);
+ });
+}
+function render(){
+ renderSelector();const b=bucket();
+ stats(b);renderHist(b);renderCurve(b);renderPDF(b);
+}
+$("src").onchange=e=>{state.src=e.target.value;state.det="all";render()};
+$("station").onchange=e=>{state.station=Number(e.target.value);state.det="all";render()};
+$("det").onchange=e=>{state.det=e.target.value;render()};
+$("limit").onchange=e=>{state.limit=Number(e.target.value);render()};
+render();
+})();
+</script>
+</body></html>
