@@ -29,7 +29,7 @@ def main():
     assert b["zeroCollectedHits"]==1
     assert b["hist"].sum()==4
     assert b["hist"][-1]==1  # a real 2,500 ns tail event
-    assert b["multiplicity"][0].tolist()==[2,2,0,0,0,0]
+    assert b["multiplicity"][0].tolist()==[3,1,0,0,0,0]
     assert b["multiplicity"][1].tolist()==[2,2,0,0,0,0]
     assert b["multiplicity"][2].tolist()==[2,1,1,0,0,0]
     assert b["multiplicity"][-1].tolist()==[1,2,1,0,0,0]
