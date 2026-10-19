@@ -163,7 +163,7 @@ def build(args):
             "scope":"ALL NATIVE MUON GAS HIT SEGMENTS, FIRST 3000 GENERATED EVENTS PER SOURCE ONLY, not full 200000",
             "notFullRun":True,
             "usesActualGeantGasGeometry":True,
-            "model":"Heed sampled cluster ionization, B=0 saved Garfield single-electron transit samples mapped to nominal fixed 77/128-anode 4mm grid, +1mm 6mm-gap approximation",
+            "model":"LEGACY ASYMMETRIC 2+4mm Garfield electric field, NOT centered 3+3mm: Heed sampled cluster ionization, B=0 saved Garfield single-electron transit samples, fixed 77/128 anodes and +1mm 6mm-gap approximation",
             "meaning":"Electron drift time from ionization to anode, measured in ns; NOT Geant4 particle flight time or electronics discriminator time",
             "threshold":"≥1 collected primary electron per anode. No avalanche, analog shaping, noise, or ASIC threshold",
             "exposure":"Per REAL Geant4 gas HIT SEGMENT, not incoming station muon",
