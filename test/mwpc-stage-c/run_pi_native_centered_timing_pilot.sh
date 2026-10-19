@@ -9,8 +9,10 @@ cd "$REPO"
 python3 -m py_compile \
  "$HERE/pi_centered_electron_sampler.py" \
  "$HERE/pi_native_centered_timing_pilot.py" \
- "$HERE/test_pi_native_centered_timing_pilot.py"
+ "$HERE/test_pi_native_centered_timing_pilot.py" \
+ "$HERE/test_pi_centered_pilot_integration.py"
 python3 "$HERE/test_pi_native_centered_timing_pilot.py"
+python3 "$HERE/test_pi_centered_pilot_integration.py"
 echo "Reading pre-existing true Geant4 first-chunk native gas hits, Heed library,"
 echo "and the finished MANIFEST-VERIFIED symmetric 3+3mm Garfield map."
 echo "This may take several minutes; no new Garfield or Geant4 transport."
