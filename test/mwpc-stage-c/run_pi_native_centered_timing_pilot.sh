@@ -16,6 +16,27 @@ echo "and the finished MANIFEST-VERIFIED symmetric 3+3mm Garfield map."
 echo "This may take several minutes; no new Garfield or Geant4 transport."
 python3 "$HERE/pi_native_centered_timing_pilot.py"
 OUT="$REPO/test_runs/mwpc_stage_c/pi_fixed_wire_maps/pi_centered_timing_pilot.html"
+python3 - "$REPO" <<'PY'
+from pathlib import Path
+from zipfile import ZipFile,ZIP_DEFLATED
+import sys
+root=Path(sys.argv[1])
+d=root/"test_runs/mwpc_stage_c/pi_centered_anode_timing_pilot"
+html=root/"test_runs/mwpc_stage_c/pi_fixed_wire_maps/pi_centered_timing_pilot.html"
+files=[
+ d/"pi_centered_timing_manifest.json",
+ d/"pi_centered_time_angle_multiplicity.csv",
+ d/"pi_centered_native_hit_multiplicities.csv",
+ html,
+]
+archive=d/"pi_centered_PI_pilot_review.zip"
+with ZipFile(archive,"w",ZIP_DEFLATED,compresslevel=6) as z:
+    for f in files:
+        if not f.is_file():
+            raise FileNotFoundError(f)
+        z.write(f,arcname=f.name)
+print("PI analysis package:",archive)
+PY
 echo "PASS: Native Geant4/Heed/NEW centered Garfield timing pilot:"
 echo "  $OUT"
 if command -v wslpath >/dev/null 2>&1; then
