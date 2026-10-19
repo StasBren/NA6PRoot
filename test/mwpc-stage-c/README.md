@@ -1866,3 +1866,52 @@ angle binning matter. The readout is the next PHYSICS inspection, not
 yet a per-anode firing result. An Edep histogram by itself does not
 predict how many physical anodes collect Heed electrons, and a generated
 event is not necessarily an incoming muon at a specific station.
+
+
+### Where is the arrival-time distribution plot? (PI timing question)
+
+The full 201-chunk Geant4 QA report alone contains Edep and entering/exiting
+momentum angles, but **not** Garfield electron drift-time distributions.
+Geant4 \`NA6PMuonSpecHit::getTime()\` is a particle crossing time, not a
+primary-electron arrival time and not electronic threshold crossing.
+
+An unbiased **first-chunk pilot** now resamples Heed on EACH *native* muon
+gas-hit segment (3,000 generated events per Jpsi/Phi/Omega, not 32 curated
+Track Explorer events) and uses already saved Garfield electron endpoint
+time outcomes, without running microscopic Garfield, Geant4, or cathodes:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_native_drift_times.sh
+
+The synthetic regression checks 0-electron hits, true times >2µs, unknown
+time handling, finite-grid anode counts and time-window dependence.
+Outputs:
+
+    test_runs/mwpc_stage_c/pi_fixed_wire_maps/pi_native_drift_times.html
+
+    test_runs/mwpc_stage_c/pi_native_drift_time_first_chunk/
+      pi_native_drift_time_histograms.csv
+      pi_native_time_window_multiplicity.csv
+      pi_native_drift_time_provenance.json
+
+The HTML is an interactive **true native Geant4 gas-segment / Heed+saved
+Garfield single-electron** timing study, switchable across Jpsi/Phi/Omega,
+all 6 stations, every one of 298 modules, time ranges 0–500/1000/2000 ns.
+It plots 20-ns-bin distributions of collected primary-electron drift times,
+together with \`P(N_active_anodes >= 2)\` as a function of individual
+electron arrival-time window (50, 100, 200, 400, 800 ns or all collected).
+A full 0/1/2/3/4/5+ conditional multiplicity table appears alongside.
+The station and native Track Explorer dashboards provide direct links.
+
+**Critical interpretation:** this is not the already-finished full
+200,000/source native Geant4 response simulation. The Geant4 geometric
+truth IS real for the first 3,000 events/source; sampled Heed clusters
+and Garfield transport endpoints are a response model (B=0, approximate
+asymmetric gap mapping, finite nominal 77/128 anodes). The denominator
+is one **gas-hit segment** (including cases with 0 collected electrons),
+not one incoming station muon, because module overlaps and repeated
+segments exist. Times refer to PRIMARY electron arrival and NOT to
+analog shaped pulses, avalanches, actual ASIC or hardware-fired wires.
+The full 201-chunk anode timing fold is a subsequent CPU-intensive job;
+do not present the pilot PDF as full-campaign statistics.
