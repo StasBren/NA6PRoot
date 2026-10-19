@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="ru">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NA60+ · Углы входа на каждой камере</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1422;--card:#13263b;--muted:#b2c6d7;--line:#35536c;--accent:#69caba}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#e8f3fc;font:14px system-ui,-apple-system,"Segoe UI",sans-serif}
+header,.bar,main,footer{padding:16px max(16px,3vw)}header{background:#182e46}h1{font-size:23px;margin:7px 0}
+p{color:var(--muted);font-size:12px;line-height:1.65}a{color:#85e3e7}
+.bar{display:flex;gap:14px;flex-wrap:wrap;align-items:end}
+label{display:block;color:var(--muted);font-size:11px;margin-bottom:5px}
+select{background:#1d3852;border:1px solid #597992;color:#e8f3fc;border-radius:6px;padding:8px;font:inherit;max-width:100%}
+main{display:grid;grid-template-columns:minmax(340px,1fr) minmax(350px,1fr);gap:13px}
+.panel{border:1px solid var(--line);border-radius:11px;background:var(--card);padding:13px;min-width:0}
+svg{display:block;width:100%;height:min(66vh,700px);min-height:340px;background:#0b1d31;border-radius:6px}
+#hist{height:310px;min-height:310px}
+.stat{display:flex;flex-wrap:wrap;gap:10px;margin:11px 0}
+.stat>span{padding:7px 10px;background:#1a3a4c;border-radius:6px}
+.note{background:#1b3348;border-left:3px solid #ebaf62;padding:10px 12px;margin:0 max(16px,3vw);line-height:1.55;color:#d5e4ee;font-size:12px}
+footer{font-size:12px;color:var(--muted);line-height:1.6}
+@media(max-width:920px){main{grid-template-columns:1fr}}
+</style></head>
+<body>
+<header>
+<div style="color:#7fdacc;letter-spacing:1.7px;font-size:10px;font-weight:700">NA60+ · 201 CHUNKS · GEANT4 MATERIAL TRUTH</div>
+<h1>Углы захода мюонов в зависимости от положения камеры</h1>
+<p>Полный новый Geant4-ран: 200 000 сгенерированных событий каждого канала, MCKine-привязанные настоящие газовые хиты в 298 модулях.</p>
+<a href="pi_station_interactive.html">← Карта станций</a> · <a href="pi_muon_track_explorer_native.html">Просмотр отдельных мюонов</a> ·
+<a href="pi_native_drift_times.html">Heed/Garfield время дрейфа (отдельная модель)</a>
+</header>
+<div class="bar">
+<div><label for="source">Канал</label><select id="source"></select></div>
+<div><label for="station">Станция</label><select id="station"></select></div>
+<div><label for="angle">Угол</label><select id="angle"></select></div>
+<div><label for="metric">Как окрашивать камеры</label>
+<select id="metric"><option value="positive">P(θ ≥ 0°)</option>
+<option value="far10">P(|θ| ≥ 10°)</option><option value="near2">P(|θ| ≤ 2°)</option></select></div>
+<div><label for="detector">Выбранная камера</label><select id="detector"></select></div>
+</div>
+<div class="note">Окраска показывает <strong>долю внутри распределения углов данной камеры</strong>, а не число попаданий. Все вероятности вычислены непосредственно из границ сохранённых угловых гистограмм; никакая оценка среднего угла по центрам бинов не выдаётся за измеренное значение. Малозаселённые камеры могут иметь большие неопределённости.</div>
+<main>
+<section class="panel">
+<h2>Глобальная XY-позиция камер · X вправо, Y вверх</h2>
+<p>Число в каждой ячейке — DET ID. Нажми камеру, чтобы увидеть её угловое распределение.</p>
+<svg id="plan" viewBox="-200 -200 400 400" aria-label="XY карта газовых площадей с окраской по углу"></svg>
+<p id="legend">Значения приведены к фиксированному масштабу вероятностей.</p>
+</section>
+<section class="panel">
+<h2 id="detailTitle">Углы в выбранной камере</h2>
+<div class="stat" id="stat"></div>
+<svg id="hist" viewBox="0 0 600 310" aria-label="Гистограмма углов захода"></svg>
+<p>Гистограмма — плотность вероятности (% на градус) на линейной шкале от −30° до +30°. Неодинаковая ширина бинов учтена при нормировке; хвосты вне диапазона не включены в изображение, но остаются в знаменателе.</p>
+<p id="summary"></p>
+</section>
+</main>
+<footer>Входные данные: полные native pi_native_all_histograms.csv и pi_native_all_chamber_quality.csv. Критерии в легенде основаны на точных границах бинов (0, ±2, ±10 градусов). Это не Garfield и не электронный счётчик анодов; Geant4-время газового хита не равно времени дрейфа.</footer>
+<script id="angleData" type="application/json">__ANGLE_POSITION_DATA__</script>
+<script>
+"use strict";
+(function(){
+const D=JSON.parse(document.getElementById("angleData").textContent);
+const $=id=>document.getElementById(id),NS="http://www.w3.org/2000/svg";
+const names={"jpsi40-bore":"J/ψ · 40 AGeV","phi40-bore":"φ · 40 AGeV","omega40-bore":"ω · 40 AGeV"};
+const angles={theta_u_in_deg:"θu вход",theta_w_in_deg:"θw вход",theta_u_out_deg:"θu выход",theta_w_out_deg:"θw выход"};
+const S={source:D.sources[0],station:0,angle:"theta_u_in_deg",metric:"far10",det:null};
+function node(name,attrs,root){const el=document.createElementNS(NS,name);for(const key in attrs)el.setAttribute(key,attrs[key]);if(root)root.append(el);return el}
+function text(s,x,y,attrs,root){const el=node("text",Object.assign({x,y,fill:"#c4d9e7","font-size":9},attrs||{}),root);el.textContent=s;return el}
+function choices(id,arr,chosen){const el=$(id);el.replaceChildren();for(const [key,txt] of arr){const opt=document.createElement("option");opt.value=String(key);opt.textContent=txt;el.append(opt)}el.value=String(chosen)}
+function geom(){return D.geometry.filter(c=>c.st===S.station)}
+function data(det){return D.module[S.source][String(det)]}
+function fraction(det){
+ const v=data(det),h=v.angles[S.angle],n=v.n;
+ if(!n)return null;
+ let acc=0;
+ for(let i=0;i<h.length;i++){
+  const a=D.edges[i],b=D.edges[i+1];
+  if(S.metric==="positive"?a>=0:S.metric==="far10"?(b<=-10||a>=10):(a>=-2&&b<=2))acc+=h[i];
+ }
+ return acc/n;
+}
+function color(v){
+ if(v===null)return "#38485a";
+ const cap=S.metric==="far10"?.10:1;
+ const frac=Math.min(1,v/cap);
+ return "rgb("+Math.round(34+190*frac)+","+Math.round(95+65*(1-frac))+","+Math.round(115-44*frac)+")";
+}
+function renderSelectors(){
+ choices("source",D.sources.map(src=>[src,names[src]]),S.source);
+ choices("station",[0,1,2,3,4,5].map(st=>[st,"MS"+st]),S.station);
+ choices("angle",D.fields.map(x=>[x,angles[x]]),S.angle);
+ $("metric").value=S.metric;
+ const m=geom();
+ if(!m.some(x=>x.id===S.det))S.det=m[Math.floor(m.length/2)].id;
+ choices("detector",m.map(c=>[c.id,"DET"+String(c.id).padStart(3,"0")+" · "+c.layer+" · r"+c.row+" c"+c.col]),S.det);
+}
+function renderMap(){
+ const root=$("plan");root.replaceChildren();
+ const g=geom(),x0=Math.min(...g.map(c=>c.x-c.hx)),
+ x1=Math.max(...g.map(c=>c.x+c.hx)),
+ y0=Math.min(...g.map(c=>-c.y-c.hy)),
+ y1=Math.max(...g.map(c=>-c.y+c.hy));
+ const pad=Math.max(x1-x0,y1-y0)*.07;
+ root.setAttribute("viewBox",[x0-pad,y0-pad,x1-x0+2*pad,y1-y0+2*pad].join(" "));
+ for(const c of g.filter(c=>c.id!==S.det).concat(g.filter(c=>c.id===S.det))){
+  const group=node("g",{},root);
+  const p=fraction(c.id),select=c.id===S.det;
+  node("rect",{x:c.x-c.hx,y:-c.y-c.hy,width:c.hx*2,height:c.hy*2,
+   fill:color(p),"fill-opacity":.9,
+   stroke:select?"#ffe9b9":"#6e8499","stroke-width":select?2.8:.7},group);
+  text(String(c.id),c.x,-c.y+1.8,{"text-anchor":"middle",
+   "font-size":Math.max(3,Math.min(6,(x1-x0)/75)),
+   fill:"#f6faff","pointer-events":"none"},group);
+  const target=node("rect",{x:c.x-c.hx,y:-c.y-c.hy,
+   width:c.hx*2,height:c.hy*2,fill:"transparent",cursor:"pointer"},group);
+  node("title",{},target).textContent="DET"+c.id+" / "+data(c.id).n+
+   " native gas hits / "+(p===null?"no exposure":(100*p).toFixed(2)+"%");
+  target.onclick=()=>{S.det=c.id;render()};
+ }
+ const fontsize=Math.max(3,(x1-x0)/65);
+ for(let x=Math.ceil(x0/50)*50;x<=x1;x+=50){
+  node("line",{x1:x,y1:y0,x2:x,y2:y1,
+   stroke:x===0?"#ffffff":"#a5c5dc","stroke-width":x===0?1.2:.75,
+   "stroke-dasharray":x===0?"none":"3 4",
+   "stroke-opacity":.5,"pointer-events":"none"},root);
+  text(String(x),x,y1+pad*.55,{"text-anchor":"middle","font-size":fontsize,
+   "pointer-events":"none"},root);
+ }
+ for(let y=Math.ceil(-y1/50)*50;y<=-y0;y+=50){
+  node("line",{x1:x0,y1:-y,x2:x1,y2:-y,stroke:y===0?"#ffffff":"#a5c5dc",
+   "stroke-width":y===0?1.2:.75,"stroke-opacity":.5,
+   "stroke-dasharray":y===0?"none":"3 4","pointer-events":"none"},root);
+  text(String(y),x0-pad*.3,-y+fontsize*.3,{"text-anchor":"end",
+   "font-size":fontsize,"pointer-events":"none"},root);
+ }
+ text("X, см →",x1+pad*.8,y1+pad*.96,
+      {"text-anchor":"end","font-size":fontsize},root);
+ text("Y, см ↑",x0-pad*.8,y0-pad*.45,
+      {"font-size":fontsize},root);
+ const range=S.metric==="far10"?"0–10% (при ≥10% насыщение цвета)":"0–100%";
+ $("legend").textContent="Окраска: "+$("metric").selectedOptions[0].textContent+
+   ", "+range+". Серые камеры: n=0. Контуры — реальные газовые модули.";
+}
+function renderHistogram(){
+ const root=$("hist");root.replaceChildren();
+ const c=D.geometry.find(c=>c.id===S.det),o=data(c.id),h=o.angles[S.angle],n=o.n;
+ $("detailTitle").textContent="DET"+c.id+" · MS"+c.st+" · "+angles[S.angle];
+ $("stat").replaceChildren();
+ for(const str of ["n="+n.toLocaleString("ru-RU")+" газовых хитов",
+   "Центр X="+c.x.toFixed(1)+", Y="+c.y.toFixed(1)+" см",
+   "Layer "+c.layer+" · row "+c.row+", col "+c.col]){
+  const el=document.createElement("span");el.textContent=str;$("stat").append(el);
+ }
+ const x=v=>56+500*(v+30)/60;
+ const bins=[];
+ for(let i=0;i<h.length;i++){
+  let lo=D.edges[i],hi=D.edges[i+1];
+  if(lo<-30||hi>30)continue;
+  bins.push({lo,hi,k:h[i],height:n?(h[i]/n)/(hi-lo)*100:0});
+ }
+ const ymax=Math.max(.05,...bins.map(b=>b.height))*1.12;
+ const y=v=>257-206*v/ymax;
+ for(let j=0;j<=4;j++){
+  const v=ymax*j/4;
+  node("line",{x1:54,x2:556,y1:y(v),y2:y(v),stroke:"#496078","stroke-width":.7},root);
+  text(v.toFixed(2),49,y(v)+3,{"text-anchor":"end"},root);
+ }
+ for(const tick of [-30,-20,-10,0,10,20,30]){
+  text(String(tick),x(tick),274,{"text-anchor":"middle"},root);
+ }
+ for(const b of bins){
+  const bar=node("rect",{x:x(b.lo)+.45,y:y(b.height),
+    width:Math.max(1,x(b.hi)-x(b.lo)-.9),
+    height:Math.max(0,257-y(b.height)),fill:"#53d2bd"},root);
+  node("title",{},bar).textContent=b.lo+"°.."+b.hi+"°: "+b.k+
+    " hits / "+b.height.toFixed(4)+" %/degree";
+ }
+ text("θ, градусы",550,298,{"text-anchor":"end","font-size":11},root);
+ text("PDF (%/градус)",8,17,{"font-size":11},root);
+ const p=fraction(c.id);
+ $("summary").textContent="Текущий критерий: "+$("metric").selectedOptions[0].textContent+
+    " = "+(p===null?"нет статистики":(100*p).toFixed(3)+"%")+
+    ". Статистика условна на настоящий Geant4 газовый хит; "
+    +"общее число входящих в станцию мюонов — другой знаменатель.";
+}
+function render(){renderSelectors();renderMap();renderHistogram()}
+$("source").onchange=e=>{S.source=e.target.value;render()};
+$("station").onchange=e=>{S.station=Number(e.target.value);S.det=null;render()};
+$("angle").onchange=e=>{S.angle=e.target.value;render()};
+$("metric").onchange=e=>{S.metric=e.target.value;render()};
+$("detector").onchange=e=>{S.det=Number(e.target.value);render()};
+render();
+})();
+</script></body></html>
