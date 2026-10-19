@@ -2018,3 +2018,53 @@ These are NOT intermediate u(t)/v(t)/w(t) electron drift trajectories.
 Those require a new microscopic Garfield trajectory step recorder.
 Do not claim full 201-chunk native timing, chamber detection efficiency,
 or a real electronic discriminator threshold from this pilot.
+
+
+### NEW centered 3+3mm native Geant4/Heed/Garfield time-angle pilot
+
+Prerequisites: finished native first chunk exports and VERIFIED centered
+Garfield B=0 map and pi_centered_transport_manifest.json.
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_native_centered_timing_pilot.sh
+
+The pilot consumes the RAW MCKine-joined true native gas-hit exporter
+CSVs at pi_native_anode_first_chunk/native_exports/ (all local u/v/w
+coordinates), not the older compatibility track-viewer format without
+the w component. It loads the NEW centered 3+3 mm response with
+manifest-pinned SHA256 and checks original electric-field provenance.
+The historical 2+4mm lookup with the legacy +1mm offset is NOT used.
+The seed is deterministic per (source,chunk,event,hit_index,track).
+
+The primary Heed clusters are sampled independently of Geant4 Edep
+along actual TGeo-local true gas-hit line segments. No analogue anode
+weighting current, cathode strips, ASIC threshold or hardware firing
+is claimed. Exactly 77 MS0 or 128 other physical anodes are retained,
+with overflow electrons recorded as losses.
+
+Outputs:
+
+    test_runs/mwpc_stage_c/pi_fixed_wire_maps/pi_centered_timing_pilot.html
+    test_runs/mwpc_stage_c/pi_centered_anode_timing_pilot/
+      pi_centered_native_hit_multiplicities.csv
+      pi_centered_time_angle_multiplicity.csv
+      pi_centered_timing_manifest.json
+      pi_centered_PI_pilot_review.zip
+
+Open the interactive HTML and choose Jpsi/Phi/Omega, MS station,
+one physical chamber or all, theta_u or theta_w and a signed angular
+bin. The endpoint Garfield t_drift PDFs use 10-ns bins. Heatmaps show
+initial u_cell, u, v, or w position versus FINAL electron arrival
+time for all chambers of a station at the selected angle. Probability
+rows P(N=0,1,2,3,4,5+) are gas-hit-inclusive and show 50/100/200/
+400/800-ns drift gates and all collected endpoints. Each N is a count
+of DISTINCT finite anodes with >=1 collected primary electron.
+
+Scope is first 3000 generated events/source, NOT the full 200000;
+native GAS HIT SEGMENTS are the denominator, NOT incident station
+muons. Independent Heed ionisation is not forced to match Geant4 Edep.
+Birth-coordinate vs arrival time is NOT a true intermediate
+u(t)/v(t)/w(t) electron cloud; next stage needs microscopic Garfield
+drift trajectory snapshots. Attach the review ZIP and terminal output
+to the analysis assistant after a successful local run.
