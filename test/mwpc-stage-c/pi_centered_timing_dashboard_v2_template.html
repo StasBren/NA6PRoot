@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NA60+ — PI: время дрейфа, координаты и аноды · V2</title>
+<style>
+:root{color-scheme:dark;--bg:#091626;--panel:#14283e;--panel2:#0d2236;--edge:#3d5d77;--text:#ecf7ff;--muted:#b3cadc;--a:#59d9c5;--orange:#ffd28d}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--text);margin:0;font:14px/1.5 system-ui,"Segoe UI",Arial,sans-serif}
+header,.controls,main,footer{padding:18px max(20px,2.7vw)}
+header{background:#19324b}h1{margin:5px 0 10px;font-size:25px}
+h2{margin:0 0 9px;font-size:17px}h3{margin:5px 0;font-size:13px}
+p{color:var(--muted);margin:8px 0;line-height:1.65;font-size:13px}
+a{color:#8de9e6}
+.small{font-size:11px;color:var(--muted)}
+.topline{font-size:11px;color:#70e9d5;font-weight:750;letter-spacing:1px}
+.controls{display:flex;flex-wrap:wrap;align-items:end;gap:13px}
+.ctrl{min-width:120px}
+label{display:block;font-size:12px;color:#c8dbea;margin-bottom:5px}
+select,button{font:inherit;padding:8px 10px;background:#244360;color:#f2fbff;border:1px solid #7193a9;border-radius:6px}
+select{max-width:280px}button{cursor:pointer}button:focus-visible,select:focus-visible{outline:2px solid var(--a)}
+main{display:grid;grid-template-columns:minmax(330px,1fr) minmax(350px,1fr);gap:16px}
+.panel{background:var(--panel);border:1px solid var(--edge);border-radius:10px;padding:15px;min-width:0}
+.panel.full{grid-column:1/-1}.notice{padding:12px 15px;background:#24394b;border-left:4px solid #eeb978;margin:0 max(20px,2.7vw) 15px}
+.notice p{margin:0;color:#e0eaf3}.stats{display:flex;flex-wrap:wrap;gap:9px;margin:10px 0}
+.stat{background:#203e53;padding:7px 11px;border-radius:7px;font-size:12px}
+.stat b{display:block;font-size:16px;font-variant-numeric:tabular-nums}
+svg{width:100%;display:block;border-radius:7px;background:var(--panel2)}
+#map{height:550px}#time{height:315px}#birth{height:360px}#multi{height:320px}
+.axis-note{font-size:12px;color:#e3eefa;font-weight:600}
+.key{display:flex;gap:12px;flex-wrap:wrap;margin:7px 0}
+.key span{font-size:12px;display:inline-flex;gap:6px;align-items:center}
+.swatch{display:inline-block;width:14px;height:3px;border-radius:3px}
+table{border-collapse:collapse;width:100%;font-size:12px;font-variant-numeric:tabular-nums}
+th,td{text-align:right;border-bottom:1px solid #3c5369;padding:8px 6px}
+th:first-child,td:first-child{text-align:left}th{color:#c6e0f4}
+tr:nth-child(even){background:#20384a}
+.help{border-left:3px solid var(--a);padding:5px 0 5px 11px;margin:10px 0}
+.grid-note{color:#e2ecef}
+#empty{color:#ffcb9a}
+footer{color:var(--muted);font-size:12px}
+@media(max-width:1000px){main{grid-template-columns:1fr}.panel.full{grid-column:auto}#map{height:480px}}
+</style></head><body>
+<header>
+<div class="topline">NA60+ · ПИЛОТ 3+3 ММ · NATIVE GEANT4 + HEED + GARFIELD · ПОЖЕЛАНИЯ PI</div>
+<h1>Время дрейфа, начальные координаты и срабатывание анодов</h1>
+<p>Исправленная симметричная камера: анодная плоскость при v=0; катоды при v=−3 и +3 мм; шаг проволок 4 мм; Garfield B=0.</p>
+<nav><a href="pi_native_angle_position.html">Полная Geant4-карта углов</a> ·
+<a href="pi_station_interactive.html">Статистические карты станций</a> ·
+<a href="pi_muon_track_explorer_native.html">Muon Track Explorer</a></nav>
+</header>
+<section class="controls" aria-label="Фильтры анализа">
+<div class="ctrl"><label for="source">Канал</label><select id="source"></select></div>
+<div class="ctrl"><label for="station">Станция</label><select id="station"></select></div>
+<div class="ctrl"><label for="axis">Угол входа мюона</label><select id="axis">
+<option value="u">θu — поперёк анодов</option><option value="w">θw — вдоль анодов</option></select></div>
+<div class="ctrl"><label for="angle">Интервал углов (с данными)</label><select id="angle"></select></div>
+<div class="ctrl"><label for="coord">Координата рождения электрона</label><select id="coord">
+<option value="v_birth_mm">v: от катода к аноду (−3…+3 мм)</option>
+<option value="u_cell_mm">u: отклонение от ближайшей проволоки (±2 мм)</option>
+<option value="w_birth_mm">w: вдоль проволоки (мм)</option>
+<option value="u_birth_mm">u: положение по всей ширине камеры (мм)</option>
+</select></div>
+</section>
+<div class="notice"><p><strong>Как читать:</strong> карта выбирает физическую камеру кликом; нижняя кнопка «Все камеры» возвращает суммарную статистику станции. Список углов показывает <strong>только интервалы с газовыми хитами</strong> в текущей выборке. На каждом графике подписаны обе оси и единицы. Это отклик <strong>первичных электронов</strong>, не порог электроники.</p></div>
+<main>
+<section class="panel">
+<h2>1. Выбор камеры на XY-плане станции</h2>
+<p>Кликните на прямоугольник DET. Цвет — доля газовых хитов, в которых ≥2 проволоки получили хотя бы один первичный электрон за <strong>100 нс</strong>. Серый — нет данных для выбранного угла; оси X,Y в сантиметрах.</p>
+<button id="allModules" type="button">Все камеры станции</button>
+<p id="selection" class="axis-note"></p>
+<svg id="map" viewBox="-200 -200 400 400" role="img" aria-label="Карта камер XY с кликабельными областями и осями X,Y в сантиметрах"></svg>
+<p id="mapLegend" class="small"></p>
+</section>
+<section class="panel">
+<h2 id="timeTitle">2. Когда электроны достигают анода</h2>
+<p>Это распределение <strong>времени от рождения до сбора на аноде</strong>, а не время пролёта мюона. Отдельный столбец отвечает интервалу 10 нс.</p>
+<div id="statistics" class="stats"></div>
+<svg id="time" viewBox="0 0 760 315" role="img" aria-label="Время дрейфа и доля собранных электронов"></svg>
+<p class="small">Нормировка: все собранные электроны с известным временем в выбранной камере и угловом интервале, включая времена за 300 нс.</p>
+</section>
+<section class="panel">
+<h2>3. Где родились электроны, пришедшие в разные интервалы времени?</h2>
+<p id="coordDesc"></p>
+<p class="grid-note"><strong>По всей станции MS<span id="birthStation"></span>, а не по отдельной DET.</strong> Выбор угла применяется. В исходном пилоте координатные распределения сохранены только для целой станции; выбор камеры влияет на графики 2 и 4, но <strong>не</strong> на этот график.</p>
+<svg id="birth" viewBox="0 0 760 360" role="img" aria-label="Одномерные распределения места рождения электрона для разных времен прихода"></svg>
+<div id="birthLegend" class="key"></div>
+<p class="small">Каждая линия — условное распределение <strong>координаты РОЖДЕНИЯ</strong> среди электронов, пришедших в данном интервале времени. Ось Y — доля электронов в координатном бине, %. Это НЕ траектория электронов u(t),v(t),w(t).</p>
+</section>
+<section class="panel">
+<h2>4. Сколько разных анодов успевают собрать электроны?</h2>
+<div class="help"><p><strong>Пример:</strong> если 40 электронов прибыли на проволоку №10, а один на №11 — кратность N=2, не N=41. Если на №11 электрон пришёл только после 100 нс, при T=100 нс было N=1.</p>
+<p><strong>P(N≥2)</strong> = доля реальных газовых хит-сегментов, для которых минимум две <em>разные</em> физические проволоки собрали первичные электроны внутри окна T. N=0 и газовые хиты без электронов входят в знаменатель.</p></div>
+<svg id="multi" viewBox="0 0 760 320" role="img" aria-label="Вероятность N не меньше двух анодов в зависимости от времени отсечения"></svg>
+<p id="multiSummary" class="axis-note"></p>
+<table><thead><tr><th>Окно T, нс</th><th>P0</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th><th>P5+</th><th>P≥2</th></tr></thead><tbody id="multiTable"></tbody></table>
+<p class="small">«Все» = все собранные электроны без временного отсечения. Категории P0…P5+ взаимоисключающие и суммируются до 100%; P≥2 — сумма P2…P5+.</p>
+</section>
+</main>
+<footer>Исходные данные: ровно те же 74 322 native Geant4 gas-hit segments из первых 3 000 событий каждого канала, независимо смоделированная ионизация Heed и подтверждённая Garfield-карта 3+3 мм. Отсутствуют катодные стрипы, лавинный аналоговый сигнал, реальный дискриминатор и нормировка по всем мюонам, входящим в станцию. Интерактивная версия V2 получена без повторного транспорта и без изменения физической статистики.</footer>
+<script id="dataV2" type="application/json">__PI_CENTERED_DASHBOARD_V2_DATA__</script>
+<script>
+"use strict";
+(()=>{
+const D=JSON.parse(document.getElementById("dataV2").textContent);
+const NS="http://www.w3.org/2000/svg", $=id=>document.getElementById(id);
+const names={"jpsi40-bore":"J/ψ","phi40-bore":"φ","omega40-bore":"ω"};
+const all=D.layout;
+const S={src:D.sourceNames[0],st:0,det:-1,axis:"u",bin:-1,coord:"v_birth_mm"};
+const bands=[
+ {lo:0,hi:2,name:"0–20 нс",color:"#68dbcc"},
+ {lo:2,hi:4,name:"20–40 нс",color:"#eeb874"},
+ {lo:4,hi:6,name:"40–60 нс",color:"#82b5ff"},
+ {lo:6,hi:10,name:"60–100 нс",color:"#d4a3fa"},
+ {lo:10,hi:31,name:"100 нс и позже",color:"#fe858f"}
+];
+const coordInfo={
+ v_birth_mm:{title:"v — расстояние по нормали между катодами (мм)",help:"v=0 — плоскость анодных проволок; катоды расположены при v=−3 и +3 мм. Это координата, где возник электрон."},
+ u_cell_mm:{title:"u — координата относительно ближайшей анодной проволоки (мм)",help:"u=0 — на линии ближайшего анода; шаг сетки 4 мм; диапазон одной ячейки −2…+2 мм. Положение в плоскости поперёк проволок."},
+ w_birth_mm:{title:"w — координата вдоль анодных проволок (мм)",help:"w — вдоль длинной проволоки. Эта координата меняется при выборе места рождения на камере; в идеальном 2D Garfield-поле самостоятельной зависимости поля от w нет."},
+ u_birth_mm:{title:"u — положение по ширине конкретной камеры (мм)",help:"Локальная координата поперёк проволок по всей камере, а не только внутри одного шага 4 мм."},
+};
+function svg(name,attrs,parent){let n=document.createElementNS(NS,name);
+ for(const k in attrs)n.setAttribute(k,attrs[k]);if(parent)parent.append(n);return n;}
+function tx(text,x,y,parent,attrs={}){const n=svg("text",Object.assign({x,y,fill:"#c8ddec","font-size":12},attrs),parent);n.textContent=String(text);return n}
+function choose(id,pairs,v){const a=$(id);a.replaceChildren();
+ for(const [key,label] of pairs){const o=document.createElement("option");o.value=String(key);o.textContent=label;a.append(o)}
+ a.value=String(v)}
+function key(det,bin){return [S.src,S.st,det,S.axis,bin].join("|")}
+function group(det=S.det,bin=S.bin){return D.groups[key(det,bin)]||null}
+function pct(v,digits=2){return (100*v).toFixed(digits)+"%"}
+function selectSourceStation(){
+ choose("source",D.sourceNames.map(x=>[x,names[x]]),S.src);
+ choose("station",[0,1,2,3,4,5].map(x=>[x,"MS"+x]),S.st);
+ $("axis").value=S.axis;$("coord").value=S.coord;
+}
+function validAngles(){
+ const options=[[-1,"Все углы ("+(group(S.det,-1)?.n||0).toLocaleString("ru-RU")+" хитов)"]];
+ for(let i=0;i<D.angles.length-1;i++){
+  const b=group(S.det,i);
+  if(b&&b.n>0)options.push([i,
+   D.angles[i]+"° … "+D.angles[i+1]+"° ("+b.n.toLocaleString("ru-RU")+")"]);
+ }
+ if(!options.some(([v])=>v===S.bin))S.bin=-1;
+ choose("angle",options,S.bin);
+}
+function dims(st=S.st){return all.filter(c=>c.st===st)}
+function val100(ch){
+ const b=group(ch,-1); if(!b||!b.n)return null;
+ const selected=group(ch,S.bin);
+ if(!selected||!selected.n)return null;
+ return selected.m[1].slice(2).reduce((a,b)=>a+b,0)/selected.n;
+}
+function map(){
+ const root=$("map");root.replaceChildren();
+ const chambers=dims();
+ const x0=Math.min(...chambers.map(c=>c.x-c.hx)),x1=Math.max(...chambers.map(c=>c.x+c.hx));
+ const y0=Math.min(...chambers.map(c=>-c.y-c.hy)),y1=Math.max(...chambers.map(c=>-c.y+c.hy));
+ const pad=Math.max(x1-x0,y1-y0)*.085;
+ root.setAttribute("viewBox",[x0-pad,y0-pad,x1-x0+2*pad,y1-y0+2*pad].join(" "));
+ const fractions=chambers.map(c=>val100(c.id)).filter(x=>x!==null);
+ const high=Math.max(.05,...fractions);
+ for(const c of chambers.filter(c=>c.id!==S.det).concat(chambers.filter(c=>c.id===S.det))){
+  const g=svg("g",{},root),n=val100(c.id),selected=S.det===c.id;
+  const intensity=n===null?0:Math.min(1,n/high);
+  const fill=n===null?"#4b5c6c":
+    "rgb("+Math.round(26+191*intensity)+","+
+       Math.round(106+45*(1-intensity))+","+
+       Math.round(107-63*intensity)+")";
+  svg("rect",{x:c.x-c.hx,y:-c.y-c.hy,width:c.hx*2,height:c.hy*2,
+    fill,stroke:selected?"#ffe5b3":"#8daabd",
+    "stroke-width":selected?3.2:.65},g);
+  tx(c.id,c.x,-c.y+1.6,g,{"text-anchor":"middle",
+    "font-size":Math.max(3.7,Math.min(5.6,(x1-x0)/74)),
+    fill:"#f5faff","pointer-events":"none"});
+  const click=svg("rect",{x:c.x-c.hx,y:-c.y-c.hy,width:c.hx*2,height:c.hy*2,
+    fill:"transparent",cursor:"pointer"},g);
+  click.addEventListener("click",()=>{S.det=c.id;draw()});
+  svg("title",{},click).textContent="DET"+c.id+" · "+c.layer+
+    " · r"+c.row+" c"+c.col+" · "+(n===null?"нет хитов":"P≥2="+pct(n));
+ }
+ // Every XY plot has explicit axis ticks, units, and positive directions.
+ const font=Math.max(4.1,(x1-x0)/75);
+ for(let x=Math.ceil(x0/50)*50;x<=x1;x+=50){
+  svg("line",{x1:x,x2:x,y1:y0,y2:y1,stroke:x===0?"#c2edff":"#a2bacb",
+   "stroke-width":x===0?1.5:.6,"stroke-dasharray":x===0?"none":"4 5",
+   "stroke-opacity":.55,"pointer-events":"none"},root);
+  tx(x,x,y1+pad*.55,root,{"text-anchor":"middle",
+    "font-size":font,"pointer-events":"none"});
+ }
+ for(let y=Math.ceil(-y1/50)*50;y<=-y0;y+=50){
+  svg("line",{x1:x0,x2:x1,y1:-y,y2:-y,stroke:y===0?"#c2edff":"#a2bacb",
+   "stroke-width":y===0?1.5:.6,"stroke-dasharray":y===0?"none":"4 5",
+   "stroke-opacity":.55,"pointer-events":"none"},root);
+  tx(y,x0-pad*.24,-y+font*.27,root,{"text-anchor":"end",
+    "font-size":font,"pointer-events":"none"});
+ }
+ tx("X, см →",x1+pad*.85,y1+pad*.96,root,
+   {"text-anchor":"end","font-size":font,"font-weight":"700"});
+ tx("Y, см ↑",x0-pad*.84,y0-pad*.5,root,
+   {"font-size":font,"font-weight":"700"});
+ const selection=S.det===-1?"Все камеры MS"+S.st:
+   "DET"+S.det+" (MS"+S.st+", layer "+all.find(c=>c.id===S.det)?.layer+")";
+ $("selection").textContent="Выбрано: "+selection+
+   " · газовых хитов: "+(group()?.n||0).toLocaleString("ru-RU");
+ $("mapLegend").textContent="Цветовая шкала: от 0% до "+pct(high)+
+   " для P(N≥2, T=100 нс). Камеры с n=0 серые. Выделенная камера обведена жёлтым.";
+}
+function axes(root,plot,titleX,titleY,xTicks,yTicks,xFn,yFn){
+ const [x0,y0,x1,y1]=plot;
+ svg("line",{x1:x0,y1:y0,x2:x0,y2:y1,stroke:"#c3dbeb"},root);
+ svg("line",{x1:x0,y1:y1,x2:x1,y2:y1,stroke:"#c3dbeb"},root);
+ for(const [v,label] of xTicks){const x=xFn(v);
+  tx(label,x,y1+22,root,{"text-anchor":"middle","font-size":11});}
+ for(const [v,label] of yTicks){const y=yFn(v);
+  svg("line",{x1:x0,y1:y,x2:x1,y2:y,stroke:"#446078",
+    "stroke-width":.7},root);
+  tx(label,x0-8,y+4,root,{"text-anchor":"end","font-size":11});}
+ tx(titleY,x0,20,root,{"font-size":12,"font-weight":"700"});
+ tx(titleX,x1,y1+46,root,{"text-anchor":"end","font-size":12,"font-weight":"700"});
+}
+function timeline(b){
+ const root=$("time");root.replaceChildren();
+ $("timeTitle").textContent="2. Время дрейфа — "+
+  (S.det<0?"все камеры":"DET"+S.det)+" · MS"+S.st;
+ const stats=$("statistics");stats.replaceChildren();
+ for(const [label,num] of [["Газовых хитов",b.n],["Первичных электронов",b.nprim],
+  ["Собрано",b.collected],["Время известно",b.known],
+  ["Время неизвестно",b.unknown],["Потерь на краях",b.edge]]){
+  const e=document.createElement("div");e.className="stat";
+  const bold=document.createElement("b");bold.textContent=num.toLocaleString("ru-RU");
+  const cap=document.createElement("span");cap.textContent=label;e.append(bold,cap);stats.append(e);
+ }
+ const N=Math.max(1,b.known),hist=b.time.slice(0,30);
+ const ymax=Math.max(.05,...hist.map(n=>100*n/N))*1.2;
+ const x=t=>65+t*635/300,y=p=>255-185*p/ymax;
+ axes(root,[65,70,700,255],"Время дрейфа от рождения до анода, нс",
+      "Доля e⁻ в интервале 10 нс, %",
+      [0,50,100,150,200,250,300].map(t=>[t,String(t)]),
+      [0,.25,.5,.75,1].map(j=>[ymax*j,j===0?"0":(ymax*j).toFixed(1)]),x,y);
+ hist.forEach((n,k)=>{
+  const v=100*n/N,r=svg("rect",{
+    x:x(k*10)+.8,y:y(v),width:635/30-1.6,height:255-y(v),
+    fill:"#57d9c4"},root);
+  svg("title",{},r).textContent=(k*10)+"–"+(k*10+10)+" нс: "+
+    n.toLocaleString("ru-RU")+" электронов; "+v.toFixed(2)+"%";
+ });
+ svg("line",{x1:x(100),x2:x(100),y1:68,y2:255,
+  stroke:"#ffc77e","stroke-width":2,"stroke-dasharray":"4 4"},root);
+ tx("100 нс",x(100)+5,62,root,{fill:"#ffc77e","font-size":11});
+ if(!b.known)tx("Нет электронов с известным временем",400,160,root,{"text-anchor":"middle"});
+}
+function coordinate(b){
+ $("birthStation").textContent=S.st;
+ const root=$("birth");root.replaceChildren();
+ const info=coordInfo[S.coord];$("coordDesc").textContent=info.help;
+ const arr=b.coords?.[S.coord],edges=D.coordinates[S.coord];
+ const legend=$("birthLegend");legend.replaceChildren();
+ if(!arr){tx("Нет сохранённых распределений координат для станции",370,150,root,
+   {"text-anchor":"middle"});return;}
+ const n=arr.length,intervals=[],colSums=[];
+ for(const band of bands){
+  const vals=arr.map(row=>row.slice(band.lo,band.hi).reduce((a,v)=>a+v,0));
+  const total=vals.reduce((a,v)=>a+v,0);
+  const p=vals.map(v=>total?100*v/total:0);
+  intervals.push({name:band.name,color:band.color,total,p});
+ }
+ const ymax=Math.max(2,...intervals.flatMap(q=>q.total>=30?q.p:[]))*1.16;
+ const lo=edges[0],hi=edges[edges.length-1];
+ const x=v=>70+620*(v-lo)/(hi-lo),y=v=>290-222*v/ymax;
+ const xticks=[0,.25,.5,.75,1].map(f=>{
+  const v=lo+(hi-lo)*f;return [v,v.toFixed(Math.abs(hi-lo)>100?0:1)];
+ });
+ axes(root,[70,68,690,290],info.title,
+  "Доля e⁻ в бине начальной координаты, %",
+  xticks,[0,.25,.5,.75,1].map(f=>[ymax*f,(ymax*f).toFixed(1)]),x,y);
+ for(const q of intervals){
+  const sw=document.createElement("span");
+  const bar=document.createElement("i");bar.className="swatch";bar.style.background=q.color;
+  const label=document.createElement("span");
+  label.textContent=q.name+" (n="+q.total.toLocaleString("ru-RU")+")"+
+      (q.total<30?" · мало":"");
+  sw.append(bar,label);legend.append(sw);
+  if(q.total<30)continue;
+  const points=q.p.map((v,i)=>x((edges[i]+edges[i+1])/2)+","+y(v)).join(" ");
+  svg("polyline",{points,fill:"none",stroke:q.color,"stroke-width":2.5,
+    "stroke-linejoin":"round","stroke-linecap":"round"},root);
+ }
+ if(!intervals.some(q=>q.total>=30))
+  tx("Недостаточно электронов для сравнения временных интервалов",380,150,
+    root,{"text-anchor":"middle"});
+}
+function multiplicity(b){
+ const root=$("multi");root.replaceChildren();
+ const values=b.m.map(rows=>b.n?100*rows.slice(2).reduce((a,v)=>a+v,0)/b.n:0);
+ const max=Math.max(1,...values);
+ const top=Math.min(100,Math.max(5,max*1.22));
+ const x=i=>75+i*115,y=p=>251-181*p/top;
+ axes(root,[75,70,650,251],"Окно от рождения электрона T, нс (Все = без ограничения)",
+  "P(N≥2), % газовых хитов",
+  [50,100,200,400,800,"Все"].map((v,i)=>[i,String(v)]),
+  [0,.25,.5,.75,1].map(f=>[top*f,(top*f).toFixed(1)]),x,y);
+ const points=values.map((v,i)=>x(i)+","+y(v)).join(" ");
+ svg("polyline",{points,fill:"none",stroke:"#69e8cf","stroke-width":3},root);
+ values.forEach((v,i)=>{
+  const circle=svg("circle",{cx:x(i),cy:y(v),r:5,fill:i===1?"#ffce8a":"#69e8cf"},root);
+  svg("title",{},circle).textContent="T="+D.meta.cutoffs_ns[i]+
+   " нс; "+pct(v/100)+" ("+b.m[i].slice(2).reduce((a,v)=>a+v,0)+
+   " из "+b.n+" газовых хитов)";
+  tx(v.toFixed(1)+"%",x(i),Math.max(61,y(v)-10),root,{"text-anchor":"middle","font-size":11});
+ });
+ const tb=$("multiTable");tb.replaceChildren();
+ b.m.forEach((bins,i)=>{
+  const row=document.createElement("tr"),v=[
+   D.meta.cutoffs_ns[i]=== "all"?"Все":D.meta.cutoffs_ns[i],
+   ...bins.map(n=>b.n?pct(n/b.n):"—"),
+   b.n?pct(values[i]/100):"—"];
+  for(const str of v){const e=document.createElement("td");e.textContent=str;row.append(e)}
+  tb.append(row);
+ });
+ const ge2=b.m[1].slice(2).reduce((a,v)=>a+v,0);
+ $("multiSummary").textContent="При 100 нс: "+ge2+
+  " из "+b.n+" газовых хит-сегментов ("+pct(b.n?ge2/b.n:0)+
+  ") имеют ≥2 активных анода. Нормировка — газовый хит, не входящий мюон станции.";
+}
+function draw(){
+ selectSourceStation();
+ validAngles();map();
+ const b=group(),station=group(-1);
+ if(!b||!station){
+  for(const id of ["time","birth","multi"])$(id).replaceChildren();
+  $("statistics").replaceChildren();$("multiTable").replaceChildren();
+  $("selection").textContent+=" · нет данных";return;
+ }
+ timeline(b);coordinate(station);multiplicity(b);
+}
+$("source").onchange=e=>{S.src=e.target.value;draw()};
+$("station").onchange=e=>{S.st=Number(e.target.value);S.det=-1;draw()};
+$("axis").onchange=e=>{S.axis=e.target.value;draw()};
+$("angle").onchange=e=>{S.bin=Number(e.target.value);draw()};
+$("coord").onchange=e=>{S.coord=e.target.value;draw()};
+$("allModules").onclick=()=>{S.det=-1;draw()};
+draw();
+})();
+</script></body></html>
