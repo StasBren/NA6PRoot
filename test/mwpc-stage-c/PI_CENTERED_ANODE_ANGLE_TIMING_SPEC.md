@@ -109,3 +109,25 @@ E. Full 201-chunk primary-electron response complete with correct incoming-muon 
 F. Old 2+4 results remain reproducible and visibly identified as legacy.
 
 PI to confirm before calibrated detector-firing predictions: final HV, gas mixture, 3+3 anode-centering across all modules, actual magnetic field at each station, and electronics threshold/shaping. Anode "collected >=1 electron" is never automatically a fired discriminator output.
+
+
+## PI additional requirement: anode-wire pitch scan 3–4 mm
+
+Requested 2026-10-19: study drift-time and angular response as the **distance between neighbouring anode wires** changes from 3 to 4 mm. This is wire PITCH in the transverse u direction, not anode–cathode spacing. Cathodes stay at local v=-3mm/+3mm and the anode plane at v=0; Ar/CO2, wire diameter, HV, B and physical gas aperture are held fixed for a controlled comparison.
+
+Suggested FIRST scan grid p={3.0,3.5,4.0} mm (expand to 0.25mm increments after initial validation). All pitch points require fresh Garfield ComponentAnalyticField drift/endpoint tables. The current centered manifest, sampler and response lookup are HARD-CODED to p=4mm, u in [-2,+2]mm and 20 u bins; never reuse the 4mm response by relabelling p or simply rescaling endpoints. Set u in [-p/2,+p/2] and use an exact tiling, e.g. du=0.1mm for p=3,3.5,4, and retain v in [-3,+3]mm with dv=0.2mm. Refactor both generator and loading/sampling/validation to dynamic pitch and dynamic number of u bins. Version each map by physical pitch, geometry, B, HV and sampled-response provenance; refuse cross-pitch mixing.
+
+IMPORTANT controlled comparison: the PHYSICAL gas active width in u stays unchanged. Changing p changes the number of *finite* anodes and end positions. Do NOT retain MS0=77 and MS1..5=128 at p=3mm (that artificially shrinks the instrumented aperture). Derive integer physical wire count and centered grid phase for each pitch and original module active width; explicitly document how partial edge cells are treated. Show both central unbounded-cell response and full finite-module occupancy to separate field/pitch physics from edge coverage.
+
+Two DIFFERENT possible meanings of "angles" must be kept separate:
+1. **Muon entrance angles** theta_u and theta_w are already stored in native Geant4 and, for unchanged gas geometry/selection, their incoming distributions DO NOT change with anode pitch. Plot time response and P(N>=2) *conditioned on the same native muon entrance-angle bins* for each pitch; this measures the geometry-induced response to oblique tracks.
+2. **Electron arrival/incidence angle at anode wire**, e.g. saved Garfield phi_hit_deg / incidence_normal_deg, DOES depend on the electric field, which depends on p. Compare signed/absolute electron incidence angle and t_drift across pitch, and joint p(t_drift,theta_e_hit | pitch, initial u/v), not mix it with muon entrance angles.
+
+Deliverables for p=3.0,3.5,4.0mm:
+- Overlaid electron drift-time PDFs and CDFs, e.g. median, 90th/95th and fraction arriving <=50/100/200ns, at controlled same starting positions (and global native-angle-weighted Heed ensemble).
+- Garfield electron incidence-angle (signed phi_hit_deg and/or well-documented incidence_normal_deg) distributions and conditional t_drift vs electron incidence angle, plus theta_e_hit vs pitch.
+- Native Geant4/Heed full gas-hit sample reused with IDENTICAL deterministic cluster starting locations and correlated random trial quantiles across pitch where possible to lower comparison variance; do not regenerate a different muon sample.
+- P(N=0,1,2,3,4,5+) and P(N>=2) per native muon gas-hit segment, vs muon theta_u/theta_w and drift-time cutoff T; propagate finite-grid edge losses and actual wire counts for each pitch.
+- Explicit separation of field response vs geometric sharing effects; report per-pitch map-statistical uncertainty and gas-hit event correlation. Re-check B=0 first and only later physical B if known.
+
+Implementation order: (i) keep current tested centered p=4mm baseline; (ii) create pitch-parametrised standalone Garfield runner and map manifest validator; (iii) dynamic-grid native Heed sampler using same tracks; (iv) one PI comparative dashboard with pitch selector/overlays; (v) pilot first, then full 201-chunk re-fold if comparison proves stable. No Geant4 transport rerun and no cathode-strip processing.
