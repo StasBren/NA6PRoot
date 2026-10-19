@@ -1915,3 +1915,66 @@ segments exist. Times refer to PRIMARY electron arrival and NOT to
 analog shaped pulses, avalanches, actual ASIC or hardware-fired wires.
 The full 201-chunk anode timing fold is a subsequent CPU-intensive job;
 do not present the pilot PDF as full-campaign statistics.
+
+
+### PI angular acceptance vs chamber XY + centred-anode timing work (2026-10-19)
+
+Full technical specification (data fields, coordinate definitions, two
+different meanings of coordinate-by-time plots, acceptance criteria):
+
+    test/mwpc-stage-c/PI_CENTERED_ANODE_ANGLE_TIMING_SPEC.md
+
+**Fast first output — full 201-chunk Geant4 angular position dashboard:**
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_native_angle_position.sh
+
+This is pure Python and JavaScript; reads the already completed
+pi_native_all_chamber_quality.csv, pi_native_all_station_quality.csv and
+pi_native_all_histograms.csv and uses NO ROOT/Geant4/Garfield or transport.
+It validates 894 source×chamber records, native station-vs-module exposure,
+and all four signed TGeo-local entrance/exit u/w angular PDFs per module.
+
+Opens:
+
+    test_runs/mwpc_stage_c/pi_fixed_wire_maps/pi_native_angle_position.html
+
+Browse one of six stations, source Jpsi/phi/omega, signed theta_u/theta_w
+entrance or exit and one of these EXACT bin-edge probabilities:
+P(theta>=0deg), P(abs(theta)>=10deg), P(abs(theta)<=2deg).
+Select any one of 298 chambers for its original nonuniform-bin signed
+angle density in percent/degree. Nothing is falsely presented as an exact
+mean or percentile reconstructed from the binned QA.
+
+**Independent new microscopic response (different physics computation):**
+
+    bash test/mwpc-stage-c/run_pi_centered_transport_box_map.sh 50 180019
+
+This runs an existing STAGE-C GARFIELD drift generator, but with symmetrical
+cathode gaps 3.0+3.0 mm and anode v=0. It does NOT rerun the completed
+600k-event Geant4 transport. It DOES take time to compute 30,000 fresh
+Garfield electron paths (600 boxes × 50 per box, B=0). It uses its own
+versioned output directory:
+
+    test_runs/mwpc_stage_c/c_transport_box_map_gm3p0_gp3p0/
+
+The wrapper freezes seed/geometry/sample count, refuses incompatible
+partial maps, and validates all new table rows/box centres using
+pi_validate_centered_box_map.py. The output manifest is
+pi_centered_transport_manifest.json.
+
+**Do not apply earlier +1-mm response-coordinate shift to this new map.**
+Existing 2+4-mm Garfield maps and their plots are legacy approximation.
+Running the centred Garfield producer alone does NOT automatically switch
+existing timelike pi_native_drift_times or Muon Track Explorer to the
+new physically correct field: a separate centred native Heed adapter,
+pilot, genuine Garfield trajectory-snapshot exporter and full fold must
+be implemented and validated according to the specification.
+
+The full PI suite must distinguish:
+(i) a time series of actual drifting-electron positions P(u(t)), P(v(t)),
+P(w(t)), which requires Garfield intermediate electron trajectories,
+(ii) conditional P(t_arrival | u_birth,v_birth,w_birth) using endpoint times,
+(iii) Geant4 muon entry/exit time, (iv) actual electronics comparator time,
+not conflated. There is no cathode-strip signal work in this scope.
