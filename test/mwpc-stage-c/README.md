@@ -1978,3 +1978,43 @@ P(w(t)), which requires Garfield intermediate electron trajectories,
 (ii) conditional P(t_arrival | u_birth,v_birth,w_birth) using endpoint times,
 (iii) Geant4 muon entry/exit time, (iv) actual electronics comparator time,
 not conflated. There is no cathode-strip signal work in this scope.
+
+### Centered 3+3mm native Geant4 muon timing pilot (2026-10-19)
+
+The user-provided centered Garfield response CSV SHA256 matches its
+validated manifest. It contains 30,000 single-electron drift trials,
+24,291 collected (80.97%), median collected time 29.62ns, p95 67.45ns,
+and 98.711% collected by 100ns. These are uniformly sampled response
+map entries, NOT an efficiency estimate for real muon detector hits.
+Negative and positive normal-v sides yield very similar collection and
+timing; the response should still be folded with real Heed birth positions.
+
+First run (synthetic test + 100 true native Geant4 muon gas hits/channel):
+
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_centered_native_timing_pilot.sh smoke
+
+Then full FIRST CHUNK from 3000 generated events/source:
+
+    bash test/mwpc-stage-c/run_pi_centered_native_timing_pilot.sh all
+
+Requires an already completed centered Garfield gm3p0_gp3p0 run and
+pi_centered_transport_manifest.json. Validates actual SHA256 response,
+20x30 geometry and local v=-3..+3 mm. Never maps v+1 (legacy 2+4mm).
+Real MCKine-tagged TGeo native gas-hit coordinates seed independent Heed
+cluster positions, and saved centered Garfield electron collection/time
+draws determine finite 77/128 physical-anode multiplicities.
+
+Output interactive graph:
+    test_runs/mwpc_stage_c/pi_fixed_wire_maps/pi_centered_native_timing.html
+Output machine-readable binned first-chunk results:
+    test_runs/mwpc_stage_c/pi_centered_timing_native_first_chunk/
+      pi_centered_native_first_chunk_angle_timing.json
+
+Graph: 10ns electron arrival-time PDF by signed muon theta_u and theta_w,
+1D histograms of *electron birth positions* u0/v0/w0 in different ARRIVAL
+time slices, P(two or more anodes) versus timing window and full N0..N5+.
+These are NOT intermediate u(t)/v(t)/w(t) electron drift trajectories.
+Those require a new microscopic Garfield trajectory step recorder.
+Do not claim full 201-chunk native timing, chamber detection efficiency,
+or a real electronic discriminator threshold from this pilot.
