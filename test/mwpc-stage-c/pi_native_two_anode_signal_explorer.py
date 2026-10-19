@@ -225,6 +225,36 @@ def build(args):
 
     for arr in examples.values():
         arr.sort(key=lambda v:(v["thetaU"],v["event"],v["hitIndex"]))
+    # Small PI event catalog complements the interactive multi-megabyte
+    # standalone HTML, permitting quick choice of angle and lag examples.
+    event_catalog=args.html.parent/"pi_two_anode_event_catalog.csv"
+    event_catalog.parent.mkdir(parents=True,exist_ok=True)
+    fields=("source","station","det_id","event","track_id","hit_index",
+            "theta_u_deg","theta_w_deg","wire_a","wire_b",
+            "electrons_a","electrons_b","first_a_ns","first_b_ns",
+            "delta_first_b_minus_a_ns","both_channels_over_5mV",
+            "n_anodes_with_primary_electrons_by_100ns")
+    with event_catalog.open("w",newline="",encoding="utf-8") as stream:
+        writer=csv.DictWriter(stream,fieldnames=fields);writer.writeheader()
+        for events in examples.values():
+            for v in events:
+                a,b=v["anodes"]
+                writer.writerow({
+                    "source":v["src"],"station":v["st"],
+                    "det_id":v["det"],"event":v["event"],
+                    "track_id":v["track"],"hit_index":v["hitIndex"],
+                    "theta_u_deg":v["thetaU"],"theta_w_deg":v["thetaW"],
+                    "wire_a":v["wires"][0],"wire_b":v["wires"][1],
+                    "electrons_a":a["nPrimaryCollected"],
+                    "electrons_b":b["nPrimaryCollected"],
+                    "first_a_ns":v["anodes"][0]["firstElectron_ns"],
+                    "first_b_ns":v["anodes"][1]["firstElectron_ns"],
+                    "delta_first_b_minus_a_ns":v["deltaFirstElectron_ns"],
+                    "both_channels_over_5mV":int(
+                        any(x>=5 for x in a["samples_mV"]) and
+                        any(x>=5 for x in b["samples_mV"])),
+                    "n_anodes_with_primary_electrons_by_100ns":v["N_t100"],
+                })
     layout=[{
         "st":c.station,"det":c.det_id,
         "x":c.x,"y":c.y,"hx":c.half_x,"hy":c.half_y,
@@ -282,6 +312,7 @@ def build(args):
     print(f"PASS: {processed} interactive native two-anode examples "
           "with independent waveforms and hypothetical summed output")
     print("Output:",args.html)
+    print("Sortable PI two-wire angular/timing event catalog:",event_catalog)
     return report
 
 
