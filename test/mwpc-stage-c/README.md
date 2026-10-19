@@ -2132,3 +2132,67 @@ The second requirement, the future p=3,3.5,4mm anode *pitch* sweep, is
 separate from this visualization fix and still requires a new
 Garfield electric-field calculation at each pitch. Do not fake it from
 this single p=4mm response.
+
+
+### NEW: one native muon and TWO independent physical anode signals
+
+PI question: how do TWO physical anode channels respond to a single native
+Geant4 muon crossing, including electron arrival-time offsets, pulse
+shapes and (illustrative only) arithmetic sum of the two channels?
+Explore real Geant4 gas-hit segments from the already verified first
+3000 generated events/source (Jpsi/phi/omega); select chamber on global
+XY, select one muon event by signed theta_u, then inspect independent
+anode A/B voltage waveforms, Garfield endpoint electron arrival rasters,
+wire numbers and separation, and an artificial A+B overlay.
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_two_anode_signal_explorer.sh
+
+Output:
+
+    test_runs/mwpc_stage_c/pi_fixed_wire_maps/
+      pi_two_anode_signal_explorer.html
+      pi_two_anode_signal_explorer_manifest.json
+
+The runner reads frozen first-chunk true native Geant4 gas export CSVs and
+the completed 3+3mm centered PI pilot per-hit CSV. It filters exactly
+N_all=2 independent physical wire IDs and retains up to seven
+angle-spread examples per source×module, including late second-wire
+collection if available. Most camera/source combinations contain such
+events, but some have none. Selected examples are deliberately curated;
+NEVER use this set for unconditional detector probabilities or efficiencies.
+
+The Heed+Garfield electron sampling replays the EXACT per-native-hit
+SHA256 seed used in pi_native_centered_timing_pilot.py, and validates
+N_all=2 and N_t100 against the existing event table. Both wires are
+simulated independently by the current pi_anode_digitizer.py:
+UNCONDITIONED Stage-A gain file optionally configured, otherwise
+an EXPLICITLY UNCALIBRATED Polya+zero gain model, fast electron and slow
+ion surrogate current, ideal nominal CR-RC, fixed independent noise and
+user-settable display discriminator threshold (default 5 mV).
+
+The display plots TWO distinct per-wire voltage channels on the same
+time axis and a THIRD DASHED hypothetical pointwise A+B VOLTAGE SUM.
+The real MWPC has two separate anode readouts; this arithmetic overlay
+does NOT represent a real analogue summing circuit or an electrode's
+induced charge. The interface flags when TWO actual independent
+surrogate channels cross the requested voltage threshold, versus
+merely collecting at least one primary electron each. Zero threshold
+crossings can occur on one or both wires despite N_all=2.
+The amplifier output time is NOT equal to Garfield electron first-arrival
+time. Time origin here is approximate local electron birth and omits
+finite muon-ionisation creation-time spread. This digitizer is NOT a
+calibrated Shockley-Ramo anode weighting field or ASIC response.
+Further realism requires computing anode weighting potentials, actual
+electron+ion avalanche waveforms, cross talk and verified ASIC settings.
+
+Gallery quick picks try near-normal (<3deg), moderate (3..10deg), and
+oblique (>=10deg) native muon theta_u; only available real events are
+shown. All charts and station XY map have labeled axes and physical
+units. No cathode strip output is modeled.
+
+No new native Geant4, Garfield drift or ROOT export is performed. Run
+the tiny native/synthetic regression before production; the wrapper
+does this automatically, then generates the HTML. The old 2+4mm response
+and earlier Track Explorer are untouched.
