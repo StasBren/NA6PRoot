@@ -38,6 +38,15 @@ def build(input_dir,out,template):
             exposure[key]=int(row["gas_hit_rows"])
     if any(v is None for v in exposure.values()):
         raise ValueError("Missing 894 native module exposures")
+    station_exposure={}
+    with (input_dir/"pi_native_all_station_quality.csv").open(newline="") as stream:
+        for row in csv.DictReader(stream):
+            key=row["source"],int(row["station"])
+            if key in station_exposure or key[0] not in SOURCES or key[1] not in range(6):
+                raise ValueError("Invalid/duplicate source×station native QA row")
+            station_exposure[key]=int(row["gas_hit_rows"])
+    if len(station_exposure)!=len(SOURCES)*6:
+        raise ValueError("Missing full 18 source×station QA exposures")
     data={src:{str(ch.det_id):{
         "st":ch.station,"n":exposure[src,ch.det_id],
         "angles":{name:[None]*NBIN for name in FIELDS}
@@ -77,9 +86,12 @@ def build(input_dir,out,template):
                     raise ValueError("Negative module native gas-hit exposure")
         for st in range(6):
             n=sum(data[src][str(c.det_id)]["n"] for c in GEOMETRY[st])
-            expected=int(sum(data[src][str(c.det_id)]["n"] for c in GEOMETRY[st]))
+            expected=station_exposure[src,st]
             if n!=expected:
-                raise AssertionError("Impossible module count")
+                raise ValueError(
+                    f"Actual native angle module count != station QA "
+                    f"{src} MS{st}: modules={n}, station={expected}"
+                )
     payload={
         "sources":SOURCES,
         "edges":ANGLE,
