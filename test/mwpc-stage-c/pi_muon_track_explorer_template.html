@@ -82,10 +82,14 @@ button:disabled{opacity:.35;cursor:not-allowed}
  </div>
 </section>
 <section class="panel">
- <div class="head"><h2 id="stationTitle">Станция MS0 — камера</h2><span class="muted" id="selectedStats"></span></div>
+ <div class="head"><h2 id="stationTitle">Станция MS0 — камера</h2>
+ <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+ <div><label for="xyGrid">Сетка XY</label>
+ <select id="xyGrid"><option value="50">50 см</option><option value="25">25 см</option><option value="0">Выкл.</option></select></div>
+ <span class="muted" id="selectedStats"></span></div></div>
  <div class="contents">
   <svg xmlns="http://www.w3.org/2000/svg" id="plan" viewBox="-200 -200 400 400" aria-label="Модули MWPC и попадания выбранного мюона"></svg>
-  <p class="muted">Прямоугольники — газовые площади камер в XY; подсвеченные — геометрически пересечённые этим треком. Нажми камеру для подробностей.</p>
+  <p class="muted">Координаты в сантиметрах: X → вправо, Y ↑ вверх. Светлые оси показывают X=0 и Y=0. Жёлтая точка — середина газового сегмента выбранного мюона. Нажми камеру для подробностей.</p>
  </div>
 </section>
 </div>
@@ -154,7 +158,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
 const D=JSON.parse(document.getElementById("trackData").textContent);
 const $=id=>document.getElementById(id),NS="http://www.w3.org/2000/svg";
 const names={"jpsi40-bore":"J/ψ · 40 AGeV","phi40-bore":"φ · 40 AGeV","omega40-bore":"ω · 40 AGeV"};
-const state={source:Object.keys(D.sources)[0],ei:0,ti:0,station:0,det:null,criterion:D.meta.chargeModel?"e1":"geom",wireScale:"focus",anodeWire:null,threshold:5};
+const state={source:Object.keys(D.sources)[0],ei:0,ti:0,station:0,det:null,criterion:D.meta.chargeModel?"e1":"geom",wireScale:"focus",xyGrid:50,anodeWire:null,threshold:5};
 const selectedColor="#53d8c6",otherColor="#f9b25b";
 function node(tag,attrs,parent){const e=document.createElementNS(NS,tag);for(const key in (attrs||{}))e.setAttribute(key,attrs[key]);if(parent)parent.appendChild(e);return e}
 function label(v,x,y,attrs,root){const e=node("text",Object.assign({x,y,fill:"#bbccdd","font-size":10},attrs||{}),root);e.textContent=v;return e}
@@ -193,6 +197,7 @@ function renderToolbar(){
  $("next").disabled=state.ei===events.length-1;
  $("criterion").value=state.criterion;
  $("wireScale").value=state.wireScale;
+ $("xyGrid").value=String(state.xyGrid);
  $("criterion").querySelectorAll("option").forEach(o=>{
   o.disabled=(!D.meta.chargeModel&&o.value!=="geom")||
     (o.value==="fired"&&!D.meta.anodeSignalModel);
@@ -286,6 +291,40 @@ function renderPlan(){
   if(hit){overlay.onclick=()=>{state.det=g.det;state.anodeWire=null;renderPlan();renderHit()}}
   node("title",{},overlay).textContent="DET"+g.det+(hit?
     " — muon gas crossing; click for anodes":" — no sampled gas crossing");
+ }
+ // Show TRUE global X/Y [cm] over the chamber rectangles, not over
+ // a detector-index grid. SVG has downward-positive Y, hence -globalY.
+ // Grid must not intercept existing detector/track point clicks.
+ const step=state.xyGrid,font=Math.max(3.3,Math.min(5.5,(x1-x0)/65));
+ if(step>0){
+  const gx0=Math.ceil(x0/step)*step,gx1=Math.floor(x1/step)*step;
+  const gy0=Math.ceil(-y1/step)*step,gy1=Math.floor(-y0/step)*step;
+  for(let x=gx0;x<=gx1;x+=step){
+   node("line",{x1:x,y1:y0,x2:x,y2:y1,
+    stroke:x===0?"#a8d6ff":"#7fa7c8",
+    "stroke-width":x===0?1.5:.85,"stroke-opacity":x===0?.9:.48,
+    "stroke-dasharray":x===0?"none":"3 4",
+    "pointer-events":"none"},root);
+   label(String(x),x,y1+pad*.53,
+    {"text-anchor":"middle","font-size":font,fill:"#c4deef",
+     "pointer-events":"none"},root);
+  }
+  for(let y=gy0;y<=gy1;y+=step){
+   node("line",{x1:x0,y1:-y,x2:x1,y2:-y,
+    stroke:y===0?"#a8d6ff":"#7fa7c8",
+    "stroke-width":y===0?1.5:.85,"stroke-opacity":y===0?.9:.48,
+    "stroke-dasharray":y===0?"none":"3 4",
+    "pointer-events":"none"},root);
+   label(String(y),x0-pad*.23,-y+font*.3,
+    {"text-anchor":"end","font-size":font,fill:"#c4deef",
+     "pointer-events":"none"},root);
+  }
+  label("X, см →",x1+pad*.82,y1+pad*.94,
+   {"text-anchor":"end","font-size":font,"font-weight":"700",
+    fill:"#e4f2fc","pointer-events":"none"},root);
+  label("Y, см ↑",x0-pad*.86,y0-pad*.47,
+   {"font-size":font,"font-weight":"700",
+    fill:"#e4f2fc","pointer-events":"none"},root);
  }
  // XY positions come from each projected gas-segment midpoint (not wires).
  // Radius is a DISPLAY symbol in global-cm viewBox, not a physical spot size.
@@ -488,6 +527,7 @@ $("event").onchange=e=>changeEvent(Number(e.target.value));
 $("track").onchange=e=>changeTrack(Number(e.target.value));
 $("criterion").onchange=e=>{state.criterion=e.target.value;renderHit()};
 $("wireScale").onchange=e=>{state.wireScale=e.target.value;renderHit()};
+$("xyGrid").onchange=e=>{state.xyGrid=Number(e.target.value);renderPlan()};
 $("anodeChoice").onchange=e=>{state.anodeWire=Number(e.target.value);renderAnodeSignal()};
 $("anodeThreshold").oninput=e=>{state.threshold=Number(e.target.value);renderHit()};
 $("prev").onclick=()=>changeEvent(state.ei-1);
