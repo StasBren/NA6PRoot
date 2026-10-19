@@ -74,7 +74,12 @@ button.action:hover{background:#294360}
 <div class="tag">NA60+ · MUON SPECTROMETER · STAGE C</div>
 <h1>Интерактивная карта MWPC-станций</h1>
 <p>Геометрия пересечений мюонов и сбор первичных электронов на отдельных анодах. Нажми на камеру, чтобы увидеть её профиль и пронумерованные проволоки.</p>
-<p style="margin-top:9px"><a href="pi_muon_track_explorer.html" style="color:#82dfde;font-weight:650" title="Сначала создайте офлайн Muon Track Explorer при помощи run_pi_muon_track_explorer.sh">Посмотреть путь отдельного мюона и сбор электронов по анодам → Muon Track Explorer</a></p>
+<p style="margin-top:9px">
+ <a href="pi_muon_track_explorer_native.html" style="color:#82dfde;font-weight:650" title="Настоящие хиты и энерговыделения нового Geant4, анодные сигналы. Создать: run_pi_native_anode_first_chunk.sh">→ Muon Track Explorer: новые реальные газовые хиты Geant4</a>
+ <span style="color:#9fb7c7;margin:0 9px">|</span>
+ <a href="pi_muon_track_explorer.html" style="color:#82dfde" title="Старый просмотр проекций мюонов на камеры: run_pi_muon_track_explorer.sh">→ Muon Track Explorer: исторические геометрические проекции</a>
+</p>
+<p style="font-size:11px">Эти два режима основаны на разных наборах событий; переход открывает соответствующую страницу, но не переносит выбор конкретного события.</p>
 </header>
 <div class="toolbar">
  <div class="field"><label for="source">Источник мюонов</label><select id="source"><option value="jpsi40-bore">J/ψ (40 AGeV)</option><option value="phi40-bore">φ (40 AGeV)</option><option value="omega40-bore">ω (40 AGeV)</option></select></div>
