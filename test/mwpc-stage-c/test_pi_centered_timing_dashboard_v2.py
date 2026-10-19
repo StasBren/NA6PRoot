@@ -69,7 +69,7 @@ def main():
         "b&&b.n>0",
         'click.addEventListener("click"',
         "НЕ траектория",
-        "Выбор камеры влияет на графики 2 и 4",
+        "выбор камеры влияет на графики 2 и 4",
     ]:
         if phrase not in html:
             raise AssertionError("Missing required PI plot feature: "+phrase)
