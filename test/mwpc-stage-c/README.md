@@ -1838,3 +1838,31 @@ not be silently replaced with gas-crossing tracks or generated events.
 The full run computes with existing ROOT files ONLY and performs NO
 Geant4 transportation, Garfield electron avalanche or cathode simulation.
 It may take a while to read all 201 saved chunks, but will resume safely.
+
+
+### Physics readout after the completed full native QA
+
+After running \`run_pi_native_full_qa.sh all\` through Omega chunk0067
+(the final chunk contains only **2,000**, not 3,000, generated events),
+run the independent **read-only** physics and conservation summary:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_native_qa_readout.sh
+
+It checks completion provenance and 894 chamber/18 station coverage,
+all 8 conditional histograms per chamber (7,152 independent spectra,
+including consistent zero-exposure handling), per-detector bin
+conservation, native muon/nonmuon count conservation, and the sums
+of chamber gas hits within each station. It separately reports unique
+gas-hitting muon tracks, real multi-module overlaps and repeated
+same-module hit segments. It writes the human-readable:
+
+    test_runs/mwpc_stage_c/pi_native_full_quality/pi_native_QA_readout.txt
+
+Share that small text file with the analysis assistant to interpret
+physical outliers and decide whether electron-drift-time and incidence
+angle binning matter. The readout is the next PHYSICS inspection, not
+yet a per-anode firing result. An Edep histogram by itself does not
+predict how many physical anodes collect Heed electrons, and a generated
+event is not necessarily an incoming muon at a specific station.
