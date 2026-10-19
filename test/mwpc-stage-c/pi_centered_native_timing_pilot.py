@@ -94,7 +94,8 @@ def born_on_segment(row,rng,lam,marks):
 def centered_endpoints(u,v,station,transport,rng):
     """Response-map electron endpoints for v in -3..+3, NEVER legacy +1mm."""
     if not len(u):
-        return np.empty(0,dtype=np.int64),np.empty(0),np.empty(0),0
+        return (np.empty(0,dtype=np.int64),np.empty(0),np.empty(0),0,
+                np.empty(0,dtype=bool))
     offsets,sizes,responses=transport
     n=n_wires(station)
     closest=nominal_wire_index(u,station,0.)
@@ -194,9 +195,9 @@ def build(args):
                 if key in seen:
                     raise ValueError(f"Duplicate real gas hit {source} {key}")
                 seen.add(key)
-                nrows+=1
-                if args.max_per_source and nrows>args.max_per_source:
+                if args.max_per_source and nrows>=args.max_per_source:
                     break
+                nrows+=1
                 st=int(row["station"]);det=int(row["det_id"])
                 if det not in GEOMETRY or GEOMETRY[det].station!=st:
                     raise ValueError(f"Unexpected physical chamber {source} {st=} {det=}")
