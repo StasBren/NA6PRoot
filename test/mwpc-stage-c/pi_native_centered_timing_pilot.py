@@ -192,7 +192,10 @@ def run(args):
                         for module in (-1,det):
                             for idx in (-1,abin):
                                 key=(source,st,module,axis,idx)
-                                bucket=containers.setdefault(key,fresh(module))
+                                bucket=containers.get(key)
+                                if bucket is None:
+                                    bucket=fresh(module)
+                                    containers[key]=bucket
                                 update(bucket,hit,mult,tbins,valid,cbins)
                     writer.writerow(dict(
                         source=source,chunk="chunk0001",event=event,hit_index=index,
