@@ -53,6 +53,10 @@ th:first-child,td:first-child{text-align:left}
 <div><label for="st">Станция</label><select id="st"></select></div>
 <div><label for="event">Выбрать мюон в камере — угол θu</label><select id="event"></select></div>
 <div><label for="threshold">Условный порог, мВ</label><input id="threshold" type="number" min="0.05" max="1000" step="0.5" value="5"/></div>
+<div><label for="timeRange">Масштаб времени сигналов</label>
+<select id="timeRange"><option value="400">0–400 нс</option>
+<option value="800" selected>0–800 нс</option><option value="1500">0–1500 нс</option>
+<option value="3000">0–3000 нс</option></select></div>
 </div>
 <div class="note" style="margin:0 max(16px,2.7vw) 15px">
 <strong>Как смотреть:</strong> нажми камеру на XY-карте → выбери один из имеющихся мюонов (различаются углами) → на диаграмме увидишь <span style="color:#5edacc">анод A</span>, <span style="color:#f8bc75">анод B</span> и <span style="color:#e89adb">их условную сумму</span>. Каждый отдельный анод имеет собственный усилитель и шум; сумма построена только для сравнения и <strong>не является реальным третьим каналом электроники</strong>. Порог влияет на подписи «сработал» и моменты пересечения, но не на сам шумный сигнал.
@@ -101,7 +105,7 @@ th:first-child,td:first-child{text-align:left}
 const D=JSON.parse(document.getElementById("twoWireData").textContent);
 const NS="http://www.w3.org/2000/svg", $=id=>document.getElementById(id);
 const srcNames={"jpsi40-bore":"J/ψ","phi40-bore":"φ","omega40-bore":"ω"};
-const C={src:D.sources[0],st:0,det:null,i:0,threshold:5};
+const C={src:D.sources[0],st:0,det:null,i:0,threshold:5,timeRange:800};
 const colors=["#5edacc","#f8bc75","#e89adb"];
 function svg(tag,attrs,parent){const n=document.createElementNS(NS,tag);for(const k in attrs)n.setAttribute(k,attrs[k]);if(parent)parent.append(n);return n}
 function tx(v,x,y,parent,attrs={}){const n=svg("text",Object.assign({x,y,fill:"#d3e6ef","font-size":12},attrs),parent);n.textContent=v;return n}
@@ -130,6 +134,7 @@ function renderControls(){
  select("event",opts.length?opts:[[-1,"В этой камере нет событий с двумя анодами"]],C.i);
  $("event").disabled=!opts.length;
  $("threshold").value=String(C.threshold);
+ $("timeRange").value=String(C.timeRange);
 }
 function renderMap(){
  const root=$("chamberMap");root.replaceChildren();
@@ -198,12 +203,16 @@ function waveform(v){
  const root=$("wave");root.replaceChildren();
  const a=v.anodes[0].samples_mV,b=v.anodes[1].samples_mV,
   sum=v.sumSamples_mV,step=D.meta.digitizer.sampling_ns,
-  tmax=(a.length-1)*step;
- const ymin=Math.min(-2,...a,...b,...sum)*1.12;
- const ymax=Math.max(C.threshold*1.07,2,...a,...b,...sum)*1.16;
+  tmax=Math.min(C.timeRange,(a.length-1)*step);
+ const samples=Math.floor(tmax/step)+1;
+ const visibleA=a.slice(0,samples),visibleB=b.slice(0,samples),
+       visibleSum=sum.slice(0,samples);
+ const ymin=Math.min(-2,...visibleA,...visibleB,...visibleSum)*1.12;
+ const ymax=Math.max(C.threshold*1.07,2,...visibleA,...visibleB,...visibleSum)*1.16;
  const x=t=>73+t*635/tmax,y=p=>294-217*(p-ymin)/(ymax-ymin);
- const xTicks=[0,500,1000,1500,2000,2500,3000]
-  .filter(t=>t<=tmax).map(t=>[t,String(t)]);
+ const gridStep=tmax<=400?50:tmax<=800?100:tmax<=1500?250:500;
+ const xTicks=Array.from({length:Math.floor(tmax/gridStep)+1},
+   (_,i)=>[i*gridStep,String(i*gridStep)]);
  const yTicks=Array.from({length:5},(_,i)=>{
   const val=ymin+(ymax-ymin)*i/4;return [val,val.toFixed(1)];
  });
@@ -212,7 +221,7 @@ function waveform(v){
  // Physically separate two channels, plus illustrative arithmetic sum.
  [[a,colors[0],"",2],[b,colors[1],"",2],
   [sum,colors[2],"6 4",2.1]].forEach(([wave,color,dash,width])=>{
-  const points=wave.map((n,i)=>x(i*step)+","+y(n)).join(" ");
+  const points=wave.slice(0,samples).map((n,i)=>x(i*step)+","+y(n)).join(" ");
   polyline(root,points,color,width,dash);
  });
  const ty=y(C.threshold);
@@ -349,6 +358,7 @@ $("threshold").onchange=e=>{
  const t=Number(e.target.value);
  if(Number.isFinite(t)&&t>0&&t<=1000){C.threshold=t;render()}
 };
+$("timeRange").onchange=e=>{C.timeRange=Number(e.target.value);render()};
 render();
 })();
 </script></body></html>
