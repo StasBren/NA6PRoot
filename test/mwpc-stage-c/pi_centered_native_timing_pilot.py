@@ -144,6 +144,20 @@ def consume(a,wire,times,urel,v,w,ncl,nprimary,lost):
         raise AssertionError("Every timing gate needs the same gas-hit denominator")
 
 
+def accumulate(aggregate,packet):
+    """Combine one physically sampled Geant4 gas hit without resampling it."""
+    for key in ("gas_hits","clusters","primary_electrons",
+                "collected_electrons","valid_drift_times",
+                "unknown_drift_times","edge_lost_electrons"):
+        aggregate[key]+=packet[key]
+    aggregate["t"]+=packet["t"]
+    for axis in ("u","v","w"):
+        aggregate["coord"][axis]+=packet["coord"][axis]
+    aggregate["multi"]+=packet["multi"]
+    if np.any(aggregate["multi"].sum(axis=1)!=aggregate["gas_hits"]):
+        raise AssertionError("Multi-source aggregate denominators not conserved")
+
+
 def serialize(a):
     if int(a["t"].sum())!=a["valid_drift_times"]:
         raise AssertionError("Unaccounted known electron arrival times")
@@ -175,7 +189,6 @@ def build(args):
     transport=read_garfield(args.garfield)
     aggregated={}
     counts={}
-    unique=[]
     for source in SOURCES:
         nvalid=0
         nrows=0
@@ -219,15 +232,24 @@ def build(args):
                     urel=np.empty(0)
                     vgood=wgood=np.empty(0)
                     lost=0
+                # Simulate each true Geant4 hit EXACTLY ONCE, then copy
+                # its already binned, correlated electron response into the
+                # four angle selections. No repeated ionisation/drift draw and
+                # no 12 repeated 2D histogram computations per hit.
+                packet=blank()
+                consume(packet,wire,times,urel,vgood,wgood,
+                        ncl,nprimary,lost)
                 nvalid+=1
                 for axis,theta_key in (("theta_u","theta_u_in_deg"),
                                        ("theta_w","theta_w_in_deg")):
                     abin=angle_index(float(row[theta_key]))
                     for chosen_bin in (-1,abin):
                         key=(source,st,axis,chosen_bin)
-                        bucket=aggregated.setdefault(key,blank())
-                        consume(bucket,wire,times,urel,vgood,wgood,
-                                ncl,nprimary,lost)
+                        bucket=aggregated.get(key)
+                        if bucket is None:
+                            bucket=blank()
+                            aggregated[key]=bucket
+                        accumulate(bucket,packet)
                 if nvalid%5000==0:
                     print(f"{source}: {nvalid:,} centered true gas-hit samples",
                           flush=True)
