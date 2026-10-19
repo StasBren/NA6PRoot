@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 from pi_centered_native_timing_pilot import (
     ANGLE_EDGES,angle_index,blank,born_on_segment,centered_endpoints,
-    consume,serialize,TIMES,
+    consume,serialize,TIMES,accumulate,
 )
 
 
@@ -66,6 +66,18 @@ def main():
     # the hit's two physical wires; the other hit has zero electrons.
     assert packed["multiplicity_counts"][0][0]==2
     assert packed["multiplicity_counts"][1][2]==1
+
+    # Same physical native hit is reused for multiple selections without
+    # fresh Garfield random draws, and every selection must conserve counts.
+    grouped=blank()
+    accumulate(grouped,a)
+    accumulate(grouped,a)
+    doubled=serialize(grouped)
+    assert doubled["gas_hits"]==4
+    assert doubled["valid_drift_times"]==6
+    assert all(sum(v)==4 for v in doubled["multiplicity_counts"])
+    assert all(sum(sum(row) for row in doubled["birth_vs_time"][key])==6
+               for key in ("u","v","w"))
 
     # Unknown Garfield arrival time may count for "all collected"
     # but must NOT be silently treated as a prompt electron.
