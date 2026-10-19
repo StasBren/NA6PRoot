@@ -48,6 +48,9 @@ for key,wanted in checks:
 # The underlying Garfield runner currently does not print its base seed.
 # Stamp a separate immutable seed token in the wrapper output directory.
 seal=log.parent/"pi_centered_run_config.json"
+if not seal.exists() and any((log.parent/"columns").glob("iu_*.csv")):
+    raise SystemExit("Cannot resume prior 3+3 Garfield columns with unverified base seed: "
+                     "move aside this directory for provenance, do not mix")
 if seal.exists():
     import json
     val=json.loads(seal.read_text())
