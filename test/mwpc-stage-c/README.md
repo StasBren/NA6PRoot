@@ -2068,3 +2068,67 @@ Birth-coordinate vs arrival time is NOT a true intermediate
 u(t)/v(t)/w(t) electron cloud; next stage needs microscopic Garfield
 drift trajectory snapshots. Attach the review ZIP and terminal output
 to the analysis assistant after a successful local run.
+
+
+### PI centered 3+3mm dashboard V2: click-on-XY instead of chamber dropdown
+
+After successful run of run_pi_native_centered_timing_pilot.sh, the pilot
+contains a FULL self-contained set of the actual initial-coordinate/time
+histograms and per-module wire multiplicities in the generated HTML.
+That entire 4.8MB original physics payload can be reused without
+running Geant4, Heed or Garfield again:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_centered_timing_dashboard_v2.sh
+
+The builder first validates 298 physical chamber positions and that all
+source/station/module/angle/time-bin gas hit counts are conserved.
+It then only changes visualization, writing:
+
+    test_runs/mwpc_stage_c/pi_fixed_wire_maps/
+      pi_centered_timing_dashboard_v2.html
+
+No original source CSV/HTML, primary electron response, truth events or
+model manifest is modified. The old PI viewer is preserved separately.
+
+Changes explicitly requested by the PI/researcher:
+
+- Select a physical DET by CLICKING its actual XY chamber rectangle
+  (visible global X/Y in cm, axes/ticks and module IDs). A separate
+  "All chambers" button restores the station-total view; each camera is
+  colored by the 100ns P(N>=2) for the current muon angle selection.
+- Signed entrance muon theta_u or theta_w selector now lists ONLY bins
+  with >0 native gas-hit exposures in the selected source, station and
+  module, including their sample sizes. Selection of an empty bin resets
+  to a known available all-angles view.
+- Initial electron coordinates clearly defined: u_cell relative to
+  nearest wire, full local u across active camera, local v from -3mm
+  cathode to +3mm cathode with anode at v=0, and w along wire.
+- Instead of an unexplained RAW COUNT heatmap, show independently
+  normalized one-dimensional P(birth_coordinate_bin | Garfield
+  electron ARRIVAL time interval), with 5 colored 1D lines for
+  t_drift=0-20,20-40,40-60,60-100,>=100ns. Each curve integrates to 100%
+  over the plotted coordinate bins for that time band (conditional on
+  collected electrons with known drift-time). THIS IS NOT P(u(t)):
+  the true moving-cloud position snapshots still need a Garfield
+  trajectory recorder.
+- Existing source only stored electron coordinate/time correlations
+  aggregated over the STATION and signed MUON ANGLE, not each module.
+  Therefore the V2 coordinate plot explicitly says the DET selection
+  DOES NOT change it. Module selection DOES change the time distribution
+  and anode-multiplicity charts. This deliberate visibility prevents
+  the previous silent mixing of selection scopes.
+- Active-anode multiplicity chart has auto-zoomed Y axis (% of real
+  native gas-hit segments) and the physical formula: distinct finite
+  physical anodes receiving >=1 collected primary electron before T,
+  never primary-electron count nor ASIC threshold crossing. Zero-hit
+  tracks/hits are retained. Table rows display complete mutually
+  exclusive P0,P1,P2,P3,P4,P5+ and sum P>=2.
+- ALL SVG plots now label X and Y axes with units. Screen captures
+  remain reproducible in original global XY frame and angular binnings.
+
+The second requirement, the future p=3,3.5,4mm anode *pitch* sweep, is
+separate from this visualization fix and still requires a new
+Garfield electric-field calculation at each pitch. Do not fake it from
+this single p=4mm response.
