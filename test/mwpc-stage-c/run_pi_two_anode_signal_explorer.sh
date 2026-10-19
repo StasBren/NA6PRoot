@@ -21,6 +21,23 @@ echo "Replaying representative N_all=2 native Geant4 muon hits by source/chamber
 echo "NO new Geant4, ROOT or microscopic Garfield simulation."
 python3 "$HERE/pi_native_two_anode_signal_explorer.py" "$@"
 OUTPUT="$REPO/test_runs/mwpc_stage_c/pi_fixed_wire_maps/pi_two_anode_signal_explorer.html"
+python3 - "$REPO" <<'PY'
+from pathlib import Path
+from zipfile import ZipFile,ZIP_DEFLATED
+import sys
+directory=Path(sys.argv[1])/"test_runs/mwpc_stage_c/pi_fixed_wire_maps"
+parts=("pi_two_anode_signal_explorer.html",
+       "pi_two_anode_event_catalog.csv",
+       "pi_two_anode_signal_explorer_manifest.json")
+archive=directory/"pi_two_anode_PI_review.zip"
+with ZipFile(archive,"w",ZIP_DEFLATED,compresslevel=6) as out:
+    for name in parts:
+        p=directory/name
+        if not p.is_file():
+            raise FileNotFoundError(p)
+        out.write(p,arcname=name)
+print("PI review archive:",archive)
+PY
 echo "PASS: two separate physical anode readouts + illustrative sum, pulse times, XY/angle/event selector"
 echo "OPEN: $OUTPUT"
 if command -v wslpath >/dev/null 2>&1; then
