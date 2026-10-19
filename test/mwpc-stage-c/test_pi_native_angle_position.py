@@ -25,6 +25,12 @@ def main():
                 for c in chambers:
                     w.writerow(dict(source=src,station=c.station,
                                     det_id=c.det_id,gas_hit_rows=3))
+        with (root/"pi_native_all_station_quality.csv").open("w",newline="") as stream:
+            w=csv.DictWriter(stream,fieldnames=("source","station","gas_hit_rows"))
+            w.writeheader()
+            for src in SOURCES:
+                for st,group in enumerate(build_chambers()):
+                    w.writerow(dict(source=src,station=st,gas_hit_rows=3*len(group)))
         fields=("source","det_id","variable","bin_lower","bin_upper",
                 "hit_count","gas_hit_exposure")
         with (root/"pi_native_all_histograms.csv").open("w",newline="") as stream:
