@@ -119,10 +119,13 @@ function renderControls(){
  select("src",D.sources.map(s=>[s,srcNames[s]]),C.src);
  select("st",[0,1,2,3,4,5].map(x=>[x,"MS"+x]),C.st);
  getFirstChamber();
- const opts=examples(C.det).map((v,i)=>[i,
-  "θu "+v.thetaU.toFixed(2)+"° · θw "+v.thetaW.toFixed(2)+
+ const opts=examples(C.det).map((v,i)=>{
+  const twoFired=v.anodes.every(a=>a.samples_mV.some(x=>x>=C.threshold));
+  return [i,"θu "+v.thetaU.toFixed(2)+"° · θw "+v.thetaW.toFixed(2)+
   "° · e"+v.event+" / track "+v.track+" · Δt="+
-  (v.deltaFirstElectron_ns===null?"неизв.":v.deltaFirstElectron_ns.toFixed(1)+" нс")]);
+  (v.deltaFirstElectron_ns===null?"неизв.":v.deltaFirstElectron_ns.toFixed(1)+" нс")+
+  (twoFired?" · ОБА канала > порога":" · первичный заряд на двух анодах")];
+ });
  if(C.i>=opts.length)C.i=0;
  select("event",opts.length?opts:[[-1,"В этой камере нет событий с двумя анодами"]],C.i);
  $("event").disabled=!opts.length;
@@ -221,6 +224,11 @@ function waveform(v){
  const f1=thresholdFeature(a,step,C.threshold),
   f2=thresholdFeature(b,step,C.threshold),
   fsum=thresholdFeature(sum,step,C.threshold);
+ const firedBoth=f1.fired&&f2.fired;
+ tx(firedBoth?"ОБА независимых канала > порога":
+    "Внимание: только сбор на 2 анода, НЕ два электронных срабатывания",
+    704,46,root,{"text-anchor":"end","font-size":11,
+    fill:firedBoth?"#8ce6cc":"#fbc999"});
  const results=[f1,f2].map((r,i)=>
   "анод "+v.wires[i]+": "+(r.fired?"порог в "+r.t.toFixed(0)+" нс":"порог НЕ пересечён"));
  $("compare").textContent=results.join("; ")+
@@ -306,8 +314,13 @@ function gallery(){
   ["Почти нормальный",0,3],["Умеренный угол",3,10],["Сильно наклонный",10,180]
  ]){
   const matching=allEvent.filter(v=>Math.abs(v.thetaU)>=lo&&Math.abs(v.thetaU)<hi)
-   .sort((a,b)=>Math.abs(Math.abs(a.thetaU)-(lo+Math.min(hi,20))/2)-
-               Math.abs(Math.abs(b.thetaU)-(lo+Math.min(hi,20))/2));
+   .sort((a,b)=>{
+      const firedA=a.anodes.every(w=>w.samples_mV.some(x=>x>=C.threshold));
+      const firedB=b.anodes.every(w=>w.samples_mV.some(x=>x>=C.threshold));
+      if(firedA!==firedB)return firedA?-1:1;
+      const mid=(lo+Math.min(hi,20))/2;
+      return Math.abs(Math.abs(a.thetaU)-mid)-Math.abs(Math.abs(b.thetaU)-mid);
+   });
   const button=document.createElement("button");
   if(!matching.length){button.disabled=true;button.textContent=name+" — нет примеров";}
   else{
