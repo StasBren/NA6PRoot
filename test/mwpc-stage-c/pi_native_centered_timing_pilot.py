@@ -123,7 +123,11 @@ def run(args):
             raise FileNotFoundError(f"Missing pipeline input: {p}")
     pool,field=load_centered_map(args.garfield,args.manifest)
     lam,marks=read_heed(args.heed_tracks,args.heed_clusters)
-    containers={}
+    # Explicitly preserve all 18 source×station exposures, even where
+    # a tiny pilot source contains no gas hit at a given station.
+    containers={(src,st,-1,axis,-1):fresh(-1)
+                for src in SOURCES for st in range(6)
+                for axis in ("u","w")}
     hit_totals={}
     args.out.mkdir(parents=True,exist_ok=True)
     detailed=args.out/"pi_centered_native_hit_multiplicities.csv"
