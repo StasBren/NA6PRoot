@@ -306,8 +306,8 @@ function gallery(){
   ["Почти нормальный",0,3],["Умеренный угол",3,10],["Сильно наклонный",10,180]
  ]){
   const matching=allEvent.filter(v=>Math.abs(v.thetaU)>=lo&&Math.abs(v.thetaU)<hi)
-   .sort((a,b)=>Math.abs((a.thetaU+b.thetaU)/2-(lo+Math.min(hi,20))/2)-
-               Math.abs((b.thetaU+a.thetaU)/2-(lo+Math.min(hi,20))/2));
+   .sort((a,b)=>Math.abs(Math.abs(a.thetaU)-(lo+Math.min(hi,20))/2)-
+               Math.abs(Math.abs(b.thetaU)-(lo+Math.min(hi,20))/2));
   const button=document.createElement("button");
   if(!matching.length){button.disabled=true;button.textContent=name+" — нет примеров";}
   else{
