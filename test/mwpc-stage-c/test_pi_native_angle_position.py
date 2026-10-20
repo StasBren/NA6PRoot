@@ -52,6 +52,12 @@ def main():
         html=out.read_text(encoding="utf-8")
         marker='<script id="angleData" type="application/json">'
         payload=json.loads(html.split(marker,1)[1].split("</script>",1)[0])
+        # A signed-negative selection is available with NO new native export.
+        # Opening the local map must show all gas hits, not an empty filter.
+        assert '<option value="negative">P(θ &lt; 0°)</option>' in html
+        assert '<option value="all" selected>' in html
+        assert 'metric:"far10",det:null,localMode:"all"' in html
+        assert 'addSparse(m.selected[S.angle].positive,-1)' in html
         assert len(payload["geometry"])==298
         assert len(payload["module"])==3
         assert len(payload["module"][SOURCES[0]])==298
@@ -84,6 +90,12 @@ def main():
         assert joined["local"]["modules"][SOURCES[0]]["0"]["all"]==[
             [0,1],[1,2]]
         assert joined["module"][SOURCES[0]]["0"]["n"]==3
+        local_module=joined["local"]["modules"][SOURCES[0]]["0"]
+        all_count=sum(v for _,v in local_module["all"])
+        nonnegative_count=sum(v for _,v in local_module["selected"]
+                              ["theta_u_in_deg"]["positive"])
+        assert all_count==3 and nonnegative_count==1
+        assert all_count-nonnegative_count==2
         assert joined["local"]["modules"][SOURCES[2]]["278"][
             "selected"]["theta_u_in_deg"]["near2"]==[[0,1],[1,2]]
         local_data["meta"]["scope"]="FULL_201_CHUNKS_200000_EVENTS_PER_SOURCE"
