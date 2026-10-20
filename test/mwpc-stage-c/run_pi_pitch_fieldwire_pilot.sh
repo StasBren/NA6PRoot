@@ -47,12 +47,43 @@ fi
 if [[ -d "$GARFIELD_PREFIX/lib64" ]]; then
   export LD_LIBRARY_PATH="$GARFIELD_PREFIX/lib64:${LD_LIBRARY_PATH:-}"
 fi
-if command -v root-config >/dev/null 2>&1; then
-  ROOT_LIBDIR="$(root-config --libdir)"
-  if [[ -d "$ROOT_LIBDIR" ]]; then
-    export LD_LIBRARY_PATH="$ROOT_LIBDIR:${LD_LIBRARY_PATH:-}"
-  fi
+# ROOT's root-config may not be in PATH even when ROOT is installed.
+# On this Stage-C workstation, ROOT is under ~/na6p/install/root/lib.
+# Resolve the real libraries directly rather than trusting PATH alone.
+ROOT_LIBDIR=""
+ROOT_CANDIDATES=()
+if [[ -n "${NA6P_ROOT_LIBDIR:-}" ]]; then
+  ROOT_CANDIDATES+=("$NA6P_ROOT_LIBDIR")
 fi
+if [[ -n "${ROOTSYS:-}" ]]; then
+  ROOT_CANDIDATES+=("$ROOTSYS/lib" "$ROOTSYS/lib64")
+fi
+ROOT_CANDIDATES+=(
+  "$HOME/na6p/install/root/lib"
+  "$HOME/na6p/install/root/lib64"
+)
+if command -v root-config >/dev/null 2>&1; then
+  ROOT_CANDIDATES+=("$(root-config --libdir)")
+elif [[ -x "$HOME/na6p/install/root/bin/root-config" ]]; then
+  ROOT_CANDIDATES+=("$("$HOME/na6p/install/root/bin/root-config" --libdir)")
+fi
+for CANDIDATE in "${ROOT_CANDIDATES[@]}"; do
+  if [[ -f "$CANDIDATE/libRIO.so" &&
+        -f "$CANDIDATE/libTree.so" &&
+        -f "$CANDIDATE/libCore.so" ]]; then
+    ROOT_LIBDIR="$(cd "$CANDIDATE" && pwd -P)"
+    break
+  fi
+done
+if [[ -z "$ROOT_LIBDIR" ]]; then
+  echo "ERROR: ROOT shared libraries (libRIO/libTree/libCore) not found." >&2
+  echo "Searched ROOT library dirs:" >&2
+  printf '  %s\\n' "${ROOT_CANDIDATES[@]}" >&2
+  echo "Set NA6P_ROOT_LIBDIR=/absolute/path/to/root/lib if needed." >&2
+  exit 127
+fi
+export LD_LIBRARY_PATH="$ROOT_LIBDIR:${LD_LIBRARY_PATH:-}"
+echo "ROOT runtime libraries: $ROOT_LIBDIR"
 cmake -S "$HERE" -B "$HERE/build" \
   -DGarfield_DIR="$HOME/na6p/install/garfieldpp/lib/cmake/Garfield"
 cmake --build "$HERE/build" -j4 \
@@ -70,7 +101,7 @@ if [[ -n "$UNRESOLVED" ]]; then
   echo "ERROR: Garfield shared libraries unresolved:" >&2
   echo "$UNRESOLVED" >&2
   echo "Garfield setup: $GARFIELD_SETUP" >&2
-  echo "ROOT runtime libdir: ${ROOT_LIBDIR:-not found via root-config}" >&2
+  echo "ROOT runtime libdir: $ROOT_LIBDIR" >&2
   exit 127
 fi
 echo "NEW Garfield physics calculation: six independent configs."
