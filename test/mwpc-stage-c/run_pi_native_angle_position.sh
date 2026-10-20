@@ -9,6 +9,7 @@ python3 -m py_compile "$HERE/pi_native_angle_position.py" \
     "$HERE/test_pi_native_angle_position.py"
 python3 "$HERE/test_pi_native_angle_position.py"
 python3 "$HERE/pi_native_angle_position.py"
+python3 "$HERE/refresh_pi_dashboard_navigation.py"
 OUT="$REPO/test_runs/mwpc_stage_c/pi_fixed_wire_maps/pi_native_angle_position.html"
 echo "PASS: full Geant4 muon angle vs module position:"
 echo "  $OUT"
