@@ -2436,9 +2436,9 @@ NEW microscopic Garfield simulation for the PI's six electrode arrangements:
     cd ~/na6p/src/NA6PRoot-mwpc
     git switch feature/mwpc-stage-c
     git pull --ff-only
-    bash test/mwpc-stage-c/run_pi_pitch_fieldwire_pilot.sh smoke 100 2
+    bash test/mwpc-stage-c/run_pi_pitch_fieldwire_pilot.sh smoke 75 2
 
-Here **100 um is an explicitly chosen provisional field-wire DIAMETER**, not
+Here **75 um is the selected field-wire DIAMETER for this study**, not
 a verified mechanical design requirement. Confirm actual field-wire diameter
 and HV with the PI before committing to physically calibrated production.
 Field wires are halfway between adjacent +1800 V anodes at potential 0 V;
@@ -2453,15 +2453,15 @@ It creates its own immutable namespace:
     test_runs/mwpc_stage_c/pi_pitch_fieldwire_pilot_v1/smoke/
       all_six_configurations.json
       p3p0_anode_only/
-      p3p0_field100p0um/
+      p3p0_field75p0um/
       p3p5_anode_only/
-      p3p5_field100p0um/
+      p3p5_field75p0um/
       p4p0_anode_only/
-      p4p0_field100p0um/
+      p4p0_field75p0um/
 
 Only after smoke succeeds, a moderate all-unit-cell pilot can be launched:
 
-    bash test/mwpc-stage-c/run_pi_pitch_fieldwire_pilot.sh pilot 100 20
+    bash test/mwpc-stage-c/run_pi_pitch_fieldwire_pilot.sh pilot 75 20
 
 This uses the FULL wire pitch in u, -3...+3 mm cathode gap in v,
 du=0.1 mm, dv=0.2 mm; 30/35/40 u bins for p=3/3.5/4mm.
@@ -2481,3 +2481,13 @@ comparison. The last-step incidence angle is a microscopic transport proxy,
 not a clean field-line angle nor a reconstructed ASIC pulse angle. Results are
 not absolute NA60+ response until wire diameters, voltages, gas, B, finite
 anode aperture and source muon acceptance are confirmed.
+
+Loader diagnostic for native C++ Garfield runtime: this wrapper now sources
+the local Garfield setup, includes Garfield and ROOT library directories in
+LD_LIBRARY_PATH, and runs ldd before launching electrons. Failure code 127
+indicates a runtime loader or shell-execution problem, not a Garfield physics
+result. The Python driver prints the last 45 lines of each failed column log.
+If a prior failed attempt left a frozen manifest but no completed CSV columns,
+the old manifest is archived automatically on retry after a driver update.
+Completed microscopic output is never silently reused across incompatible
+physics configurations or deleted.
