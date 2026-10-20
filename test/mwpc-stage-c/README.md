@@ -2324,4 +2324,3 @@ and intermediate local grid data:
 
 There is no Geant4 gas re-simulation, no Heed, no Garfield/charge
 drift/electronics or cathode-strip model in either local mode.
-;
