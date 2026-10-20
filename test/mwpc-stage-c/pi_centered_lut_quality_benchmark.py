@@ -30,22 +30,27 @@ def assess(pool, bootstrap=200):
     for bid in range(pool.shape[0]):
         hit = pool[bid]
         collected = hit[:, 0] == 1
-        good = hit[collected, 2]
-        if not np.all(np.isfinite(good)) or np.any(good < 0):
-            raise ValueError(f"Invalid collected drift times at box {bid}")
+        valid_time = np.isfinite(hit[:, 2]) & (hit[:, 2] >= 0)
+        good = hit[collected & valid_time, 2]
         measured = stats(good, seed=180019+bid, replicates=bootstrap)
         # Symmetric splitting into independent sample-index halves diagnoses
         # sensitivity to finite trials; no fabricated event correlations.
         half = len(hit) // 2
         first = hit[:half]
         second = hit[half:]
-        ta = first[first[:, 0] == 1, 2]
-        tb = second[second[:, 0] == 1, 2]
+        ta = first[(first[:, 0] == 1) &
+                   np.isfinite(first[:, 2]) & (first[:, 2] >= 0), 2]
+        tb = second[(second[:, 0] == 1) &
+                    np.isfinite(second[:, 2]) & (second[:, 2] >= 0), 2]
         mean_delta = (float(abs(np.mean(ta)-np.mean(tb)))
                       if len(ta) and len(tb) else None)
         rows.append({
-            "box_id": bid, "n_trials": len(hit), "n_collected": len(good),
-            "collection_fraction": len(good) / len(hit),
+            "box_id": bid, "n_trials": len(hit),
+            "n_collected": int(np.count_nonzero(collected)),
+            "n_collected_with_known_time": len(good),
+            "n_collected_unknown_time":
+                int(np.count_nonzero(collected))-len(good),
+            "collection_fraction": float(np.mean(collected)),
             "mean_drift_ns": measured["mean"],
             "rms_drift_ns": measured["rms"],
             "mean_stat_error_ns": measured["mean_error"],
@@ -129,6 +134,8 @@ def run(lut, manifest, out, n_electrons=300000, batch=15000, bootstrap=200):
             sum(row["insufficient_collected_n_lt_10"] for row in rows),
         "total_garfield_trials": sum(row["n_trials"] for row in rows),
         "total_collected_trials": sum(row["n_collected"] for row in rows),
+        "total_collected_with_known_time":
+            sum(row["n_collected_with_known_time"] for row in rows),
         "mean_collection_fraction_uniform_boxes":
             sum(row["collection_fraction"] for row in rows)/len(rows),
         "in_memory_benchmark": performance,
