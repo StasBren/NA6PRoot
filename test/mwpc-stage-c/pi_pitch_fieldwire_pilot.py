@@ -46,6 +46,12 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def same_physics_manifest(old, current):
+    """Source-only reporting changes do not alter microscopic Garfield data."""
+    return ({k: v for k, v in old.items() if k != "runner_sha256"} ==
+            {k: v for k, v in current.items() if k != "runner_sha256"})
+
+
 def tag(pitch, fw):
     return f"p{pitch:.1f}".replace(".", "p") + (
         f"_field{fw:.1f}um".replace(".", "p") if fw else "_anode_only")
@@ -230,14 +236,9 @@ def config(pitch, fw, mode, samples, seed, binary, output):
     columns.mkdir(exist_ok=True)
     if manifest.is_file():
         old = json.loads(manifest.read_text(encoding="utf-8"))
-        # The source hash of the orchestration/analysis script does NOT
-        # define the Garfield physics model. Preserve it for provenance,
-        # but do not invalidate completed microscopic drifts when only
-        # reporting, benchmarking or checkpoint bookkeeping changes.
-        # Physics-critical CPP/binary/grid/HV/gas/seeds remain immutable.
-        physics_identity = lambda d: {
-            k: v for k, v in d.items() if k != "runner_sha256"}
-        if physics_identity(old) != physics_identity(fingerprint):
+        # Report-only script edits may change the runner hash, while
+        # CPP/binary/grid/HV/gas/seeds define frozen Garfield physics.
+        if not same_physics_manifest(old, fingerprint):
             if any(columns.glob("iu_*.csv")):
                 # Protect completed microscopic Garfield physics data.
                 raise ValueError(
