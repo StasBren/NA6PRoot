@@ -2256,3 +2256,72 @@ acceptance, electronics efficiency or full 201-chunk response statistics.
 The new Garfield trajectory mode and HTML require first local execution
 in WSL; do not claim the scientific outputs are finished merely because
 their code exists in GitHub.
+
+
+### Geant4 native angular XY dashboard: selected-chamber local u-w + 1D projections
+
+The existing full Geant4 **global XY angular** station dashboard is
+extended with local gas-hit midpoint maps of whichever chamber is
+selected by clicking its global rectangle (or selecting its DET ID).
+The local panel is *u-w*, NOT u-v:
+- u across wires, in mm (full gas half-width 153.6mm in MS0, otherwise
+  256mm); w along wires (full gas half-width 332.8mm);
+- explicit axes/ticks and physical gas boundaries; central (0,0),
+  physical 4mm wire-pitch reference marks (every 8th wire drawn);
+- modes: nominal local chamber geometry, all native muon gas-hit
+  midpoints, and gas-hit midpoints with the existing active angular
+  selector (signed theta_u/ theta_w in/out and positive / |theta|>=10 /
+  |theta|<2 cut);
+- 16x24 two-dimensional *native gas hit segment count per local bin*
+  histogram, with its u and w one-dimensional projections in native
+  gas-hit segments per coordinate bin (not primary electrons, not
+  detector efficiency, not unique throughgoing muon count).
+
+The global XY, complete 200k-event Geant4 angular dashboard remains
+unchanged in physics. The local maps require extra actual TGeo-local
+hit entrance/exit u,w that the existing full QA histograms do NOT
+retain. Their input is exclusively MCKine-linked native GEANT4 gas
+hit export, with u_mid=(u_in+u_out)/2 and w_mid=(w_in+w_out)/2.
+Their validity definitions are identical to saved QA: finite
+in/out u/w signed angles, Edep>=0, gas length>0, muon PDG=+/-13.
+Overlaps and repeated same-module segments count separately.
+
+**Fast preview (no ROOT re-export, 3000 events/source)**:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_native_local_uw.sh first
+
+This uses existing native_exports/*.csv. The page's full-source
+angular map STILL uses 200k generated events/channel; the local
+u-w occupancy and u/w projections explicitly say PILOT 3000
+generated events/channel. Mixing full and pilot scopes under an
+undisclosed legend is prohibited.
+
+**Full source (read-only 201 native Geant4 ROOT chunks, resumable):**
+
+    bash test/mwpc-stage-c/run_pi_native_local_uw.sh all
+
+This DOES NOT rerun Geant4 or Garfield. It runs the known working
+ROOT native hit exporter on each saved chunk; independent per-chunk
+immutable-code+file-stat checkpoints are written in
+test_runs/mwpc_stage_c/pi_native_local_uw_density/checkpoints.
+The combined per-detector valid muon-hit n and all 4 signed
+angle histograms are required to match the existing independent
+complete pi_native_full_quality QA exactly, before the dashboard
+can claim FULL local source coverage. Interruptions can resume via
+the same command; a changed exporter/aggregator or input chunk
+requires a clean new --out directory.
+
+Output updated in place:
+
+    test_runs/mwpc_stage_c/pi_fixed_wire_maps/pi_native_angle_position.html
+
+and intermediate local grid data:
+
+    test_runs/mwpc_stage_c/pi_native_local_uw_density/
+      pi_native_local_uw_density.json
+
+There is no Geant4 gas re-simulation, no Heed, no Garfield/charge
+drift/electronics or cathode-strip model in either local mode.
+;
