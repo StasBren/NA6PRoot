@@ -47,7 +47,7 @@ def main():
                         "v_center_mm":-3+(iv+.5)*.2,
                         "collected":int(c),
                         "field_wire_collected":int(field),
-                        "field_wire_index":iv if field else 999999,
+                        "field_wire_index":0 if field else 999999,
                         "drift_time_ns":10+iv if c else "nan",
                         "phi_hit_deg":30 if c else "nan",
                         "incidence_normal_deg":30+iv if c else "nan",
