@@ -217,3 +217,21 @@ field-wire scan, realistic memory/CPU profiling, and ultimately the new
 2,000,000 generated parent events/source must follow this preflight.
 Do not extend the original 200k/source suite: use a new frozen suite and
 a fresh benchmark/smoke before long production.
+
+### Field-wire diameter set for the initial comparison (2026-10-20)
+
+The user selected **75 micrometers** as the field-wire diameter for
+all p=3.0/3.5/4.0 mm configurations that include grounded midpoint
+field wires. This is a fixed input for the present comparison; the
+anode-only controls retain zero field wires. Anode wire diameter remains
+30 micrometers. Nominal field-wire potential is 0 V, and anode potential
+is +1800 V. Geometry and exact voltages should still be confirmed
+against the eventual mechanical/electronics configuration before final
+detector-efficiency claims.
+
+The first new Garfield-only smoke run reached the binary invocation but
+failed with exit 127. The C++ target compiled successfully. This does
+NOT imply a physical Garfield transport failure. The runner now activates
+Garfield/ROOT runtime libraries and diagnoses ELF shared dependencies
+with ldd. The exact original loader error must be read from
+columns/iu_015.log before asserting its cause.
