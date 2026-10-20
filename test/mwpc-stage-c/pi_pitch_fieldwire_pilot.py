@@ -121,7 +121,7 @@ def save_column_timing(dest, seconds, n_electrons):
         "measurement": "subprocess.run Garfield including process startup",
     }
     sidecar = dest.with_suffix(".timing.json")
-    temp = sidecar.with_suffix(".timing.json.tmp")
+    temp = sidecar.with_name(sidecar.name + ".tmp")
     temp.write_text(json.dumps(info, indent=2)+"\n", encoding="utf-8")
     os.replace(temp, sidecar)
 
@@ -230,7 +230,14 @@ def config(pitch, fw, mode, samples, seed, binary, output):
     columns.mkdir(exist_ok=True)
     if manifest.is_file():
         old = json.loads(manifest.read_text(encoding="utf-8"))
-        if old != fingerprint:
+        # The source hash of the orchestration/analysis script does NOT
+        # define the Garfield physics model. Preserve it for provenance,
+        # but do not invalidate completed microscopic drifts when only
+        # reporting, benchmarking or checkpoint bookkeeping changes.
+        # Physics-critical CPP/binary/grid/HV/gas/seeds remain immutable.
+        physics_identity = lambda d: {
+            k: v for k, v in d.items() if k != "runner_sha256"}
+        if physics_identity(old) != physics_identity(fingerprint):
             if any(columns.glob("iu_*.csv")):
                 # Protect completed microscopic Garfield physics data.
                 raise ValueError(
@@ -323,6 +330,7 @@ def config(pitch, fw, mode, samples, seed, binary, output):
                     o.write(line)
     os.replace(temporary, combined)
     result = summarise(combined, pitch, fw, mode, samples)
+    result["analysis_runner_sha256"] = digest(Path(__file__))
     result["column_wall_times"] = observations
     result["columns_missing_measured_wall_time"] = unknown_column_times
     result["garfield_wall_seconds_per_electron"] = mean_rms(
