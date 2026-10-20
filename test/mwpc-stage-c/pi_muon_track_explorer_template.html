@@ -56,13 +56,31 @@ button:disabled{opacity:.35;cursor:not-allowed}
 @media(max-width:1050px){.layout,.two{grid-template-columns:1fr}.stations{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:550px){.stations{grid-template-columns:repeat(2,1fr)}.controls{gap:8px}#plan{height:370px}}
 </style>
+<style id="pi-latest-nav-style">
+.pi-latest-nav{display:flex;flex-wrap:wrap;align-items:center;gap:7px 9px;
+margin:14px 0 3px;padding:10px;border:1px solid #536e80;border-radius:9px;
+background:rgba(9,31,47,.75);font:12px/1.4 system-ui,"Segoe UI",sans-serif}
+.pi-latest-nav .pi-latest-name{font-weight:750;color:#d4eaf3;margin-right:9px}
+.pi-latest-nav a,.pi-latest-nav .pi-latest-active{display:inline-block;
+padding:7px 10px;border:1px solid #547a91;border-radius:6px;
+text-decoration:none;color:#d1f7f2;background:rgba(35,66,81,.7)}
+.pi-latest-nav a:hover{border-color:#84eee3;color:#fff}
+.pi-latest-nav .pi-latest-active{font-weight:750;color:#071f2c;
+background:#85e5d6;border-color:#85e5d6}
+</style>
 </head>
 <body>
 <header>
 <div class="kicker">NA60+ · DI-CE MWPC · EVENT DISPLAY</div>
 <h1>Muon Track Explorer</h1>
 <p id="dataExplanation">Один мюон и его газовые пересечения. Heed/Garfield — одна независимая симуляция первичной ионизации и сбора электронов по анодам.</p>
-<a href="pi_station_interactive.html">← Вернуться к статистическим картам станций</a> · <a href="pi_native_drift_times.html" title="Построить сначала: run_pi_native_drift_times.sh">Графики распределения времени дрейфа к анодам →</a>
+<nav class="pi-latest-nav" aria-label="Актуальные dashboard NA60+">
+<span class="pi-latest-name">NA60+ / PI</span>
+<a href="pi_latest_dashboards.html">Обзор</a>
+<a href="pi_native_angle_position.html">Геометрия и углы · XY / u–w</a>
+<a href="pi_centered_timing_dashboard_v2.html">Время дрейфа и кратность</a>
+<a href="pi_two_anode_electron_explorer.html">Один мюон · два анода</a>
+</nav>
 </header>
 <div class="controls">
  <div><label for="source">Канал</label><select id="source"></select></div>
