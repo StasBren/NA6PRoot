@@ -25,7 +25,7 @@ FIELDS=("theta_u_in_deg","theta_w_in_deg",
 NBIN=len(ANGLE)-1
 
 
-def build(input_dir,out,template):
+def build(input_dir,out,template,local_file=None):
     qa=json.loads((input_dir/"pi_native_all_QA_report.json").read_text(encoding="utf-8"))
     if not qa["full_campaign_analyzed"] or qa["processed_chunks_per_source"]!=67:
         raise ValueError("Native angular spatial dashboard requires full Geant4 QA")
@@ -110,6 +110,39 @@ def build(input_dir,out,template):
             "not":"NOT Heed/Garfield drift, NOT primary-electron time, NOT the number of incident station muons",
         },
     }
+    if local_file is not None and Path(local_file).is_file():
+        local=json.loads(Path(local_file).read_text(encoding="utf-8"))
+        meta=local.get("meta",{})
+        if meta.get("scope") not in (
+             "FIRST_CHUNK_3000_EVENTS_PER_SOURCE",
+             "FULL_201_CHUNKS_200000_EVENTS_PER_SOURCE"):
+            raise ValueError("Native local u-w grid scope missing or unverified")
+        if int(meta.get("nu",-1))!=16 or int(meta.get("nw",-1))!=24:
+            raise ValueError("Incompatible local U-W grid resolution")
+        if set(local.get("modules",{}))!=set(SOURCES):
+            raise ValueError("Incomplete local U-W source groups")
+        for src in SOURCES:
+            if set(local["modules"][src])!=set(str(c.det_id)
+                  for group in GEOMETRY for c in group):
+                raise ValueError("Missing physical module in local U-W density")
+            for group in GEOMETRY:
+                for c in group:
+                    item=local["modules"][src][str(c.det_id)]
+                    total_count=sum(count for _,count in item["all"])
+                    if total_count!=int(item["n"])-int(item["outside"]):
+                        raise ValueError("Local U-W midpoint exposure not conserved")
+                    if meta["scope"]=="FULL_201_CHUNKS_200000_EVENTS_PER_SOURCE":
+                        if not meta.get("full_independent_qa_passed"):
+                            raise ValueError("Full local density QA not independently verified")
+                        if int(item["n"])!=data[src][str(c.det_id)]["n"]:
+                            raise ValueError("Full local and global native angular exposure differ")
+        payload["local"]=local
+        print("Local u-w density:",meta["scope"],flush=True)
+    else:
+        payload["local"]=None
+        if local_file is not None:
+            print("NOTE: local U-W grid missing; build with "+
+                  "run_pi_native_local_uw.sh first",flush=True)
     html=template.read_text(encoding="utf-8")
     marker="__ANGLE_POSITION_DATA__"
     if html.count(marker)!=1:
@@ -128,8 +161,10 @@ def main():
     ap.add_argument("--input",type=Path,default=DEFAULT_IN)
     ap.add_argument("--out",type=Path,default=DEFAULT_OUT)
     ap.add_argument("--template",type=Path,default=HERE/"pi_native_angle_position_template.html")
+    ap.add_argument("--local-file",type=Path,default=REPO/
+          "test_runs/mwpc_stage_c/pi_native_local_uw_density/pi_native_local_uw_density.json")
     args=ap.parse_args()
-    build(args.input,args.out,args.template)
+    build(args.input,args.out,args.template,args.local_file)
 
 
 if __name__=="__main__":
