@@ -2491,3 +2491,30 @@ If a prior failed attempt left a frozen manifest but no completed CSV columns,
 the old manifest is archived automatically on retry after a driver update.
 Completed microscopic output is never silently reused across incompatible
 physics configurations or deleted.
+
+### October 20: validated six-geometry Garfield smoke (75 um field wires)
+
+The WSL workstation completed ALL six 60-electron Garfield central-u-column
+smoke checks: p=3.0/3.5/4.0 mm with and without 75 um grounded midpoint field
+wires, 360 tracked electrons total, 0 classified as collected on the field
+wires in these CENTRAL-ANODE columns. That is **not** evidence that a field
+wire has no effect: the smoke sampled near the anode, not the full unit cell.
+The six measured anode-conditional mean drift times are about 18-20 ns with
+~1.7-1.8 ns bootstrap errors, and are not meaningful pitch-difference tests.
+
+NEXT new Garfield pilot:
+
+    bash test/mwpc-stage-c/run_pi_pitch_fieldwire_pilot.sh pilot 75 20
+
+This samples all 30/35/40 columns for the full gas cell and both electrode
+conditions, 126,000 Garfield trajectories total. The micro-simulation can
+take considerable wall time, depending on the host: do NOT infer runtime
+from the tiny smoke test. If interrupted between/within columns, run the
+same command again. Each completed column is checksum-validated and its
+measured subprocess wall time recorded in an adjacent .timing.json file.
+Summaries include Garfield subprocess seconds/electron mean, centered RMS
+and column-bootstrap uncertainty; missing historical measurements are
+represented as unknown, never inferred from timestamps. The sampler
+retains exact frozen CPP/binary/geometry/gas/HV/seed identity even when
+only its reporting and timing bookkeeping source changes. Not a
+muon-angle-conditioned response yet.
