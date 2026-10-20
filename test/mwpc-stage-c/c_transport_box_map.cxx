@@ -121,6 +121,10 @@ int main(int argc, char** argv) {
       ReadArg(argc, argv, "--wire-pitch-mm", 4.0);
   const double wireDiameterUm =
       ReadArg(argc, argv, "--wire-diam-um", 30.0);
+  // Zero disables the optional grounded field-wire bank.
+  // In field-wire mode one conductor is midway between adjacent anodes.
+  const double fieldWireDiameterUm =
+      ReadArg(argc, argv, "--field-wire-diam-um", 0.0);
   const double hv =
       ReadArg(argc, argv, "--hv", 1800.0);
   const double bTesla =
@@ -164,6 +168,8 @@ int main(int argc, char** argv) {
 
   if (gapMinusMm <= 0. || gapPlusMm <= 0. ||
       wirePitchMm <= 0. || wireDiameterUm <= 0. ||
+      fieldWireDiameterUm < 0. || fieldWireDiameterUm >= 1000.*wirePitchMm ||
+      wireDiameterUm + fieldWireDiameterUm >= 2000.*wirePitchMm ||
       halfWires < 2 || uMaxMm <= uMinMm || vMaxMm <= vMinMm ||
       duMm <= 0. || dvMm <= 0. || electronsPerBox < 1 ||
       baseSeed < 0 || startEnergyEv <= 0. || wHalfSpanMm <= 0.) {
@@ -209,6 +215,8 @@ int main(int argc, char** argv) {
   const double wirePitchCm = 0.1 * wirePitchMm;
   const double wireDiameterCm = 1.e-4 * wireDiameterUm;
   const double wireRadiusCm = 0.5 * wireDiameterCm;
+  const double fieldWireDiameterCm = 1.e-4 * fieldWireDiameterUm;
+  const double fieldWireRadiusCm = 0.5 * fieldWireDiameterCm;
   const double w0Cm = 0.1 * w0Mm;
   const double wHalfSpanCm = 0.1 * wHalfSpanMm;
 
@@ -223,6 +231,12 @@ int main(int argc, char** argv) {
   field.SetMedium(&gas);
   for (int i = -halfWires; i <= halfWires; ++i) {
     field.AddWire(i * wirePitchCm, 0., wireDiameterCm, hv, "anode");
+  }
+  if (fieldWireDiameterUm > 0.) {
+    for (int i = -halfWires; i < halfWires; ++i) {
+      field.AddWire((i + 0.5) * wirePitchCm, 0.,
+                    fieldWireDiameterCm, 0., "field_wire");
+    }
   }
   field.AddPlaneY(-gapMinusCm, 0., "cathode_minus");
   field.AddPlaneY(+gapPlusCm, 0., "cathode_plus");
@@ -249,6 +263,7 @@ int main(int argc, char** argv) {
     if (std::abs(gapMinusMm - 3.) > 1.e-12 ||
         std::abs(gapPlusMm - 3.) > 1.e-12 ||
         std::abs(wirePitchMm - 4.) > 1.e-12 ||
+        fieldWireDiameterUm > 0. ||
         std::abs(bTesla) > 1.e-12 ||
         traceCollisionSteps < 1) {
       std::cerr << "Native track drift snapshots demand centred 3+3mm, "
@@ -375,7 +390,8 @@ int main(int argc, char** argv) {
       << "phi_hit_deg,cos_phi_hit,sin_phi_hit,hit_side_u,"
       << "incidence_normal_deg,"
       << "last_step_u_mm,last_step_v_mm,last_step_w_mm,"
-      << "last_step_energy_eV,last_dir_u,last_dir_v,last_dir_w\n";
+      << "last_step_energy_eV,last_dir_u,last_dir_v,last_dir_w,"
+      << "field_wire_collected,field_wire_index,field_wire_u_mm\n";
 
   std::cout << std::fixed << std::setprecision(4)
             << "\n=== STAGE C: ELECTRON TRANSPORT BOX MAP ===\n"
@@ -394,6 +410,8 @@ int main(int argc, char** argv) {
             << "wire pitch / diameter     : "
             << wirePitchMm << " mm / "
             << wireDiameterUm << " um\n"
+            << "field wire diameter       : "
+            << fieldWireDiameterUm << " um (0 disables, voltage=0 V)\n"
             << "gap (-,+)                 : "
             << gapMinusMm << ", " << gapPlusMm << " mm\n"
             << "B(local u)                : "
@@ -437,7 +455,12 @@ int main(int argc, char** argv) {
           if (std::abs(iw) > halfWires) return false;
           const double duWireMm = uMm - iw * wirePitchMm;
           const double rMm = std::hypot(duWireMm, vMm);
-          return rMm <= 0.5e-3 * wireDiameterUm;
+          if (rMm <= 0.5e-3 * wireDiameterUm) return true;
+          if (fieldWireDiameterUm <= 0.) return false;
+          const int jf = static_cast<int>(std::floor(uMm / wirePitchMm));
+          if (jf < -halfWires || jf >= halfWires) return false;
+          return std::hypot(uMm - (jf + 0.5) * wirePitchMm, vMm)
+                 <= 0.5e-3 * fieldWireDiameterUm;
         };
 
         if (insideAnyWire(uStartMm, vStartMm)) {
@@ -489,6 +512,10 @@ int main(int argc, char** argv) {
         double sinPhi =
             std::numeric_limits<double>::quiet_NaN();
         int hitSideU = 0;
+        bool fieldWireCollected = false;
+        int fieldWireIndex = 999999;
+        double fieldWireUMm =
+            std::numeric_limits<double>::quiet_NaN();
         double incidenceNormalDeg =
             std::numeric_limits<double>::quiet_NaN();
 
@@ -538,9 +565,26 @@ int main(int argc, char** argv) {
           }
         }
 
+        if (!collected && fieldWireDiameterUm > 0. &&
+            nEndpoints > 0 && std::isfinite(u1) && std::isfinite(v1)) {
+          const int jf = static_cast<int>(std::floor(u1 / wirePitchCm));
+          if (jf >= -halfWires && jf < halfWires) {
+            const double uf = (jf + 0.5) * wirePitchCm;
+            if (std::hypot(u1 - uf, v1) < 1.5 * fieldWireRadiusCm &&
+                status != -7) {
+              fieldWireCollected = true;
+              fieldWireIndex = jf;
+              fieldWireUMm = 10. * uf;
+            }
+          }
+        }
         ++nLaunched;
         if (collected) ++nCollected;
 
+        if (collected && fieldWireCollected) {
+          std::cerr << "Electron assigned to both anode and field wire.\n";
+          return 31;
+        }
         out
             << iu << "," << iv << "," << boxId << ","
             << uCenterMm << "," << vCenterMm << ","
@@ -575,7 +619,8 @@ int main(int argc, char** argv) {
             << ","
             << (gLastStep.valid ? gLastStep.dw :
                 std::numeric_limits<double>::quiet_NaN())
-            << "\n";
+            << "," << (fieldWireCollected ? 1 : 0)
+            << "," << fieldWireIndex << "," << fieldWireUMm << "\n";
       }
     }
   }
