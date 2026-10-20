@@ -9,11 +9,11 @@ of one pitch; they are NOT conditioned on native GEANT muon angle yet.
 
 Usage (after building mwpc_stage_c_transport_box_map):
   python3 pi_pitch_fieldwire_pilot.py --mode smoke --samples 2 \
-      --field-wire-diam-um 100
+      --field-wire-diam-um 75
   python3 pi_pitch_fieldwire_pilot.py --mode pilot --samples 20 \
-      --field-wire-diam-um 100
+      --field-wire-diam-um 75
 
-WARNING: 100 um is an EXPLICIT provisional study parameter, not a verified
+WARNING: 75 um is the CHOSEN study parameter, not a verified
 NA60+ mechanical field-wire diameter. All 6 configurations are independent
 and have isolated, SHA-pinned resumable output directories.
 """
@@ -196,14 +196,30 @@ def config(pitch, fw, mode, samples, seed, binary, output):
             "field-wire collection is NOT anode collection.",
     }
     manifest = directory / "frozen_config.json"
-    if manifest.is_file():
-        if json.loads(manifest.read_text(encoding="utf-8")) != fingerprint:
-            raise ValueError(f"Incompatible frozen configuration {directory}")
-    else:
-        manifest.write_text(json.dumps(fingerprint, indent=2)+"\n",
-                            encoding="utf-8")
     columns = directory / "columns"
     columns.mkdir(exist_ok=True)
+    if manifest.is_file():
+        old = json.loads(manifest.read_text(encoding="utf-8"))
+        if old != fingerprint:
+            if any(columns.glob("iu_*.csv")):
+                # Protect completed microscopic Garfield physics data.
+                raise ValueError(
+                    f"Incompatible frozen config with completed columns: {directory}. "
+                    "Keep these results; choose a NEW --out namespace.")
+            # An ELF loader failure (exit 127) may have left an empty run.
+            # Keep its original manifest rather than asking users to rm it.
+            archive = directory / (
+                "frozen_config.pre_retry_"
+                + hashlib.sha256(manifest.read_bytes()).hexdigest()[:12]
+                + ".json")
+            if archive.exists():
+                raise ValueError(f"Previous incompatible manifest already archived: {archive}")
+            manifest.rename(archive)
+            print(f"Archived failed launch settings (NO completed columns): {archive}",
+                  flush=True)
+    if not manifest.is_file():
+        manifest.write_text(json.dumps(fingerprint, indent=2)+"\n",
+                            encoding="utf-8")
     iu_values = ([nu//2] if mode == "smoke" else list(range(nu)))
     observations = []
     for iu in iu_values:
@@ -236,7 +252,13 @@ def config(pitch, fw, mode, samples, seed, binary, output):
                                   stderr=subprocess.STDOUT, check=False)
         elapsed = time.perf_counter() - t0
         if done.returncode:
-            raise RuntimeError(f"Garfield failed {done.returncode}: {log}")
+            tail = "\n".join(log.read_text(
+                encoding="utf-8", errors="replace").splitlines()[-45:])
+            raise RuntimeError(
+                f"Garfield failed with exit {done.returncode}: {log}\n"
+                f"Last 45 log lines:\n{tail}\n"
+                "Exit 127 commonly indicates a missing runtime shared library; "
+                "check the ELF ldd preflight printed by the shell runner.")
         validate_column(tmp, iu, pitch, samples)
         os.replace(tmp, dest)
         observations.append({"iu": iu, "wall_seconds": elapsed})
@@ -268,8 +290,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", choices=("smoke", "pilot"), default="smoke")
     parser.add_argument("--samples", type=int, default=None)
-    parser.add_argument("--field-wire-diam-um", type=float, required=True,
-                        help="EXPLICIT provisional wire diameter; not inferred")
+    parser.add_argument("--field-wire-diam-um", type=float, default=75.,
+                        help="Study default 75 um; may override explicitly")
     parser.add_argument("--seed", type=int, default=260020)
     parser.add_argument("--binary", type=Path, default=DEFAULT_BINARY)
     parser.add_argument("--out", type=Path, default=ROOT)
