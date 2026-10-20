@@ -269,6 +269,9 @@ int main(int argc, char** argv) {
     }
     std::string header;
     std::getline(source, header);
+    // Python csv.DictWriter on WSL writes CRLF by default; tolerate
+    // carriage return without loosening strict schema validation.
+    if (!header.empty() && header.back() == '\r') header.pop_back();
     if (header != "electron_id,u_cell_mm,v_birth_mm,w_start_mm,seed") {
       std::cerr << "Incorrect native electron start CSV header. "
                    "Expected numeric ID,u_cell,v,w,seed.\n";
