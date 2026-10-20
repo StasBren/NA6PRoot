@@ -61,7 +61,17 @@ def main():
         summary, rows = run(data, out)
         assert not summary["exact_four_quadrant_geometry"]
         assert len(rows) == len(SOURCES) * 6 * 5
-        assert all(row["segments_per_chamber"] == 4 for row in rows)
+        # An empty AXIS category is valid for even-by-even station MS0.
+        # The per-chamber rate is undefined (None), not zero or four.
+        assert all(row["segments_per_chamber"] == 4
+                   for row in rows if row["chambers"] > 0)
+        assert all(row["segments_per_chamber"] is None and
+                   row["gas_hit_segments"] == 0 and
+                   row["ratio_to_Q1_per_chamber"] is None
+                   for row in rows if row["chambers"] == 0)
+        assert sum(row["chambers"] == 0 for row in rows) == len(SOURCES)
+        assert all(row["station"] == 0 and row["quadrant"] == "AXIS"
+                   for row in rows if row["chambers"] == 0)
         assert all(row["ratio_to_Q1_per_chamber"] == 1
                    for row in rows if row["quadrant"] in ("Q1","Q2","Q3","Q4"))
         assert sum(row["gas_hit_segments"] for row in rows) == \
