@@ -53,7 +53,7 @@ footer{font-size:12px;color:var(--muted);line-height:1.6}
 </section>
 <div class="right-stack">
 <section class="panel">
-<h2 id="localTitle">Выбранная камера · локальные координаты u–w</h2>
+<h2 id="localTitle">Выбранная камера · w горизонтально, u вертикально</h2>
 <p><strong>u</strong> — поперёк анодных проволок; <strong>w</strong> — вдоль проволок. Клик по глобальной XY-карте обновляет этот локальный вид. Центр каждой камеры: (0, 0). Все размеры в мм.</p>
 <label for="localMode">Содержимое локальной карты</label>
 <select id="localMode">
@@ -237,46 +237,52 @@ function renderLocal(){
  const root=$("localUW");root.replaceChildren();
  const c=D.geometry.find(q=>q.id===S.det);
  const title="DET"+c.id+" · MS"+c.st+" · layer "+c.layer;
- $("localTitle").textContent=title+" · локальные u–w";
+ $("localTitle").textContent=title+" · w горизонтально, u вертикально";
  const hu=(c.st===0?153.6:256),hw=332.8;
- const scale=Math.min(485/(2*hu),335/(2*hw));
+ // Long physical gas dimension is w ALONG anode wires: horizontal X.
+ // Short gas dimension u ACROSS wires: vertical Y. Use the same
+ // millimetre scale for both axes; only the presentation is rotated.
+ const scale=Math.min(485/(2*hw),335/(2*hu));
  const centerX=314,centerY=231;
- const x=u=>centerX+scale*u,y=w=>centerY-scale*w;
- const left=x(-hu),right=x(hu),top=y(hw),bottom=y(-hw);
+ const x=w=>centerX+scale*w,y=u=>centerY-scale*u;
+ const left=x(-hw),right=x(hw),top=y(hu),bottom=y(-hu);
  const r=localData();
  const visible=S.localMode!=="geometry"&&r;
  const max=visible?Math.max(1,...r.values):1;
  if(visible){
-  for(let j=0;j<r.nw;j++)for(let i=0;i<r.nu;i++){
-   const value=r.values[j*r.nu+i];
+  // Data are stored with u INDEX FASTEST: cell=iw*nu+iu.
+  // Physical rotation changes positions on screen, not the cell data.
+  for(let iw=0;iw<r.nw;iw++)for(let iu=0;iu<r.nu;iu++){
+   const value=r.values[iw*r.nu+iu];
+   const w0=-hw+2*hw*iw/r.nw,w1=-hw+2*hw*(iw+1)/r.nw;
+   const u0=-hu+2*hu*iu/r.nu,u1=-hu+2*hu*(iu+1)/r.nu;
    const frac=Math.sqrt(value/max);
    const fill=value?
     "rgb("+Math.round(26+167*frac)+","+Math.round(55+132*frac)+","+
             Math.round(83+52*frac)+")":"#112d40";
    const elem=node("rect",{
-     x:x(-hu+2*hu*i/r.nu),y:y(-hw+2*hw*(j+1)/r.nw),
-     width:(2*hu/r.nu)*scale+.04,
-     height:(2*hw/r.nw)*scale+.04,fill,
+     x:x(w0),y:y(u1),
+     width:x(w1)-x(w0)+.04,
+     height:y(u0)-y(u1)+.04,fill,
    },root);
    node("title",{},elem).textContent=
-      "u="+(-hu+2*hu*i/r.nu).toFixed(1)+"..."+
-      (-hu+2*hu*(i+1)/r.nu).toFixed(1)+
-      " мм, w="+(-hw+2*hw*j/r.nw).toFixed(1)+"..."+
-      (-hw+2*hw*(j+1)/r.nw).toFixed(1)+
+      "w="+w0.toFixed(1)+"..."+w1.toFixed(1)+
+      " мм, u="+u0.toFixed(1)+"..."+u1.toFixed(1)+
       " мм: "+value+" Geant4 газовых сегментов";
   }
  } else node("rect",{x:left,y:top,width:right-left,height:bottom-top,
     fill:"#153d4a","fill-opacity":.5},root);
  const nwires=c.st===0?77:128;
- // Only every 8th physical wire is drawn; every real wire still has pitch 4mm.
+ // Anode wire has constant u and runs ALONG w: horizontal on this map.
+ // For readability draw every eighth wire (true pitch is still 4 mm).
  for(let wire=0;wire<nwires;wire+=8){
   const u=(wire-(nwires-1)/2)*4;
   if(u<-hu||u>hu)continue;
-  node("line",{x1:x(u),y1:top,x2:x(u),y2:bottom,
+  node("line",{x1:left,y1:y(u),x2:right,y2:y(u),
    stroke:"#d3dce3","stroke-opacity":visible?.22:.54,
    "stroke-dasharray":"3 4","stroke-width":.7},root);
  }
- // Always draw geometry, centre axes and labels above occupancy colors.
+ // Draw physical outline and local centre after the native hit density.
  node("rect",{x:left,y:top,width:right-left,height:bottom-top,
    stroke:"#c4e9f3","stroke-width":1.4,fill:"none"},root);
  node("line",{x1:x(0),x2:x(0),y1:top,y2:bottom,
@@ -286,18 +292,18 @@ function renderLocal(){
    stroke:"#b5dcf5","stroke-dasharray":"5 4","stroke-width":1.15,
    "stroke-opacity":.9},root);
  node("circle",{cx:x(0),cy:y(0),r:2.8,fill:"#fee2ab"},root);
- const label=(v)=>v.toFixed(0);
+ const label=v=>v.toFixed(0);
  for(const t of [-1,-.5,0,.5,1]){
-  const value=t*hu;
-  text(label(value),x(value),bottom+18,
-       {"text-anchor":"middle","font-size":10},root);
   const w=t*hw;
-  text(label(w),left-12,y(w)+4,
+  text(label(w),x(w),bottom+18,
+       {"text-anchor":"middle","font-size":10},root);
+  const u=t*hu;
+  text(label(u),left-12,y(u)+4,
        {"text-anchor":"end","font-size":10},root);
  }
- text("u — поперёк проволок, мм →",right,bottom+43,
+ text("w — вдоль проволок, мм →",right,bottom+43,
       {"text-anchor":"end","font-size":12,"font-weight":"700"},root);
- text("w — вдоль проволок, мм ↑",left,27,
+ text("u — поперёк проволок, мм ↑",left,27,
       {"font-size":12,"font-weight":"700"},root);
  text("0,0",x(0)+7,y(0)-8,{"font-size":10,"fill":"#fee2ab"},root);
  const count=r?r.total:0;
@@ -317,10 +323,11 @@ function renderLocal(){
   "ПОЛНЫЙ 201-чанковый Geant4, 200 000 событий/канал":
   "ПИЛОТ первых чанков: 3 000 событий/канал (XY слева — 200 000)";
  $("localLegend").textContent=scope+". Выбрано "+count.toLocaleString("ru-RU")+
-  " реальных газовых сегментов; локальная 2D-карта: "+r.nu+"×"+r.nw+
-  " ячеек, цвет = число сегментов / ячейку, максимум "+max+
+  " реальных газовых сегментов; локальная 2D-карта: "+r.nw+
+  " бинов по горизонтальной w × "+r.nu+" по вертикальной u"+
+  ", цвет = число сегментов / ячейку, максимум "+max+
   ". Исключено вне активного газового прямоугольника: "+r.mod.outside+
-  ". Штриховые аноды показаны через 8 проволок, истинный шаг 4 мм.";
+  ". Штриховые аноды горизонтальны и показаны через 8 проволок, истинный шаг 4 мм.";
  drawProjection("projU",r.u,"u",hu);
  drawProjection("projW",r.w,"w",hw);
  const countRule=S.localMode==="filtered"?
