@@ -211,6 +211,161 @@ function renderHistogram(){
     ". Статистика условна на настоящий Geant4 газовый хит; "
     +"общее число входящих в станцию мюонов — другой знаменатель.";
 }
+
+function localData(){
+ if(!D.local)return null;
+ const m=D.local.modules[S.source][String(S.det)];
+ if(!m)return null;
+ const sparse=(S.localMode==="filtered"
+   ?m.selected[S.angle][S.metric]:m.all)||[];
+ const nu=D.local.meta.nu,nw=D.local.meta.nw;
+ const values=Array(nu*nw).fill(0);
+ for(const [index,count] of sparse){
+  if(index<0||index>=values.length||count<0)throw Error("Corrupt native local histogram");
+  values[index]+=count;
+ }
+ const total=values.reduce((a,b)=>a+b,0);
+ const u=Array(nu).fill(0),w=Array(nw).fill(0);
+ for(let iw=0;iw<nw;iw++)for(let iu=0;iu<nu;iu++){
+  const n=values[iw*nu+iu];u[iu]+=n;w[iw]+=n;
+ }
+ if(u.reduce((a,b)=>a+b,0)!==total || w.reduce((a,b)=>a+b,0)!==total)
+  throw Error("2D-to-1D native midpoint count conservation failed");
+ return {values,u,w,total,mod:m,nu,nw};
+}
+function renderLocal(){
+ const root=$("localUW");root.replaceChildren();
+ const c=D.geometry.find(q=>q.id===S.det);
+ const title="DET"+c.id+" · MS"+c.st+" · layer "+c.layer;
+ $("localTitle").textContent=title+" · локальные u–w";
+ const hu=(c.st===0?153.6:256),hw=332.8;
+ const scale=Math.min(485/(2*hu),335/(2*hw));
+ const centerX=314,centerY=231;
+ const x=u=>centerX+scale*u,y=w=>centerY-scale*w;
+ const left=x(-hu),right=x(hu),top=y(hw),bottom=y(-hw);
+ const r=localData();
+ const visible=S.localMode!=="geometry"&&r;
+ const max=visible?Math.max(1,...r.values):1;
+ if(visible){
+  for(let j=0;j<r.nw;j++)for(let i=0;i<r.nu;i++){
+   const value=r.values[j*r.nu+i];
+   const frac=Math.sqrt(value/max);
+   const fill=value?
+    "rgb("+Math.round(26+167*frac)+","+Math.round(55+132*frac)+","+
+            Math.round(83+52*frac)+")":"#112d40";
+   const elem=node("rect",{
+     x:x(-hu+2*hu*i/r.nu),y:y(-hw+2*hw*(j+1)/r.nw),
+     width:(2*hu/r.nu)*scale+.04,
+     height:(2*hw/r.nw)*scale+.04,fill,
+   },root);
+   node("title",{},elem).textContent=
+      "u="+(-hu+2*hu*i/r.nu).toFixed(1)+"..."+
+      (-hu+2*hu*(i+1)/r.nu).toFixed(1)+
+      " мм, w="+(-hw+2*hw*j/r.nw).toFixed(1)+"..."+
+      (-hw+2*hw*(j+1)/r.nw).toFixed(1)+
+      " мм: "+value+" Geant4 газовых сегментов";
+  }
+ } else node("rect",{x:left,y:top,width:right-left,height:bottom-top,
+    fill:"#153d4a","fill-opacity":.5},root);
+ const nwires=c.st===0?77:128;
+ // Only every 8th physical wire is drawn; every real wire still has pitch 4mm.
+ for(let wire=0;wire<nwires;wire+=8){
+  const u=(wire-(nwires-1)/2)*4;
+  if(u<-hu||u>hu)continue;
+  node("line",{x1:x(u),y1:top,x2:x(u),y2:bottom,
+   stroke:"#d3dce3","stroke-opacity":visible?.22:.54,
+   "stroke-dasharray":"3 4","stroke-width":.7},root);
+ }
+ // Always draw geometry, centre axes and labels above occupancy colors.
+ node("rect",{x:left,y:top,width:right-left,height:bottom-top,
+   stroke:"#c4e9f3","stroke-width":1.4,fill:"none"},root);
+ node("line",{x1:x(0),x2:x(0),y1:top,y2:bottom,
+   stroke:"#b5dcf5","stroke-dasharray":"5 4","stroke-width":1.15,
+   "stroke-opacity":.9},root);
+ node("line",{x1:left,x2:right,y1:y(0),y2:y(0),
+   stroke:"#b5dcf5","stroke-dasharray":"5 4","stroke-width":1.15,
+   "stroke-opacity":.9},root);
+ node("circle",{cx:x(0),cy:y(0),r:2.8,fill:"#fee2ab"},root);
+ const label=(v)=>v.toFixed(0);
+ for(const t of [-1,-.5,0,.5,1]){
+  const value=t*hu;
+  text(label(value),x(value),bottom+18,
+       {"text-anchor":"middle","font-size":10},root);
+  const w=t*hw;
+  text(label(w),left-12,y(w)+4,
+       {"text-anchor":"end","font-size":10},root);
+ }
+ text("u — поперёк проволок, мм →",right,bottom+43,
+      {"text-anchor":"end","font-size":12,"font-weight":"700"},root);
+ text("w — вдоль проволок, мм ↑",left,27,
+      {"font-size":12,"font-weight":"700"},root);
+ text("0,0",x(0)+7,y(0)-8,{"font-size":10,"fill":"#fee2ab"},root);
+ const count=r?r.total:0;
+ const labelName=S.localMode==="geometry"?"Геометрия":S.localMode==="all"?
+      "Все углы":angles[S.angle]+" · "+$("metric").selectedOptions[0].textContent;
+ text(labelName,314,458,{"text-anchor":"middle","font-size":11},root);
+ if(!r){
+  text("Нет локального массива. Выполни run_pi_native_local_uw.sh first",
+      314,477,{"text-anchor":"middle","font-size":10},root);
+  $("localLegend").textContent="Только геометрия. Для локальных хитов запусти "+
+   "run_pi_native_local_uw.sh first или all; полный Geant4 XY остаётся доступен.";
+  drawProjection("projU",null,"u",hu);
+  drawProjection("projW",null,"w",hw);
+  return;
+ }
+ const scope=D.local.meta.scope.startsWith("FULL")?
+  "ПОЛНЫЙ 201-чанковый Geant4, 200 000 событий/канал":
+  "ПИЛОТ первых чанков: 3 000 событий/канал (XY слева — 200 000)";
+ $("localLegend").textContent=scope+". Выбрано "+count.toLocaleString("ru-RU")+
+  " реальных газовых сегментов; локальная 2D-карта: "+r.nu+"×"+r.nw+
+  " ячеек, цвет = число сегментов / ячейку, максимум "+max+
+  ". Исключено вне активного газового прямоугольника: "+r.mod.outside+
+  ". Штриховые аноды показаны через 8 проволок, истинный шаг 4 мм.";
+ drawProjection("projU",r.u,"u",hu);
+ drawProjection("projW",r.w,"w",hw);
+ const countRule=S.localMode==="filtered"?
+  angles[S.angle]+" · "+$("metric").selectedOptions[0].textContent:
+  "все углы (в режиме геометрии проекции показывают все газовые хиты)";
+ $("projectionsScope").textContent="DET"+c.id+" · "+countRule+
+  " · "+scope+". По вертикали: число Geant4 газовых хит-сегментов в бине. "+
+  "Тот же набор "+count+" событий в проекции u и в проекции w; это не электроны.";
+}
+function drawProjection(id,counts,axis,half){
+ const root=$(id);root.replaceChildren();
+ const left=64,right=564,top=49,bottom=201;
+ const arr=counts||[];
+ const max=Math.max(1,...arr);
+ const scaleY=Math.max(1,max*1.16);
+ const x=val=>left+(val+half)/(2*half)*(right-left);
+ const y=val=>bottom-(bottom-top)*val/scaleY;
+ // Full plotted axes with count normalization and physical dimensions.
+ for(let t=0;t<=4;t++){
+  const value=scaleY*t/4;
+  node("line",{x1:left,x2:right,y1:y(value),y2:y(value),
+    stroke:"#48677e","stroke-width":.75},root);
+  text(value.toFixed(value>=10?0:1),left-8,y(value)+3,
+       {"text-anchor":"end","font-size":10},root);
+  const pos=-half+2*half*t/4;
+  text(pos.toFixed(0),x(pos),bottom+20,
+       {"text-anchor":"middle","font-size":11},root);
+ }
+ if(arr.length){
+  const width=(right-left)/arr.length;
+  arr.forEach((value,j)=>{
+   const rect=node("rect",{
+     x:left+j*width+.7,y:y(value),
+     width:Math.max(1,width-1.4),height:bottom-y(value),
+     fill:axis==="u"?"#57d4c5":"#f0b97d"},root);
+   node("title",{},rect).textContent=
+      axis+" бин "+j+": "+value+" реальных Geant4 газовых сегментов";
+  });
+ }
+ text("Число газовых сегментов / бин",left,20,
+   {"font-size":11,"font-weight":"700"},root);
+ text(axis+" локальная координата, мм →",right,bottom+49,
+   {"text-anchor":"end","font-size":12,"font-weight":"700"},root);
+}
+
 function render(){renderSelectors();renderMap();renderHistogram();renderLocal()}
 $("source").onchange=e=>{S.source=e.target.value;render()};
 $("station").onchange=e=>{S.station=Number(e.target.value);S.det=null;render()};
