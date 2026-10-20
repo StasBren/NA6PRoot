@@ -15,6 +15,7 @@ import hashlib
 import json
 import math
 import os
+import shutil
 from pathlib import Path
 from audit_pi_geant4_campaign import audit, DEFAULT as CAMPAIGN
 from mwpc_checkerboard_projection import SOURCES, build_chambers
@@ -31,6 +32,90 @@ SELECTORS=("positive","far10","near2")
 NU,NW=16,24
 GEOM={c.det_id:c for g in build_chambers() for c in g}
 CHANNELS={"jpsi40-bore":"jpsi","phi40-bore":"phi","omega40-bore":"omega"}
+
+
+def resolve_root_executable(build_dirs=None,env=None):
+    """Locate ROOT binary without relying on interactive-shell PATH.
+
+    Prefer PI_ROOT_EXECUTABLE, current PATH, then ROOTSYS and the
+    ROOT_DIR/CMAKE_PREFIX_PATH from EXISTING NA6PRoot CMake build.
+    """
+    env=os.environ if env is None else env
+    explicit=env.get("PI_ROOT_EXECUTABLE","").strip()
+    if explicit:
+        selected=shutil.which(explicit,path=env.get("PATH",""))
+        if not selected and Path(explicit).is_file() and os.access(explicit,os.X_OK):
+            selected=explicit
+        if not selected:
+            raise FileNotFoundError(
+                "PI_ROOT_EXECUTABLE set but cannot be executed: "+explicit)
+        return Path(selected).resolve()
+    selected=shutil.which("root",path=env.get("PATH",""))
+    if selected:
+        return Path(selected).resolve()
+    possible=[]
+    def offer(value):
+        if not value:
+            return
+        # Existing CMake caches may store semicolon-delimited prefixes.
+        for token in value.split(";"):
+            token=token.strip()
+            if token and "$" not in token:
+                possible.append(Path(os.path.expanduser(token)))
+    for name in ("ROOTSYS","ROOT_DIR","ROOT_ROOT","CMAKE_PREFIX_PATH"):
+        offer(env.get(name,""))
+    if build_dirs is None:
+        home=Path.home()
+        build_dirs=(
+            REPO/"build",home/"na6p/build",
+            home/"na6p/build/NA6PRoot",
+            home/"na6p/build/NA6PRoot-mwpc",
+            home/"na6p/src/NA6PRoot-mwpc/build",
+        )
+    for directory in build_dirs:
+        cache=Path(directory)/"CMakeCache.txt"
+        if not cache.is_file():
+            continue
+        for line in cache.read_text(encoding="utf-8",errors="replace").splitlines():
+            if "=" not in line or line.startswith(("//","#")):
+                continue
+            key,value=line.split("=",1)
+            field=key.split(":",1)[0]
+            if field in ("ROOT_DIR","ROOTSYS","ROOT_ROOT","CMAKE_PREFIX_PATH",
+                         "ROOT_INCLUDE_DIR","ROOT_LIBRARY_DIR",
+                         "ROOT_BIN_DIR","ROOT_BINARY_DIR","ROOT_DIR_HINT"):
+                offer(value)
+    for candidate in possible:
+        for prefix in (candidate,*list(candidate.parents)[:7]):
+            exe=prefix/"bin/root"
+            if exe.is_file() and os.access(exe,os.X_OK):
+                return exe.resolve()
+    raise FileNotFoundError(
+        "ROOT binary not found. NA6PRoot Stage-C is installed, but "
+        "ROOT's bin directory is not on PATH and the CMake cache did "
+        "not locate it. Find it with "
+        "'find ~/na6p -path */bin/root -type f' "
+        "then launch with PI_ROOT_EXECUTABLE=/absolute/path/bin/root "
+        "bash test/mwpc-stage-c/run_pi_native_local_uw.sh all."
+    )
+
+
+def activate_root_for_export(build_dirs=None,env=None):
+    """Expose native ROOT macro, rootcling and ROOT shared libraries."""
+    env=os.environ if env is None else env
+    exe=resolve_root_executable(build_dirs=build_dirs,env=env)
+    bindir=exe.parent
+    prefix=bindir.parent
+    env["PI_ROOT_EXECUTABLE"]=str(exe)
+    env["ROOTSYS"]=str(prefix)
+    env["PATH"]=os.pathsep.join(
+        [str(bindir)]+[p for p in env.get("PATH","").split(os.pathsep)
+                       if p and p!=str(bindir)])
+    additions=[str(p) for p in (prefix/"lib",prefix/"lib64") if p.is_dir()]
+    env["LD_LIBRARY_PATH"]=os.pathsep.join(
+        additions+[p for p in env.get("LD_LIBRARY_PATH","").split(os.pathsep)
+                   if p and p not in additions])
+    return str(exe)
 
 
 def local_bounds(ch):
@@ -174,6 +259,10 @@ def build(args):
         status=audit(args.campaign,False)
         if status["status"]!="COMPLETE":
             raise ValueError("Frozen Geant4 campaign incomplete")
+        # Fail fast before 201 exports if Stage-C is active but ROOT is not.
+        root_binary=activate_root_for_export()
+        print("PI native ROOT executable:",root_binary,flush=True)
+        print("ROOTSYS:",os.environ["ROOTSYS"],flush=True)
         checkpoint=args.out/"checkpoints";checkpoint.mkdir(exist_ok=True)
         current=args.out/"_export_current.csv"
         log=args.out/"_export_current.log"
@@ -194,8 +283,7 @@ def build(args):
                     if current.exists():current.unlink()
                     print(f"RUN {src} chunk{i:04d}/67: native ROOT export...",
                           flush=True)
-                    export_chunk(os.getenv("PI_ROOT_EXECUTABLE","root"),
-                                 chunk,current,log)
+                    export_chunk(root_binary,chunk,current,log)
                     this,bad=process_csv(current)
                     tmp=target.with_suffix(".json.tmp")
                     tmp.write_text(json.dumps(
