@@ -12,6 +12,7 @@ python3 -m py_compile \
  "$HERE/test_pi_two_anode_electron_explorer.py"
 python3 "$HERE/test_pi_two_anode_electron_explorer.py"
 python3 "$HERE/build_pi_two_anode_electron_explorer.py"
+python3 "$HERE/refresh_pi_dashboard_navigation.py"
 OUT="$REPO/test_runs/mwpc_stage_c/pi_fixed_wire_maps/pi_two_anode_electron_explorer.html"
 python3 - "$REPO" <<'PY'
 from pathlib import Path
