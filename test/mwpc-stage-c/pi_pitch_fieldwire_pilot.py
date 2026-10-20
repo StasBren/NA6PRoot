@@ -130,6 +130,9 @@ def summarise(csv_path, pitch, fw, mode, samples):
             g = int(row["field_wire_collected"])
             if c+g > 1:
                 raise ValueError("Electron collected on anode and field wire")
+            if g:
+                if fw <= 0. or not (-4 <= int(row["field_wire_index"]) < 4):
+                    raise ValueError("Field-wire hit absent from declared geometry")
             collected += c
             grounded += g
             if c:
