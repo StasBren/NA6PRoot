@@ -39,14 +39,30 @@ tr:nth-child(even){background:#20384a}
 #empty{color:#ffcb9a}
 footer{color:var(--muted);font-size:12px}
 @media(max-width:1000px){main{grid-template-columns:1fr}.panel.full{grid-column:auto}#map{height:480px}}
-</style></head><body>
+</style><style id="pi-latest-nav-style">
+.pi-latest-nav{display:flex;flex-wrap:wrap;align-items:center;gap:7px 9px;
+margin:14px 0 3px;padding:10px;border:1px solid #536e80;border-radius:9px;
+background:rgba(9,31,47,.75);font:12px/1.4 system-ui,"Segoe UI",sans-serif}
+.pi-latest-nav .pi-latest-name{font-weight:750;color:#d4eaf3;margin-right:9px}
+.pi-latest-nav a,.pi-latest-nav .pi-latest-active{display:inline-block;
+padding:7px 10px;border:1px solid #547a91;border-radius:6px;
+text-decoration:none;color:#d1f7f2;background:rgba(35,66,81,.7)}
+.pi-latest-nav a:hover{border-color:#84eee3;color:#fff}
+.pi-latest-nav .pi-latest-active{font-weight:750;color:#071f2c;
+background:#85e5d6;border-color:#85e5d6}
+</style>
+</head><body>
 <header>
 <div class="topline">NA60+ · ПИЛОТ 3+3 ММ · NATIVE GEANT4 + HEED + GARFIELD · ПОЖЕЛАНИЯ PI</div>
 <h1>Время дрейфа, начальные координаты и срабатывание анодов</h1>
 <p>Исправленная симметричная камера: анодная плоскость при v=0; катоды при v=−3 и +3 мм; шаг проволок 4 мм; Garfield B=0.</p>
-<nav><a href="pi_native_angle_position.html">Полная Geant4-карта углов</a> ·
-<a href="pi_station_interactive.html">Статистические карты станций</a> ·
-<a href="pi_muon_track_explorer_native.html">Muon Track Explorer</a> · <a href="pi_two_anode_electron_explorer.html" style="font-weight:700">Два анода: электроны и трек u–v →</a> · <a href="pi_centered_true_1d_cloud.html">Настоящее движущееся облако u(t), v(t), w(t) →</a></nav>
+<nav class="pi-latest-nav" aria-label="Актуальные dashboard NA60+">
+<span class="pi-latest-name">NA60+ / PI</span>
+<a href="pi_latest_dashboards.html">Обзор</a>
+<a href="pi_native_angle_position.html">Геометрия и углы · XY / u–w</a>
+<span class="pi-latest-active" aria-current="page">Время дрейфа и кратность</span>
+<a href="pi_two_anode_electron_explorer.html">Один мюон · два анода</a>
+</nav>
 </header>
 <section class="controls" aria-label="Фильтры анализа">
 <div class="ctrl"><label for="source">Канал</label><select id="source"></select></div>
