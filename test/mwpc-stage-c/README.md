@@ -2324,3 +2324,24 @@ and intermediate local grid data:
 
 There is no Geant4 gas re-simulation, no Heed, no Garfield/charge
 drift/electronics or cathode-strip model in either local mode.
+
+
+#### ROOT executable discovery for full local u-w processing
+
+The Stage-C activator enables na6psim and libsimLib but does not
+necessarily put ROOT's root executable on PATH. Therefore
+run_pi_native_local_uw.sh all now auto-resolves ROOT from an explicitly
+configured PI_ROOT_EXECUTABLE, active root in PATH, ROOTSYS,
+or ROOT_DIR/CMAKE_PREFIX_PATH/ROOT_LIBRARY_DIR entries from the
+EXISTING CMakeCache of NA6PRoot, including ROOT_DIR paths ending in
+lib/cmake/ROOT. It populates ROOTSYS, PATH and LD_LIBRARY_PATH for
+the ROOT macro exporter before starting the first chunk.
+No simulation or ROOT rebuild occurs.
+
+If ROOT is installed outside recorded paths, the program fails
+before re-exporting any chunks and provides directions for selecting
+the installed bin/root with PI_ROOT_EXECUTABLE. A synthetic regression
+covers the WSL missing-PATH scenario using a fake ROOT installation in
+a CMake directory and rejects invalid explicitly configured binaries.
+Previously completed per-chunk checkpoints remain resumable; all native
+input ROOT chunks and their full Geant4 QA remain unchanged.
