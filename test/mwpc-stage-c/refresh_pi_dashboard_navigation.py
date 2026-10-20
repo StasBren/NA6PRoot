@@ -70,7 +70,7 @@ def update_page(source,current,present):
     if cut is None:
         cut=re.search(r'(?is)<a\b[^>]*\bhref\s*=\s*["\'][^"\']+\.html',contents)
     clean=contents[:cut.start()] if cut else contents
-    revised=(source[:m.start()]+m.group(1)+"\n"+clean.rstrip()+"\n"+
+    revised=(source[:m.start()]+m.group(1)+"\n"+clean.strip("\n").rstrip()+"\n"+
              navbar(current,present)+"\n"+m.group(3)+source[m.end():])
     if '<style id="pi-latest-nav-style">' not in revised:
         close=re.search(r"</head\s*>",revised,re.I)
