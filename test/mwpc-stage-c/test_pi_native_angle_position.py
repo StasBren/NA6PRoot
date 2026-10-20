@@ -58,6 +58,54 @@ def main():
         assert payload["module"][SOURCES[0]]["0"]["n"]==3
         assert sum(payload["module"][SOURCES[1]]["278"]["angles"]["theta_w_in_deg"])==3
         assert len(payload["module"][SOURCES[2]]["34"]["angles"]["theta_u_out_deg"])==len(ANGLE)-1
+        # Ensure the same page truly embeds local u-w data while its
+        # existing global angle histograms retain full QA exposure.
+        local_path=root/"synthetic_local_uw.json"
+        local_data={
+            "meta":{"scope":"FIRST_CHUNK_3000_EVENTS_PER_SOURCE",
+                    "nu":16,"nw":24,"full_independent_qa_passed":False},
+            "modules":{
+                src:{str(c.det_id):{
+                    "n":3,"outside":0,
+                    "all":[[0,1],[1,2]],
+                    "selected":{field:{
+                        "positive":[[0,1]],"far10":[],
+                        "near2":[[0,1],[1,2]]
+                        } for field in FIELDS}
+                } for c in chambers}
+                for src in SOURCES},
+        }
+        local_path.write_text(json.dumps(local_data),encoding="utf-8")
+        build(root,out,template,local_path)
+        joined=json.loads(out.read_text(encoding="utf-8").split(
+            marker,1)[1].split("</script>",1)[0])
+        assert joined["local"]["meta"]["scope"]==(
+            "FIRST_CHUNK_3000_EVENTS_PER_SOURCE")
+        assert joined["local"]["modules"][SOURCES[0]]["0"]["all"]==[
+            [0,1],[1,2]]
+        assert joined["module"][SOURCES[0]]["0"]["n"]==3
+        assert joined["local"]["modules"][SOURCES[2]]["278"][
+            "selected"]["theta_u_in_deg"]["near2"]==[[0,1],[1,2]]
+        local_data["meta"]["scope"]="FULL_201_CHUNKS_200000_EVENTS_PER_SOURCE"
+        local_path.write_text(json.dumps(local_data),encoding="utf-8")
+        try:
+            build(root,out,template,local_path)
+        except ValueError as exc:
+            assert "not independently verified" in str(exc)
+        else:
+            raise AssertionError("Unvalidated full local-u-w source was accepted")
+        local_data["meta"]["full_independent_qa_passed"]=True
+        local_data["modules"][SOURCES[0]]["0"]["n"]=4
+        local_data["modules"][SOURCES[0]]["0"]["outside"]=1
+        local_path.write_text(json.dumps(local_data),encoding="utf-8")
+        try:
+            build(root,out,template,local_path)
+        except ValueError as exc:
+            assert "exposure differ" in str(exc)
+        else:
+            raise AssertionError("Full local-u-w mismatch with full Geant4 QA accepted")
+        print("PASS: embedded pilot native u-w maps alongside full native angle QA")
+        print("PASS: refuse unvalidated or mismatched full 201-chunk local map")
         print("PASS: all 894 physical module/source PDFs and 4 signed angle fields")
         print("PASS: native complete-campaign provenance, histogram conservation and offline HTML JSON")
 
