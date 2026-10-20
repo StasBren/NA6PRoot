@@ -217,6 +217,22 @@ def run(data, out, geometry_only=False):
     if rows:
         print(f"PASS: {len(rows)} source/station/quadrant QA summaries, "
               "including signed entrance-angle marginal comparisons.")
+        print("Per-chamber hit-density ratios and signed-angle TVD to Q1 "
+              "(DESCRIPTIVE only; no significance test):")
+        for source in SOURCES:
+            for st in range(6):
+                chosen = {row["quadrant"]:row for row in rows
+                          if row["source"] == source and row["station"] == st}
+                def val(q, name):
+                    number = chosen[q][name]
+                    return "NA" if number is None else f"{number:.3f}"
+                comparisons = []
+                for q in ("Q2","Q3","Q4"):
+                    comparisons.append(
+                        f"{q}/Q1={val(q,'ratio_to_Q1_per_chamber')} "
+                        f"TVDu={val(q,'theta_u_marginal_TVD_to_Q1')} "
+                        f"TVDw={val(q,'theta_w_marginal_TVD_to_Q1')}")
+                print(f"{source} MS{st}: " + "; ".join(comparisons))
     print("RESTRICTION: no quadrant-only Geant4 generator approved by this test.")
     return summary, rows
 
