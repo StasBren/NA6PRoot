@@ -36,6 +36,26 @@ echo "New Garfield microscopic drifts from TRUE native-angle Heed origins..."
 
 python3 "$HERE/pi_centered_true_1d_cloud.py"
 VIEW="$REPO/test_runs/mwpc_stage_c/pi_fixed_wire_maps/pi_centered_true_1d_cloud.html"
+python3 - "$REPO" <<'PY'
+from pathlib import Path
+from zipfile import ZipFile,ZIP_DEFLATED
+import sys
+root=Path(sys.argv[1])/"test_runs/mwpc_stage_c"
+d=root/"pi_centered_native_drift_trajectories"
+v=root/"pi_fixed_wire_maps"
+archive=d/"pi_centered_true_1d_PI_review.zip"
+with ZipFile(archive,"w",ZIP_DEFLATED,compresslevel=6) as z:
+    for path in (
+      v/"pi_centered_true_1d_cloud.html",
+      v/"pi_centered_true_1d_cloud_manifest.json",
+      d/"native_heed_trace_manifest.json",
+      d/"native_heed_start_metadata.csv",
+      d/"centered_native_microscopic_drift_points.csv",
+    ):
+        if not path.is_file():raise FileNotFoundError(path)
+        z.write(path,arcname=path.name)
+print("PI true microscopic 1D review ZIP:",archive)
+PY
 echo "PASS: actual microscopic intermediate-coordinate pilot vs native muon angles"
 echo "  $VIEW"
 if command -v wslpath >/dev/null 2>&1; then
