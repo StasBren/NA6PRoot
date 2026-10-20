@@ -6,8 +6,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from pi_pitch_fieldwire_pilot import (
-    DU, NV, PITCHES, expected_rows, mean_rms, summarise, tag,
-    validate_column,
+    DU, NV, PITCHES, expected_rows, load_column_timing,
+    mean_rms, save_column_timing, summarise, tag, validate_column,
 )
 
 
@@ -53,6 +53,10 @@ def main():
                         "incidence_normal_deg":30+iv if c else "nan",
                     })
         assert validate_column(path, iu, pitch, 2) == 60
+        assert load_column_timing(path) is None
+        save_column_timing(path, 2.5, 60)
+        assert load_column_timing(path) == 2.5
+        assert path.with_suffix(".timing.json").exists()
         summary = summarise(path, pitch, 100., "smoke", 2)
         assert summary["n_electrons"] == 60
         assert summary["n_anode_collected"] == 30
@@ -62,8 +66,17 @@ def main():
         assert math.isclose(summary["drift_time_ns"]["mean"], 24.5)
         assert summary["drift_time_ns"]["mean_error"] > 0
         assert summary["electron_incidence_normal_deg"]["rms"] > 0
+        # Timing metadata must be invalidated if the physics CSV changes.
+        with path.open("a", encoding="utf-8") as extra:
+            extra.write("# modification invalidating checksum\\n")
+        try:
+            load_column_timing(path)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Altered checkpoint CSV accepted its old timer")
     print("PASS: six pitch tags, exact grids, anode/field-wire separation, "
-          "mean/RMS bootstrap errors and conservative smoke-scope labeling")
+          "mean/RMS bootstrap errors and authenticated per-column timings")
 
 
 if __name__ == "__main__":
