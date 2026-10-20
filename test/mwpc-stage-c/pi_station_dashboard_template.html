@@ -68,30 +68,31 @@ button.action:hover{background:#294360}
 @media(max-width:1060px){.layout{grid-template-columns:1fr}.cards{grid-template-columns:repeat(2,1fr)}#stationSVG{height:500px}}
 @media(max-width:620px){.toolbar,.cards,.layout{padding-left:12px;padding-right:12px}.cards{grid-template-columns:repeat(2,1fr)}.stat .value{font-size:16px}.wireHead,.wireRow{grid-template-columns:32px 1fr 54px 54px 54px;font-size:10px}}
 </style>
+<style id="pi-latest-nav-style">
+.pi-latest-nav{display:flex;flex-wrap:wrap;align-items:center;gap:7px 9px;
+margin:14px 0 3px;padding:10px;border:1px solid #536e80;border-radius:9px;
+background:rgba(9,31,47,.75);font:12px/1.4 system-ui,"Segoe UI",sans-serif}
+.pi-latest-nav .pi-latest-name{font-weight:750;color:#d4eaf3;margin-right:9px}
+.pi-latest-nav a,.pi-latest-nav .pi-latest-active{display:inline-block;
+padding:7px 10px;border:1px solid #547a91;border-radius:6px;
+text-decoration:none;color:#d1f7f2;background:rgba(35,66,81,.7)}
+.pi-latest-nav a:hover{border-color:#84eee3;color:#fff}
+.pi-latest-nav .pi-latest-active{font-weight:750;color:#071f2c;
+background:#85e5d6;border-color:#85e5d6}
+</style>
 </head>
 <body>
 <header>
 <div class="tag">NA60+ · MUON SPECTROMETER · STAGE C</div>
 <h1>Интерактивная карта MWPC-станций</h1>
 <p>Геометрия пересечений мюонов и сбор первичных электронов на отдельных анодах. Нажми на камеру, чтобы увидеть её профиль и пронумерованные проволоки.</p>
-<p style="margin-top:9px">
- <a href="pi_muon_track_explorer_native.html" style="color:#82dfde;font-weight:650" title="Настоящие хиты и энерговыделения нового Geant4, анодные сигналы. Создать: run_pi_native_anode_first_chunk.sh">→ Muon Track Explorer: новые реальные газовые хиты Geant4</a>
- <span style="color:#9fb7c7;margin:0 9px">|</span>
- <a href="pi_native_angle_position.html" style="color:#82dfde" title="Углы входа/выхода мюонов по позициям каждой из 298 камер, полный Geant4-ран: run_pi_native_angle_position.sh">→ Углы мюонов по камерам XY (полный Geant4)</a>
- <span style="color:#9fb7c7;margin:0 9px">|</span>
- <a href="pi_centered_native_timing.html" style="color:#82dfde" title="Новая симметричная Garfield 3+3мм модель, угол-время-координаты: run_pi_centered_native_timing_pilot.sh all">→ Новый отклик 3+3 мм по времени и углам</a>
- <span style="color:#9fb7c7;margin:0 9px">|</span>
- <a href="pi_centered_true_1d_cloud.html" style="color:#82dfde;font-weight:700" title="Настоящие координаты движущегося облака для Garfield микроскопических траекторий в бинах углов мюонов; run_pi_centered_true_1d_cloud.sh">→ 1D облако электронов u(t),v(t),w(t)</a>
- <span style="color:#9fb7c7;margin:0 9px">|</span>
- <a href="pi_two_anode_electron_explorer.html" style="color:#82dfde;font-weight:700" title="Настоящая u–v траектория Geant4 и две гистограммы первичных электронов на разных анодах. run_pi_two_anode_electron_explorer.sh">→ Два анода: электроны по времени и схема трека</a>
- <span style="color:#9fb7c7;margin:0 9px">|</span>
- <a href="pi_centered_timing_dashboard_v2.html" style="color:#82dfde;font-weight:700" title="Обновлённый анализ 3+3 мм: XY-выбор камеры, заполненные интервалы углов, 1D координата-время, оси и пояснения; run_pi_centered_timing_dashboard_v2.sh">→ 3+3 мм: время, углы и аноды (новый PI dashboard)</a>
- <span style="color:#9fb7c7;margin:0 9px">|</span>
- <a href="pi_native_drift_times.html" style="color:#82dfde" title="Времена дрейфа электронов Garfield на настоящих газовых хитах первого чанка: run_pi_native_drift_times.sh">→ Время дрейфа к анодам (графики)</a>
- <span style="color:#9fb7c7;margin:0 9px">|</span>
- <a href="pi_muon_track_explorer.html" style="color:#82dfde" title="Старый просмотр проекций мюонов на камеры: run_pi_muon_track_explorer.sh">→ Muon Track Explorer: исторические геометрические проекции</a>
-</p>
-<p style="font-size:11px">Эти два режима основаны на разных наборах событий; переход открывает соответствующую страницу, но не переносит выбор конкретного события.</p>
+<nav class="pi-latest-nav" aria-label="Актуальные dashboard NA60+">
+<span class="pi-latest-name">NA60+ / PI</span>
+<a href="pi_latest_dashboards.html">Обзор</a>
+<a href="pi_native_angle_position.html">Геометрия и углы · XY / u–w</a>
+<a href="pi_centered_timing_dashboard_v2.html">Время дрейфа и кратность</a>
+<a href="pi_two_anode_electron_explorer.html">Один мюон · два анода</a>
+</nav>
 </header>
 <div class="toolbar">
  <div class="field"><label for="source">Источник мюонов</label><select id="source"><option value="jpsi40-bore">J/ψ (40 AGeV)</option><option value="phi40-bore">φ (40 AGeV)</option><option value="omega40-bore">ω (40 AGeV)</option></select></div>
