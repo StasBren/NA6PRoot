@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NA60+ PI: истинные одномерные распределения дрейфующего облака</title>
+<style>
+:root{color-scheme:dark;--bg:#091522;--card:#132b40;--edge:#40627b;--muted:#b1cadb}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#f2f9ff;font:14px/1.55 system-ui,"Segoe UI",sans-serif}
+header,.controls,main,footer{padding:18px max(18px,3vw)}header{background:#1a354e}
+h1{font-size:25px;margin:4px 0}h2{font-size:17px;margin:4px 0 8px}
+p{color:var(--muted);font-size:12px;line-height:1.65}
+a{color:#87e0dd}.kicker{font-size:11px;color:#7aead4;letter-spacing:1px;font-weight:750}
+.controls{display:flex;flex-wrap:wrap;gap:14px;align-items:end}
+label{display:block;color:#c3d8e9;font-size:12px;margin-bottom:5px}
+select{padding:8px;background:#28445b;border:1px solid #7295b1;border-radius:6px;color:#edf8ff;font:inherit}
+main{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.panel{border:1px solid var(--edge);border-radius:10px;padding:15px;background:var(--card);min-width:0}
+.panel.full{grid-column:1/-1}svg{width:100%;display:block;height:330px;background:#0a2035;border-radius:6px}
+#survival{height:280px}.note{margin:0 max(18px,3vw) 14px;padding:12px 14px;background:#253c4a;border-left:4px solid #efbf82;font-size:12px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;margin:9px 0}
+.legend span{display:inline-flex;align-items:center;gap:4px}
+.legend i{width:17px;height:4px;display:inline-block;border-radius:4px}
+@media(max-width:880px){main{grid-template-columns:1fr}.panel.full{grid-column:auto}}
+</style></head><body>
+<header><div class="kicker">NA60+ · NATIVE GEANT4 ANGLES · ACTUAL GARFIELD MICROSCOPIC DRIFT LINES · 3+3 MM</div>
+<h1>Как изменяются одномерные распределения электронного облака во времени?</h1>
+<p>Это \(P(u;t),P(v;t),P(w;t)\) для электронов, которые <strong>ещё дрейфуют</strong> в момент \(t\): реальные промежуточные точки Garfield, а не начальная координата против итогового времени прибытия.</p>
+<a href="pi_centered_timing_dashboard_v2.html">← Время прибытия и кратность</a> · <a href="pi_two_anode_electron_explorer.html">← Два анода, один мюон</a>
+</header>
+<div class="controls">
+<div><label for="src">Источник</label><select id="src"></select></div>
+<div><label for="station">Станция</label><select id="station"></select></div>
+<div><label for="angle">|θu| входа мюона</label><select id="angle"></select></div>
+<div><label for="which">Одномерная координата</label><select id="which">
+<option value="u_relative_wire_mm">u(t), поперёк проволок, от ближайшего исходного анода</option>
+<option value="v_mm">v(t), толщина камеры</option>
+<option value="w_displacement_mm">Δw(t), движение вдоль проволоки от точки рождения</option>
+<option value="w_along_wire_mm">w(t), полное положение вдоль проволоки</option>
+</select></div>
+</div>
+<div class="note"><strong>Важно для PI.</strong> Каждая цветная кривая показывает координаты электронов в <strong>конкретный момент времени</strong>, а не их координаты рождения. Электроны, уже достигшие анода или потерянные, из распределения исчезают. Поэтому число оставшихся электронов убывает, и вероятность на каждой кривой нормирована на число ещё дрейфующих электронов в этот момент. Выборка ограничена мюонами из первых чанков, отобранными по углу; она <strong>не</strong> даёт детекторную эффективность.</div>
+<main>
+<section class="panel full">
+<h2 id="title">Распределение координаты облака</h2>
+<p id="scope"></p>
+<svg id="distribution" viewBox="0 0 960 330" role="img" aria-label="Несколько одномерных распределений положения дрейфующих электронов по времени, обе оси подписаны"></svg>
+<div id="legend" class="legend"></div>
+<p>Кривые по моментам \(t\) являются одномерными бинированными распределениями. Точки между реальными сохранёнными Garfield-микроступенями интерполированы; прямого соединения точки рождения с точкой сбора без траектории нет. Слабозаполненные моменты с менее чем 20 живыми электронами скрыты и помечены в легенде.</p>
+</section>
+<section class="panel full">
+<h2>Сколько электронов ещё находится в дрейфе?</h2>
+<svg id="survival" viewBox="0 0 960 280" role="img" aria-label="Число электронов, ещё дрейфующих к анодам, как функция прошедшего времени"></svg>
+<p>Здесь знаменатель постоянный: полное число запущенных микроскопических электронов данной угловой группы. Убывание обусловлено завершением их микроскопических треков (сбор или потеря). Это не число электронов в электрическом импульсе.</p>
+</section>
+</main>
+<footer>Метод: реальные местные Geant4 траектории мюонов; независимое Heed рождение электронов; отдельные новые Garfield AvalancheMicroscopic::DriftElectron траектории с EnableDriftLines() и сохранением промежуточных координат; срезы времени интерполированы только между соседними сохранёнными микроскопическими точками. Конфигурация B=0, p=4 мм, v-катоды на ±3 мм, аноды при v=0. По оси w возможна диффузия, но электрическое поле идеальной 2D-анодной геометрии трансляционно-инвариантно вдоль проволоки. По 8 мюонных хитов и 12 электронов на хит на каждой выборочной угловой группе по умолчанию: пилот ограниченной статистики. Катодных стрипов и электроники нет.</footer>
+<script id="cloudData" type="application/json">__PI_TRUE_DRIFT_1D_DATA__</script>
+<script>
+"use strict";
+(()=>{
+const D=JSON.parse(document.getElementById("cloudData").textContent);
+const $=id=>document.getElementById(id),NS="http://www.w3.org/2000/svg";
+const srcNames={"jpsi40-bore":"J/ψ","phi40-bore":"φ","omega40-bore":"ω"};
+const palette=["#8be1d4","#f6bd7f","#a9a4ff","#d1a7e9","#78baff","#e7e88b","#ff9797","#62c4d1","#f9ccac"];
+const S={src:D.sources[0],station:0,angle:0,which:"u_relative_wire_mm"};
+const fields={
+ u_relative_wire_mm:"u(t) относительно исходной проволоки, мм",
+ v_mm:"v(t) нормаль к анодной плоскости, мм",
+ w_displacement_mm:"Δw(t) вдоль анода от точки рождения, мм",
+ w_along_wire_mm:"w(t) координата вдоль анода, мм"
+};
+function svg(name,attrs,root){const n=document.createElementNS(NS,name);for(const k in attrs)n.setAttribute(k,attrs[k]);if(root)root.append(n);return n}
+function txt(s,x,y,root,attrs){const n=svg("text",Object.assign({x,y,fill:"#c9dfef","font-size":12},attrs||{}),root);n.textContent=String(s);return n}
+function options(id,arr,val){const x=$(id);x.replaceChildren();for(const [key,title] of arr){const n=document.createElement("option");n.value=String(key);n.textContent=title;x.append(n)}x.value=String(val)}
+function entry(){return D.groups[[S.src,S.station,S.angle].join("|")]}
+function choices(){
+ options("src",D.sources.map(s=>[s,srcNames[s]]),S.src);
+ options("station",[0,1,2,3,4,5].map(i=>[i,"MS"+i]),S.station);
+ const active=[];
+ for(let i=0;i<D.angleCategories.length;i++){
+  const r=D.groups[[S.src,S.station,i].join("|")];
+  if(r&&r.born>0)active.push([i,D.angleCategories[i]+" ("+r.born+" e⁻)"]);
+ }
+ if(!active.some(x=>x[0]===S.angle))S.angle=active.length?active[0][0]:0;
+ options("angle",active.length?active:[[-1,"Нет угловых данных"]],S.angle);
+ $("which").value=S.which;
+}
+function draw(){
+ choices();
+ const b=entry(),a=$("distribution"),sur=$("survival");
+ a.replaceChildren();sur.replaceChildren();
+ $("legend").replaceChildren();
+ if(!b||!b.born){
+  $("title").textContent="Нет данных для выбранной угловой группы";
+  $("scope").textContent="Попробуй другую станцию или источник.";return;
+ }
+ $("title").textContent="Одномерное распределение "+fields[S.which];
+ $("scope").textContent=srcNames[S.src]+" · MS"+S.station+
+   " · |θu| "+D.angleCategories[S.angle]+" · запущено "+
+   b.born+" отдельных Heed электронов; исходные треки выбраны по углу.";
+ const edges=D.edges[S.which],grid=b.hist[S.which],lo=edges[0],
+ hi=edges[edges.length-1],ns=grid[0].length;
+ const curves=b.alive.map((alive,i)=>alive?grid[i].map(n=>100*n/alive):grid[i].map(()=>0));
+ const ymax=Math.max(3,...curves.filter((_,i)=>b.alive[i]>=20).flat())*1.17;
+ const x=v=>74+810*(v-lo)/(hi-lo),y=p=>266-184*p/ymax;
+ svg("line",{x1:74,x2:74,y1:69,y2:266,stroke:"#c3ddeb"},a);
+ svg("line",{x1:74,x2:884,y1:266,y2:266,stroke:"#c3ddeb"},a);
+ for(let j=0;j<=4;j++){
+  let value=ymax*j/4,yy=y(value);
+  svg("line",{x1:74,x2:884,y1:yy,y2:yy,stroke:"#496478","stroke-width":.7},a);
+  txt(value.toFixed(1),67,yy+4,a,{"text-anchor":"end","font-size":11});
+ }
+ for(let j=0;j<=5;j++){
+  let xx=lo+(hi-lo)*j/5;
+  txt(xx.toFixed(hi-lo>100?0:1),x(xx),287,a,{"text-anchor":"middle","font-size":11});
+ }
+ txt("Доля электронов ещё в дрейфе / координатный бин, %",74,25,a,{"font-weight":"700"});
+ txt(fields[S.which]+" →",886,320,a,{"font-weight":"700","text-anchor":"end"});
+ curves.forEach((vs,i)=>{
+  const alive=b.alive[i],t=D.times_ns[i],item=document.createElement("span");
+  const sw=document.createElement("i");sw.style.background=palette[i%palette.length];
+  const caption=document.createElement("span");caption.textContent="t="+t+
+   " нс (n="+alive+")"+(alive<20?" · мало":"");
+  item.append(sw,caption);$("legend").append(item);
+  if(alive<20)return;
+  const pts=vs.map((v,j)=>x((edges[j]+edges[j+1])/2)+","+y(v)).join(" ");
+  svg("polyline",{points:pts,stroke:palette[i%palette.length],fill:"none",
+   "stroke-width":2.3,"stroke-linecap":"round","stroke-linejoin":"round"},a);
+ });
+ const tmax=Math.max(...D.times_ns),sx=t=>74+810*t/tmax,sy=p=>216-150*p/100;
+ svg("line",{x1:74,x2:74,y1:51,y2:216,stroke:"#c3ddeb"},sur);
+ svg("line",{x1:74,x2:884,y1:216,y2:216,stroke:"#c3ddeb"},sur);
+ for(const tick of [0,25,50,75,100]){
+  svg("line",{x1:74,x2:884,y1:sy(tick),y2:sy(tick),
+   stroke:"#46627a","stroke-width":.7},sur);
+  txt(tick+"%",66,sy(tick)+4,sur,{"text-anchor":"end","font-size":11});
+ }
+ for(const t of D.times_ns)
+  txt(t,sx(t),238,sur,{"text-anchor":"middle","font-size":11});
+ const percentage=b.alive.map(n=>100*n/b.born);
+ const points=percentage.map((v,i)=>sx(D.times_ns[i])+","+sy(v)).join(" ");
+ svg("polyline",{points,stroke:"#87e2cd","stroke-width":3,fill:"none"},sur);
+ percentage.forEach((v,i)=>{
+  svg("circle",{cx:sx(D.times_ns[i]),cy:sy(v),r:4,fill:"#87e2cd"},sur);
+ });
+ txt("Электронов, ещё дрейфующих / все запущенные, %",74,25,sur,
+     {"font-weight":"700"});
+ txt("Время после рождения, нс →",886,273,sur,
+     {"text-anchor":"end","font-weight":"700"});
+}
+$("src").onchange=e=>{S.src=e.target.value;draw()};
+$("station").onchange=e=>{S.station=Number(e.target.value);draw()};
+$("angle").onchange=e=>{S.angle=Number(e.target.value);draw()};
+$("which").onchange=e=>{S.which=e.target.value;draw()};
+draw();
+})();
+</script></body></html>
