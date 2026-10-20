@@ -7,7 +7,8 @@ from tempfile import TemporaryDirectory
 
 from pi_pitch_fieldwire_pilot import (
     DU, NV, PITCHES, expected_rows, load_column_timing,
-    mean_rms, save_column_timing, summarise, tag, validate_column,
+    mean_rms, same_physics_manifest, save_column_timing, summarise,
+    tag, validate_column,
 )
 
 
@@ -17,7 +18,15 @@ def main():
     assert expected_rows(3., 2, "smoke") == 60
     assert expected_rows(3.5, 20, "pilot") == 21000
     assert tag(3.5, 0.) == "p3p5_anode_only"
-    assert tag(4., 100.) == "p4p0_field100p0um"
+    assert tag(4., 75.) == "p4p0_field75p0um"
+    frozen = {"cpp_sha256":"a","binary_sha256":"b",
+              "runner_sha256":"old","field_wire_diam_um":75.}
+    assert same_physics_manifest(
+        frozen, {**frozen,"runner_sha256":"new"})
+    assert not same_physics_manifest(
+        frozen, {**frozen,"binary_sha256":"changed"})
+    assert not same_physics_manifest(
+        frozen, {**frozen,"field_wire_diam_um":76.})
     moments = mean_rms([10., 20., 10., 20.], 123, reps=60)
     assert moments["n"] == 4
     assert moments["mean"] == 15. and moments["rms"] == 5.
