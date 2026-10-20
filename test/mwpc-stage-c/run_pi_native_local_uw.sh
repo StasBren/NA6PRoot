@@ -24,6 +24,7 @@ case "${1:-first}" in
    ;;
 esac
 python3 "$HERE/pi_native_angle_position.py"
+python3 "$HERE/refresh_pi_dashboard_navigation.py"
 OUT="$REPO/test_runs/mwpc_stage_c/pi_fixed_wire_maps/pi_native_angle_position.html"
 echo "PASS: global XY angular PDFs + selected chamber local u-w geometry,"
 echo "  true native gas-hit midpoint 2D density and angle-cut 1D projections."
