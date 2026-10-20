@@ -347,6 +347,7 @@ def simulate(args, suite, inputs):
                 out.rename(old)
                 print(f"Archived interrupted chunk: {old}", flush=True)
             out.mkdir()
+            chunk_started = time.perf_counter()
             command = [
                 sim, "--workers", str(args.workers),
                 "--keep-worker-output",
@@ -391,11 +392,13 @@ def simulate(args, suite, inputs):
                 f"{n:,} events, {args.workers} workers, seed={seed}",
                 flush=True,
             )
+            geant_started = time.perf_counter()
             with log.open("w",encoding="utf-8") as stream:
                 result = subprocess.run(
                     command, cwd=REPO, env=env, stdout=stream,
                     stderr=subprocess.STDOUT, check=False,
                 )
+            geant_wall_seconds = time.perf_counter() - geant_started
             if result.returncode != 0:
                 raise RuntimeError(
                     f"Geant4 failed rc={result.returncode} ({log}).\n"
@@ -469,12 +472,14 @@ def simulate(args, suite, inputs):
             # ROOT checks event counts, object branches and the gas-step tree.
             validator = f'{inputs["validator"]}+("{out}",{n})'
             verify_log = out / "validation.log"
+            validation_started = time.perf_counter()
             with verify_log.open("w", encoding="utf-8") as stream:
                 check = subprocess.run(
                     [root,"-l","-b","-q",validator],
                     cwd=REPO,env=env,stdout=stream,
                     stderr=subprocess.STDOUT,check=False,
                 )
+            validation_wall_seconds = time.perf_counter() - validation_started
             valid_text = verify_log.read_text(errors="replace")
             if check.returncode != 0 or "PI_GEANT_CHUNK_PASS" not in valid_text:
                 raise RuntimeError(
@@ -492,6 +497,12 @@ def simulate(args, suite, inputs):
                 "verified_gas_step_tree":True,
                 "verified_virtual_muon_plane_tree":True,
                 "original_worker_subruns_preserved":True,
+                "wall_seconds": {
+                    "geant4": round(geant_wall_seconds, 6),
+                    "root_validation": round(validation_wall_seconds, 6),
+                    "chunk_total": round(time.perf_counter()-chunk_started, 6),
+                },
+                "timing_clock": "time.perf_counter, elapsed wall seconds",
             })
             count_new += 1
             print(
