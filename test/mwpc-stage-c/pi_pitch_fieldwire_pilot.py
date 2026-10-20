@@ -96,6 +96,36 @@ def validate_column(path, iu, pitch, samples):
     return n
 
 
+def load_column_timing(dest):
+    """Read a measured Garfield runtime, never infer it from file mtimes."""
+    path = dest.with_suffix(".timing.json")
+    if not path.is_file():
+        return None
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if (value.get("csv_sha256") != digest(dest) or
+            value.get("timing_kind") != "monotonic_wall_seconds" or
+            not math.isfinite(float(value["seconds"])) or
+            float(value["seconds"]) <= 0):
+        raise ValueError(f"Inconsistent or invalid measured timing: {path}")
+    return float(value["seconds"])
+
+
+def save_column_timing(dest, seconds, n_electrons):
+    if not math.isfinite(seconds) or seconds <= 0 or n_electrons <= 0:
+        raise ValueError("Invalid Garfield measured runtime")
+    info = {
+        "timing_kind": "monotonic_wall_seconds",
+        "seconds": float(seconds),
+        "n_electrons": int(n_electrons),
+        "csv_sha256": digest(dest),
+        "measurement": "subprocess.run Garfield including process startup",
+    }
+    sidecar = dest.with_suffix(".timing.json")
+    temp = sidecar.with_suffix(".timing.json.tmp")
+    temp.write_text(json.dumps(info, indent=2)+"\n", encoding="utf-8")
+    os.replace(temp, sidecar)
+
+
 def mean_rms(values, seed, reps=300):
     x = np.asarray(values, dtype=float)
     x = x[np.isfinite(x)]
@@ -222,10 +252,18 @@ def config(pitch, fw, mode, samples, seed, binary, output):
                             encoding="utf-8")
     iu_values = ([nu//2] if mode == "smoke" else list(range(nu)))
     observations = []
+    unknown_column_times = 0
     for iu in iu_values:
         dest = columns / f"iu_{iu:03d}.csv"
         if dest.exists():
             validate_column(dest, iu, pitch, samples)
+            elapsed_saved = load_column_timing(dest)
+            if elapsed_saved is None:
+                unknown_column_times += 1
+            else:
+                observations.append({"iu": iu, "wall_seconds": elapsed_saved,
+                                     "n_electrons": NV*samples,
+                                     "reused_checkpoint": True})
             print(f"SKIP validated {tag(pitch,fw)} / u-column {iu}")
             continue
         tmp = columns / f"iu_{iu:03d}.csv.tmp"
@@ -261,7 +299,13 @@ def config(pitch, fw, mode, samples, seed, binary, output):
                 "check the ELF ldd preflight printed by the shell runner.")
         validate_column(tmp, iu, pitch, samples)
         os.replace(tmp, dest)
-        observations.append({"iu": iu, "wall_seconds": elapsed})
+        save_column_timing(dest, elapsed, NV*samples)
+        observations.append({"iu": iu, "wall_seconds": elapsed,
+                             "n_electrons": NV*samples,
+                             "reused_checkpoint": False})
+        print(f"TIMING {tag(pitch,fw)} / u-column {iu}: "
+              f"{elapsed:.2f} s ({elapsed/(NV*samples):.4f} s/electron)",
+              flush=True)
     combined = directory / "garfield_electrons.csv"
     temporary = directory / "garfield_electrons.csv.tmp"
     with temporary.open("w", newline="", encoding="utf-8") as o:
@@ -279,7 +323,12 @@ def config(pitch, fw, mode, samples, seed, binary, output):
                     o.write(line)
     os.replace(temporary, combined)
     result = summarise(combined, pitch, fw, mode, samples)
-    result["new_columns_wall_times"] = observations
+    result["column_wall_times"] = observations
+    result["columns_missing_measured_wall_time"] = unknown_column_times
+    result["garfield_wall_seconds_per_electron"] = mean_rms(
+        [r["wall_seconds"] / r["n_electrons"] for r in observations],
+        250020 + int(10*pitch) + int(fw)) if observations else None
+    result["timing_includes_process_startup"] = True
     result["raw_data"] = str(combined)
     (directory / "summary.json").write_text(json.dumps(
         result, indent=2)+"\n", encoding="utf-8")
