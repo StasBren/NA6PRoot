@@ -2345,3 +2345,44 @@ covers the WSL missing-PATH scenario using a fake ROOT installation in
 a CMake directory and rejects invalid explicitly configured binaries.
 Previously completed per-chunk checkpoints remain resumable; all native
 input ROOT chunks and their full Geant4 QA remain unchanged.
+
+
+### Current PI dashboard navigation (no historical/legacy links)
+
+The newest independently useful dashboards are linked bidirectionally
+using a common offline navigation header and a self-contained start page:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_latest_dashboards.sh
+
+Open pi_latest_dashboards.html in the pi_fixed_wire_maps directory.
+
+Current pages:
+- pi_native_angle_position.html: verified full native Geant4 200k
+  generated events/source, global XY plus local u-w positions/1D
+  occupancy for pilot or full (as labeled);
+- pi_centered_timing_dashboard_v2.html: FIRST-CHUNK centered 3+3mm
+  Heed/Garfield electron arrival and time-gated 0,1,2,3,4,5+ wires;
+- pi_two_anode_electron_explorer.html: curated native first-chunk
+  two-collected-wire event with TRUE local u-v muon segment and
+  independent primary electron count-versus-time histograms (NO mV);
+- pi_centered_true_1d_cloud.html: micro Garfield P(u(t)),P(v(t)),P(w(t))
+  for native angle-stratified electron cloud IF the separate
+  microscopic trajectory calculation successfully produced the page.
+
+The common offline navigation tool only links HTML files ACTUALLY on
+this workstation. A missing optional microscopic cloud is shown as
+not-yet-created, not a dead link. It preserves the exact embedded
+source JSON data bytes and does not rerun, overwrite or process ROOT,
+Geant4, Heed or Garfield data. It is idempotent, and checks that the
+original data script text stays unchanged. Historical legacy 2+4mm,
+old projected station estimates, provisional centered native timing,
+and parametric-voltage explorations remain on disk for reproducibility
+but are deliberately excluded from all new menus.
+
+Modern dashboard builders automatically refresh the latest navigation
+when they finish. If only restoring navigation across already-built
+pages, run the one-shot command above. Old bookmarked station/track
+pages will also acquire links forward to these current analyses;
+they are not endorsed as updated physics.
