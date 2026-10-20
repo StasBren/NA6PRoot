@@ -16,6 +16,7 @@ import csv
 import hashlib
 import json
 import math
+import time
 from pathlib import Path
 from collections import defaultdict
 
@@ -117,12 +118,14 @@ def finish(bucket):
 
 
 def run(args):
+    run_started=time.perf_counter()
     for p in (args.export_dir,args.garfield,args.manifest,
               args.heed_tracks,args.heed_clusters,args.template):
         if not p.exists():
             raise FileNotFoundError(f"Missing pipeline input: {p}")
     pool,field=load_centered_map(args.garfield,args.manifest)
     lam,marks=read_heed(args.heed_tracks,args.heed_clusters)
+    lookup_load_wall=time.perf_counter()-run_started
     # Explicitly preserve all 18 source×station exposures, even where
     # a tiny pilot source contains no gas hit at a given station.
     containers={(src,st,-1,axis,-1):fresh(-1)
@@ -296,6 +299,11 @@ def run(args):
         "sha256_code":hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "model":"Heed PRIMARY electron + verified symmetric Garfield drift; no analog electronics",
         "no_cathode_strips":True,
+        "measured_wall_seconds":{
+            "validated_lut_and_heed_load":lookup_load_wall,
+            "whole_pilot_including_IO":time.perf_counter()-run_started,
+        },
+        "timing_clock":"time.perf_counter monotonic seconds",
     }
     (args.out/"pi_centered_timing_manifest.json").write_text(
         json.dumps(manifest,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
