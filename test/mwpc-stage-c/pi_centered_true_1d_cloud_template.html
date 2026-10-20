@@ -19,11 +19,31 @@ main{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .legend span{display:inline-flex;align-items:center;gap:4px}
 .legend i{width:17px;height:4px;display:inline-block;border-radius:4px}
 @media(max-width:880px){main{grid-template-columns:1fr}.panel.full{grid-column:auto}}
-</style></head><body>
-<header><div class="kicker">NA60+ · NATIVE GEANT4 ANGLES · ACTUAL GARFIELD MICROSCOPIC DRIFT LINES · 3+3 MM</div>
+</style><style id="pi-latest-nav-style">
+.pi-latest-nav{display:flex;flex-wrap:wrap;align-items:center;gap:7px 9px;
+margin:14px 0 3px;padding:10px;border:1px solid #536e80;border-radius:9px;
+background:rgba(9,31,47,.75);font:12px/1.4 system-ui,"Segoe UI",sans-serif}
+.pi-latest-nav .pi-latest-name{font-weight:750;color:#d4eaf3;margin-right:9px}
+.pi-latest-nav a,.pi-latest-nav .pi-latest-active{display:inline-block;
+padding:7px 10px;border:1px solid #547a91;border-radius:6px;
+text-decoration:none;color:#d1f7f2;background:rgba(35,66,81,.7)}
+.pi-latest-nav a:hover{border-color:#84eee3;color:#fff}
+.pi-latest-nav .pi-latest-active{font-weight:750;color:#071f2c;
+background:#85e5d6;border-color:#85e5d6}
+</style>
+</head><body>
+<header>
+<div class="kicker">NA60+ · NATIVE GEANT4 ANGLES · ACTUAL GARFIELD MICROSCOPIC DRIFT LINES · 3+3 MM</div>
 <h1>Как изменяются одномерные распределения электронного облака во времени?</h1>
 <p>Это \(P(u;t),P(v;t),P(w;t)\) для электронов, которые <strong>ещё дрейфуют</strong> в момент \(t\): реальные промежуточные точки Garfield, а не начальная координата против итогового времени прибытия.</p>
-<a href="pi_centered_timing_dashboard_v2.html">← Время прибытия и кратность</a> · <a href="pi_two_anode_electron_explorer.html">← Два анода, один мюон</a>
+<nav class="pi-latest-nav" aria-label="Актуальные dashboard NA60+">
+<span class="pi-latest-name">NA60+ / PI</span>
+<a href="pi_latest_dashboards.html">Обзор</a>
+<a href="pi_native_angle_position.html">Геометрия и углы · XY / u–w</a>
+<a href="pi_centered_timing_dashboard_v2.html">Время дрейфа и кратность</a>
+<a href="pi_two_anode_electron_explorer.html">Один мюон · два анода</a>
+<span class="pi-latest-active" aria-current="page">Облако u(t), v(t), w(t)</span>
+</nav>
 </header>
 <div class="controls">
 <div><label for="src">Источник</label><select id="src"></select></div>
