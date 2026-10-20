@@ -6,6 +6,8 @@
 #include <iostream>
 #include <limits>
 #include <string>
+#include <sstream>
+#include <vector>
 
 #include "Garfield/AvalancheMicroscopic.hh"
 #include "Garfield/ComponentAnalyticField.hh"
@@ -233,6 +235,126 @@ int main(int argc, char** argv) {
   sensor.SetArea(
       -uExtent, -gapMinusCm, -wHalfSpanCm,
       +uExtent, +gapPlusCm, +wHalfSpanCm);
+
+  // Optional NEW pure microscopic DRIFT-LINE collection mode for the
+  // PI's P(u(t)),P(v(t)),P(w(t)) plots conditional on true native muon angle.
+  // Uniform response-map output and its historical behaviour are untouched.
+  const std::string traceStarts =
+      ReadStringArg(argc, argv, "--trace-starts", "");
+  if (!traceStarts.empty()) {
+    const std::string traceOutput = ReadStringArg(
+        argc, argv, "--trace-output", "c_centered_native_drift_lines.csv");
+    const int traceCollisionSteps = ReadIntArg(
+        argc, argv, "--trace-collision-steps", 20);
+    if (std::abs(gapMinusMm - 3.) > 1.e-12 ||
+        std::abs(gapPlusMm - 3.) > 1.e-12 ||
+        std::abs(wirePitchMm - 4.) > 1.e-12 ||
+        std::abs(bTesla) > 1.e-12 ||
+        traceCollisionSteps < 1) {
+      std::cerr << "Native track drift snapshots demand centred 3+3mm, "
+                   "4mm pitch, B=0, positive collision sample stride.\n";
+      return 21;
+    }
+    std::ifstream source(traceStarts);
+    if (!source) {
+      std::cerr << "Cannot read native Heed starting electron CSV: "
+                << traceStarts << "\n";
+      return 22;
+    }
+    std::ofstream trace(traceOutput);
+    if (!trace) {
+      std::cerr << "Cannot open drift-line output CSV: "
+                << traceOutput << "\n";
+      return 23;
+    }
+    std::string header;
+    std::getline(source, header);
+    if (header != "electron_id,u_cell_mm,v_birth_mm,w_start_mm,seed") {
+      std::cerr << "Incorrect native electron start CSV header. "
+                   "Expected numeric ID,u_cell,v,w,seed.\n";
+      return 24;
+    }
+    trace << std::setprecision(12)
+          << "electron_id,point_index,t_rel_birth_ns,"
+             "u_cell_mm,v_mm,w_mm,end_status,number_points\n";
+    std::string line;
+    long long nElectronStarts = 0;
+    long long nMicroPoints = 0;
+    while (std::getline(source, line)) {
+      if (line.empty()) continue;
+      std::istringstream row(line);
+      std::string part;
+      std::vector<std::string> v;
+      while (std::getline(row, part, ',')) v.push_back(part);
+      if (v.size() != 5) {
+        std::cerr << "Bad native Heed seed row: " << line << "\n";
+        return 25;
+      }
+      try {
+        const long long id = std::stoll(v[0]);
+        const double u0mm = std::stod(v[1]);
+        const double v0mm = std::stod(v[2]);
+        const double w0mm = std::stod(v[3]);
+        const long long seed = std::stoll(v[4]);
+        if (id < 0 || seed < 0 || seed > 2147483647LL ||
+            !std::isfinite(u0mm) || !std::isfinite(v0mm) ||
+            !std::isfinite(w0mm) ||
+            std::abs(u0mm) > 2.001 ||
+            std::abs(v0mm) > 3.001 ||
+            std::abs(w0mm) > 1.e-5) {
+          std::cerr << "Native drift starts must be within centered "
+                       "wire cell and gas half gap, with w0=0.\n";
+          return 26;
+        }
+        Garfield::RandomEngineRoot engine(
+            static_cast<unsigned int>(seed));
+        Garfield::Random::SetEngine(engine);
+        Garfield::AvalancheMicroscopic drift(&sensor);
+        drift.EnableSignalCalculation(false);
+        drift.EnableDriftLines();
+        drift.SetCollisionSteps(traceCollisionSteps);
+        drift.DriftElectron(0.1*u0mm,0.1*v0mm,0.,0.,
+                            startEnergyEv,0.,0.,0.);
+        const auto endCount=drift.GetNumberOfElectronEndpoints();
+        int status=-999;
+        if (endCount) {
+          double uStart=0.,vStart=0.,wStart=0.,tStart=0.,eStart=0.;
+          double uEnd=0.,vEnd=0.,wEnd=0.,tEnd=0.,eEnd=0.;
+          drift.GetElectronEndpoint(0,uStart,vStart,wStart,tStart,eStart,
+                  uEnd,vEnd,wEnd,tEnd,eEnd,status);
+        }
+        if (!endCount) {
+          trace << id << ",0,0," << u0mm << "," << v0mm
+                << ",0,-999,1\n";
+          ++nMicroPoints;
+        } else {
+          const auto count=drift.GetNumberOfElectronDriftLinePoints(0);
+          for (std::size_t k=0;k<count;++k) {
+            double uu=0.,vv=0.,ww=0.,tt=0.;
+            drift.GetElectronDriftLinePoint(uu,vv,ww,tt,k,0);
+            trace << id << "," << k << "," << tt << ","
+                  << 10.*uu << "," << 10.*vv << "," << 10.*ww
+                  << "," << status << "," << count << "\n";
+            ++nMicroPoints;
+          }
+        }
+        ++nElectronStarts;
+      } catch (const std::exception& e) {
+        std::cerr << "Failed native Garfield electron seed/trace parse: "
+                  << e.what() << "\n";
+        return 27;
+      }
+    }
+    if (!nElectronStarts) {
+      std::cerr << "No native Heed electrons to drift.\n";
+      return 28;
+    }
+    std::cout << "PASS: centered native-angle microscopic Garfield "
+              << nElectronStarts << " electrons, "
+              << nMicroPoints << " REAL drift-line points -> "
+              << traceOutput << "\n";
+    return 0;
+  }
 
   std::ofstream out(output);
   if (!out) {
