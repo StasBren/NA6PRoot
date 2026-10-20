@@ -2196,3 +2196,63 @@ No new native Geant4, Garfield drift or ROOT export is performed. Run
 the tiny native/synthetic regression before production; the wrapper
 does this automatically, then generates the HTML. The old 2+4mm response
 and earlier Track Explorer are untouched.
+
+
+### PI: actual Geant4 muon u-v and true Garfield microscopic cloud u(t),v(t),w(t)
+
+After the previously completed centered 3+3mm Heed/Garfield
+two-anode pilot is available, run:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_two_anode_electron_explorer.sh
+
+This builds pi_two_anode_electron_explorer.html in
+test_runs/mwpc_stage_c/pi_fixed_wire_maps/. It reuses collected primary
+electron arrival timestamps from the old 3+3mm per-event HTML, but NEVER
+the arbitrary model mV voltages. It joins each selected muon to the TRUE
+TGeo-local u/v/w Geant4 gas entrance/exit from existing
+pi_native_anode_first_chunk/native_exports CSVs (strict source/event/
+hit/track geometry matching), and draws the actual u-v segment between
+cathodes at v=±3mm and two highlighted finite anode wires at v=0.
+Time plot: separate transparent histograms of primary electron counts
+on both physical anodes, 5/10/20ns bin selector, optional dashed arithmetic
+A+B primary electron COUNT curve, no electronics/analog circuit sum,
+no ASIC threshold, no cathode strips. Every axis is labeled.
+Original analog viewer remains unchanged in a different HTML.
+
+For genuinely time-evolving microscopic electron positions (not
+initial position vs final arrival time), run the NEW, intentionally
+limited simulation:
+
+    bash test/mwpc-stage-c/run_pi_centered_true_1d_cloud.sh
+
+This command first tests snapshot conservation on synthetic traces;
+next selects independent Heed initial electron locations along ACTUAL
+native first-chunk muon gas-hit segments in four |theta_u| strata
+(0–2, 2–5, 5–10, >=10 degrees) for every source and MS station.
+It rebuilds the EXISTING Stage-C Garfield executable and invokes only
+its new --trace-starts mode: symmetric 3+3mm, 4mm pitch, B=0, real
+AvalancheMicroscopic::DriftElectron with EnableDriftLines() and 20-collision
+sample stride. The original 600-box map, completed Geant4 600k run and
+old 2+4mm reference data stay untouched.
+
+The saved real microscopic drift points are evaluated at fixed times
+0,5,10,20,40,60,80,100,150ns by interpolation ONLY between adjacent
+stored Garfield microscopic samples (NOT the straight line from birth
+to final endpoint). Once an electron's trace ends it leaves the
+still-drifting population; each coordinate PDF is normalized to the
+number of electrons STILL drifting at its time. The survival plot
+shows the fraction of launched microscopic electrons not yet stopped.
+The standalone pi_centered_true_1d_cloud.html in
+test_runs/mwpc_stage_c/pi_fixed_wire_maps/ can display independent
+P(u_relative_to_initial_wire(t)), P(v(t)), P(delta_w(t)), and local
+P(w(t)), for angle-conditioned real native muon samples.
+
+This is a limited STRATIFIED pilot: default 8 native muon-hit gas
+segments per channel/station/angle bin and at most 12 Heed primary
+electrons per hit. Therefore these curves do not give absolute muon
+acceptance, electronics efficiency or full 201-chunk response statistics.
+The new Garfield trajectory mode and HTML require first local execution
+in WSL; do not claim the scientific outputs are finished merely because
+their code exists in GitHub.
