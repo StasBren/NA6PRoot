@@ -5,7 +5,7 @@ import csv,json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from pi_native_local_uw_density import process_csv,merge,build,NU,NW,GEOM,FIELDS,selections
+from pi_native_local_uw_density import process_csv,merge,build,NU,NW,GEOM,FIELDS,selections,resolve_root_executable,activate_root_for_export
 
 def row(det,st,theta,u,w,pdg=13,path=6):
     return dict(event=0,hit_index=0,track_id=0,det_id=det,station=st,pdg=pdg,
@@ -54,6 +54,40 @@ def test():
         assert sum(k for _,k in module["all"])==3
         assert sum(k for _,k in module["selected"]["theta_u_in_deg"]
                        ["near2"])==1
+        # Regression for the WSL failure in full 201-chunk mode:
+        # installed NA6PRoot is on PATH, but the root command is not.
+        # Resolve real ROOT from the already-existing CMakeCache, without
+        # assuming the interactive bash profile has sourced thisroot.sh.
+        root_prefix=root/"existing-root-install"
+        root_bin=root_prefix/"bin";root_bin.mkdir(parents=True)
+        (root_prefix/"lib/cmake/ROOT").mkdir(parents=True)
+        executable=root_bin/"root"
+        executable.write_text("#!/bin/sh\nexit 0\n",encoding="utf-8")
+        executable.chmod(0o755)
+        cmake=root/"existing-cmake-build";cmake.mkdir()
+        (cmake/"CMakeCache.txt").write_text(
+            "ROOT_DIR:PATH="+str(root_prefix/"lib/cmake/ROOT")+"\n",
+            encoding="utf-8")
+        isolated={"PATH":"/does-not-contain-ROOT","LD_LIBRARY_PATH":"/other/lib"}
+        resolved=resolve_root_executable(build_dirs=[cmake],env=isolated)
+        assert resolved==executable.resolve()
+        active=activate_root_for_export(build_dirs=[cmake],env=isolated)
+        assert active==str(executable.resolve())
+        assert isolated["ROOTSYS"]==str(root_prefix)
+        assert isolated["PI_ROOT_EXECUTABLE"]==active
+        assert isolated["PATH"].split(":")[0]==str(root_bin)
+        assert str(root_prefix/"lib") in isolated["LD_LIBRARY_PATH"].split(":")
+        assert "/other/lib" in isolated["LD_LIBRARY_PATH"].split(":")
+        failed={**isolated,"PI_ROOT_EXECUTABLE":"/not/a/ROOT/bin/root"}
+        try:
+            resolve_root_executable(build_dirs=[cmake],env=failed)
+        except FileNotFoundError as exc:
+            assert "PI_ROOT_EXECUTABLE" in str(exc)
+        else:
+            raise AssertionError("Bad explicit ROOT path silently accepted")
+        print("PASS: locate missing ROOT from existing CMake ROOT_DIR")
+        print("PASS: activate rootcling PATH/ROOTSYS/shared libs in WSL")
+        print("PASS: reject stale explicitly configured ROOT path")
         print("PASS: signed muon angle cuts, local gas aperture, native QA rejection")
         print("PASS: all-source 298-chamber 2D/1D midpoint exposure conservation")
 
