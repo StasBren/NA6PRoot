@@ -57,6 +57,7 @@ background:#85e5d6;border-color:#85e5d6}
 <div><label for="angle">Угол</label><select id="angle"></select></div>
 <div><label for="metric">Как окрашивать камеры</label>
 <select id="metric"><option value="positive">P(θ ≥ 0°)</option>
+<option value="negative">P(θ &lt; 0°)</option>
 <option value="far10">P(|θ| ≥ 10°)</option><option value="near2">P(|θ| ≤ 2°)</option></select></div>
 <div><label for="detector">Выбранная камера</label><select id="detector"></select></div>
 </div>
@@ -75,8 +76,8 @@ background:#85e5d6;border-color:#85e5d6}
 <label for="localMode">Содержимое локальной карты</label>
 <select id="localMode">
 <option value="geometry">Только геометрия и аноды</option>
-<option value="all">Все газовые хиты выбранной камеры</option>
-<option value="filtered" selected>Газовые хиты с текущим угловым фильтром</option>
+<option value="all" selected>Все газовые хиты выбранной камеры</option>
+<option value="filtered">Газовые хиты с текущим угловым фильтром</option>
 </select>
 <svg id="localUW" viewBox="0 0 650 490" aria-label="u-w физический газовый прямоугольник выбранной камеры и локальная плотность газовых хитов"></svg>
 <p id="localLegend"></p>
@@ -107,7 +108,7 @@ const D=JSON.parse(document.getElementById("angleData").textContent);
 const $=id=>document.getElementById(id),NS="http://www.w3.org/2000/svg";
 const names={"jpsi40-bore":"J/ψ · 40 AGeV","phi40-bore":"φ · 40 AGeV","omega40-bore":"ω · 40 AGeV"};
 const angles={theta_u_in_deg:"θu вход",theta_w_in_deg:"θw вход",theta_u_out_deg:"θu выход",theta_w_out_deg:"θw выход"};
-const S={source:D.sources[0],station:0,angle:"theta_u_in_deg",metric:"far10",det:null,localMode:"filtered"};
+const S={source:D.sources[0],station:0,angle:"theta_u_in_deg",metric:"far10",det:null,localMode:"all"};
 function node(name,attrs,root){const el=document.createElementNS(NS,name);for(const key in attrs)el.setAttribute(key,attrs[key]);if(root)root.append(el);return el}
 function text(s,x,y,attrs,root){const el=node("text",Object.assign({x,y,fill:"#c4d9e7","font-size":9},attrs||{}),root);el.textContent=s;return el}
 function choices(id,arr,chosen){const el=$(id);el.replaceChildren();for(const [key,txt] of arr){const opt=document.createElement("option");opt.value=String(key);opt.textContent=txt;el.append(opt)}el.value=String(chosen)}
@@ -119,7 +120,7 @@ function fraction(det){
  let acc=0;
  for(let i=0;i<h.length;i++){
   const a=D.edges[i],b=D.edges[i+1];
-  if(S.metric==="positive"?a>=0:S.metric==="far10"?(b<=-10||a>=10):(a>=-2&&b<=2))acc+=h[i];
+  if(S.metric==="positive"?a>=0:S.metric==="negative"?b<=0:S.metric==="far10"?(b<=-10||a>=10):(a>=-2&&b<=2))acc+=h[i];
  }
  return acc/n;
 }
@@ -233,14 +234,23 @@ function localData(){
  if(!D.local)return null;
  const m=D.local.modules[S.source][String(S.det)];
  if(!m)return null;
- const sparse=(S.localMode==="filtered"
-   ?m.selected[S.angle][S.metric]:m.all)||[];
  const nu=D.local.meta.nu,nw=D.local.meta.nw;
  const values=Array(nu*nw).fill(0);
- for(const [index,count] of sparse){
-  if(index<0||index>=values.length||count<0)throw Error("Corrupt native local histogram");
-  values[index]+=count;
+ function addSparse(sparse,sign){
+  for(const [index,count] of sparse){
+   if(index<0||index>=values.length||count<0)throw Error("Corrupt native local histogram");
+   values[index]+=sign*count;
+  }
  }
+ if(S.localMode==="filtered"&&S.metric==="negative"){
+  // Each real gas-hit midpoint is either theta < 0 or theta >= 0.
+  // Recover signed-negative occupancy from the EXISTING native arrays.
+  addSparse(m.all,1);
+  addSparse(m.selected[S.angle].positive,-1);
+ }else{
+  addSparse(S.localMode==="filtered"?m.selected[S.angle][S.metric]:m.all,1);
+ }
+ if(values.some(count=>count<0))throw Error("Invalid signed-negative local histogram");
  const total=values.reduce((a,b)=>a+b,0);
  const u=Array(nu).fill(0),w=Array(nw).fill(0);
  for(let iw=0;iw<nw;iw++)for(let iu=0;iu<nu;iu++){
