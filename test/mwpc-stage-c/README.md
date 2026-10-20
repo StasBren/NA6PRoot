@@ -2426,3 +2426,58 @@ are reviewed. **Do not infer exact quadrant transport symmetry from similar
 hit maps:** ABCD z-staggered layers are not fourfold equivalent. The
 nearest-anode geometric speed test is not a Garfield physics validation.
 These scripts generate no new Geant4, Heed or Garfield electron trajectories.
+
+
+### Next physics stage: six independent B=0 Garfield wire-pitch/field-wire pilots
+
+After the completed read-only symmetry/LUT preflight, run a tiny, genuinely
+NEW microscopic Garfield simulation for the PI's six electrode arrangements:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git switch feature/mwpc-stage-c
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_pitch_fieldwire_pilot.sh smoke 100 2
+
+Here **100 um is an explicitly chosen provisional field-wire DIAMETER**, not
+a verified mechanical design requirement. Confirm actual field-wire diameter
+and HV with the PI before committing to physically calibrated production.
+Field wires are halfway between adjacent +1800 V anodes at potential 0 V;
+the cathodes remain at v=+-3 mm and 0 V. v=0 is the wire plane.
+The calculation uses Ar/CO2 70:30, B=0 and 30-um anode diameter.
+
+The smoke mode runs ONLY the central u-column for each of the 6 setups,
+2 electrons per (u,v) box. This validates new Garfield components, electrode
+collection classification and output without producing a physics comparison.
+It creates its own immutable namespace:
+
+    test_runs/mwpc_stage_c/pi_pitch_fieldwire_pilot_v1/smoke/
+      all_six_configurations.json
+      p3p0_anode_only/
+      p3p0_field100p0um/
+      p3p5_anode_only/
+      p3p5_field100p0um/
+      p4p0_anode_only/
+      p4p0_field100p0um/
+
+Only after smoke succeeds, a moderate all-unit-cell pilot can be launched:
+
+    bash test/mwpc-stage-c/run_pi_pitch_fieldwire_pilot.sh pilot 100 20
+
+This uses the FULL wire pitch in u, -3...+3 mm cathode gap in v,
+du=0.1 mm, dv=0.2 mm; 30/35/40 u bins for p=3/3.5/4mm.
+Each individual u-column is SHA-pinned, validated and resumable.
+Separate anode/field-wire/not-on-electrode outcomes are recorded.
+The pilot outputs arithmetic mean, centered RMS and bootstrap statistical
+uncertainties of the anode-collected electron drift time and last-step
+electron incidence-normal angle. It does **NOT** reuse or overwrite the
+existing verified centered p=4mm map.
+
+**Limitations:** launch electrons uniformly in each cell, independently of
+GEANT muon tracks; this first pass cannot show P(theta_e | theta_mu), since
+it has NO muon-angle input. Different pitches do not start from identical
+global electron positions in this unit-cell scan: use fixed native Geant4/Heed
+birth coordinates and common random numbers in the subsequent paired response
+comparison. The last-step incidence angle is a microscopic transport proxy,
+not a clean field-line angle nor a reconstructed ASIC pulse angle. Results are
+not absolute NA60+ response until wire diameters, voltages, gas, B, finite
+anode aperture and source muon acceptance are confirmed.
