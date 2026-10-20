@@ -23,7 +23,6 @@ cmake -S "$HERE" -B "$HERE/build" \
 cmake --build "$HERE/build" -j4 \
  --target mwpc_stage_c_transport_box_map
 
-python3 "$HERE/refresh_pi_dashboard_navigation.py"
 OUT="$REPO/test_runs/mwpc_stage_c/pi_centered_native_drift_trajectories"
 TRACE="$OUT/centered_native_microscopic_drift_points.csv"
 echo "New Garfield microscopic drifts from TRUE native-angle Heed origins..."
@@ -36,6 +35,7 @@ echo "New Garfield microscopic drifts from TRUE native-angle Heed origins..."
  --trace-collision-steps 20
 
 python3 "$HERE/pi_centered_true_1d_cloud.py"
+python3 "$HERE/refresh_pi_dashboard_navigation.py"
 VIEW="$REPO/test_runs/mwpc_stage_c/pi_fixed_wire_maps/pi_centered_true_1d_cloud.html"
 python3 - "$REPO" <<'PY'
 from pathlib import Path
