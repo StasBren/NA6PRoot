@@ -14,9 +14,9 @@ python3 -c "import numpy" || {
 echo "Checking dashboard source and synthetic 298-chamber fixture ..."
 python3 -m py_compile "$HERE/build_pi_station_dashboard.py" "$HERE/test_pi_station_dashboard.py"
 python3 "$HERE/test_pi_station_dashboard.py"
-python3 "$HERE/refresh_pi_dashboard_navigation.py"
 OUT="$REPO/test_runs/mwpc_stage_c/pi_fixed_wire_maps/pi_station_interactive.html"
 python3 "$HERE/build_pi_station_dashboard.py" --out "$OUT"
+python3 "$HERE/refresh_pi_dashboard_navigation.py"
 echo
 echo "Open this HTML in a browser:"
 echo "  $OUT"
