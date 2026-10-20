@@ -28,14 +28,30 @@ td,th{padding:9px 7px;border-bottom:1px solid #3d566c;text-align:right}
 td:first-child,th:first-child{text-align:left}th{color:#d5e6f2}
 footer{font-size:12px;color:var(--muted);line-height:1.7}
 @media(max-width:1050px){main{grid-template-columns:1fr}.panel.full{grid-column:auto}}
-</style></head><body>
+</style><style id="pi-latest-nav-style">
+.pi-latest-nav{display:flex;flex-wrap:wrap;align-items:center;gap:7px 9px;
+margin:14px 0 3px;padding:10px;border:1px solid #536e80;border-radius:9px;
+background:rgba(9,31,47,.75);font:12px/1.4 system-ui,"Segoe UI",sans-serif}
+.pi-latest-nav .pi-latest-name{font-weight:750;color:#d4eaf3;margin-right:9px}
+.pi-latest-nav a,.pi-latest-nav .pi-latest-active{display:inline-block;
+padding:7px 10px;border:1px solid #547a91;border-radius:6px;
+text-decoration:none;color:#d1f7f2;background:rgba(35,66,81,.7)}
+.pi-latest-nav a:hover{border-color:#84eee3;color:#fff}
+.pi-latest-nav .pi-latest-active{font-weight:750;color:#071f2c;
+background:#85e5d6;border-color:#85e5d6}
+</style>
+</head><body>
 <header>
 <div class="kicker">NA60+ · NATIVE GEANT4 + HEED + CENTERED GARFIELD 3+3 MM · ELECTRON-ONLY</div>
 <h1>Один мюон — две анодные проволоки</h1>
 <p>Настоящая траектория в газе; два физических анода, собравших первичные электроны; их распределения по времени прихода. Никаких условных напряжений, усиления или ASIC-порогов.</p>
-<a href="pi_centered_timing_dashboard_v2.html">← Статистика времени и углов</a> ·
-<a href="pi_native_angle_position.html">Карта углов всех камер</a> ·
-<a href="pi_station_interactive.html">Основной dashboard</a> · <a href="pi_centered_true_1d_cloud.html">Движение облака электронов u(t), v(t), w(t)</a>
+<nav class="pi-latest-nav" aria-label="Актуальные dashboard NA60+">
+<span class="pi-latest-name">NA60+ / PI</span>
+<a href="pi_latest_dashboards.html">Обзор</a>
+<a href="pi_native_angle_position.html">Геометрия и углы · XY / u–w</a>
+<a href="pi_centered_timing_dashboard_v2.html">Время дрейфа и кратность</a>
+<span class="pi-latest-active" aria-current="page">Один мюон · два анода</span>
+</nav>
 </header>
 <div class="toolbar">
 <div><label for="source">Физический канал</label><select id="source"></select></div>
