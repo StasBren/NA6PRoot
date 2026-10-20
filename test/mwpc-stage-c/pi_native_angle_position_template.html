@@ -14,6 +14,12 @@ main{display:grid;grid-template-columns:minmax(340px,1fr) minmax(350px,1fr);gap:
 .panel{border:1px solid var(--line);border-radius:11px;background:var(--card);padding:13px;min-width:0}
 svg{display:block;width:100%;height:min(66vh,700px);min-height:340px;background:#0b1d31;border-radius:6px}
 #hist{height:310px;min-height:310px}
+#localUW{height:430px;min-height:430px}
+#projU,#projW{height:250px;min-height:250px}
+.right-stack{display:grid;gap:13px;align-content:start;min-width:0}
+.projection-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.panel.full{grid-column:1/-1}
+@media(max-width:700px){.projection-grid{grid-template-columns:1fr}}
 .stat{display:flex;flex-wrap:wrap;gap:10px;margin:11px 0}
 .stat>span{padding:7px 10px;background:#1a3a4c;border-radius:6px}
 .note{background:#1b3348;border-left:3px solid #ebaf62;padding:10px 12px;margin:0 max(16px,3vw);line-height:1.55;color:#d5e4ee;font-size:12px}
@@ -45,12 +51,34 @@ footer{font-size:12px;color:var(--muted);line-height:1.6}
 <svg id="plan" viewBox="-200 -200 400 400" aria-label="XY карта газовых площадей с окраской по углу"></svg>
 <p id="legend">Значения приведены к фиксированному масштабу вероятностей.</p>
 </section>
+<div class="right-stack">
+<section class="panel">
+<h2 id="localTitle">Выбранная камера · локальные координаты u–w</h2>
+<p><strong>u</strong> — поперёк анодных проволок; <strong>w</strong> — вдоль проволок. Клик по глобальной XY-карте обновляет этот локальный вид. Центр каждой камеры: (0, 0). Все размеры в мм.</p>
+<label for="localMode">Содержимое локальной карты</label>
+<select id="localMode">
+<option value="geometry">Только геометрия и аноды</option>
+<option value="all">Все газовые хиты выбранной камеры</option>
+<option value="filtered" selected>Газовые хиты с текущим угловым фильтром</option>
+</select>
+<svg id="localUW" viewBox="0 0 650 490" aria-label="u-w физический газовый прямоугольник выбранной камеры и локальная плотность газовых хитов"></svg>
+<p id="localLegend"></p>
+</section>
 <section class="panel">
 <h2 id="detailTitle">Углы в выбранной камере</h2>
 <div class="stat" id="stat"></div>
 <svg id="hist" viewBox="0 0 600 310" aria-label="Гистограмма углов захода"></svg>
 <p>Гистограмма — плотность вероятности (% на градус) на линейной шкале от −30° до +30°. Неодинаковая ширина бинов учтена при нормировке; хвосты вне диапазона не включены в изображение, но остаются в знаменателе.</p>
 <p id="summary"></p>
+</section>
+</div>
+<section class="panel full">
+<h2>Одномерные проекции распределения газовых хитов</h2>
+<p id="projectionsScope">Проекции по локальным координатам u и w строятся из той же 2D-гистограммы, что показана выше. По вертикали — число настоящих газовых хит-сегментов в координатном бине; это не число уникальных мюонов и не плотность первичных электронов.</p>
+<div class="projection-grid">
+<div><svg id="projU" viewBox="0 0 600 265" aria-label="Одномерная гистограмма координаты u по камере, обе оси и единицы"></svg></div>
+<div><svg id="projW" viewBox="0 0 600 265" aria-label="Одномерная гистограмма координаты w по камере, обе оси и единицы"></svg></div>
+</div>
 </section>
 </main>
 <footer>Входные данные: полные native pi_native_all_histograms.csv и pi_native_all_chamber_quality.csv. Критерии в легенде основаны на точных границах бинов (0, ±2, ±10 градусов). Это не Garfield и не электронный счётчик анодов; Geant4-время газового хита не равно времени дрейфа.</footer>
@@ -62,7 +90,7 @@ const D=JSON.parse(document.getElementById("angleData").textContent);
 const $=id=>document.getElementById(id),NS="http://www.w3.org/2000/svg";
 const names={"jpsi40-bore":"J/ψ · 40 AGeV","phi40-bore":"φ · 40 AGeV","omega40-bore":"ω · 40 AGeV"};
 const angles={theta_u_in_deg:"θu вход",theta_w_in_deg:"θw вход",theta_u_out_deg:"θu выход",theta_w_out_deg:"θw выход"};
-const S={source:D.sources[0],station:0,angle:"theta_u_in_deg",metric:"far10",det:null};
+const S={source:D.sources[0],station:0,angle:"theta_u_in_deg",metric:"far10",det:null,localMode:"filtered"};
 function node(name,attrs,root){const el=document.createElementNS(NS,name);for(const key in attrs)el.setAttribute(key,attrs[key]);if(root)root.append(el);return el}
 function text(s,x,y,attrs,root){const el=node("text",Object.assign({x,y,fill:"#c4d9e7","font-size":9},attrs||{}),root);el.textContent=s;return el}
 function choices(id,arr,chosen){const el=$(id);el.replaceChildren();for(const [key,txt] of arr){const opt=document.createElement("option");opt.value=String(key);opt.textContent=txt;el.append(opt)}el.value=String(chosen)}
@@ -89,6 +117,7 @@ function renderSelectors(){
  choices("station",[0,1,2,3,4,5].map(st=>[st,"MS"+st]),S.station);
  choices("angle",D.fields.map(x=>[x,angles[x]]),S.angle);
  $("metric").value=S.metric;
+ $("localMode").value=S.localMode;
  const m=geom();
  if(!m.some(x=>x.id===S.det))S.det=m[Math.floor(m.length/2)].id;
  choices("detector",m.map(c=>[c.id,"DET"+String(c.id).padStart(3,"0")+" · "+c.layer+" · r"+c.row+" c"+c.col]),S.det);
@@ -182,12 +211,13 @@ function renderHistogram(){
     ". Статистика условна на настоящий Geant4 газовый хит; "
     +"общее число входящих в станцию мюонов — другой знаменатель.";
 }
-function render(){renderSelectors();renderMap();renderHistogram()}
+function render(){renderSelectors();renderMap();renderHistogram();renderLocal()}
 $("source").onchange=e=>{S.source=e.target.value;render()};
 $("station").onchange=e=>{S.station=Number(e.target.value);S.det=null;render()};
 $("angle").onchange=e=>{S.angle=e.target.value;render()};
 $("metric").onchange=e=>{S.metric=e.target.value;render()};
 $("detector").onchange=e=>{S.det=Number(e.target.value);render()};
+$("localMode").onchange=e=>{S.localMode=e.target.value;renderLocal()};
 render();
 })();
 </script></body></html>
