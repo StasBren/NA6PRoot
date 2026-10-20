@@ -2386,3 +2386,43 @@ when they finish. If only restoring navigation across already-built
 pages, run the one-shot command above. Old bookmarked station/track
 pages will also acquire links forward to these current analyses;
 they are not endorsed as updated physics.
+
+
+### PI October 20 preflight: quadrants, runtime, LUT precision (no new physics run)
+
+The PI now requests 2 million generated dimuon events **per** Jpsi/Phi/Omega
+channel, anode pitches 3/3.5/4 mm with/without grounded field wires,
+arrival angle conditional on SIGNED muon incidence, and **mean + centered
+RMS + statistical errors** (not median). Details and non-negotiable
+physics controls are in PI_CENTERED_ANODE_ANGLE_TIMING_SPEC.md.
+
+Run the fast read-only baseline first:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git switch feature/mwpc-stage-c
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_stagec_preflight.sh
+
+This executes synthetic tests and reads the already completed native
+201-chunk QA, when present, to write:
+
+    test_runs/mwpc_stage_c/pi_quadrant_preflight/
+      pi_quadrant_geometry_preflight.json
+      pi_quadrant_native_counts.csv
+
+It also reads existing completed.json run times where available, without
+fabricating timings for the old campaign, and produces per-box precision +
+vectorized lookup performance for an existing validated centered p=4 mm
+Garfield table:
+
+    test_runs/mwpc_stage_c/pi_centered_lut_benchmark/
+      pi_centered_lut_box_quality.csv
+      pi_centered_lut_benchmark.json
+
+New native Geant4 chunks record perf_counter wall durations automatically
+in completed.json. Use a NEW frozen suite for 2M/source, not the existing
+200k suite; do not start it until quadrant feasibility and performance
+are reviewed. **Do not infer exact quadrant transport symmetry from similar
+hit maps:** ABCD z-staggered layers are not fourfold equivalent. The
+nearest-anode geometric speed test is not a Garfield physics validation.
+These scripts generate no new Geant4, Heed or Garfield electron trajectories.
