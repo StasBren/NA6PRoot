@@ -131,3 +131,89 @@ Deliverables for p=3.0,3.5,4.0mm:
 - Explicit separation of field response vs geometric sharing effects; report per-pitch map-statistical uncertainty and gas-hit event correlation. Re-check B=0 first and only later physical B if known.
 
 Implementation order: (i) keep current tested centered p=4mm baseline; (ii) create pitch-parametrised standalone Garfield runner and map manifest validator; (iii) dynamic-grid native Heed sampler using same tracks; (iv) one PI comparative dashboard with pitch selector/overlays; (v) pilot first, then full 201-chunk re-fold if comparison proves stable. No Geant4 transport rerun and no cathode-strip processing.
+
+
+## PI follow-up, 2026-10-20: statistics, quadrant generation, field wires, benchmark
+
+### Statistical reporting (supersedes earlier median-based proposals)
+
+For drift/arrival times, electron arrival-angle distributions, and timing-gated
+responses, report **arithmetic mean, centered RMS and statistical uncertainties**.
+Define RMS = sqrt(sum((x_i - mean)^2)/N); clearly label this as a width, not
+sqrt(mean(x_i^2)) and not the uncertainty on the mean. Give population N,
+collection/unknown-time fractions, and error estimates. For full physical
+response, resample source Geant4 **parent events** (clusters/electrons remain
+together) so uncertainty is not biased by falsely independent electrons.
+For single-electron LUT calibration, resample independent Garfield trials
+inside each starting-position cell instead. Sparse cells must be marked.
+Report neither medians nor percentile curves as primary PI deliverables.
+
+### Exact versus approximate quadrant symmetries
+
+The installed NA6PMuonSpec module placement is not invariant under general
+(X,Y)->(abs(X),abs(Y)): ABCD layers have different z offsets (-6,-2,+2,+6 cm),
+set by row/column parity. At least one reflection changes the parity-layer
+for each of MS0..MS5. Dipole field, material, muon charge, vertex source,
+acceptance and correlated dimuon daughters introduce further constraints.
+DO NOT restrict Geant4 production to one quadrant or quadruple the event
+count/statistical independence without independent validation of the whole
+transport problem. Restricting BOTH muons to Q1 also changes the dimuon
+correlation/acceptance. Safer alternative: preserve the full GEANT4 sample,
+use the local periodic MWPC unit-cell symmetry for B=0 LUT reduction only
+after comparing direct Garfield trajectories, and/or use symmetry for
+descriptive acceptance diagnostics without pretending new independent events.
+
+Read-only baseline before enabling any generation change:
+
+    bash test/mwpc-stage-c/run_pi_stagec_preflight.sh
+
+The script checks exact reflected layer/z geometry, compares existing full
+201-chunk gas-hit segment count per chamber and reflected signed theta_u/theta_w
+marginals by quadrant, and leaves a JSON + CSV. Counts and total-variation
+distances are descriptive; full acceptance and event-level bootstrap require
+per-event virtual-plane muon counts (not merely correlated gas-hit rows).
+Never infer quadrant-transport equivalence solely from one hit-count ratio.
+
+### Six geometries in the physics pitch scan
+
+For each anode-to-anode pitch p={3,3.5,4} mm, compare without field wires
+and with a grounded field wire at each anode midpoint. V_field=0 V
+is **potential**, not zero electric field. Freeze cathode spacing 3+3 mm,
+gas, nominal anode voltage, diameter, B and gas aperture for controlled
+comparisons. Parameterize field-wire diameter and material, and record
+collected-on-field-wire, cathode loss, anode collection and unknown-time
+statuses separately. Rebuild the electric field and Garfield lookup for
+EVERY geometry; no post-hoc relabeling of the p=4 mm LUT. Keep the physical
+module aperture fixed; change finite anode count and edge treatment as p
+changes. With alternating anode-field wire pattern, validate spatial cell
+periodicity afresh. First study B=0; magnetic field requires independent
+physical station conditions.
+
+Principal outputs per p/field-wire configuration and signed incident muon-angle
+bin: mean drift time +/- error, RMS drift time +/- error, collection fraction,
+mean/RMS electron arrival-angle +/- errors (with angle wrapping/convention
+explicit), angular/time correlations, and time-gated active-anode multiplicity.
+For angle-of-impact, distinguish electron hit position phi_hit_deg from
+final-velocity incidence_normal_deg: the latter is based on last microscopic
+step and is sensitive to collision sampling. Retain the same Geant4/Heed
+origins for all six fields, and keep muon-angle sign.
+
+### Runtime and lookup accuracy benchmark
+
+The frozen old Geant4 200k/source completed.json checkpoints did not record
+independent wall-time durations. Do NOT estimate these from file timestamps.
+New future Geant4 chunks now stamp monotonic wall seconds for the simulation,
+ROOT validator, and entire chunk. The preflight reads old checkpoints
+honestly as unmeasured. Timing reports give per-event mean/RMS and errors
+bootstrap-resampled across independent completed chunks.
+
+For the existing centered p=4mm, B=0 600-cell response map, preflight
+also reports independent-trial mean and RMS of collected electron drift
+time with bootstrap errors for EACH grid cell, how many cells have sparse
+known times, and an in-memory NumPy lookup microbenchmark. Geometry-only
+nearest-anode assignment is a SPEED comparator, **not a physical Garfield
+replacement**. The full comparison of direct Garfield vs LUT accuracy,
+field-wire scan, realistic memory/CPU profiling, and ultimately the new
+2,000,000 generated parent events/source must follow this preflight.
+Do not extend the original 200k/source suite: use a new frozen suite and
+a fresh benchmark/smoke before long production.
