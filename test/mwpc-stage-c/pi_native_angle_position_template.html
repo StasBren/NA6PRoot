@@ -25,14 +25,31 @@ svg{display:block;width:100%;height:min(66vh,700px);min-height:340px;background:
 .note{background:#1b3348;border-left:3px solid #ebaf62;padding:10px 12px;margin:0 max(16px,3vw);line-height:1.55;color:#d5e4ee;font-size:12px}
 footer{font-size:12px;color:var(--muted);line-height:1.6}
 @media(max-width:920px){main{grid-template-columns:1fr}}
-</style></head>
+</style><style id="pi-latest-nav-style">
+.pi-latest-nav{display:flex;flex-wrap:wrap;align-items:center;gap:7px 9px;
+margin:14px 0 3px;padding:10px;border:1px solid #536e80;border-radius:9px;
+background:rgba(9,31,47,.75);font:12px/1.4 system-ui,"Segoe UI",sans-serif}
+.pi-latest-nav .pi-latest-name{font-weight:750;color:#d4eaf3;margin-right:9px}
+.pi-latest-nav a,.pi-latest-nav .pi-latest-active{display:inline-block;
+padding:7px 10px;border:1px solid #547a91;border-radius:6px;
+text-decoration:none;color:#d1f7f2;background:rgba(35,66,81,.7)}
+.pi-latest-nav a:hover{border-color:#84eee3;color:#fff}
+.pi-latest-nav .pi-latest-active{font-weight:750;color:#071f2c;
+background:#85e5d6;border-color:#85e5d6}
+</style>
+</head>
 <body>
 <header>
 <div style="color:#7fdacc;letter-spacing:1.7px;font-size:10px;font-weight:700">NA60+ · 201 CHUNKS · GEANT4 MATERIAL TRUTH</div>
 <h1>Углы захода мюонов в зависимости от положения камеры</h1>
 <p>Полный новый Geant4-ран: 200 000 сгенерированных событий каждого канала, MCKine-привязанные настоящие газовые хиты в 298 модулях.</p>
-<a href="pi_station_interactive.html">← Карта станций</a> · <a href="pi_muon_track_explorer_native.html">Просмотр отдельных мюонов</a> ·
-<a href="pi_centered_native_timing.html" title="Новый симметричный 3+3 мм пилот; подготовить: run_pi_centered_native_timing_pilot.sh all">Новое время дрейфа 3+3 мм по углам →</a> · <a href="pi_native_drift_times.html" title="LEGACY 2+4 мм">Legacy Garfield 2+4 мм</a>
+<nav class="pi-latest-nav" aria-label="Актуальные dashboard NA60+">
+<span class="pi-latest-name">NA60+ / PI</span>
+<a href="pi_latest_dashboards.html">Обзор</a>
+<span class="pi-latest-active" aria-current="page">Геометрия и углы · XY / u–w</span>
+<a href="pi_centered_timing_dashboard_v2.html">Время дрейфа и кратность</a>
+<a href="pi_two_anode_electron_explorer.html">Один мюон · два анода</a>
+</nav>
 </header>
 <div class="bar">
 <div><label for="source">Канал</label><select id="source"></select></div>
