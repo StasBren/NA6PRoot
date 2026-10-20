@@ -16,7 +16,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-DEFAULT_SUITE = REPO / "test_runs/mwpc_stage_c/pi_native_geant4_full"
+DEFAULT_SUITE = REPO / "test_runs/mwpc_stage_c/pi_geant4_hit_validation_v1"
 STAGES = ("geant4", "root_validation", "chunk_total")
 
 
