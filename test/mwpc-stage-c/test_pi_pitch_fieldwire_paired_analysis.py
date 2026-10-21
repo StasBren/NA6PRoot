@@ -73,6 +73,14 @@ def test_full_map_matching(tmp):
                         ib=iu*NV+iv
                         # Identical physical starts and seeds in both setups.
                         c=(k==0 or (fw==0 and iv%2==0))
+                        # The original C++ safeguards electron births inside
+                        # a grounded field wire: only that geometry moves the
+                        # point to the box center. Exercise this actual case.
+                        relocated = (iu == 0 and iv == 14 and k == 0)
+                        start_u = (-1.49 if relocated and fw == 0.
+                                   else -1.5+(iu+.5)*DU)
+                        start_v = (-.01 if relocated and fw == 0.
+                                   else -3+(iv+.5)*.2)
                         w.writerow({
                             "iu":iu, "iv":iv, "box_id":ib,
                             "sample":k, "collected":int(c),
@@ -80,8 +88,8 @@ def test_full_map_matching(tmp):
                             "drift_time_ns":15+iu if c else "nan",
                             "incidence_normal_deg":25 if c else "nan",
                             "status":-1 if not c else -5,
-                            "u_start_mm":-1.5+(iu+.5)*DU,
-                            "v_start_mm":-3+(iv+.5)*.2,
+                            "u_start_mm":start_u,
+                            "v_start_mm":start_v,
                             "random_seed":260020+ib*2+k,
                             "wire_index":0,
                         })
@@ -89,13 +97,17 @@ def test_full_map_matching(tmp):
     assert pair["bare"].shape == (900,2)
     assert pair["field"].shape == (900,2)
     assert pair["transition_counts"]["1->0"] == 450
-    assert pair["transition_counts"]["1->1"] == 900
+    assert pair["transition_counts"]["1->1"] == 899
     assert pair["transition_counts"]["0->0"] == 450
     assert pair["transition_counts"]["0->1"] == 0
+    assert len(pair["start_relocations"]) == 1
+    assert pair["start_relocations"][0]["box_id"] == 14
+    assert pair["start_relocations"][0]["sample"] == 0
+    assert np.count_nonzero(pair["paired_start_valid"]) == 1799
     profile=spatial_profiles(pair)
     assert len(profile)==30
     assert profile[0]["u_bin"]==0
-    assert abs(profile[0]["delta_anode_fraction_pp"]+25)<1.e-12
+    assert abs(profile[0]["delta_anode_fraction_pp"]+1500/59)<1.e-12
     # Offline HTML is pure presentation; original simulation arrays untouched.
     analysis=analyse(pair,replicas=30)
     mock_report={"field_wire_diameter_um":75.,
@@ -110,6 +122,23 @@ def test_full_map_matching(tmp):
     assert "application/json" in contents
     assert "Same initial electron" in contents
     assert "75.0 µm" in contents
+    # Unexplained drifts in the birth coordinate must be rejected, not
+    # casually hidden as if they were valid matched electron trajectories.
+    f=tmp/tag(3.,75.)/"garfield_electrons.csv"
+    original=f.read_text(encoding="utf-8")
+    lines=original.splitlines()
+    header=lines[0].split(",")
+    index=header.index("u_start_mm")
+    invalid=lines[1].split(",")
+    invalid[index]=str(float(invalid[index])+.04)
+    lines[1]=",".join(invalid)
+    f.write_text("\n".join(lines)+"\n",encoding="utf-8")
+    try:
+        match_maps(3.,tmp)
+    except ValueError as exc:
+        assert "Unexplained Garfield start mismatch" in str(exc)
+    else:
+        raise AssertionError("Unexplained start-coordinate mismatch accepted")
 
 
 def main():
