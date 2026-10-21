@@ -2676,3 +2676,14 @@ Following this first-chunk check, extend to the PI's newly requested
 2,000,000 generated parent events PER channel only with measured runtime,
 checkpointed parent-event bootstrap, and independent full Geant4 production
 planning. Do NOT label the first chunk or old 200k/source set as 2m/source.
+
+The same first-chunk fold also SAVES real Garfield electron-angle
+histograms with 10-degree bins: 0..180deg incidence-to-inward-surface-normal
+from the final microscopic transport step; -180..180deg signed phi of the
+electron's geometric impact point around the wire. They are each conditioned
+on the signed muon theta_u or theta_w bin at station/chamber level, and
+on the selected physical anode for angle-integrated native events. The
+interactive HTML has an observable selector for drift time, incidence angle
+and wire-hit phi, plus a toggle for six-LUT overlay. Angular denominators
+are all collected electrons with known angle and may differ from known-time
+counts; these are NOT normalized as if they were the same ensemble.
