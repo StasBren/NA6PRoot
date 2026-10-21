@@ -343,6 +343,8 @@ def run(args):
     groups,counts=aggregate(native_rows(),maps,lam,marks,
                             limit=args.limit_per_source)
     if args.limit_per_source == 0:
+        if set(counts)!=set(SOURCES):
+            raise ValueError("Full native first-chunk missing a source")
         for source,n in counts.items():
             if n!=FIRST_CHUNK_EXPECTED[source]:
                 raise ValueError(f"Native first-chunk count mismatch: {source} {n}")
@@ -353,6 +355,9 @@ def run(args):
                      f"EXPLORATORY first {args.limit_per_source} muon gas "
                      "segments per source, NOT full native first chunk",
         "gas_hit_counts":counts,
+        "native_geant4_export_sha256":{
+            source:sha(args.export_dir/f"{channel}_geant_gas_crossings.csv")
+            for source,channel in SOURCES.items()},
         "heed_clusters_per_mm":lam,
         "heed_tracks_sha":sha(args.heed_tracks),
         "heed_clusters_sha":sha(args.heed_clusters),
