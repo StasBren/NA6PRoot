@@ -179,6 +179,8 @@ for _root in "${_stagec_dep_roots[@]}"; do
        -o -name 'libg4root.so*' -o -name 'libG4Tree.so*' \
        -o -name 'libXmlVGM.so*' -o -name 'libGeant4GM.so*' \
        -o -name 'libRootGM.so*' -o -name 'libBaseVGM.so*' \
+       -o -name 'libVMC.so*' -o -name 'libHepMC3.so*' \
+       -o -name 'libFairLogger.so*' \
     \) -printf '%h\n' | sort -u)
 done
 if [[ ${#_stagec_dep_libdirs[@]} -eq 0 ]]; then
