@@ -127,6 +127,71 @@ echo "  root:              $(command -v root)"
 echo "  hadd:              $(command -v hadd)"
 echo "  libraries:         $_stagec_root_libdir"
 echo "  ROOTSYS:           $_stagec_root_prefix"
+
+# na6psim links Geant4, Geant4VMC, VGM separately from ROOT.
+# Use THIS checkout's CMakeCache as search provenance and resolve the
+# installed real shared-library directories BEFORE testing ldd.
+_stagec_dep_roots=("$HOME/na6p/install")
+_stagec_cache="$_stagec_build/CMakeCache.txt"
+for _cmake_key in CMAKE_PREFIX_PATH Geant4_DIR Geant4VMC_DIR VGM_DIR VMC_DIR; do
+  _cmake_value="$(sed -n "s/^$_cmake_key:[^=]*=//p" "$_stagec_cache" | head -1)"
+  [[ -n "$_cmake_value" ]] || continue
+  IFS=';' read -r -a _cmake_values <<< "$_cmake_value"
+  for _value in "${_cmake_values[@]}"; do
+    [[ -d "$_value" ]] || continue
+    _scan="$_value"
+    for _up in 0 1 2 3 4 5; do
+      _stagec_dep_roots+=("$_scan")
+      [[ "$_scan" == "/" ]] && break
+      _scan="$(dirname "$_scan")"
+    done
+  done
+done
+if [[ -n "${NA6P_EXTRA_DEP_ROOTS:-}" ]]; then
+  IFS=':' read -r -a _extra_roots <<< "$NA6P_EXTRA_DEP_ROOTS"
+  for _scan in "${_extra_roots[@]}"; do
+    if [[ ! -d "$_scan" ]]; then
+      echo "ERROR: NA6P_EXTRA_DEP_ROOTS not a directory: $_scan" >&2
+      return 9
+    fi
+    _stagec_dep_roots+=("$_scan")
+  done
+fi
+
+_stagec_dep_libdirs=()
+_stagec_seen_dep_libdirs=":"
+for _root in "${_stagec_dep_roots[@]}"; do
+  [[ -d "$_root" ]] || continue
+  while IFS= read -r _libdir; do
+    [[ -d "$_libdir" ]] || continue
+    _libdir="$(cd "$_libdir" && pwd -P)"
+    case "$_stagec_seen_dep_libdirs" in
+      *":$_libdir:"*) continue ;;
+    esac
+    _stagec_dep_libdirs+=("$_libdir")
+    _stagec_seen_dep_libdirs+="$_libdir:"
+  done < <(find "$_root" -maxdepth 7 \( -type f -o -type l \) \
+    \( -name 'libG4global.so*' -o -name 'libG4run.so*' \
+       -o -name 'libg4root.so*' -o -name 'libG4Tree.so*' \
+       -o -name 'libXmlVGM.so*' -o -name 'libGeant4GM.so*' \
+       -o -name 'libRootGM.so*' -o -name 'libBaseVGM.so*' \
+    \) -printf '%h\n' | sort -u)
+done
+if [[ ${#_stagec_dep_libdirs[@]} -eq 0 ]]; then
+  echo "ERROR: no Geant4/VGM/Geant4VMC library directories found." >&2
+  echo "Searched CMake cache and installed prefix roots:" >&2
+  printf '  %s\n' "${_stagec_dep_roots[@]}" >&2
+  echo "Override: NA6P_EXTRA_DEP_ROOTS=/path/geant4:/path/vgm:/path/geant4vmc" >&2
+  return 10
+fi
+for _libdir in "${_stagec_dep_libdirs[@]}"; do
+  case ":${LD_LIBRARY_PATH:-}:" in
+    *":$_libdir:"*) ;;
+    *) export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:$_libdir" ;;
+  esac
+done
+echo "Geant4/VGM/Geant4VMC runtime libraries:"
+printf '  %s\n' "${_stagec_dep_libdirs[@]}"
 for _program in "$_stagec_root_prefix/bin/hadd" "$_stagec_prefix/bin/na6psim"; do
   _unresolved="$(ldd "$_program" 2>/dev/null | grep 'not found' || true)"
   if [[ -n "$_unresolved" ]]; then
@@ -138,6 +203,9 @@ done
 unset _stagec_root_candidates _stagec_root_cfg _candidate _lib
 unset _stagec_root_prefix _stagec_root_libdir _program _unresolved
 unset _active_root_real _active_hadd_real _expected_root_real _expected_hadd_real
+unset _stagec_dep_roots _stagec_cache _cmake_key _cmake_value _cmake_values
+unset _value _scan _up _extra_roots _root _libdir
+unset _stagec_dep_libdirs _stagec_seen_dep_libdirs
 
 fi
 
