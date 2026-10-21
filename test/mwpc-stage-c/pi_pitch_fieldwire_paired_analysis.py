@@ -28,6 +28,7 @@ from pathlib import Path
 import numpy as np
 
 from pi_pitch_fieldwire_pilot import DU, NV, PITCHES, tag
+from pi_pitch_fieldwire_paired_html import render
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
@@ -301,9 +302,16 @@ def run(input_dir, out, diameter=75., replicas=400):
     json_path=out/"pi_pitch_fieldwire_paired_summary.json"
     json_path.write_text(json.dumps(output, indent=2, allow_nan=False)+"\n",
                          encoding="utf-8")
-    print("PASS: paired same-start Gaussian-bootstrap Garfield physics study")
+    html_rows = [{
+        key: ("nan" if isinstance(value, float) and not math.isfinite(value)
+              else value)
+        for key, value in row.items()
+    } for row in profile]
+    page=render(output,html_rows,out/"pi_pitch_fieldwire_paired_dashboard.html")
+    print("PASS: paired same-start stratified-bootstrap Garfield physics study")
     print("Output:",json_path)
     print("By initial u:",table)
+    print("Open interactive dashboard:",page)
     for row in studies:
         m=row["point_estimate"];e=row["bootstrap_standard_errors"]
         print(f"p={row['pitch_mm']:.1f}mm, "
