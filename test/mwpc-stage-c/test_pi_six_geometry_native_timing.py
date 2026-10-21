@@ -64,6 +64,10 @@ def main():
     assert summary["hist"][30]==2
     assert sum(summary["hist"])==6
     assert summary["collected"]==6
+    assert summary["angle_hist"][3]==6
+    assert sum(summary["angle_hist"])==summary["angle_n"]==6
+    assert summary["phi_hist"][22]==6  # 45 degrees = bin [40,50)
+    assert sum(summary["phi_hist"])==summary["phi_n"]==6
     assert abs(summary["mean_ns"]-np.mean(t))<1.e-9
     assert abs(summary["rms_ns"]-np.std(t))<1.e-9
 
