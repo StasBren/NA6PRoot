@@ -9,10 +9,10 @@ cd "$REPO"
 MODE="plan"
 if [[ $# -gt 0 ]]; then MODE="$1"; shift; fi
 if [[ $# -gt 0 ]]; then
-  echo "Usage: bash $0 plan|status|benchmark|full" >&2
+  echo "Usage: bash $0 plan|env-check|status|benchmark|full" >&2
   exit 2
 fi
-case "$MODE" in plan|status|benchmark|full) ;; *)
+case "$MODE" in plan|env-check|status|benchmark|full) ;; *)
   echo "Usage: bash $0 plan|status|benchmark|full" >&2
   exit 2 ;;
 esac
@@ -43,6 +43,20 @@ print("NO Geant4 quadrant-only simplification. Garfield LUT fold is separate.")
 PY
 
 if [[ "$MODE" == "plan" ]]; then exit 0; fi
+# Small, read-only environment check. Does NOT create a frozen campaign
+# manifest and does NOT start Geant4 or even the 50k benchmark.
+if [[ "$MODE" == "env-check" ]]; then
+  source "$HERE/activate_pi_stagec_env.sh"
+  for program in root hadd na6psim na6psim_parallel; do
+    command -v "$program" || {
+      echo "ERROR: missing executable $program" >&2
+      exit 127
+    }
+  done
+  echo "PASS: native simulator + ROOT/hadd dynamic-link environment ready."
+  echo "No simulation and no ROOT campaign files created by env-check."
+  exit 0
+fi
 if [[ "$MODE" == "status" ]]; then
   python3 - "$SUITE" <<'PY'
 from pathlib import Path
