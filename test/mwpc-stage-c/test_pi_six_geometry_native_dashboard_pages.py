@@ -90,6 +90,11 @@ def main():
         assert VERSION in txt
         assert 'id="map"' in txt and 'id="time"' in txt
         assert 'id="arrival"' in txt and 'id="comparison"' in txt
+        assert 'id="timeScale"' in txt
+        assert 'value="log"' in txt
+        assert "Math.log10" in txt
+        assert 'logarithmic&&v<=0' in txt
+        assert 'id="yscale"' in page_text
         assert "P(N≥2)" in txt and "Это не P(N≥2)" in txt
         assert "Резервная гистограмма" in txt
         assert "__STATIC_FALLBACK__" not in txt
