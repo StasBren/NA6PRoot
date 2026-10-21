@@ -92,8 +92,13 @@ function sel(element,options,wanted){
  }
  if(options.some(([value])=>String(value)===String(old)))element.value=String(old);
 }
-sel(el.source,[["all","Все источники"],...Object.keys(meta.gas_hit_counts).map(k=>[k,k])],"all");
-sel(el.station,Array.from({length:6},(_,i)=>[i,"MS"+i]),0);
+const presentSources=[...new Set(groups.map(g=>g.source))];
+const sourceOrder=["all",...Object.keys(meta.gas_hit_counts)];
+sel(el.source,sourceOrder.filter(k=>presentSources.includes(k))
+    .map(k=>[k,k==="all"?"Все источники":k]),
+    presentSources.includes("all")?"all":presentSources[0]);
+const presentStations=[...new Set(groups.map(g=>g.station))].sort((a,b)=>a-b);
+sel(el.station,presentStations.map(i=>[i,"MS"+i]),presentStations[0]);
 sel(el.config,confs.map((k,i)=>[k,k.replace("anode_only","без field wire").replace(/field75p0um/,"field wire 75 µm")]),confs[0]);
 sel(el.axis,[["all","Без отбора"],["u","θu (со знаком)"],["w","θw (со знаком)"]],"all");
 function updateChoices(){
