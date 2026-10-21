@@ -12,7 +12,7 @@ from pi_six_geometry_event_bootstrap import (
 
 
 def test_exact_moments_and_errors():
-    assert finite_moments(4.,60.,100.)==(15.,5.)
+    assert finite_moments(4.,60.,1000.)==(15.,5.)
     assert finite_moments(0.,0.,0.)==(None,None)
     p=np.zeros(NF)
     p[0]=10;p[1]=8;p[2]=7;p[3]=70;p[4]=875
