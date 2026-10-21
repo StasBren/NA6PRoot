@@ -3,14 +3,28 @@
 import json
 import tempfile
 from pathlib import Path
+import re
 
 from pi_six_geometry_native_dashboard_pages import (
     read_groups_stream, generate,
 )
 from pi_six_geometry_native_timing import SOURCES, tag, PITCHES
+from pi_six_geometry_native_timing_html import HTML
 
 
 def main():
+    # UI regression: the first station page used to render empty because
+    # draw() referred to el.stats and el.coverage without binding either.
+    selectors=json.loads(re.search(r'const ids=(\\[[^;]+\\]);', HTML).group(1))
+    element_refs=set(re.findall(r'\\bel\\.([A-Za-z_]\\w*)', HTML))
+    extra={"stats","coverage"}
+    assert element_refs.issubset(set(selectors)|extra), (
+        "Unregistered native HTML DOM element references",
+        sorted(element_refs-set(selectors)-extra))
+    for name in extra:
+        assert (name+':document.getElementById("'+name+'")') in HTML, (
+            f"Missing real DOM binding for {name}")
+        assert 'id="'+name+'"' in HTML
     configs=[tag(p,fw) for p in PITCHES for fw in (0.,75.)]
     assert len(configs)==6
     meta={
