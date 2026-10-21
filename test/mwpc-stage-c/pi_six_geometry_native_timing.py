@@ -129,7 +129,8 @@ def load_map(pitch,diameter,root=MAPS):
 class Count:
     __slots__=("segments","primaries","collected","known","unknown","edge",
                "hist","summed","squared","incidence_sum","incidence_squared",
-               "incidence_n","phi_sum","phi_squared","phi_n")
+               "incidence_n","angle_hist","phi_hist",
+               "phi_sum","phi_squared","phi_n")
     def __init__(self):
         self.segments=0
         self.primaries=0
@@ -141,6 +142,8 @@ class Count:
         self.summed=self.squared=0.
         self.incidence_sum=self.incidence_squared=0.
         self.incidence_n=0
+        self.angle_hist=np.zeros(18,dtype=np.int64)  # [0,10), ..., [170,180]
+        self.phi_hist=np.zeros(36,dtype=np.int64)    # [-180,-170), ..., [170,180]
         self.phi_sum=self.phi_squared=0.
         self.phi_n=0
 
@@ -164,16 +167,23 @@ class Count:
         self.incidence_sum+=float(a.sum())
         self.incidence_squared+=float(np.square(a).sum())
         self.incidence_n+=len(a)
+        self.angle_hist+=np.bincount(np.clip((a//10).astype(np.int64),0,17),
+                                      minlength=18)
         # phi is signed in [-180,+180]; arithmetic moments are not
         # circular statistics; preserve mean sin/cos in later study.
         ph=phi[np.isfinite(phi)&(phi>=-180)&(phi<=180)]
         self.phi_sum+=float(ph.sum())
         self.phi_squared+=float(np.square(ph).sum())
         self.phi_n+=len(ph)
+        self.phi_hist+=np.bincount(
+            np.clip(np.floor((ph+180)/10).astype(np.int64),0,35),
+            minlength=36)
 
     def done(self):
         if self.collected != self.known+self.unknown or \
-                int(self.hist.sum())!=self.known:
+                int(self.hist.sum())!=self.known or \
+                int(self.angle_hist.sum())!=self.incidence_n or \
+                int(self.phi_hist.sum())!=self.phi_n:
             raise AssertionError("Collected/time known/overflow conservation")
         def moments(s,q,n):
             if n==0:return None,None
@@ -185,7 +195,9 @@ class Count:
         return dict(segments=self.segments,primaries=self.primaries,
             collected=self.collected,known=self.known,unknown=self.unknown,
             edge=self.edge,hist=self.hist.tolist(),mean_ns=mean,rms_ns=rms,
-            angle_n=self.incidence_n,mean_angle_deg=am,rms_angle_deg=ar)
+            angle_n=self.incidence_n,mean_angle_deg=am,rms_angle_deg=ar,
+            angle_hist=self.angle_hist.tolist(),phi_n=self.phi_n,
+            phi_hist=self.phi_hist.tolist())
 
 
 def first_indices(u,pitch,n):
@@ -412,6 +424,8 @@ def run(args):
                          "N=floor(W/p+0.5), physical gas aperture W fixed",
         "time_edges_ns":list(range(0,CUTOFF+1,DT))+["overflow"],
         "time_bin_width_ns":DT,
+        "electron_angle_edges_deg":list(range(0,181,10)),
+        "electron_phi_hit_edges_deg":list(range(-180,181,10)),
         "angle_bins_deg":ANGLES.tolist(),
         "angle_semantics":"signed muon entrance theta_u,theta_w Geant4; "
                  "electron incidence_normal_deg from LAST microscopic "
