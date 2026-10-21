@@ -2865,3 +2865,39 @@ chunk-aware workflow followed by a Heed + frozen 6 Garfield LUT fold.
 Only after those results are merged into original-layout histograms,
 with source/event/chunk provenance and parent-bootstrap statistics,
 may dashboards be labelled 100k/source or 2M/source.
+
+
+### 2026-10-21: ROOT/hadd missing from PATH during 2M benchmark launch
+
+The real WSL benchmark reported:
+- 2M GENERATED parents/source target, 50k/chunk, plan PASS;
+  865.52 GiB free disk at startup.
+- Synthetic capped-run regression PASS; its SKIP completed Jpsi/Phi/
+  Omega lines refer to dummy /tmp fixtures, NOT actual ROOT checkpoints.
+- Native Stage-C simulator prefix detected correctly under
+  /home/stanm/na6p/install/NA6PRoot-mwpc.
+- REAL campaign setup STOPPED before any Geant4 event was generated:
+  CAMPAIGN_ERROR: Required hadd missing from PATH.
+
+ROOT is installed independently of NA6PRoot. The Stage-C environment
+activator now chooses the installed ROOT prefix, prioritizing explicit
+NA6P_ROOT_PREFIX, then ROOTSYS, then /home/stanm/na6p/install/root,
+then root-config. It demands executable bin/root and bin/hadd plus
+libCore, libRIO and libTree from the SAME installation, sets PATH,
+ROOTSYS, LD_LIBRARY_PATH and ROOT_INCLUDE_PATH and checks linked
+libraries using ldd. No ROOT/Geant4 rebuild warranted just for PATH.
+
+Run only the read-only executable/environment preflight first:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_2m_generated_parent_campaign.sh env-check
+
+Only after env-check PASS, retry:
+
+    bash test/mwpc-stage-c/run_pi_2m_generated_parent_campaign.sh benchmark
+
+The env-check never creates a campaign manifest or starts Geant4.
+The real benchmark preserves the frozen 2M/source identity and all
+completed 50k chunks. Review measured ROOT disk and CPU wall time
+before FULL production.
