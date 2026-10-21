@@ -128,12 +128,42 @@ def match_maps(pitch, input_dir, field_diameter=75.):
     b_angle = np.full(shape, np.nan)
     nfield = 0
     transitions = Counter()
+    valid_birth = np.ones(shape, dtype=bool)
+    relocated = []
     for (ib,j) in keys:
         a, b = bare[ib,j], field[ib,j]
-        if a["seed"] != b["seed"] or \
-           not math.isclose(a["u"], b["u"], rel_tol=0., abs_tol=1.e-8) or \
-           not math.isclose(a["v"], b["v"], rel_tol=0., abs_tol=1.e-8):
-            raise ValueError(f"Initial Garfield electron not paired at {ib}/{j}")
+        if a["seed"] != b["seed"]:
+            raise ValueError(f"Different Garfield random seeds at {ib}/{j}")
+        same_u = math.isclose(a["u"], b["u"], rel_tol=0., abs_tol=1.e-8)
+        same_v = math.isclose(a["v"], b["v"], rel_tol=0., abs_tol=1.e-8)
+        if not (same_u and same_v):
+            # C++ generator uses an explicit safeguard: a birth accidentally
+            # inside a metal conductor is moved to the CELL CENTER.
+            # Only the field-wire-on map can contain this extra conductor.
+            # Never mislabel these two distinct physical births as paired.
+            iu, iv = divmod(ib, NV)
+            center_u = -pitch/2 + (iu+.5)*DU
+            center_v = -3. + (iv+.5)*.2
+            field_index = math.floor(a["u"]/pitch)
+            field_u = (field_index+.5)*pitch
+            radius = .0005*field_diameter  # micrometers -> mm radius
+            inside_field = (-4 <= field_index < 4 and
+                math.hypot(a["u"]-field_u,a["v"]) <= radius + 2.e-8)
+            relocated_to_center = (
+                math.isclose(b["u"],center_u,rel_tol=0.,abs_tol=1.e-8)
+                and math.isclose(b["v"],center_v,rel_tol=0.,abs_tol=1.e-8))
+            if not (inside_field and relocated_to_center):
+                raise ValueError(
+                    f"Unexplained Garfield start mismatch at {ib}/{j}: "
+                    f"bare=({a['u']},{a['v']}), field=({b['u']},{b['v']}); "
+                    "refusing artificial electron pairing")
+            valid_birth[ib,j] = False
+            relocated.append({
+                "box_id":ib,"sample":j,"seed":a["seed"],
+                "bare_birth_u_mm":a["u"],"bare_birth_v_mm":a["v"],
+                "field_birth_u_mm":b["u"],"field_birth_v_mm":b["v"],
+                "field_wire_center_u_mm":field_u,
+            })
         a_col[ib,j] = a["collected"]
         b_col[ib,j] = b["collected"]
         a_time[ib,j] = a["time"]
@@ -141,12 +171,15 @@ def match_maps(pitch, input_dir, field_diameter=75.):
         a_angle[ib,j] = a["angle"]
         b_angle[ib,j] = b["angle"]
         nfield += b["field"]
-        transitions[(int(a["collected"]), int(b["collected"]))] += 1
-    if sum(transitions.values()) != a_col.size:
-        raise ValueError("Paired Garfield transition accounting failed")
+        if valid_birth[ib,j]:
+            transitions[(int(a["collected"]), int(b["collected"]))] += 1
+    if sum(transitions.values()) != np.count_nonzero(valid_birth):
+        raise ValueError("Matched-start Garfield transition accounting failed")
     return {
         "pitch": pitch, "samples": samples,
         "bare": a_col, "field": b_col,
+        "paired_start_valid": valid_birth,
+        "start_relocations": relocated,
         "bare_time": a_time, "field_time": b_time,
         "bare_angle": a_angle, "field_angle": b_angle,
         "transition_counts": {f"{a}->{b}": transitions[a,b]
@@ -167,7 +200,13 @@ def moments(values):
     return m, float(np.sqrt(np.mean((good-m)**2)))
 
 
-def metrics(a, b, ta, tb, aa, ab):
+def metrics(a, b, ta, tb, aa, ab, mask=None):
+    eligible = np.ones_like(a, dtype=bool) if mask is None else mask
+    n_eligible = int(np.count_nonzero(eligible))
+    if n_eligible == 0:
+        raise ValueError("No matched electron starts in this selection")
+    a = a & eligible
+    b = b & eligible
     both = a & b
     diff = tb[both] - ta[both]
     diff = diff[np.isfinite(diff)]
@@ -180,9 +219,10 @@ def metrics(a, b, ta, tb, aa, ab):
     angle_a, angle_rms_a = moments(ai)
     angle_b, angle_rms_b = moments(bi)
     return {
-        "anode_fraction_no": float(a.mean()),
-        "anode_fraction_field": float(b.mean()),
-        "delta_anode_fraction_pp": float(100*(b.mean()-a.mean())),
+        "n_common_starts": n_eligible,
+        "anode_fraction_no": float(np.count_nonzero(a)/n_eligible),
+        "anode_fraction_field": float(np.count_nonzero(b)/n_eligible),
+        "delta_anode_fraction_pp": float(100*(np.count_nonzero(b)-np.count_nonzero(a))/n_eligible),
         "mean_time_no_ns": a_mean,
         "mean_time_field_ns": b_mean,
         "delta_conditional_mean_time_ns": b_mean-a_mean,
@@ -202,13 +242,13 @@ def metrics(a, b, ta, tb, aa, ab):
         "angle_rms_field_deg": angle_rms_b,
         "delta_conditional_rms_angle_deg": angle_rms_b-angle_rms_a,
         "anode_le50ns_fraction_no":
-            float(np.mean(a & np.isfinite(ta) & (ta<=50))),
+            float(np.count_nonzero(a & np.isfinite(ta) & (ta<=50))/n_eligible),
         "anode_le50ns_fraction_field":
-            float(np.mean(b & np.isfinite(tb) & (tb<=50))),
+            float(np.count_nonzero(b & np.isfinite(tb) & (tb<=50))/n_eligible),
         "anode_le100ns_fraction_no":
-            float(np.mean(a & np.isfinite(ta) & (ta<=100))),
+            float(np.count_nonzero(a & np.isfinite(ta) & (ta<=100))/n_eligible),
         "anode_le100ns_fraction_field":
-            float(np.mean(b & np.isfinite(tb) & (tb<=100))),
+            float(np.count_nonzero(b & np.isfinite(tb) & (tb<=100))/n_eligible),
     }
 
 
@@ -217,17 +257,21 @@ def analyse(pair, replicas=400, seed=260020):
     ta, tb = pair["bare_time"], pair["field_time"]
     aa, ab = pair["bare_angle"], pair["field_angle"]
     nbox, samples = a.shape
-    point = metrics(a,b,ta,tb,aa,ab)
+    valid = pair.get("paired_start_valid",
+                     np.ones_like(a, dtype=bool))
+    point = metrics(a,b,ta,tb,aa,ab,valid)
     rng = np.random.default_rng(seed)
     row_index = np.arange(nbox)[:,None]
     variations = {k:[] for k in point if k not in
-                  ("n_both_collected","n_paired_valid_times")}
+                  ("n_both_collected","n_paired_valid_times",
+                   "n_common_starts")}
     # Preserve exactly 20 Garfield trials per spatial cell in each bootstrap.
     for _ in range(replicas):
         chosen = rng.integers(0, samples, (nbox,samples))
         mm = metrics(a[row_index,chosen], b[row_index,chosen],
                      ta[row_index,chosen], tb[row_index,chosen],
-                     aa[row_index,chosen], ab[row_index,chosen])
+                     aa[row_index,chosen], ab[row_index,chosen],
+                     valid[row_index,chosen])
         for key in variations:
             variations[key].append(mm[key])
     result = {
@@ -235,6 +279,9 @@ def analyse(pair, replicas=400, seed=260020):
         "n_spatial_cells": nbox,
         "trials_per_cell": samples,
         "n_electron_pairs": int(a.size),
+        "n_identical_birth_pairs": int(np.count_nonzero(valid)),
+        "n_field_wire_birth_relocations": int(valid.size-np.count_nonzero(valid)),
+        "excluded_birth_relocations": pair.get("start_relocations", []),
         "field_wire_endpoints": pair["field_wire_ends"],
         "transitions": pair["transition_counts"],
         "raw_endpoint_status_no_field": pair["status_bare"],
@@ -247,6 +294,9 @@ def analyse(pair, replicas=400, seed=260020):
             else None for k,values in variations.items()
         },
         "uncertainty_unit": (
+            "Only EXACTLY MATCHED initial electron coordinates are included "
+            "in paired denominators; births relocated from within the metal "
+            "field wire are excluded and recorded, not imputed. "
             "Single Garfield electron, resampled WITHIN fixed initial (u,v) "
             "cell and paired across field/no-field configurations. "
             "No parent-Geant4-event uncertainty or interpolation systematic."),
@@ -261,7 +311,9 @@ def spatial_profiles(pair):
         sl = slice(iu*NV, (iu+1)*NV)
         point = metrics(*(pair[k][sl] for k in (
             "bare", "field", "bare_time", "field_time",
-            "bare_angle", "field_angle")))
+            "bare_angle", "field_angle")),
+            mask=pair.get("paired_start_valid",
+                          np.ones_like(pair["bare"],dtype=bool))[sl])
         result.append({"pitch_mm":pair["pitch"],
                        "u_center_mm": -pair["pitch"]/2+(iu+.5)*DU,
                        "u_over_pitch":(-pair["pitch"]/2+(iu+.5)*DU)/pair["pitch"],
@@ -292,6 +344,13 @@ def run(input_dir, out, diameter=75., replicas=400):
                       "bootstrap Monte-Carlo errors across common initial "
                       "electron positions, NOT errors on correlated "
                       "source-parent GEANT muon events.",
+        "birth_handling": "Garfield's original C++ generator relocates a "
+                          "random birth INSIDE a metal wire to the center "
+                          "of its u/v cell. Newly introduced 75um field "
+                          "wires create configuration-specific relocations. "
+                          "Only truly identical birth positions enter "
+                          "paired estimates; all original raw CSVs are "
+                          "retained and never modified.",
         "warning": "Cross-pitch electron births cover different physical "
                    "u intervals; results are UNIFORM over respective unit "
                    "cells, NOT matched native Geant4/Heed tracks.",
@@ -323,6 +382,10 @@ def run(input_dir, out, diameter=75., replicas=400):
               f"{m['paired_mean_time_delta_both_ns']:.3f} +/- "
               f"{e['paired_mean_time_delta_both_ns']:.3f} ns "
               f"(N={m['n_paired_valid_times']})")
+        print("  matched launches:",row["n_identical_birth_pairs"],
+              "of",row["n_electron_pairs"],
+              "; field-wire birth relocations excluded:",
+              row["n_field_wire_birth_relocations"])
         print("  collection transition counts:",row["transitions"])
         print("  status without field:",row["raw_endpoint_status_no_field"])
         print("  status with field   :",row["raw_endpoint_status_with_field"])
