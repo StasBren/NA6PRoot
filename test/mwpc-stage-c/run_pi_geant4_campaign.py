@@ -315,8 +315,10 @@ def simulate(args, suite, inputs):
     root = inputs["root"]
     chunks_per_source = math.ceil(args.events_per_source / args.chunk_size)
     count_new = 0
+    max_parts = (args.max_chunks_per_source if args.max_chunks_per_source>0
+                 else chunks_per_source)
     for ich, channel in enumerate(CHANNELS):
-        for part in range(chunks_per_source):
+        for part in range(min(chunks_per_source,max_parts)):
             n = min(args.chunk_size,
                     args.events_per_source-part*args.chunk_size)
             seed = BASE_SEED[channel] + part*251
@@ -511,6 +513,13 @@ def simulate(args, suite, inputs):
                 f"elapsed {(time.monotonic()-started)/60:.1f} min",
                 flush=True,
             )
+    if max_parts < chunks_per_source:
+        print("CAMPAIGN_BENCHMARK_STAGE_COMPLETE: capped at "
+              f"{max_parts} full chunks per source; total target remains "
+              f"{args.events_per_source:,} generated parents/source. "
+              "Repeat without --max-chunks-per-source to continue.",
+              flush=True)
+        return
     print("CAMPAIGN_COMPLETE all three channels and every frozen chunk.",flush=True)
     write_json_atomic(suite / "campaign_complete.json",{
         "utc": dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -531,6 +540,11 @@ def main():
                     help="Budget checked BETWEEN whole chunks, 0 = unlimited")
     ap.add_argument("--suite",type=Path,default=None,
                     help="Fresh custom output directory for changed settings")
+    ap.add_argument("--max-chunks-per-source",type=int,default=0,
+                    help="Operational stage cap (0=all). With 2 and "
+                         "chunk-size 50000, first run 100k parents/source "
+                         "and later resume SAME frozen 2m/source suite "
+                         "with 0; not part of physics provenance")
     args = ap.parse_args()
     if args.events_per_source is None:
         args.events_per_source = (
@@ -542,6 +556,10 @@ def main():
             3 if args.mode == "smoke" else
             12 if args.mode == "parallel-smoke" else 3000
         )
+    if args.max_chunks_per_source<0:
+        ap.error("--max-chunks-per-source must be nonnegative")
+    if args.mode!="full" and args.max_chunks_per_source:
+        ap.error("--max-chunks-per-source requires --mode full")
     suite,inputs = setup(args)
     lock=(suite/".campaign.lock").open("a")
     try:
