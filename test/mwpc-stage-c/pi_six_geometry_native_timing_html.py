@@ -43,18 +43,27 @@ a{color:#89d0ff} .note{padding:12px;border-left:3px solid #7890a0}
 <label>Шаг и полевая проволока<select id="config"></select></label>
 <label>Угол входа мюона<select id="axis"></select></label>
 <label>Интервал угла<select id="angle"></select></label>
+<label>Наблюдаемая величина<select id="observable">
+<option value="time">Время дрейфа [нс]</option>
+<option value="incidence">Угол прихода относительно нормали [°]</option>
+<option value="phi">Угол положения попадания на аноде [°]</option>
+</select></label>
 <label>Отображение<select id="view"><option value="bar">Гистограмма выбранной конфигурации</option><option value="overlay">Наложение всех шести конфигураций</option></select></label>
 </div>
 <div id="coverage" class="info"></div>
 <div id="stats" class="statgrid"></div>
 </div>
 <div class="panel">
-<h2>Доля электронов в интервале 10 нс, %</h2>
+<h2 id="chartTitle">Доля электронов в интервале 10 нс, %</h2>
 <svg id="chart" viewBox="0 0 960 405" role="img" aria-label="Спектр времени дрейфа с шагом 10 наносекунд"></svg>
 <div id="legend" class="legend"></div>
-<div class="info">В нормировке учтены все собранные электроны с известным
-временем, включая времена ≥300 нс; они вынесены в отдельный счётчик.
-Штриховая линия: 100 нс. Пустые группы не заменяются данными других камер.</div>
+<div class="info">Временная нормировка включает ≥300 нс; они вынесены
+в отдельный счётчик. Угловые гистограммы используют электроны с известным
+углом, что не обязательно совпадает с выборкой известных времен.
+Штриховая линия 100 нс показывается только на временном графике.
+Угол попадания φ — геометрический угол на поверхности проволоки, а
+угол к нормали — направление последнего микроскопического шага Garfield.
+Пустые группы не заменяются данными других камер.</div>
 </div>
 <div class="panel note"><b>Границы физической интерпретации</b>
 <p id="meta"></p>
@@ -71,7 +80,7 @@ const data=JSON.parse(document.getElementById("data").textContent);
 const groups=data.groups,meta=data.meta;
 const map=new Map(groups.map(g=>[[g.source,g.config,g.station,g.det_id,g.anode,g.axis,g.anglebin].join("|"),g]));
 const confs=Object.keys(meta.garfield_luts);
-const ids=["source","station","det","wire","config","axis","angle","view"];
+const ids=["source","station","det","wire","config","axis","angle","observable","view"];
 const el=Object.fromEntries(ids.map(x=>[x,document.getElementById(x)]));
 const fills=["#50d5c4","#80b5ff","#efb86a","#b4a2ff","#ff8f8f","#9ad27c"];
 function sel(element,options,wanted){
@@ -145,33 +154,48 @@ function draw(){
      " — "+el.config.value;
  el.coverage.textContent=title+(rec?"":" — выбранная группа отсутствует");
  const chart=document.getElementById("chart");chart.replaceChildren();
- const valid=active.filter(([c,g])=>g&&g.known>0);
+ const quantity=el.observable.value;
+ const field=quantity==="time"?"hist":quantity==="incidence"?"angle_hist":"phi_hist";
+ const denominator=quantity==="time"?"known":quantity==="incidence"?"angle_n":"phi_n";
+ const nBins=quantity==="time"?30:quantity==="incidence"?18:36;
+ const xMin=quantity==="phi"?-180:0;
+ const xMax=quantity==="time"?300:180;
+ const width=(xMax-xMin)/nBins;
+ const xlabel=quantity==="time"?"Время дрейфа от рождения электрона, нс":
+   quantity==="incidence"?"Угол подхода электрона к нормали, градусы":
+   "Геометрический угол попадания φ, градусы";
+ document.getElementById("chartTitle").textContent=
+   quantity==="time"?"Доля электронов в интервале 10 нс, %":
+   "Доля электронов в интервале 10°, %";
+ const valid=active.filter(([c,g])=>g&&g[denominator]>0);
  const yMax=Math.max(1,...valid.flatMap(([c,g])=>
-       g.hist.slice(0,30).map(x=>100*x/g.known)))*1.12;
- const xx=v=>75+v/300*844, yy=v=>342-v/yMax*295;
+       g[field].slice(0,nBins).map(x=>100*x/g[denominator])))*1.12;
+ const xx=v=>75+(v-xMin)/(xMax-xMin)*844, yy=v=>342-v/yMax*295;
  for(let i=0;i<=4;i++){let value=i*yMax/4;let Y=yy(value);
  svg("line",{x1:75,y1:Y,x2:919,y2:Y,stroke:"#385b73","stroke-width":1});
  svg("text",{x:62,y:Y+4,"text-anchor":"end","font-size":12,fill:"#ddeaf0"},fmt(value,1));}
- for(let i=0;i<=6;i++){let x=i*50,X=xx(x);
+ for(let i=0;i<=6;i++){let x=xMin+(xMax-xMin)*i/6,X=xx(x);
  svg("text",{x:X,y:366,"text-anchor":"middle","font-size":12,fill:"#ddeaf0"},x);}
- svg("text",{x:497,y:394,"text-anchor":"middle","font-size":14,fill:"#daeafa"},
-   "Время дрейфа от рождения электрона, нс");
- svg("line",{x1:xx(100),y1:42,x2:xx(100),y2:342,stroke:"#fac778",
-      "stroke-dasharray":"4,5","stroke-width":2});
- svg("text",{x:xx(100)+4,y:34,"font-size":12,fill:"#fac778"},"100 нс");
+ svg("text",{x:497,y:394,"text-anchor":"middle","font-size":14,fill:"#daeafa"},xlabel);
+ if(quantity==="time"){
+  svg("line",{x1:xx(100),y1:42,x2:xx(100),y2:342,stroke:"#fac778",
+       "stroke-dasharray":"4,5","stroke-width":2});
+  svg("text",{x:xx(100)+4,y:34,"font-size":12,fill:"#fac778"},"100 нс");
+ }
  const legend=document.getElementById("legend");legend.replaceChildren();
  active.forEach(([conf,g])=>{
- if(!g||g.known===0)return;
+ if(!g||g[denominator]===0)return;
  const color=fills[confs.indexOf(conf)];
  if(el.view.value==="bar"){
-  g.hist.slice(0,30).forEach((count,i)=>{
-   const y=100*count/g.known;
-   svg("rect",{x:xx(i*10)+1,y:yy(y),width:Math.max(1,844/30-2),
-       height:342-yy(y),fill:color});
+  g[field].slice(0,nBins).forEach((count,i)=>{
+   const y=100*count/g[denominator];
+   svg("rect",{x:xx(xMin+i*width)+1,y:yy(y),
+       width:Math.max(1,844/nBins-2),height:342-yy(y),fill:color});
   });
  }else{
- let path=g.hist.slice(0,30).map((count,i)=>
-   (i?"L":"M")+xx(i*10+5)+" "+yy(100*count/g.known)).join(" ");
+ let path=g[field].slice(0,nBins).map((count,i)=>
+   (i?"L":"M")+xx(xMin+(i+.5)*width)+" "+
+   yy(100*count/g[denominator])).join(" ");
  svg("path",{d:path,stroke:color,"stroke-width":3,fill:"none"});
  }
  let x=document.createElement("span");
