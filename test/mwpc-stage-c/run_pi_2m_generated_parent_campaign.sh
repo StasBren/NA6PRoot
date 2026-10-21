@@ -46,6 +46,7 @@ if [[ "$MODE" == "plan" ]]; then exit 0; fi
 # Small, read-only environment check. Does NOT create a frozen campaign
 # manifest and does NOT start Geant4 or even the 50k benchmark.
 if [[ "$MODE" == "env-check" ]]; then
+  NA6P_STAGEC_REQUIRE_ROOT_HADD=1
   source "$HERE/activate_pi_stagec_env.sh"
   for program in root hadd na6psim na6psim_parallel; do
     command -v "$program" || {
@@ -133,6 +134,7 @@ print("PASS: all first 100k generated parents/source have validated "
       "checkpoints. Check disk and observed speed before FULL.")
 PY
 fi
+NA6P_STAGEC_REQUIRE_ROOT_HADD=1
 source "$HERE/activate_pi_stagec_env.sh"
 MAX=0
 if [[ "$MODE" == "benchmark" ]]; then
