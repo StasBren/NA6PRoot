@@ -113,10 +113,12 @@ export PATH="$_stagec_root_prefix/bin:$PATH"
 export LD_LIBRARY_PATH="$_stagec_root_libdir:${LD_LIBRARY_PATH:-}"
 export ROOT_INCLUDE_PATH="$_stagec_root_prefix/include:${ROOT_INCLUDE_PATH:-}"
 hash -r
-if [[ "$(readlink -f "$(command -v root)")" !=
-      "$(readlink -f "$_stagec_root_prefix/bin/root")" ||
-      "$(readlink -f "$(command -v hadd)")" !=
-      "$(readlink -f "$_stagec_root_prefix/bin/hadd")" ]]; then
+_active_root_real="$(readlink -f "$(command -v root)")"
+_active_hadd_real="$(readlink -f "$(command -v hadd)")"
+_expected_root_real="$(readlink -f "$_stagec_root_prefix/bin/root")"
+_expected_hadd_real="$(readlink -f "$_stagec_root_prefix/bin/hadd")"
+if [[ "$_active_root_real" != "$_expected_root_real" ]] ||
+   [[ "$_active_hadd_real" != "$_expected_hadd_real" ]]; then
   echo "ERROR: root/hadd resolve to different ROOT installations" >&2
   return 7
 fi
@@ -135,6 +137,7 @@ for _program in "$_stagec_root_prefix/bin/hadd" "$_stagec_prefix/bin/na6psim"; d
 done
 unset _stagec_root_candidates _stagec_root_cfg _candidate _lib
 unset _stagec_root_prefix _stagec_root_libdir _program _unresolved
+unset _active_root_real _active_hadd_real _expected_root_real _expected_hadd_real
 
 fi
 
