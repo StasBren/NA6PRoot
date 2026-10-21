@@ -116,7 +116,7 @@ def make_portal(output,refs):
             '<b>'+html.escape({"jpsi40-bore":"J/ψ","phi40-bore":"ϕ",
             "omega40-bore":"ω"}.get(src,src))+'</b>'
             ' <span>MS'+str(st)+' · интерактивная XY-карта камер</span></a>')
-    source=String = """<!doctype html><html lang="ru"><head><meta charset="utf-8">
+    source="""<!doctype html><html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NA60+ · PI · шесть конфигураций проволок</title>
 <style>body{background:#091626;color:#ecf7ff;font:15px/1.55 system-ui,
