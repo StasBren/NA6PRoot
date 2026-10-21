@@ -46,6 +46,8 @@ if [[ "$MODE" == "plan" ]]; then exit 0; fi
 # Small, read-only environment check. Does NOT create a frozen campaign
 # manifest and does NOT start Geant4 or even the 50k benchmark.
 if [[ "$MODE" == "env-check" ]]; then
+  bash -n "$HERE/activate_pi_stagec_env.sh"
+  echo "PASS: Bash syntax of Stage-C activation"
   NA6P_STAGEC_REQUIRE_ROOT_HADD=1
   source "$HERE/activate_pi_stagec_env.sh"
   for program in root hadd na6psim na6psim_parallel; do
@@ -114,6 +116,8 @@ PY
 
 python3 -m py_compile "$HERE/run_pi_geant4_campaign.py" "$HERE/test_pi_2m_campaign.py"
 python3 "$HERE/test_pi_2m_campaign.py"
+bash -n "$HERE/activate_pi_stagec_env.sh"
+echo "PASS: Bash syntax of Stage-C activation"
 if [[ "$MODE" == "full" ]]; then
   python3 - "$SUITE" <<'PY'
 from pathlib import Path
