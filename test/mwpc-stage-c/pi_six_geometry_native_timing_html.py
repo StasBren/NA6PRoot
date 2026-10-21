@@ -51,6 +51,10 @@ a{color:#89d0ff} .note{padding:12px;border-left:3px solid #7890a0}
 <option value="incidence">Угол прихода относительно нормали [°]</option>
 <option value="phi">Угол положения попадания на аноде [°]</option>
 </select></label>
+<label>Вертикальная шкала<select id="yscale">
+<option value="linear">Линейная</option>
+<option value="log">Логарифмическая</option>
+</select></label>
 <label>Отображение<select id="view"><option value="bar">Гистограмма выбранной конфигурации</option><option value="overlay">Наложение всех шести конфигураций</option></select></label>
 </div>
 <div id="coverage" class="info">Ожидание JavaScript. Если график не появился, статический спектр ниже доступен без скриптов.</div>
@@ -84,7 +88,7 @@ const data=JSON.parse(document.getElementById("data").textContent);
 const groups=data.groups,meta=data.meta;
 const map=new Map(groups.map(g=>[[g.source,g.config,g.station,g.det_id,g.anode,g.axis,g.anglebin].join("|"),g]));
 const confs=Object.keys(meta.garfield_luts);
-const ids=["source","station","det","wire","config","axis","angle","observable","view"];
+const ids=["source","station","det","wire","config","axis","angle","observable","view","yscale"];
 const el={
  ...Object.fromEntries(ids.map(x=>[x,document.getElementById(x)])),
  stats:document.getElementById("stats"),
@@ -181,12 +185,26 @@ function draw(){
    quantity==="time"?"Доля электронов в интервале 10 нс, %":
    "Доля электронов в интервале 10°, %";
  const valid=active.filter(([c,g])=>g&&g[denominator]>0);
- const yMax=Math.max(1,...valid.flatMap(([c,g])=>
-       g[field].slice(0,nBins).map(x=>100*x/g[denominator])))*1.12;
- const xx=v=>75+(v-xMin)/(xMax-xMin)*844, yy=v=>342-v/yMax*295;
- for(let i=0;i<=4;i++){let value=i*yMax/4;let Y=yy(value);
+ const positive=valid.flatMap(([c,g])=>
+       g[field].slice(0,nBins).filter(n=>n>0).map(n=>100*n/g[denominator]));
+ const yMax=Math.max(1,...positive)*1.12;
+ const isLog=el.yscale.value==="log"&&positive.length>0;
+ const yFloor=isLog?Math.pow(10,Math.floor(Math.log10(Math.min(...positive)))-1):0;
+ const yCeil=isLog?Math.pow(10,Math.ceil(Math.log10(yMax))):1;
+ const xx=v=>75+(v-xMin)/(xMax-xMin)*844;
+ const yy=isLog
+       ? v=>342-295*(Math.log10(v)-Math.log10(yFloor))/
+             (Math.log10(yCeil)-Math.log10(yFloor))
+       : v=>342-v/yMax*295;
+ const yTicks=isLog
+       ? Array.from({length:Math.round(Math.log10(yCeil/yFloor))+1},
+          (_,i)=>yFloor*Math.pow(10,i))
+       : Array.from({length:5},(_,i)=>i*yMax/4);
+ for(const value of yTicks){let Y=yy(value);
  svg("line",{x1:75,y1:Y,x2:919,y2:Y,stroke:"#385b73","stroke-width":1});
- svg("text",{x:62,y:Y+4,"text-anchor":"end","font-size":12,fill:"#ddeaf0"},fmt(value,1));}
+ svg("text",{x:62,y:Y+4,"text-anchor":"end","font-size":12,fill:"#ddeaf0"},
+     isLog?(value>=1?value.toFixed(0):Number(value.toPrecision(2)).toString()):
+       fmt(value,1));}
  for(let i=0;i<=6;i++){let x=xMin+(xMax-xMin)*i/6,X=xx(x);
  svg("text",{x:X,y:366,"text-anchor":"middle","font-size":12,fill:"#ddeaf0"},x);}
  svg("text",{x:497,y:394,"text-anchor":"middle","font-size":14,fill:"#daeafa"},xlabel);
@@ -201,15 +219,20 @@ function draw(){
  const color=fills[confs.indexOf(conf)];
  if(el.view.value==="bar"){
   g[field].slice(0,nBins).forEach((count,i)=>{
+   if(isLog&&count===0)return;
    const y=100*count/g[denominator];
    svg("rect",{x:xx(xMin+i*width)+1,y:yy(y),
        width:Math.max(1,844/nBins-2),height:342-yy(y),fill:color});
   });
  }else{
- let path=g[field].slice(0,nBins).map((count,i)=>
-   (i?"L":"M")+xx(xMin+(i+.5)*width)+" "+
-   yy(100*count/g[denominator])).join(" ");
- svg("path",{d:path,stroke:color,"stroke-width":3,fill:"none"});
+ let path="", pen=false;
+ g[field].slice(0,nBins).forEach((count,i)=>{
+   if(isLog&&count===0){pen=false;return;}
+   path+=(pen?"L":"M")+xx(xMin+(i+.5)*width)+" "+
+     yy(100*count/g[denominator])+" ";
+   pen=true;
+ });
+ svg("path",{d:path.trim(),stroke:color,"stroke-width":3,fill:"none"});
  }
  let x=document.createElement("span");
  x.innerHTML="<i class='circ' style='background:"+color+"'></i>";
