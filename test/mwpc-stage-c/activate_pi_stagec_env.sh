@@ -69,6 +69,9 @@ if [[ "$(readlink -f "$_active_sim")" != "$(readlink -f "$_stagec_prefix/bin/na6
   echo "ERROR: cannot activate this source checkout's native tools" >&2
   return 5
 fi
+# A Garfield-only caller needs NA6PRoot, not the ROOT merging executable.
+# Opt in for native Geant4 ROOT/hadd production and run full loader checks.
+if [[ "${NA6P_STAGEC_REQUIRE_ROOT_HADD:-0}" == "1" ]]; then
 # ROOT is installed separately from NA6PRoot. Resolve ROOT binaries AND
 # ROOT shared libraries from one matching installation before any Geant4 run.
 _stagec_root_candidates=()
@@ -132,6 +135,8 @@ for _program in "$_stagec_root_prefix/bin/hadd" "$_stagec_prefix/bin/na6psim"; d
 done
 unset _stagec_root_candidates _stagec_root_cfg _candidate _lib
 unset _stagec_root_prefix _stagec_root_libdir _program _unresolved
+
+fi
 
 echo "Stage-C installed simulator selected:"
 echo "  na6psim:          $_active_sim"
