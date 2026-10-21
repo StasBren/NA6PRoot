@@ -20,6 +20,7 @@ from pathlib import Path
 
 from pi_six_geometry_native_timing import OUT, SOURCES
 from pi_six_geometry_native_timing_html import build
+from pi_six_geometry_layout_v3 import render as render_v3, make_portal
 
 PAGES=OUT/"pages"
 INPUT=OUT/"pi_six_geometry_native_timing.json"
@@ -195,10 +196,15 @@ def generate(source_path,output):
             inp=tmp/f"{src}_MS{station}.json"
             dest=output/src/f"MS{station}.html"
             build(inp,dest)
+            # V2-style clickable XY physical chamber map + 6 Garfield fields
+            # and electron-angle panels; same original source/station payload.
+            render_v3(inp,output/src/f"MS{station}_layout_v3.html",src,station)
             print(f"{src} MS{station}: {n:,} groups; "
                   f"{dest.stat().st_size/(1024*1024):.1f} MiB HTML",
                   flush=True)
     index=compact_index(station_summary,output,source_names)
+    pi_portal=make_portal(output,[(src,st) for src in source_names
+                                 for st in range(6)])
     # Small, exact per-source×station×field reference for independent
     # parent-event bootstrap conservation, without loading the huge JSON.
     reference=output/"pi_six_geometry_station_reference.json"
@@ -216,7 +222,9 @@ def generate(source_path,output):
           reference)
     print("PASS: real-native six-geometry station HTML pages:",sum(counts.values()),
           "source-specific groups across",len(counts),"pages")
-    print("Open overview:",index)
+    print("Open original-layout V3 interactive XY/pitch/field-wire dashboard:",
+          pi_portal)
+    print("Open simpler overview:",index)
     print("Full original JSON stays unchanged:",source_path)
     return index
 
