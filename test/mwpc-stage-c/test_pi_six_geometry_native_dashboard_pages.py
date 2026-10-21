@@ -10,6 +10,8 @@ from pi_six_geometry_native_dashboard_pages import (
 )
 from pi_six_geometry_native_timing import SOURCES, tag, PITCHES
 from pi_six_geometry_native_timing_html import HTML
+from mwpc_checkerboard_projection import build_chambers
+from pi_six_geometry_layout_v3 import VERSION
 
 
 def main():
@@ -37,10 +39,12 @@ def main():
         "finite_anodes_by_pitch":{},
     }
     rows=[]
+    det_by_st={st:next(c.det_id for c in build_chambers()[st])
+               for st in range(6)}
     for src in SOURCES:
         for st in range(6):
             for cfg in configs:
-                rows.append({
+                row={
                     "source":src,"config":cfg,"station":st,
                     "det_id":-1,"anode":-1,"axis":"all","anglebin":-1,
                     "segments":1,"primaries":3,"collected":2,"known":2,
@@ -50,7 +54,9 @@ def main():
                     "angle_n":1,"phi_n":2,
                     "mean_ns":5.,"rms_ns":1.,
                     "mean_angle_deg":10.,"rms_angle_deg":0.,
-                })
+                }
+                rows.append(row)
+                rows.append({**row,"det_id":det_by_st[st]})
     with tempfile.TemporaryDirectory(prefix="six_native_pages_") as t:
         tmp=Path(t)
         original=tmp/"full.json"
@@ -72,11 +78,23 @@ def main():
         assert "document.getElementById(\"staticFallback\").hidden=true" in page_text
         compact=json.loads((tmp/"pages"/
                             "pi_six_geometry_station_reference.json").read_text())
-        assert len(compact["groups"])==len(rows)
+        assert len(compact["groups"])==len(rows)//2
         assert compact["groups"][0]["mean_ns"]==5.
         assert (tmp/"pages"/list(SOURCES)[-1]/"MS5.html").is_file()
-    print("PASS: stream native JSON without whole-document RAM load, "
-          "make 18 separate HTML reports and exact station reference")
+        new_portal=tmp/"pages"/"pi_pitch_fieldwire_timing_dashboard_v3.html"
+        assert new_portal.is_file()
+        assert "XY-карта" in new_portal.read_text(encoding="utf-8")
+        v3page=tmp/"pages"/list(SOURCES)[0]/"MS0_layout_v3.html"
+        assert v3page.is_file()
+        txt=v3page.read_text(encoding="utf-8")
+        assert VERSION in txt
+        assert 'id="map"' in txt and 'id="time"' in txt
+        assert 'id="arrival"' in txt and 'id="comparison"' in txt
+        assert "P(N≥2)" in txt and "Это не P(N≥2)" in txt
+        assert "Резервная гистограмма" in txt
+        assert "__STATIC_FALLBACK__" not in txt
+    print("PASS: stream native JSON to 18 XY/pitch/field-wire PI V3 "
+          "plus original 18 reports and exact bootstrap station reference")
 
 
 if __name__=="__main__":
