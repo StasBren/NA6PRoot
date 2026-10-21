@@ -53,6 +53,9 @@ footer{color:var(--muted);font-size:12px}
 </select></div>
 <div class="ctrl"><label for="angle">Интервал угла (только с данными)</label><select id="angle"></select></div>
 <div class="ctrl"><label for="wire">Конкретный анод выбранной камеры</label><select id="wire"></select></div>
+<div class="ctrl"><label for="timeScale">Вертикальная шкала времени</label><select id="timeScale">
+<option value="linear">Линейная</option>
+<option value="log">Логарифмическая</option></select></div>
 <div class="ctrl"><label for="overlay">Время: сравнить конфигурации</label><select id="overlay">
 <option value="single">Один вариант</option><option value="six">Все 6 вариантов</option>
 </select></div>
@@ -107,7 +110,7 @@ const $=id=>document.getElementById(id),NS="http://www.w3.org/2000/svg";
 const SOURCE_NAMES={"jpsi40-bore":"J/ψ","phi40-bore":"ϕ","omega40-bore":"ω"};
 const styles=["#59d9c5","#82b5ff","#ffbe79","#d4a3fa","#f08490","#a3d36f"];
 const configs=Object.keys(D.meta.garfield_luts);
-const S={src:D.selected_source,st:D.selected_station,cfg:"p3p0_anode_only",det:-1,wire:-1,axis:"u",bin:-1,overlay:false,arrival:"incidence"};
+const S={src:D.selected_source,st:D.selected_station,cfg:"p3p0_anode_only",det:-1,wire:-1,axis:"u",bin:-1,overlay:false,arrival:"incidence",scale:"linear"};
 const entries=new Map(D.groups.map(g=>[
  [g.source,g.config,g.station,g.det_id,g.anode,g.axis,g.anglebin].join("|"),g]));
 const chambers=D.layout;
@@ -132,6 +135,7 @@ function chooseUI(){
  select("config",configs.map(c=>[c,c.replace("anode_only","без field wire")
      .replace(/field75p0um/,"field wire 75 мкм")]),S.cfg);
  $("axis").value=S.axis;$("overlay").value=S.overlay?"six":"single";
+ $("timeScale").value=S.scale;
  $("arrivalType").value=S.arrival;
  const available=[[-1,"Все углы ("+format(lookup(S.cfg,S.det,-1,-1)?.segments||0)+" хитов)"]];
  for(let j=0;j<D.meta.angle_bins_deg.length-1;j++){
@@ -254,13 +258,27 @@ function renderTime(){
  const selected=lookup();renderStats(selected);
  const plotted=S.overlay?configs.map(c=>[c,lookup(c)]):[[S.cfg,selected]];
  const valid=plotted.filter(([c,b])=>b&&b.known>0);
- const max=Math.max(1,...valid.flatMap(([c,b])=>b.hist.slice(0,30).map(
-     n=>100*n/b.known)))*1.2;
- const x=t=>65+t*635/300,y=v=>255-185*v/max;
+ const nonzero=valid.flatMap(([c,b])=>b.hist.slice(0,30).filter(n=>n>0)
+     .map(n=>100*n/b.known));
+ const max=Math.max(1,...nonzero)*1.2;
+ const x=t=>65+t*635/300;
+ const logarithmic=S.scale==="log"&&nonzero.length>0;
+ const minLog=logarithmic?Math.pow(10,Math.floor(Math.log10(Math.min(...nonzero)))-1):0;
+ const maxLog=logarithmic?Math.pow(10,Math.ceil(Math.log10(max))):1;
+ const y=logarithmic
+    ? v=>255-185*(Math.log10(v)-Math.log10(minLog))/
+        (Math.log10(maxLog)-Math.log10(minLog))
+    : v=>255-185*v/max;
+ const yticks=logarithmic
+    ? Array.from({length:Math.round(Math.log10(maxLog/minLog))+1},
+        (_,i)=>minLog*Math.pow(10,i)).map(v=>[v,
+            v>=1?v.toFixed(0):Number(v.toPrecision(2)).toString()])
+    : [0,.25,.5,.75,1].map(j=>[max*j,(max*j).toFixed(1)]);
  axes(root,[65,70,700,255],"Время дрейфа от рождения до анода, нс",
-     "Доля e⁻ в интервале 10 нс, %",
+     logarithmic?"Доля e⁻ / 10 нс, % (логарифмическая шкала)":
+                   "Доля e⁻ в интервале 10 нс, %",
      [0,50,100,150,200,250,300].map(t=>[t,String(t)]),
-     [0,.25,.5,.75,1].map(j=>[max*j,(max*j).toFixed(1)]),x,y);
+     yticks,x,y);
  const legend=$("legend");legend.replaceChildren();
  plotted.forEach(([config,b])=>{
    if(!b||!b.known)return;
@@ -268,15 +286,35 @@ function renderTime(){
    if(!S.overlay){
      b.hist.slice(0,30).forEach((n,k)=>{
        const v=100*n/b.known;
-       const rect=make("rect",{x:x(k*10)+.8,y:y(v),
-         width:635/30-1.6,height:255-y(v),fill:color},root);
+       if(logarithmic&&v<=0)return;  // zero is undefined on log axis
+       const Y=y(v);
+       const rect=make("rect",{x:x(k*10)+.8,y:Y,
+         width:635/30-1.6,height:255-Y,fill:color},root);
        make("title",{},rect).textContent=(k*10)+"–"+(k*10+10)+
            "нс: "+format(n)+" электронов, "+v.toFixed(2)+"%";
      });
    }else{
-     const points=b.hist.slice(0,30).map((n,k)=>
+     if(logarithmic){
+       let segment=[];
+       function flush(){
+         if(segment.length>1)make("polyline",{points:segment.join(" "),
+          fill:"none",stroke:color,"stroke-width":2.5},root);
+         else if(segment.length===1){
+          const [px,py]=segment[0].split(",").map(Number);
+          make("circle",{cx:px,cy:py,r:2.5,fill:color},root);
+         }
+         segment=[];
+       }
+       b.hist.slice(0,30).forEach((n,k)=>{
+         if(n<=0){flush();return;}
+         segment.push(x(k*10+5)+","+y(100*n/b.known));
+       });
+       flush();
+     }else{
+       const points=b.hist.slice(0,30).map((n,k)=>
          x(k*10+5)+","+y(100*n/b.known)).join(" ");
-     make("polyline",{points,fill:"none",stroke:color,"stroke-width":2.5},root);
+       make("polyline",{points,fill:"none",stroke:color,"stroke-width":2.5},root);
+     }
    }
    const item=document.createElement("span"),line=document.createElement("i");
    line.className="swatch";line.style.background=color;
@@ -386,6 +424,7 @@ $("angle").addEventListener("change",e=>{S.bin=Number(e.target.value);safeDraw()
 $("wire").addEventListener("change",e=>{S.wire=Number(e.target.value);if(S.wire>=0)S.bin=-1;safeDraw()});
 $("arrivalType").addEventListener("change",e=>{S.arrival=e.target.value;safeDraw()});
 $("overlay").addEventListener("change",e=>{S.overlay=e.target.value==="six";safeDraw()});
+$("timeScale").addEventListener("change",e=>{S.scale=e.target.value;safeDraw()});
 $("allModules").addEventListener("click",()=>{S.det=-1;S.wire=-1;S.bin=-1;safeDraw()});
 safeDraw();
 })();
