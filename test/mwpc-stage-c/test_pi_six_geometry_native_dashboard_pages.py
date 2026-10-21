@@ -15,8 +15,8 @@ from pi_six_geometry_native_timing_html import HTML
 def main():
     # UI regression: the first station page used to render empty because
     # draw() referred to el.stats and el.coverage without binding either.
-    selectors=json.loads(re.search(r'const ids=(\\[[^;]+\\]);', HTML).group(1))
-    element_refs=set(re.findall(r'\\bel\\.([A-Za-z_]\\w*)', HTML))
+    selectors=json.loads(re.search(r'const ids=(\[[^;]+\]);', HTML).group(1))
+    element_refs=set(re.findall(r'\bel\.([A-Za-z_]\w*)', HTML))
     extra={"stats","coverage"}
     assert element_refs.issubset(set(selectors)|extra), (
         "Unregistered native HTML DOM element references",
