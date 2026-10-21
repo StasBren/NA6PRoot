@@ -31,7 +31,7 @@ def main():
         args=SimpleNamespace(events_per_source=2_000_000,
                              chunk_size=50_000,
                              max_chunks_per_source=1,
-                             hours=0.)
+                             min_free_gib=0., hours=0.)
         simulate(args,suite,{
             "parallel_runner":"/NONEXISTENT/na6psim_parallel",
             "root":"/NONEXISTENT/root",
