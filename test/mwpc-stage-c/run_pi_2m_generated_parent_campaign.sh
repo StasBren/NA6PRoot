@@ -19,9 +19,9 @@ esac
 
 TARGET=2000000
 CHUNK=50000  # Existing native Geant4 runner maximum (NOT 100k).
-WORKERS="\${PI_2M_WORKERS:-4}"
-HOURS="\${PI_2M_HOURS:-2.5}"
-MIN_GIB="\${PI_2M_MIN_FREE_GIB:-20}"
+WORKERS="${PI_2M_WORKERS:-4}"
+HOURS="${PI_2M_HOURS:-2.5}"
+MIN_GIB="${PI_2M_MIN_FREE_GIB:-20}"
 SUITE="$REPO/test_runs/mwpc_stage_c/pi_geant4_2m_parent_campaign_v1"
 
 python3 - "$TARGET" "$CHUNK" "$WORKERS" "$HOURS" "$MIN_GIB" "$SUITE" <<'PY'
