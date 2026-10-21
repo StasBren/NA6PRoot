@@ -57,7 +57,7 @@ if (frozen["events_per_source"],frozen["chunk_size"])!=(2000000,50000):
 total=0
 for ch,seed0 in (("Jpsi",202610181),("Phi",202710181),
                  ("Omega",202810181)):
-    done=0;elapsed=0.;clocked=0
+    done=0;elapsed=0.;clocked=0;bytes_total=0
     for i in range(40):
         path=suite/ch.lower()/f"chunk{i+1:04d}"/"completed.json"
         if not path.is_file():continue
@@ -65,12 +65,20 @@ for ch,seed0 in (("Jpsi",202610181),("Phi",202710181),
         if v.get("events")!=50000 or v.get("seed")!=seed0+i*251:
             sys.exit(f"ERROR: inconsistent completed checkpoint {path}")
         done+=1
+        chunk_dir=path.parent
+        bytes_total+=sum(p.stat().st_size for p in chunk_dir.rglob("*")
+                         if p.is_file())
         timer=v.get("wall_seconds",{}).get("chunk_total")
         if timer is not None:
             elapsed+=float(timer);clocked+=1
     total+=done*50000
     print(f"{ch}: {done}/40 completed chunks; {done*50000:,}/2,000,000 "
-          f"parents; {clocked} measured chunks, {elapsed/3600:.2f} h observed")
+          f"parents; {clocked} measured chunks, {elapsed/3600:.2f} h observed; "
+          f"{bytes_total/(1024**3):.2f} GiB retained original files")
+    if done:
+        print(f"  CONDITIONAL disk-only linear extrapolation at SAME output-per-"
+              f"event: {bytes_total/done*40/(1024**3):.1f} GiB/channel. "
+              "Actual output footprint may differ.")
 print(f"Completed generated parents: {total:,}/6,000,000")
 PY
   exit 0
