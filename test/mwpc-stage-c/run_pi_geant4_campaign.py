@@ -336,6 +336,16 @@ def simulate(args, suite, inputs):
                     )
                 print(f"SKIP completed {channel} chunk{part+1:04d}",flush=True)
                 continue
+            if args.min_free_gib>0:
+                free_gib=shutil.disk_usage(suite).free/(1024**3)
+                if free_gib<args.min_free_gib:
+                    print("CAMPAIGN_PAUSED low storage: "
+                          f"{free_gib:.2f} GiB free; guard is "
+                          f"{args.min_free_gib:.2f} GiB. "
+                          "No new ROOT chunk started. Keep all completed "
+                          "checkpoints, free space and resume.",
+                          flush=True)
+                    return
             if time.monotonic() >= end_time:
                 print(
                     "CAMPAIGN_PAUSED wall-clock limit reached between chunks. "
@@ -540,6 +550,9 @@ def main():
                     help="Budget checked BETWEEN whole chunks, 0 = unlimited")
     ap.add_argument("--suite",type=Path,default=None,
                     help="Fresh custom output directory for changed settings")
+    ap.add_argument("--min-free-gib",type=float,default=0.,
+                    help="Pause BEFORE the next Geant4 chunk if free space "
+                         "is below this many GiB; 0 disables guard.")
     ap.add_argument("--max-chunks-per-source",type=int,default=0,
                     help="Operational stage cap (0=all). With 2 and "
                          "chunk-size 50000, first run 100k parents/source "
@@ -558,6 +571,8 @@ def main():
         )
     if args.max_chunks_per_source<0:
         ap.error("--max-chunks-per-source must be nonnegative")
+    if not math.isfinite(args.min_free_gib) or args.min_free_gib<0:
+        ap.error("--min-free-gib must be nonnegative and finite")
     if args.mode!="full" and args.max_chunks_per_source:
         ap.error("--max-chunks-per-source requires --mode full")
     suite,inputs = setup(args)
