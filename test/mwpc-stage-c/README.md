@@ -2818,3 +2818,50 @@ per-anode six-geometry pages remain available. The source page
 pages/index.html links to the new V3. A Python-created STATIC timing
 spectrum remains visible if browser JavaScript aborts, and the page
 displays version NA60-SIX-GEOMETRY-XY-V3-20261021.
+
+
+### 2026-10-21: logarithmic timing PDFs and safe 2M parents/source runner
+
+The original-layout V3 dashboard and the detailed per-anode pages both
+now offer a LINEAR/LOGARITHMIC Y-axis for their 10ns drift histograms
+(and detailed electron-angle views). The log scale shows actual POSITIVE
+percentages, omits zero bins (log(0) is undefined), and keeps the
+original normalization INCLUDING the >=300ns overflow. It defaults to
+linear. Refresh both page families with:
+
+    bash test/mwpc-stage-c/run_pi_six_geometry_postprocess.sh pages
+
+The PI requested 2,000,000 GENERATED DIMUON PARENTS PER SOURCE for
+Jpsi/Phi/Omega (6M total). The existing native Geant4 campaign supports
+a MAXIMUM chunk size of 50,000, not 100,000. Thus the production plan
+is 40 x 50,000/source, with the first TWO chunks PER source giving
+the requested 100,000/source benchmark. Both modes share the SAME
+2M/source campaign manifest and all six real physical-chamber layers,
+so benchmark checkpoints are safely REUSED by the full continuation.
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_2m_generated_parent_campaign.sh plan
+    bash test/mwpc-stage-c/run_pi_2m_generated_parent_campaign.sh benchmark
+    bash test/mwpc-stage-c/run_pi_2m_generated_parent_campaign.sh status
+    # ONLY AFTER actual time + memory + ROOT disk-usage review:
+    bash test/mwpc-stage-c/run_pi_2m_generated_parent_campaign.sh full
+
+Defaults: PI_2M_HOURS=2.5 (invocation budget between COMPLETE chunks);
+PI_2M_WORKERS=4; PI_2M_MIN_FREE_GIB=20. Changing WORKERS, simulator
+binary, ROOT/Geant4 installed libraries, generator, fieldmaps or
+detector settings halfway through triggers the existing frozen-manifest
+check and MUST NOT be silently accepted. The hourly budget is NOT a
+per-chunk timeout and cannot interrupt a running 50k-event simulation
+before completion. All original worker-specific ROOT outputs are kept
+for unambiguous track ancestry; inspect observed disk use before
+starting the full 2M/source run. The disk guard is checked before
+each newly started chunk but cannot promise a 50k chunk fits.
+
+This is the HIGH-STATISTICS NATIVE GEANT4 CAMPAIGN, not a completed
+full six-field analysis. After Geant4 ROOT truth has been produced,
+the existing event-to-muon gas-hit TGeo exporter needs an explicitly
+chunk-aware workflow followed by a Heed + frozen 6 Garfield LUT fold.
+Only after those results are merged into original-layout histograms,
+with source/event/chunk provenance and parent-bootstrap statistics,
+may dashboards be labelled 100k/source or 2M/source.
