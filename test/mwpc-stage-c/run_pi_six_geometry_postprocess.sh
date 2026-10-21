@@ -17,6 +17,7 @@ python3 -m py_compile \
  "$HERE/pi_six_geometry_native_dashboard_pages.py" \
  "$HERE/test_pi_six_geometry_native_dashboard_pages.py" \
  "$HERE/pi_six_geometry_event_bootstrap.py" \
+ "$HERE/pi_six_geometry_parent_bootstrap_html.py" \
  "$HERE/test_pi_six_geometry_event_bootstrap.py"
 if [[ "$MODE" == "pages" || "$MODE" == "all" ]]; then
   echo "SMOKE: streaming JSON and 18 offline HTML sharded dashboards."
@@ -35,5 +36,6 @@ if [[ "$MODE" == "bootstrap" || "$MODE" == "all" ]]; then
   echo "REFOLD first 3000 generated parents/source with original shared-Heed seeds."
   echo "No new Garfield or Geant4, but Python event refolding can take time."
   python3 "$HERE/pi_six_geometry_event_bootstrap.py"
+  python3 "$HERE/pi_six_geometry_parent_bootstrap_html.py"
 fi
 echo "PASS: six-geometry first-chunk postprocessing $MODE finished."
