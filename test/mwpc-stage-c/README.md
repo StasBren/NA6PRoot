@@ -2687,3 +2687,82 @@ interactive HTML has an observable selector for drift time, incidence angle
 and wire-hit phi, plus a toggle for six-LUT overlay. Angular denominators
 are all collected electrons with known angle and may differ from known-time
 counts; these are NOT normalized as if they were the same ensemble.
+
+
+### 2026-10-21: TRUE complete native first-chunk 6-field distribution PASS
+
+The user completed:
+
+    bash test/mwpc-stage-c/run_pi_six_geometry_native_timing.sh full
+
+The synthetic regressions and real fold PASSED. Exactly:
+- Jpsi 29,488 MCKine-confirmed native gas segments;
+- Phi 23,301;
+- Omega 21,533;
+- total 74,322 muon gas-hit segments from 3,000 generated dimuon
+  parent events/channel (=9,000 total parents);
+- 496,809 stored grouped distributions, including native source/station/
+  chamber/physical anode plus signed muon angles and Garfield electron
+  drift times and two distinct arrival-angle observables;
+- all physical-anode --> chamber --> station collected-electron and 10ns
+  time-histogram conservation assertions passed.
+
+The original comprehensive JSON and HTML are under
+
+    test_runs/mwpc_stage_c/pi_six_geometry_native_timing_v1/
+
+The total HTML is potentially huge: 496k groups must NOT all be loaded
+into a single browser page to review chamber/anode effects. New READ-ONLY,
+standalone local postprocessing:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_six_geometry_postprocess.sh pages
+
+This parses the original huge JSON *incrementally* in stdlib Python
+(no ijson dependency) to generate 18 much smaller selectable source x
+station offline HTMLs and a compact index, retaining the original JSON.
+
+    .../pi_six_geometry_native_timing_v1/pages/index.html
+
+The overview lists p=4mm anode-only means/RMS for source x station.
+Each station page retains time (10ns), approach angle (10deg), signed
+wire-impact phi (10deg), plus config/chamber/finite physical anode and
+signed muon-angle selections. The splitter writes a small independent
+station reference JSON for verifying the exact full-fold results:
+
+    .../pages/pi_six_geometry_station_reference.json
+
+After pages has PASSED, separately bootstrap by the *generated parent*
+dimuon events (not independent gas segments or microscopic electrons):
+
+    bash test/mwpc-stage-c/run_pi_six_geometry_postprocess.sh bootstrap
+
+This is a complete re-fold of native first-chunk original CSVs using
+identical deterministic per-segment Heed seeds and pre-existing 6 Garfield
+LUTs, but launches NO C++ microscopic Garfield, Geant4, or ROOT jobs.
+It includes all 3000 generated parent event IDs PER source even if no
+true muon gas-hit segments appeared from that event. The bootstrap
+draw weights the complete set of hit segments, primary electrons and
+six detector-response alternatives of each parent together.
+
+Full source x station x configuration counts, 31-bin drift-time
+histograms, 18-bin electron approach-angle histograms and 36-bin signed
+wire-impact-angle histograms MUST match the original full-fold station
+reference EXACTLY. Independently computed means and centered RMS must
+match to a strict floating tolerance; otherwise abort without releasing
+any uncertainties.
+
+A first 160-replica parent-bootstrap gives std.dev. statistical errors
+for collection fraction, arithmetic mean, centered RMS, and each time
+or angle histogram fraction; this does NOT give Garfield LUT finite-trial,
+electronics, model, or transport uncertainty and does NOT yet resolve
+event-level errors by individual chamber/anode or signed muon-angle bin.
+Writes CSV + JSON + offline errorbar dashboard under:
+
+    .../pi_six_geometry_native_timing_v1/parent_bootstrap/
+
+The POSTPROCESS tools themselves are new and must pass the WSL synthetic
+and real-data runs; their availability does not imply they already ran.
+Do not claim first 3000 parents/source equals the proposed new 2M
+generated parent events/source.
