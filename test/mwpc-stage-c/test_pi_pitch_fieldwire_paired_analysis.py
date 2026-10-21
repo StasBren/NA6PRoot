@@ -109,7 +109,7 @@ def test_full_map_matching(tmp):
     assert "NA60+ MWPC" in contents
     assert "application/json" in contents
     assert "Same initial electron" in contents
-    assert "With "+str(75)+" µm" in contents
+    assert "75.0 µm" in contents
 
 
 def main():
