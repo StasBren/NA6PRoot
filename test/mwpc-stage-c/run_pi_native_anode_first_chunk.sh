@@ -10,6 +10,7 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd -P)"
 REPO="$(cd "$HERE/../.." && pwd -P)"
 cd "$REPO"
+NA6P_STAGEC_REQUIRE_ROOT_HADD=1
 source "$HERE/activate_pi_stagec_env.sh"
 
 SUITE="$REPO/test_runs/mwpc_stage_c/pi_geant4_hit_validation_v1"
