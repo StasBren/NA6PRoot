@@ -213,14 +213,24 @@ function draw(){
  legend.append(x);
  });
 }
-for(const k of ids.filter(k=>k!=="view"))el[k].addEventListener("change",draw);
-el.view.addEventListener("change",draw);
+function safeDraw(){
+ try{draw();}
+ catch(error){
+  console.error("Native six-geometry dashboard rendering failed",error);
+  const banner=document.getElementById("coverage");
+  banner.textContent="Ошибка построения графика: "+String(error)+
+    ". Исходные физические данные сохранены; сообщи текст ошибки.";
+  banner.style.color="#ffca91";
+ }
+}
+for(const k of ids.filter(k=>k!=="view"))el[k].addEventListener("change",safeDraw);
+el.view.addEventListener("change",safeDraw);
 document.getElementById("meta").textContent=
  meta.data_scope+" · "+meta.input_model+
  " · "+meta.statistical_errors+
  " · физическая ширина газового объёма сохраняется; анодов на станциях: "+
  JSON.stringify(meta.finite_anodes_by_pitch)+".";
-draw();
+safeDraw();
 </script></body></html>'''
 
 
