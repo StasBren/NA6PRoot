@@ -144,9 +144,7 @@ for _cmake_key in CMAKE_PREFIX_PATH Geant4_DIR Geant4VMC_DIR VGM_DIR VMC_DIR; do
       _stagec_dep_roots+=("$_scan")
       # Never recurse through the entire home directory or filesystem.
       # The canonical ~/na6p/install tree is scanned once separately.
-      if [[ "$_scan" == "/" || "$_scan" == "$HOME" ||
-            "$_scan" == "$HOME/na6p" ||
-            "$_scan" == "$HOME/na6p/install" ]]; then
+      if [[ "$_scan" == "/" || "$_scan" == "$HOME" || "$_scan" == "$HOME/na6p" || "$_scan" == "$HOME/na6p/install" ]]; then
         break
       fi
       _scan="$(dirname "$_scan")"
