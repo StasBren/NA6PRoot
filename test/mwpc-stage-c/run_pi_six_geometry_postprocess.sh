@@ -15,6 +15,7 @@ if [[ $# -gt 0 ]] || [[ "$MODE" != "pages" && "$MODE" != "bootstrap" && "$MODE" 
 fi
 python3 -m py_compile \
  "$HERE/pi_six_geometry_native_dashboard_pages.py" \
+ "$HERE/pi_six_geometry_layout_v3.py" \
  "$HERE/test_pi_six_geometry_native_dashboard_pages.py" \
  "$HERE/pi_six_geometry_event_bootstrap.py" \
  "$HERE/pi_six_geometry_parent_bootstrap_html.py" \
@@ -24,6 +25,8 @@ if [[ "$MODE" == "pages" || "$MODE" == "all" ]]; then
   python3 "$HERE/test_pi_six_geometry_native_dashboard_pages.py"
   echo "READ ONLY: split completed native first chunk into browser-sized pages."
   python3 "$HERE/pi_six_geometry_native_dashboard_pages.py"
+  echo "Open PI V2-style 6-geometry layout:"
+  echo "$REPO/test_runs/mwpc_stage_c/pi_six_geometry_native_timing_v1/pages/pi_pitch_fieldwire_timing_dashboard_v3.html"
 fi
 if [[ "$MODE" == "bootstrap" || "$MODE" == "all" ]]; then
   echo "SMOKE: parent-event bootstrap and exact full-fold conservation."
