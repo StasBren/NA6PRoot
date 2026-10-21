@@ -296,7 +296,50 @@ def aggregate(records,root,lam,marks,limit=0):
     return summaries,dict(processed)
 
 
+def validate_conservation(groups):
+    """Every physical-anode electron counted once; every chamber in station.
+
+    This is a strict global sanity gate on native finite-anode assignments,
+    NOT a check of incoming reference-plane muon efficiency.
+    """
+    per_chamber=defaultdict(lambda:[0,0,np.zeros(NBINS,dtype=np.int64)])
+    per_station=defaultdict(lambda:[0,0,np.zeros(NBINS,dtype=np.int64)])
+    for key,b in groups.items():
+        src,config,st,det,anode,axis,anglebin=key
+        if axis!="all" or anglebin!=-1:
+            continue
+        if anode>=0:
+            k=(src,config,st,det)
+            slot=per_chamber[k]
+            slot[0]+=b.collected
+            slot[1]+=b.known
+            slot[2]+=b.hist
+        elif det>=0:
+            k=(src,config,st)
+            slot=per_station[k]
+            slot[0]+=b.collected
+            slot[1]+=b.known
+            slot[2]+=b.hist
+    for key,b in groups.items():
+        src,config,st,det,anode,axis,anglebin=key
+        if axis!="all" or anglebin!=-1:
+            continue
+        if det>=0 and anode==-1:
+            observed=per_chamber[(src,config,st,det)]
+        elif det==-1 and anode==-1:
+            observed=per_station[(src,config,st)]
+        else:
+            continue
+        if (b.collected!=observed[0] or b.known!=observed[1]
+                or not np.array_equal(b.hist,observed[2])):
+            raise AssertionError(
+                f"Station/chamber/anode finite-wire electron conservation "
+                f"failed: {key}, counted {observed[0]} vs {b.collected}")
+    return True
+
+
 def write_report(out,groups,processed,meta):
+    validate_conservation(groups)
     out.mkdir(parents=True,exist_ok=True)
     response=[]
     for key,bucket in sorted(groups.items()):
