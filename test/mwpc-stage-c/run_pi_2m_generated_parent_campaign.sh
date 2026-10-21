@@ -89,8 +89,9 @@ print("NOTE: this is a startup guard only; inspect actual 50k ROOT size "
       "before proceeding to the full 2M/channel campaign.")
 PY
 
+python3 -m py_compile "$HERE/run_pi_geant4_campaign.py" "$HERE/test_pi_2m_campaign.py"
+python3 "$HERE/test_pi_2m_campaign.py"
 source "$HERE/activate_pi_stagec_env.sh"
-python3 -m py_compile "$HERE/run_pi_geant4_campaign.py"
 MAX=0
 if [[ "$MODE" == "benchmark" ]]; then
   MAX=2
@@ -102,7 +103,7 @@ python3 "$HERE/run_pi_geant4_campaign.py" \
   --mode full --suite "$SUITE" \
   --events-per-source "$TARGET" --chunk-size "$CHUNK" \
   --workers "$WORKERS" --hours "$HOURS" \
-  --max-chunks-per-source "$MAX"
+  --min-free-gib "$MIN_GIB" --max-chunks-per-source "$MAX"
 if [[ -f "$SUITE/campaign.json" ]]; then
   python3 "$HERE/pi_stagec_performance_report.py" \
     --suite "$SUITE" --out "$SUITE/pi_2m_measured_performance.json"
