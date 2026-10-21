@@ -2,6 +2,7 @@
 """Create self-contained offline interactive six-geometry native timing spectra."""
 from __future__ import annotations
 import argparse
+import html
 import json
 from pathlib import Path
 from pi_six_geometry_native_timing import OUT
@@ -16,6 +17,7 @@ HTML=r'''<!doctype html><html lang="ru"><head><meta charset="utf-8">
 font:15px/1.5 system-ui,Arial,sans-serif;background:var(--bg);color:var(--fg)}
 h1{font-size:1.6rem;margin-bottom:5px}h2{font-size:1.15rem}
 small,p{color:var(--quiet)}
+[hidden]{display:none!important}
 .panel{background:#142d44;border:1px solid #29465e;border-radius:9px;padding:14px;margin-top:14px}
 .controls{display:flex;flex-wrap:wrap;gap:13px;margin-top:12px}
 label{font-size:13px;color:var(--quiet);display:flex;flex-direction:column;gap:5px}
@@ -31,6 +33,7 @@ svg{display:block;width:100%;height:auto}
 a{color:#89d0ff} .note{padding:12px;border-left:3px solid #7890a0}
 </style></head><body>
 <h1>NA60+ · Дрейф электронов к анодным проволокам</h1>
+<p class="info">Версия интерфейса: <b>MWPC-NATIVE-STATIC-FALLBACK-20261021-v2</b></p>
 <p>Реальные локальные газовые пересечения Geant4 → общие для шести вариантов
 первичные электроны Heed → Garfield LUT. Время отсчитывается от рождения
 электрона, а не от пролёта мюона или порога ASIC.</p>
@@ -50,9 +53,10 @@ a{color:#89d0ff} .note{padding:12px;border-left:3px solid #7890a0}
 </select></label>
 <label>Отображение<select id="view"><option value="bar">Гистограмма выбранной конфигурации</option><option value="overlay">Наложение всех шести конфигураций</option></select></label>
 </div>
-<div id="coverage" class="info"></div>
+<div id="coverage" class="info">Ожидание JavaScript. Если график не появился, статический спектр ниже доступен без скриптов.</div>
 <div id="stats" class="statgrid"></div>
 </div>
+<div class="panel" id="staticFallback">__STATIC_FALLBACK__</div>
 <div class="panel">
 <h2 id="chartTitle">Доля электронов в интервале 10 нс, %</h2>
 <svg id="chart" viewBox="0 0 960 405" role="img" aria-label="Спектр времени дрейфа с шагом 10 наносекунд"></svg>
@@ -214,7 +218,16 @@ function draw(){
  });
 }
 function safeDraw(){
- try{draw();}
+ try{
+  draw();
+  if(el.stats.children.length<10 ||
+     document.getElementById("chart").children.length<5){
+    throw new Error("Недостаточно элементов отрисовано: stats "+
+      el.stats.children.length+", svg "+
+      document.getElementById("chart").children.length);
+  }
+  document.getElementById("staticFallback").hidden=true;
+ }
  catch(error){
   console.error("Native six-geometry dashboard rendering failed",error);
   const banner=document.getElementById("coverage");
@@ -234,12 +247,90 @@ safeDraw();
 </script></body></html>'''
 
 
+
+
+UI_REVISION = "MWPC-NATIVE-STATIC-FALLBACK-20261021-v2"
+
+
+def static_native_spectrum(payload):
+    """Server-render a REAL selected station spectrum, with zero JavaScript.
+
+    This must remain visible if an older browser aborts its interactive
+    payload processing, and is hidden only after all chart cards render.
+    """
+    items=[g for g in payload["groups"]
+           if g.get("det_id")==-1 and g.get("anode")==-1
+           and g.get("axis")=="all" and g.get("anglebin")==-1]
+    if not items:
+        raise ValueError("No station reference to render static histogram")
+    conf="p3p0_anode_only"
+    first=next((g for g in items if g["config"]==conf),items[0])
+    count=int(first["known"])
+    hist=first["hist"]
+    if len(hist)!=31 or count<0 or sum(hist)!=count:
+        raise ValueError("Static page baseline does not conserve time bins")
+    maximum=max([100.*c/count for c in hist[:30]]+[1.]) if count else 1.
+    def xx(v):
+        return 70+v/300*850
+    def yy(v):
+        return 310-v/(maximum*1.12)*270
+    parts=['<h2>Резервная гистограмма — построена Python без JavaScript</h2>',
+           '<p class="info">Версия интерфейса: '+UI_REVISION+
+           '. Если интерактивный график остаётся пустым, этот результат '
+           'отображает действительные данные для выбранной станции и '
+           'конфигурации p=3 мм без полевой проволоки.</p>',
+           '<div class="statgrid">']
+    for label,value in [
+        ("Источник",first["source"]),("Станция","MS"+str(first["station"])),
+        ("Конфигурация",first["config"]),
+        ("Газовых сегментов",str(first["segments"])),
+        ("Первичных электронов",str(first["primaries"])),
+        ("Собрано на анод",str(first["collected"])),
+        ("Известное время",str(count)),
+        ("Mean, нс",format(first["mean_ns"],".3f") if first["mean_ns"] is not None else "—"),
+        ("Centered RMS, нс",format(first["rms_ns"],".3f") if first["rms_ns"] is not None else "—"),
+        ("≥300 нс",str(hist[30])),
+    ]:
+        parts+=['<div class="stat"><b>',html.escape(str(value)),
+                '</b><span>',html.escape(label),'</span></div>']
+    parts+=['</div>',
+            '<svg viewBox="0 0 970 365" aria-label="Гистограмма времени дрейфа, резервный график">']
+    for i in range(5):
+        y=yy(maximum*1.12*i/4)
+        parts.append(f'<line x1="70" x2="920" y1="{y:.2f}" y2="{y:.2f}" '
+                     f'stroke="#395775"/>')
+        parts.append(f'<text x="59" y="{y+4:.2f}" fill="#e4f4ff" '
+                     f'font-size="12" text-anchor="end">{maximum*1.12*i/4:.1f}</text>')
+    for i in range(7):
+        x=xx(i*50.)
+        parts.append(f'<text x="{x:.2f}" y="338" fill="#e4f4ff" '
+                     f'font-size="12" text-anchor="middle">{i*50}</text>')
+    if count:
+        for i,n in enumerate(hist[:30]):
+            value=100.*n/count
+            y=yy(value)
+            parts.append(f'<rect x="{xx(i*10)+1:.2f}" y="{y:.2f}" '
+                         f'width="{850/30-2:.2f}" height="{310-y:.2f}" '
+                         f'fill="#4bd5c3"/>')
+    x=xx(100.)
+    parts+=[
+        f'<line x1="{x:.2f}" x2="{x:.2f}" y1="28" y2="310" '
+        'stroke="#fac778" stroke-dasharray="4 5"/>',
+        f'<text x="{x+5:.2f}" y="20" fill="#fac778" font-size="12">100 нс</text>',
+        '<text x="500" y="361" fill="#e4f4ff" font-size="13" '
+        'text-anchor="middle">Время дрейфа электрона, нс</text>',
+        '</svg>']
+    return "".join(parts)
+
+
 def build(source,dest):
     payload=json.loads(source.read_text(encoding="utf-8"))
     if len(payload["meta"]["garfield_luts"])!=6:
         raise ValueError("Six Garfield map identities required")
+    static=static_native_spectrum(payload)
     page=HTML.replace("__PAYLOAD__",json.dumps(payload,ensure_ascii=False,
                 separators=(",",":"),allow_nan=False).replace("</","<\\/"))
+    page=page.replace("__STATIC_FALLBACK__",static)
     dest.parent.mkdir(parents=True,exist_ok=True)
     dest.write_text(page,encoding="utf-8")
     print("Open offline interactive native timing dashboard:",dest)
