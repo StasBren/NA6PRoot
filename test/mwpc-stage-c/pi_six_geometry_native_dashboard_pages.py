@@ -199,6 +199,21 @@ def generate(source_path,output):
                   f"{dest.stat().st_size/(1024*1024):.1f} MiB HTML",
                   flush=True)
     index=compact_index(station_summary,output,source_names)
+    # Small, exact per-source×station×field reference for independent
+    # parent-event bootstrap conservation, without loading the huge JSON.
+    reference=output/"pi_six_geometry_station_reference.json"
+    compact_rows=[
+        station_summary[(src,station,config)]
+        for src in source_names for station in range(6)
+        for config in meta["garfield_luts"]
+    ]
+    reference.write_text(json.dumps({
+        "meta":meta,"source_of_reference":str(source_path),
+        "groups":compact_rows,
+    },ensure_ascii=False,separators=(",",":"),allow_nan=False)+"\n",
+       encoding="utf-8")
+    print("Saved exact station reference for independent event-bootstrap check:",
+          reference)
     print("PASS: real-native six-geometry station HTML pages:",sum(counts.values()),
           "source-specific groups across",len(counts),"pages")
     print("Open overview:",index)
