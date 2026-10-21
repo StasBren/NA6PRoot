@@ -2766,3 +2766,55 @@ The POSTPROCESS tools themselves are new and must pass the WSL synthetic
 and real-data runs; their availability does not imply they already ran.
 Do not claim first 3000 parents/source equals the proposed new 2M
 generated parent events/source.
+
+
+### 2026-10-21: original PI V2-style XY map for six Garfield geometries
+
+The user requested that the clickable physical-detector XY map (left) and
+10-ns electron drift-time histograms (right) from the ORIGINAL
+pi_centered_timing_dashboard_v2.html be extended across all six pitch/
+field-wire variants. Its source was located and reused as the visual and
+interaction reference: pi_centered_timing_dashboard_v2_template.html and
+build_pi_centered_timing_dashboard_v2.py.
+
+The EXISTING frozen six-field first-chunk distribution data and current
+detailed per-anode pages remain unchanged. Re-running the read-only
+pages postprocessor now ALSO generates 18 new visual V3 HTML pages:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_six_geometry_postprocess.sh pages
+
+Open this NEW V2-style dashboard launcher:
+
+    test_runs/mwpc_stage_c/pi_six_geometry_native_timing_v1/pages/
+      pi_pitch_fieldwire_timing_dashboard_v3.html
+
+Each Jpsi/Phi/Omega x MS0..MS5 page has the familiar physical XY clickable
+chamber rectangles and camera highlight, the selected physical-chamber
+10ns electron drift-time PDF, a toggle overlay of all 6 Garfield
+configurations, a selector for any physical anode, a signed muon-angle
+selector (chamber/station only), electron arrival-angle PDFs, and a
+six-geometry mean/RMS comparison. Same native 3k generated parents/source
+and six previously calculated Garfield LUTs; no new Geant4 or Garfield.
+
+IMPORTANT: the full six-field JSON contains single-electron times,
+collection and final-step arrival-angle histograms, but NOT the original
+V2's 2D primary electron birth-coordinate/time distributions and per-gas-
+segment N(T)>=2 distinct-anode multiplicity. The NEW V3 heatmap colors
+show P(PRIMARY electron collected on an anode within first 100ns), per
+chamber and signed muon-angle interval, with ALL native primary electrons
+in that group's denominator. This is NOT the original V2's P(gas hit
+with >=2 distinct anodes at T=100ns). The two lower panels therefore
+show REAL available Garfield electron arrival-angle spectra and six-field
+mean/RMS comparisons rather than fabricating nonexistent physical data.
+Anode-specific arrival-angle spectra currently exist ONLY integrated over
+native muon entrance angle; when an anode is selected, the signed muon
+angle selector is disabled. Parent-event statistical errors by specific
+chamber/angle are not yet available.
+
+Original pi_centered_timing_dashboard_v2.html and the original 18 full
+per-anode six-geometry pages remain available. The source page
+pages/index.html links to the new V3. A Python-created STATIC timing
+spectrum remains visible if browser JavaScript aborts, and the page
+displays version NA60-SIX-GEOMETRY-XY-V3-20261021.
