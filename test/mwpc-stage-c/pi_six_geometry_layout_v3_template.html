@@ -39,7 +39,7 @@ footer{color:var(--muted);font-size:12px}
 <div class="topline">NA60+ · PI · NATIVE GEANT4 + HEED + GARFIELD · ШЕСТЬ ГЕОМЕТРИЙ</div>
 <h1>Время дрейфа, аноды и углы — сравнение 3 / 3.5 / 4 мм</h1>
 <p>Физическая геометрия камер сохраняется; шаг анодов и заземлённые промежуточные проволоки диаметром 75 мкм переключаются без новой симуляции. Трёхтысячный первый чанк J/ψ / ϕ / ω на источник.</p>
-<p><a href="../index.html">← Навигация по станциям</a> ·
+<p><a href="../pi_pitch_fieldwire_timing_dashboard_v3.html">← Навигация по источникам и станциям</a> ·
 <a href="../../../pi_fixed_wire_maps/pi_centered_timing_dashboard_v2.html">Исходный V2, только 4 мм</a> ·
 <a id="detailPage" href="#">Детальные спектры отдельных анодов</a></p>
 <div class="axis-note">Версия: <span id="version">NA60-SIX-GEOMETRY-XY-V3-20261021</span></div>
@@ -87,7 +87,7 @@ footer{color:var(--muted);font-size:12px}
 </section>
 <section class="panel">
 <h2>4. Шесть вариантов: сбор, Mean и centered RMS</h2>
-<p>Те же исходные Geant4/Heed-события и 6 разных Garfield LUT. Средние по <em>собранным</em> электронам — не весь исходный поток; эффективность может меняться.</p>
+<p>Те же исходные Geant4/Heed-события и 6 разных Garfield LUT. Средние по <em>собранным</em> электронам — не весь исходный поток; эффективность может меняться. <strong>Внимание:</strong> один и тот же номер физического анода при разных шагах относится к разным координатам внутри камеры; для сопоставления одинаковой области лучше выбирать всю камеру.</p>
 <svg id="comparison" viewBox="0 0 760 320" role="img" aria-label="Среднее время дрейфа шести геометрий"></svg>
 <table><thead><tr><th>p / проволока</th><th>Электронов</th><th>Доля сбора*</th><th>Mean, нс</th><th>RMS, нс</th></tr></thead><tbody id="comparisonRows"></tbody></table>
 <p class="small">*Доля сбора по всем первичным электронам определяется на уровне камеры/станции. Для выбранного физического анода знаменатель первичных электронов, принадлежащих именно аноду, не определён. Числа — без bootstrap-ошибок; отдельный event-level отчёт будет подготовлен.</p>
@@ -383,7 +383,7 @@ $("station").addEventListener("change",e=>{
 $("config").addEventListener("change",e=>{S.cfg=e.target.value;S.wire=-1;safeDraw()});
 $("axis").addEventListener("change",e=>{S.axis=e.target.value;S.bin=-1;safeDraw()});
 $("angle").addEventListener("change",e=>{S.bin=Number(e.target.value);safeDraw()});
-$("wire").addEventListener("change",e=>{S.wire=Number(e.target.value);safeDraw()});
+$("wire").addEventListener("change",e=>{S.wire=Number(e.target.value);if(S.wire>=0)S.bin=-1;safeDraw()});
 $("arrivalType").addEventListener("change",e=>{S.arrival=e.target.value;safeDraw()});
 $("overlay").addEventListener("change",e=>{S.overlay=e.target.value==="six";safeDraw()});
 $("allModules").addEventListener("click",()=>{S.det=-1;S.wire=-1;S.bin=-1;safeDraw()});
