@@ -2602,3 +2602,77 @@ Run without recomputing Garfield:
 
 Read printed excluded relocation counts per pitch and confirm that every
 excluded launch has a physically justified metal-geometry reason.
+
+
+### 2026-10-21: first real-native six-geometry 10-ns timing spectra
+
+The NEXT analysis after the successful 126k Garfield six-field pilot and
+paired comparison is now implemented as a separate, NON-DESTRUCTIVE
+Geant4 native gas-hit + Heed + LUT fold:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_six_geometry_native_timing.sh smoke
+
+This smoke invokes 200 TRUE Geant4 gas-hit segments from each of the three
+already exported first chunks. One Heed ionization birth list per unique
+native muon gas segment is reused identically for all six Garfield
+response configurations. The 20 microscopic trial/cell six pitch-specific
+LUTs are unchanged. Outputs and offline HTML are generated under
+
+    test_runs/mwpc_stage_c/pi_six_geometry_native_timing_v1/smoke/
+       pi_six_geometry_native_timing.json
+       pi_six_geometry_native_timing.html
+
+On success, launch the FULL existing native FIRST chunk (3,000 generated
+parent dimuon events per channel, not 2 million or 3,000 gas segments):
+
+    bash test/mwpc-stage-c/run_pi_six_geometry_native_timing.sh full
+
+Full first-chunk inputs are already frozen MCKine-confirmed native TGeo-local
+gas crossings for Jpsi (29488 hits), phi (23301 hits), omega (21533 hits).
+No new Geant4 or Garfield microscopic transport is launched. Native muon
+angles retain signed theta_u/theta_w; Heed clusters are sampled along
+the real chamber-local 3-D segment. Same per-hit seed and same random birth
+points/LUT trial quantiles are used across six maps.
+
+Physics dimensions:
+- source: each Jpsi/Phi/Omega separately and their joined "all" sample;
+- station MS0..MS5;
+- individual detector DET (one of 298 physical installed chambers);
+- physical anode index in each pitch-dependent finite bank, not just local
+  relative wire offset;
+- signed muon entrance angular bins, for station and chamber spectra;
+- p=3.0/3.5/4.0 mm, no field wire vs 75um grounded midpoint wire.
+
+Existing physical gas transverse width is HELD FIXED: 307.2mm in MS0,
+512mm elsewhere. Centered anode-bank wire count N=round(W/p)
+(positive floor convention), giving MS0 N=102/88/77 and each other
+station N=171/146/128 at p=3/3.5/4mm. At p=4mm this reproduces the
+previous 77/128 centered physical-wire phases. A candidate hit on a
+nearest infinite-grid anode lying outside this finite bank is lost.
+
+10-ns time bins cover [0,10), ... [290,300) ns; a 31st bin tracks
+times >=300ns. The PDF denominator includes the overflow, so plots
+never renormalize a truncated tail without noting it. Per group the
+raw electron counts, known/unknown collected times, chamber edge losses,
+mean, centered RMS, and last-step electron incidence-normal-angle mean
+and RMS are stored. The dashboard can select the station, module, anode,
+and source, and can overlay all six spectra at matching selections.
+
+CURRENT ACCEPTANCE: only after passing the synthetic regression and the
+real 200-segment/channel smoke, run the full first-chunk fold. The latter
+has NOT been executed by the assistant's remote tools. Mean and RMS
+currently have NO parent-event bootstrap error bars. Because muon gas
+segments and electrons are correlated inside a generated dimuon event,
+a parent-event bootstrap (or weighted independent parent-event jackknife)
+is required before the PI's uncertainties are publishable. Anode-level
+"segments" counts segments with >=1 electron collected on that anode,
+not the number of incident reference-plane muons. B=0 and no amplifier
+or discriminator physics are still strict limitations. Fixed Heed
+calibration is a sampled model, not inferred directly from native Edep.
+
+Following this first-chunk check, extend to the PI's newly requested
+2,000,000 generated parent events PER channel only with measured runtime,
+checkpointed parent-event bootstrap, and independent full Geant4 production
+planning. Do NOT label the first chunk or old 200k/source set as 2m/source.
