@@ -24,7 +24,7 @@ if [[ $# -ge 1 && "$1" == "smoke" ]]; then
   python3 "$HERE/pi_six_geometry_native_timing_html.py" \
       --input "$REPO/test_runs/mwpc_stage_c/pi_six_geometry_native_timing_v1/smoke/pi_six_geometry_native_timing.json" \
       --out "$REPO/test_runs/mwpc_stage_c/pi_six_geometry_native_timing_v1/smoke/pi_six_geometry_native_timing.html"
-elif [[ $# -eq 0 || ($# -eq 1 && "$1" == "full") ]]; then
+elif [[ $# -eq 0 ]] || [[ $# -eq 1 && "$1" == "full" ]]; then
   echo "FULL NATIVE FIRST CHUNK: 3000 parent events PER Jpsi/Phi/Omega channel."
   echo "All real gas-hit segments; NO new Geant4/Garfield transport."
   python3 "$HERE/pi_six_geometry_native_timing.py"
