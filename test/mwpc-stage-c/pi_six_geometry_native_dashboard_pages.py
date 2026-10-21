@@ -121,6 +121,9 @@ td,th{padding:10px;border-bottom:1px solid #385d75;text-align:left}
 tr:hover{background:#1e3e56}
 small{color:#b7ccda}</style></head><body>
 <h1>NA60+ — реальные временные и угловые спектры</h1>
+<p><a href="pi_pitch_fieldwire_timing_dashboard_v3.html"><strong>
+Открыть привычный V2-подобный дашборд: XY-карта камер + время дрейфа
+для шести расстояний/полевых конфигураций</strong></a></p>
 <p>Первый нативный чанк Geant4 для каждого J/ψ/ϕ/ω; одни и те же
 Heed-электроны, шесть вариантов Garfield: шаг 3 / 3.5 / 4 мм,
 с промежуточной 75-мкм заземлённой проволокой и без неё.
