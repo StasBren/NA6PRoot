@@ -56,7 +56,10 @@ def main():
     a=np.full(6,35.)
     bucket.counts(segments=1,primaries=7,collected=6,
                   known=6,unknown=0,edge=1)
-    bucket.add_electrons(t,a,a)
+    # Keep electron incidence (35 deg) and signed wire-hit azimuth
+    # (45 deg) DISTINCT: their histogram definitions are different.
+    phi=np.full(6,45.)
+    bucket.add_electrons(t,a,phi)
     summary=bucket.done()
     assert summary["hist"][0]==2
     assert summary["hist"][1]==1
