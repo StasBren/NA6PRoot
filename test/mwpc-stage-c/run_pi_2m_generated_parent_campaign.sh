@@ -99,6 +99,26 @@ PY
 
 python3 -m py_compile "$HERE/run_pi_geant4_campaign.py" "$HERE/test_pi_2m_campaign.py"
 python3 "$HERE/test_pi_2m_campaign.py"
+if [[ "$MODE" == "full" ]]; then
+  python3 - "$SUITE" <<'PY'
+from pathlib import Path
+import json,sys
+suite=Path(sys.argv[1])
+for channel,base in (("Jpsi",202610181),
+                     ("Phi",202710181),("Omega",202810181)):
+    for i in (1,2):
+        path=suite/channel.lower()/f"chunk{i:04d}"/"completed.json"
+        if not path.is_file():
+            sys.exit(f"FULL PAUSED: benchmark not complete, missing {path}. "
+                     "Repeat benchmark to finish first 100k parents "
+                     "for EACH source.")
+        info=json.loads(path.read_text())
+        if info.get("events")!=50000 or info.get("seed")!=base+(i-1)*251:
+            sys.exit(f"FULL REFUSED: wrong frozen benchmark checkpoint: {path}")
+print("PASS: all first 100k generated parents/source have validated "
+      "checkpoints. Check disk and observed speed before FULL.")
+PY
+fi
 source "$HERE/activate_pi_stagec_env.sh"
 MAX=0
 if [[ "$MODE" == "benchmark" ]]; then
