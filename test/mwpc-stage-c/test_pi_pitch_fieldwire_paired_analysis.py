@@ -11,6 +11,7 @@ import numpy as np
 from pi_pitch_fieldwire_paired_analysis import (
     analyse, match_maps, metrics, spatial_profiles,
 )
+from pi_pitch_fieldwire_paired_html import render
 from pi_pitch_fieldwire_pilot import tag, NV, DU
 
 
@@ -95,6 +96,20 @@ def test_full_map_matching(tmp):
     assert len(profile)==30
     assert profile[0]["u_bin"]==0
     assert abs(profile[0]["delta_anode_fraction_pp"]+25)<1.e-12
+    # Offline HTML is pure presentation; original simulation arrays untouched.
+    analysis=analyse(pair,replicas=30)
+    mock_report={"field_wire_diameter_um":75.,
+                 "groups":[{**analysis,"pitch_mm":p}
+                           for p in (3.,3.5,4.)]}
+    sanitized=[{key:("nan" if isinstance(value,float) and
+                    not math.isfinite(value) else value)
+                for key,value in row.items()} for row in profile]
+    page=render(mock_report,sanitized,tmp/"paired.html")
+    contents=page.read_text(encoding="utf-8")
+    assert "NA60+ MWPC" in contents
+    assert "application/json" in contents
+    assert "Same initial electron" in contents
+    assert "With "+str(75)+" µm" in contents
 
 
 def main():
