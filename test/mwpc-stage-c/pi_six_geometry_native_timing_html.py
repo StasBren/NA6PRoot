@@ -132,11 +132,11 @@ function draw(){
  div.append(v,l);el.stats.appendChild(div);
  }
  stat("Газовых сегментов",rec?rec.segments.toLocaleString("ru-RU"):"—");
- stat("Первичных электронов",rec?rec.primaries.toLocaleString("ru-RU"):"—");
+ stat("Первичных электронов",rec&&Number(el.wire.value)<0?rec.primaries.toLocaleString("ru-RU"):"—");
  stat("Собрано на анод",rec?rec.collected.toLocaleString("ru-RU"):"—");
  stat("Время известно",rec?rec.known.toLocaleString("ru-RU"):"—");
  stat("Неизвестное время",rec?rec.unknown.toLocaleString("ru-RU"):"—");
- stat("Потери на конечных краях",rec?rec.edge.toLocaleString("ru-RU"):"—");
+ stat("Потери на конечных краях",rec&&Number(el.wire.value)<0?rec.edge.toLocaleString("ru-RU"):"—");
  stat("Mean [нс]",rec?fmt(rec.mean_ns):"—");
  stat("Centered RMS [нс]",rec?fmt(rec.rms_ns):"—");
  stat("≥ 300 нс",rec?rec.hist[30].toLocaleString("ru-RU"):"—");
