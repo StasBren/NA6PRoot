@@ -81,7 +81,11 @@ const groups=data.groups,meta=data.meta;
 const map=new Map(groups.map(g=>[[g.source,g.config,g.station,g.det_id,g.anode,g.axis,g.anglebin].join("|"),g]));
 const confs=Object.keys(meta.garfield_luts);
 const ids=["source","station","det","wire","config","axis","angle","observable","view"];
-const el=Object.fromEntries(ids.map(x=>[x,document.getElementById(x)]));
+const el={
+ ...Object.fromEntries(ids.map(x=>[x,document.getElementById(x)])),
+ stats:document.getElementById("stats"),
+ coverage:document.getElementById("coverage")
+};
 const fills=["#50d5c4","#80b5ff","#efb86a","#b4a2ff","#ff8f8f","#9ad27c"];
 function sel(element,options,wanted){
  const old=wanted===undefined?element.value:wanted;
