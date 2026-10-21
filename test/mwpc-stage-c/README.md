@@ -2901,3 +2901,53 @@ The env-check never creates a campaign manifest or starts Geant4.
 The real benchmark preserves the frozen 2M/source identity and all
 completed 50k chunks. Review measured ROOT disk and CPU wall time
 before FULL production.
+
+
+### 2026-10-21: full native 100k per-channel Geant4 benchmark PASSED
+
+User's local WSL native production finished six genuine 50k generated
+parent-event chunks, two per Jpsi/Phi/Omega, all with validated ROOT.
+Observed six-chunk campaign elapsed 21.3 minutes. Measured per-event
+GEANT4 time: Jpsi 0.0048374 seconds, Phi 0.00416779 seconds,
+Omega 0.00371075 seconds. NOT a measurement of Heed/Garfield.
+Combined 6M parent-events Geant4 would take about 7–7.5 hours
+IF no slowdown; do not present as guaranteed. Startup free disk
+865.52 GiB, but remaining disk after new ROOT checkpoints unknown.
+
+The old six-geometry native fold uses PREVIOUS campaign first 3k
+parents/source and hardcodes chunk0001 in its Heed RNG seeds. It
+MUST NOT process two new 50k chunks as if the same source/event pair
+were unique across chunks or as if high-stat PDFs already existed.
+
+A separate TGeo gas-crossing export stage has been added for the
+actual new 100k/source Geant4 ROOT files WITHOUT new Geant4/Garfield:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_2m_generated_parent_campaign.sh status
+    bash test/mwpc-stage-c/run_pi_2m_native_export.sh preflight
+    bash test/mwpc-stage-c/run_pi_2m_native_export.sh benchmark
+
+PRE-FLIGHT reads six real completed.json checkpoints and compares
+unchanged ROOT input SHA256, verified gas/reference trees, source,
+chunk index, generated event count and RNG seed (50k/source/chunk).
+BENCHMARK invokes the existing ROOT TGeo/MCKine joined native muon
+gas-crossing exporter on each of the six chunks, with local event
+indexes verified in [0,50000). Separate CSV and immutable manifest
+are saved under:
+
+    test_runs/mwpc_stage_c/pi_six_geometry_2m_native_exports_v1/
+      jpsi/chunk0001/geant_muon_crossings.csv
+      jpsi/chunk0001/crossings_manifest.json
+      ... phi and omega chunk0001 and chunk0002 ...
+
+The new outputs never overwrite the existing first 3k/source
+pi_six_geometry_native_timing_v1 or Garfield LUT maps.
+
+This is ONLY the native Geant4 crossing export, NOT YET larger-stat
+six-configuration Heed/LUT timing or arrival-angle histograms. To
+finish the physics deliverable, fold each (source,chunk,local_event)
+with shared Heed births and six existing Garfield LUTs using
+chunk-aware RNG seeds, preserve 10ns bins and chamber/anode
+conservation, merge with parent IDs and compute bootstrap statistics.
+Do not claim 100k/2M drift PDF or bootstrap until those stages pass.
