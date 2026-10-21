@@ -2518,3 +2518,52 @@ represented as unknown, never inferred from timestamps. The sampler
 retains exact frozen CPP/binary/geometry/gas/HV/seed identity even when
 only its reporting and timing bookkeeping source changes. Not a
 muon-angle-conditioned response yet.
+
+
+### 2026-10-21: full 126k Garfield pitch pilot completed, paired follow-up
+
+WSL pilot run PASSED all six geometries:
+- p=3.0mm: 18,000 trials/variant, 14,875 collected without the field wire,
+  14,258 with 75um field wire. Mean drift 27.152/26.614 ns,
+  centered RMS 14.949/14.727 ns.
+- p=3.5mm: 21,000 trials/variant, 17,124 / 16,629 anode collected.
+  Mean drift 29.407/28.448 ns, RMS 17.151/16.407 ns.
+- p=4.0mm: 24,000 trials/variant, 19,383 / 19,041 anode collected.
+  Mean drift 31.964/30.901 ns, RMS 20.247/18.651 ns.
+- Exactly 126,000 total Garfield electron trajectories in this initial
+  *uniform local-cell* scan. Field-wire endpoints classified as collected
+  were zero in all six runs; this is compatible with 0V conductors
+  repelling electrons compared with +1800V anodes, but does not establish
+  that the classification, field, or endpoint-loss mechanism is validated.
+
+Important: these mean/RMS differences are CONDITIONAL on successful ANODE
+collection and may be influenced by differential acceptance of slow
+electrons. To distinguish within-electron transport from censoring/losses,
+do the read-only paired analysis on the already completed CSVs:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_pitch_fieldwire_paired_analysis.sh
+
+This does NOT launch Garfield/Heed/Geant4 or rerun the 126k trajectories.
+It verifies exact matching of each Garfield electron's initial u/v and
+random seed across with/without field wire for EACH given pitch; checks
+frozen parameters and reports:
+- paired 2x2 collected/not-collected transition table;
+- unconditional collection fractions with bootstrap errors;
+- mean and centered RMS of anode-collected drift times and last-step
+  electron incidence-to-normal angles, with errors;
+- matched-electron drift-time changes CONDITIONED ON COLLECTION IN BOTH;
+- separate time-cut collection probabilities and mean/RMS u-column
+  spatial profiles, allowing field-wire edge effects to be localized;
+- full endpoint-status counts for every field condition;
+- offline interactive local HTML plus machine-readable CSV/JSON.
+
+Files are generated in test_runs/mwpc_stage_c/pi_pitch_fieldwire_paired_v1/.
+Open pi_pitch_fieldwire_paired_dashboard.html in a browser. Both conditions
+are paired with a stratified bootstrap within fixed (u,v) cells. This is
+*finite Garfield trial uncertainty*, not correlated GEANT event error;
+different pitches have different u intervals and are NOT exactly paired
+to the same native Geant4/Heed electron birth ensemble. A native angle-
+conditioned Heed fold must follow for the PI's requested dependence
+P(electron incidence angle | signed muon entrance angle).
