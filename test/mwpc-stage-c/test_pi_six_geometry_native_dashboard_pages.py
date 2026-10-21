@@ -62,7 +62,14 @@ def main():
         assert full[1:]==rows
         idx=generate(original,tmp/"pages")
         assert idx.exists() and "MS5.html" in idx.read_text()
-        assert (tmp/"pages"/list(SOURCES)[0]/"MS0.html").is_file()
+        station_page=tmp/"pages"/list(SOURCES)[0]/"MS0.html"
+        assert station_page.is_file()
+        page_text=station_page.read_text(encoding="utf-8")
+        assert "MWPC-NATIVE-STATIC-FALLBACK-20261021-v2" in page_text
+        assert "Резервная гистограмма" in page_text
+        assert 'id="staticFallback"' in page_text
+        assert '<rect x="' in page_text  # Python-generated physical histogram
+        assert "document.getElementById(\"staticFallback\").hidden=true" in page_text
         compact=json.loads((tmp/"pages"/
                             "pi_six_geometry_station_reference.json").read_text())
         assert len(compact["groups"])==len(rows)
