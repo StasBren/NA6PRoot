@@ -2567,3 +2567,38 @@ different pitches have different u intervals and are NOT exactly paired
 to the same native Geant4/Heed electron birth ensemble. A native angle-
 conditioned Heed fold must follow for the PI's requested dependence
 P(electron incidence angle | signed muon entrance angle).
+
+
+### Paired Gaussian-drift follow-up: metal birth-point relocation
+
+On the already completed full-pitch 75um pilot, the read-only paired
+analysis originally stopped on 'Initial Garfield electron not paired at
+14/2'. This is consistent with an *explicit C++ start-inside-electrode
+safeguard* in c_transport_box_map.cxx: when a uniform sampled birth lies
+inside an installed metallic conductor, the source launch coordinate is
+moved to the corresponding (u,v) box center before drift. A field wire at
+u=-p/2 or +p/2 can trigger this *only in the field-wire-on geometry*,
+so matching Garfield sample ID + seed is insufficient for identical
+physical starts. The first observed mismatch is in p=3 mm u-bin 0,
+v-bin 14 near the field-wire boundary at v~0.
+
+The corrected pi_pitch_fieldwire_paired_analysis.py permits an exception
+ONLY when the bare-run coordinate lies inside the theoretical 75um field
+wire and the field-run coordinate is exactly the recorded box center;
+all other coordinate or seed mismatches remain fatal. These rare pairs
+are tabulated in the JSON as excluded_birth_relocations and excluded from
+the paired transition, time and fraction denominators. Raw six Garfield
+CSV sets are not modified; the separate ORIGINAL marginal pilot results
+still include relocated initial electrons and should be regarded as an
+approximate cell-uniform model in metal-overlap regions. There is no
+claim that this is a complete physical treatment of primary ionization
+inside conductor volume. Changes to the Garfield physics producer should
+be versioned as a new independent pilot, not silently patch existing CSVs.
+
+Run without recomputing Garfield:
+
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_pitch_fieldwire_paired_analysis.sh
+
+Read printed excluded relocation counts per pitch and confirm that every
+excluded launch has a physically justified metal-geometry reason.
