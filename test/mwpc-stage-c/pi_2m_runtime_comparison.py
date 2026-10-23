@@ -95,7 +95,7 @@ def report():
                 clocks["root_export"]+=float(item["measured_export_wall_seconds"])
                 counts["export"]+=1
             for st in range(6):
-                fold=OUTPUT/"full"/ch.lower()/f"MS{st}"/f"chunk{i:04d}.manifest.json"
+                fold=OUTPUT/"full"/ch.lower()/f"MS{st}"/f"chunk{i:04d}.json.manifest.json"
                 if not fold.exists():continue
                 item=json.loads(fold.read_text(encoding="utf-8"))
                 f=item["immutable_inputs"]
