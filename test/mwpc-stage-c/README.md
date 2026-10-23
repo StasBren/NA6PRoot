@@ -3182,3 +3182,77 @@ Open in Windows from WSL:
 
 A detailed physics slide deck should wait for parent-level uncertainty
 analysis and controlled normalisation/efficiency comparisons.
+
+
+### 2026-10-23: scientific interpretation of the merged 100k anode timing
+
+The user confirmed that both native six-config 100k/parent/source merge
+and English V3 navigation work in their WSL/Windows browser. They now
+request a scientific analysis of WHICH ANODES collect at WHICH electron
+drift times, pitch and grounded-field-wire effects, 10 ns distributions,
+and possible finite-edge effects.
+
+Real merged station JSON files are user-local and NOT committed to
+GitHub, so numerical station-level effects cannot be asserted from
+source-code inspection alone. A read-only scientific summary/interactive
+English dashboard has been added:
+
+    test/mwpc-stage-c/analyze_pi_100k_anode_timing.py
+    test/mwpc-stage-c/test_pi_100k_anode_timing.py
+    test/mwpc-stage-c/run_pi_100k_anode_timing_analysis.sh
+
+Run in WSL:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_100k_anode_timing_analysis.sh
+
+This does NOT run Geant4/Heed/Garfield++/ROOT, nor re-fold six LUTs.
+It streams all 18 existing verified source/station merged JSONs with
+bounded memory and checks:
+  - source, station, six pinned configs, 100k parents/source
+  - real gas-crossing exposure, counts and all 31 time bins
+  - station=chambers=anodes hist, known+unknown electron conservation
+  - unrounded sum(t)/sum(t²) moment consistency
+  - center vs outer anode time differences as electron-weighted means
+  - per-anode conditional time histogram profiles normalised to each
+    pitch's native physical anode lattice
+
+Computes per source/station/config:
+  - total gas hits (NOT parent count)
+  - primary Heed, anode collected and known drift time electron counts
+  - anode collection probability / ALL born primary electrons
+  - P(e collected with t<100 ns) / ALL born primary electrons
+  - P(t<100 ns|collected, known drift time)
+  - mean and centered RMS from raw exact moments
+  - >=300 ns known-electron tail fraction
+  - mean timing and F100 vs normalized physical anode location
+  - station- and source-pooled field-wire minus no-wire differences.
+
+Physical caution: the per-anode groups have NO denominator of born
+primary electrons assigned to their physical anode, so anode-by-anode
+collection efficiency is undefined from these data. Do NOT equate
+timing differences (conditioned on collection) to true electronics
+timing resolution. Do NOT call a multiwire fraction a result of the
+100k timing merge; multiwire benchmark was a separate 2000
+gas-hit comparison. Do NOT compare same integer wire IDs at
+different anode pitches (their physical positions change). No
+parent-event confidence intervals for the current 100k analysis yet;
+finite microscopic Garfield LUT trials are an additional uncertainty.
+
+Read-only new files:
+    test_runs/mwpc_stage_c/pi_six_geometry_2m_timing_v1/full/
+      anode_timing_analysis_en/
+        summary.txt                  # plain-text science summary
+        station_summary.csv          # all 18×6 station/config metrics
+        station_anode_timing.json    # compact 18×6×20 anode-position bins
+        anode_timing_report_en.html  # six-curve time PDF and spatial profiles
+
+Open independent English analysis:
+
+    explorer.exe "$(wslpath -w "$HOME/na6p/src/NA6PRoot-mwpc/test_runs/mwpc_stage_c/pi_six_geometry_2m_timing_v1/full/anode_timing_analysis_en/anode_timing_report_en.html")"
+
+User can share summary.txt or station_summary.csv to enable a
+rigorous numerical interpretation and discussion of physical tradeoffs
+based on actual measured results. A separate parent-event bootstrap
+and independent finite-LUT Monte Carlo systematic study should follow.
