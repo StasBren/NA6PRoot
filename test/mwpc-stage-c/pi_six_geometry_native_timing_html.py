@@ -354,6 +354,15 @@ def build(source,dest):
     page=HTML.replace("__PAYLOAD__",json.dumps(payload,ensure_ascii=False,
                 separators=(",",":"),allow_nan=False).replace("</","<\\/"))
     page=page.replace("__STATIC_FALLBACK__",static)
+    n_parents=int(payload["meta"].get("n_generated_parent_events_per_source",3000))
+    if n_parents!=3000:
+        page=page.replace(
+            "оценки данного первого чанка",
+            f"оценки выборки из {n_parents:,} сгенерированных "
+            "родительских событий на источник")
+        page=page.replace(
+            "MWPC-NATIVE-STATIC-FALLBACK-20261021-v2",
+            "MWPC-NATIVE-CHUNK-MERGE-100K-V1")
     dest.parent.mkdir(parents=True,exist_ok=True)
     dest.write_text(page,encoding="utf-8")
     print("Open offline interactive native timing dashboard:",dest)
