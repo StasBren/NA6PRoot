@@ -2951,3 +2951,86 @@ with shared Heed births and six existing Garfield LUTs using
 chunk-aware RNG seeds, preserve 10ns bins and chamber/anode
 conservation, merge with parent IDs and compute bootstrap statistics.
 Do not claim 100k/2M drift PDF or bootstrap until those stages pass.
+
+
+### 2026-10-23: verified 100k/channel real gas-crossing exports + six LUT fold
+
+WSL user confirmed all six true native ROOT-to-TGeo exports passed with
+SHA-verified ROOT checkpoints and independent per-chunk manifests:
+
+  Jpsi chunk0001 681951 gas intersections, 494627 muon, 346.1 MiB
+  Jpsi chunk0002 685118 gas intersections, 495068 muon, 347.7 MiB
+  Phi  chunk0001 516974 gas intersections, 391297 muon, 263.3 MiB
+  Phi  chunk0002 517062 gas intersections, 392164 muon, 263.3 MiB
+  Omega chunk0001 470225 gas intersections, 359247 muon, 239.5 MiB
+  Omega chunk0002 475192 gas intersections, 361307 muon, 242.1 MiB
+
+  TOTAL 3,346,522 Geant4 gas intersections, 2,493,710 muon crossings,
+        100,000 GENERATED PARENTS/SOURCE, ~1,702 MiB CSV.
+
+The previous 3k-parent/source six-field code originally held all
+groups and the duplicate source=all groups in memory, and Heed RNG
+seeded by constant chunk0001. For the new 100k/source first stage, a
+separate station-sharded, source-and-chunk-aware fold has been added:
+
+  test/mwpc-stage-c/pi_2m_native_six_geometry_fold.py
+  test/mwpc-stage-c/test_pi_2m_native_six_geometry_fold.py
+  test/mwpc-stage-c/run_pi_2m_heed_six_geometry_fold.sh
+
+It uses existing measured native Geant4 CSV, independent frozen six
+Garfield LUTs and original empirically parameterized Heed ionization.
+It does NOT rerun microscopic Garfield or Geant4. Different chunks
+have different shared-Heed random seeds even when local event indices
+are equal. Within ONE event and ONE gas hit, all six physical fields
+receive the SAME sampled primary electron positions and quantiles.
+Each bounded-RAM shard is for one source, one source-specific 50k
+Geant4 chunk and one native station, including selected chamber,
+anode and signed entrance-angle groups. No copied source=all groups.
+
+Each shard publishes compressed exact bins, known/unknown collection,
+edge counters, approach/impact angles, and raw sum(t), sum(t^2)
+and other moments (to combine centered RMS EXACTLY across chunks,
+not average RMS). Every shard has a separate SHA and a frozen manifest
+of SOURCE+CHUNK+STATION, both Heed libraries, six Garfield map SHAs,
+input CSV SHA and source code. It fails closed on mismatches.
+Full 100k per source = 2 x 50k x 3 sources x 6 stations = 36 shards,
+then merges 2 ROOT chunks at a time for each station/source into
+NEW 18 V2-style clickable map/time pages with 10 ns histograms, log Y,
+angles, mean and centered RMS, using the SAME physical active area.
+18 separate detailed per-anode pages also retained in the NEW output.
+
+Start with the SMALL genuine benchmark, NOT all 2.49m crossings:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_2m_heed_six_geometry_fold.sh smoke
+
+This reads exactly the FIRST 200 real muon gas hits from Jpsi
+chunk0001 MS0, checks group conservation, verifies the Heed/Garfield
+LUT provenance and reports REAL wall seconds. The synthetic regression
+runs before the real 200-hit fold. No new Geant4/Garfield computation.
+After a PASS, measure one COMPLETE Jpsi MS0 50k-parent chunk:
+
+    python3 test/mwpc-stage-c/pi_2m_native_six_geometry_fold.py fold \
+      --channel Jpsi --station 0 --chunks 1
+
+That output is resumable; recorded wall time gives a measured folding
+throughput BEFORE committing to all 36 real native station shards.
+If memory/performance is acceptable, run:
+
+    bash test/mwpc-stage-c/run_pi_2m_heed_six_geometry_fold.sh fold
+    bash test/mwpc-stage-c/run_pi_2m_heed_six_geometry_fold.sh merge
+
+New HTML portal, distinct from the old 3k-parent dashboard:
+
+    test_runs/mwpc_stage_c/pi_six_geometry_2m_timing_v1/full/
+      pages/pi_pitch_fieldwire_timing_dashboard_v3.html
+
+No actual 100k-source Heed/LUT fold has yet been observed on WSL,
+so these instructions ARE NOT a claim that high-statistics time PDFs
+or event-level errors have been completed. The PDF and mean/RMS
+currently omit parent-event bootstrap errors; the native Heed/Garfield
+LUT trials also carry separate finite-sampling uncertainty.
+Do not run FULL 2M/channel Geant4 extension until representative
+Heed/LUT folding wall time, memory, and intermediate file sizes
+have been measured and reviewed.
