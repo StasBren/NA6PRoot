@@ -89,7 +89,9 @@ def translate_page(src,dst,kind,*,write=True):
     if kind=="detail" and 'id="yscale"' not in stripped:
         raise ValueError("Lost detailed time-spectrum log-Y selector")
     if write:
-        dst.write_text(stripped,encoding="utf-8")
+        temporary=dst.with_name(dst.name+".incomplete")
+        temporary.write_text(stripped,encoding="utf-8")
+        temporary.replace(dst)
     return {"path":str(dst),"source_sha256":sha(html),
             "english_sha256":sha(stripped),"bytes":len(stripped.encode("utf-8")),
             "preserved_json_payloads":len(embedded)}
@@ -117,8 +119,10 @@ def build(base,*,dry_run=False):
               "english_pages":len(produced),"artifacts":produced}
     if not dry_run:
         file=base/"english_dashboard_manifest.json"
-        file.write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+"\n",
-                        encoding="utf-8")
+        temporary=file.with_name(file.name+".incomplete")
+        temporary.write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+"\n",
+                             encoding="utf-8")
+        temporary.replace(file)
     print(f"PASS: {len(produced)} English V3, detailed spectra and portal HTML "
           f"pages; numeric embedded JSON unchanged; "
           f"{'dry-run' if dry_run else 'files written'}")
