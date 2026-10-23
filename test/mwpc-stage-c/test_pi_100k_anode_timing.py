@@ -28,7 +28,10 @@ def group(source,st,cfg,det,wire,times,primaries,segments):
                 sum_drift_ns2=float(sum(t*t for t in times)))
 
 
-def write_mock(root,source,st):
+def write_mock(root,channel,st):
+    # Production merged JSON directories use "jpsi"/"phi"/"omega",
+    # while the groups and meta retain "jpsi40-bore" etc.
+    source=SOURCES[channel]
     rows=[]
     for pitch in (3.,3.5,4.):
         for field in (0.,75.):
@@ -45,7 +48,7 @@ def write_mock(root,source,st):
                 group(source,st,cfg,0,n//2,center,0,1),
                 group(source,st,cfg,0,0,outer,0,1),
             ])
-    file=root/source.lower()/f"MS{st}.json"
+    file=root/channel.lower()/f"MS{st}.json"
     file.parent.mkdir(parents=True,exist_ok=True)
     meta={"n_generated_parent_events_per_source":100000,
           "geometries":6,"garfield_luts":{cfg:{} for cfg in CONFIGS},
@@ -63,7 +66,8 @@ def main():
         records={}
         for key,physical in SOURCES.items():
             for st in range(6):
-                write_mock(root,physical,st)
+                actual=write_mock(root,key,st)
+                assert actual==root/key.lower()/f"MS{st}.json"
                 records[(key,st)]=analyze_file(key,st,root)
                 c=records[(key,st)]["p3p0_anode_only"]
                 assert c["segments"]==7
@@ -92,7 +96,7 @@ def main():
         assert (out/"summary.txt").is_file()
         # Corrupt one wire's time histogram: strict station-vs-anode
         # conservation must reject it, not silently smooth missing hits.
-        bad=root/"jpsi40-bore"/"MS0.json"
+        bad=root/"jpsi"/"MS0.json"
         data=json.loads(bad.read_text())
         wire=next(r for r in data["groups"] if r["anode"]>=0)
         wire["hist"][2]+=1
