@@ -15,6 +15,10 @@ import shutil
 from pathlib import Path
 
 from pi_2m_export_completed_chunks import SUITE
+from pi_2m_native_six_geometry_fold import OUTPUT
+from pi_six_geometry_native_timing import (
+    MAPS, HEED_TRACKS, HEED_CLUSTERS, PITCHES, tag,
+)
 from run_pi_geant4_campaign import REPO
 
 OUT=REPO/"test_runs/mwpc_stage_c/pi_weekend_2m_operations_v1"/"frozen_inputs"
@@ -58,6 +62,27 @@ def main():
         frozen.get("mode")!="full"):
         raise RuntimeError("Refusing snapshot of a different production campaign")
     specs=source_files(frozen)
+    # The 100k benchmark is completed, so this verified shard provenance
+    # supplies ORIGINAL, per-file SHA values of the exact Heed calibration
+    # and all SIX Garfield microscopic maps. Archive actual bytes as well.
+    shard=OUTPUT/"full"/"jpsi"/"MS0"/"chunk0001.json.manifest.json"
+    if not shard.is_file():
+        raise FileNotFoundError(f"Cannot freeze prior calibrated response: {shard}")
+    fold=json.loads(shard.read_text(encoding="utf-8"))["immutable_inputs"]
+    specs["heed_tracks_original.csv"]=(
+        str(HEED_TRACKS),fold["heed_tracks_sha256"])
+    specs["heed_clusters_original.csv"]=(
+        str(HEED_CLUSTERS),fold["heed_clusters_sha256"])
+    provenance=fold["garfield_map_provenance"]
+    for p in PITCHES:
+        for field in (0.,75.):
+            config=tag(p,field)
+            info=provenance[config]
+            directory=MAPS/config
+            specs[config+"_garfield_electrons.csv"]=(
+                str(directory/"garfield_electrons.csv"),info["csv_sha256"])
+            specs[config+"_frozen_config.json"]=(
+                str(directory/"frozen_config.json"),info["frozen_sha256"])
     OUT.mkdir(parents=True,exist_ok=True)
     receipts={}
     for alias,(original,expected) in specs.items():
@@ -99,8 +124,9 @@ def main():
         tmp=MANIFEST.with_name(MANIFEST.name+".incomplete")
         tmp.write_text(json.dumps(payload,indent=2)+"\n",encoding="utf-8")
         os.replace(tmp,MANIFEST)
-    print(f"FROZEN INPUT SNAPSHOT PASS: {len(receipts)} physics/source/binary "
-          f"assets copied and checksum verified. Archive: {OUT}",flush=True)
+    print(f"FROZEN INPUT SNAPSHOT PASS: {len(receipts)} actual field/cut, "
+          f"physics/source/binary, Heed and six Garfield-LUT assets "
+          f"copied with checkpoint SHA verification. Archive: {OUT}",flush=True)
 
 
 if __name__=="__main__":
