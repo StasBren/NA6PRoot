@@ -36,8 +36,9 @@ from pi_six_geometry_native_timing import (
     birth_sample,load_map,tag,n_anodes,response_for_births,stable_seed,
 )
 from pi_2m_export_completed_chunks import (
-    DEST as EXPORT,SOURCE,PARENTS_PER_CHUNK,
+    DEST as EXPORT,SOURCE,PARENTS_PER_CHUNK,SUITE,
 )
+from pi_pitch_fieldwire_pilot import load_column_timing
 from pi_2m_native_six_geometry_fold import crossing_provenance,sha_file
 from run_pi_per_chamber_response import read_heed
 from run_pi_geant4_campaign import REPO
@@ -213,6 +214,62 @@ def compute(rows,channel,chunk,station,lam,marks,pools):
     return measures,timings,shared_heed_ns,two_cell
 
 
+def original_microscopic_garfield_times(pools):
+    """Recover ACTUAL old microscopic Garfield runtime, if fully recorded.
+
+    IMPORTANT: this is upfront six-LUT map-generation time, measured when
+    the physical Garfield electrons were originally drifted. The 6×
+    column timing includes per-column process startup (not lookup costs).
+    If any sidecar is missing, report unknown rather than fabricate.
+    """
+    output={}
+    for cfg,(pitch,fieldwire,pool) in pools.items():
+        directory=MAPS/cfg
+        config=json.loads((directory/"frozen_config.json").read_text())
+        ncols=int(config["n_u"])
+        percol=[]
+        all_recorded=True
+        for index in range(ncols):
+            filename=directory/"columns"/f"iu_{index:03d}.csv"
+            if not filename.is_file():
+                all_recorded=False
+                break
+            elapsed=load_column_timing(filename)
+            if elapsed is None:
+                all_recorded=False
+                break
+            percol.append(elapsed)
+        output[cfg]={
+            "physical_garfield_lut_creation_measured_seconds":(
+                sum(percol) if all_recorded and len(percol)==ncols else None),
+            "columns_measured":len(percol),
+            "columns_total":ncols,
+            "n_garfield_microscopic_electron_traces":(
+                int(config["n_u"])*int(config["n_v"])*
+                int(config["samples_per_box"])),
+            "measurement_includes_repeated_column_process_startup":True,
+            "measurement_source":"Garfield original per-column timing.json "
+                                  "checkpoints, CRC-validated against CSV",
+        }
+    return output
+
+
+def measured_native_geant4_chunk(channel,chunk):
+    path=SUITE/channel.lower()/f"chunk{chunk:04d}"/"completed.json"
+    if not path.is_file():
+        return None
+    doc=json.loads(path.read_text())
+    if (doc.get("events")!=50000 or doc.get("channel")!=channel
+        or doc.get("chunk")!=chunk):
+        raise ValueError(f"Not a matching completed Geant4 chunk: {path}")
+    return {
+        "n_generated_parent_events":doc["events"],
+        "geant4_native_transport_seconds":doc.get("wall_seconds",{}).get("geant4"),
+        "native_root_validation_seconds":doc.get("wall_seconds",{}).get("root_validation"),
+        "checkpoint":"completed.json with measured monotonic elapsed times",
+    }
+
+
 def summarize(rows,seen,read_sec,channel,chunk,station,lam,marks,
               pools,load_sec,out):
     total_start=time.perf_counter_ns()
@@ -263,6 +320,9 @@ def summarize(rows,seen,read_sec,channel,chunk,station,lam,marks,
             outrow[f"P_lut_at_least_two_wires_ge_{threshold}_electrons"]=(
                 c[f"lut_multiwire_atleast_{threshold}e"]/n)
         summary.append(outrow)
+    microscopic=original_microscopic_garfield_times(pools)
+    for item in summary:
+        item.update(microscopic[item["configuration"]])
     result={
         "version":VERSION,
         "real_input":{
@@ -286,12 +346,19 @@ def summarize(rows,seen,read_sec,channel,chunk,station,lam,marks,
         },
         "timing":{
             "clock":"time.perf_counter_ns, sequential Python on this WSL host",
+            "native_upstream_geant4_50k_generated_parents":
+                measured_native_geant4_chunk(channel,chunk),
+            "microscopic_lut_generation_source":
+                "Stored timing.json sidecars from original Garfield physics "
+                "runs, separately timed from this postprocessing benchmark",
             "source_csv_read_and_sampling_seconds":read_sec,
             "six_garfield_lut_load_seconds":load_sec,
             "matched_six_methods_compute_wall_seconds":compute_s,
             "per_config_scoped_model_times_exclude_Heed_and_disk_io":True,
             "direct_microscopic_Garfield_simulation_per_electron":"NOT run",
-            "historic_Garfield_LUT_creation_wall_time":"NOT measured in this benchmark",
+            "historic_Garfield_LUT_creation_wall_time":
+                "Read ONLY from original validated Garfield per-column "
+                "timing sidecars when all columns present; no new traces.",
             "native_Geant4_generation_wall_time":"separately measured",
             "note":"Two models are postprocessing approaches, not "
                    "independent full Geant4+ionization+Garfield simulations. "
@@ -322,6 +389,12 @@ def summarize(rows,seen,read_sec,channel,chunk,station,lam,marks,
               f" {x['lut_over_geometry_processing_ratio']:>11.2f}"
               f" {x['P_geo_at_least_two_wires_ge_1_electrons']:>11.4f}"
               f" {x['P_lut_at_least_two_wires_ge_1_electrons']:>11.4f}")
+    print("Original full microscopic Garfield LUT creation wall times "
+          "(SEPARATE, per 6 configurations, if all timing sidecars exist):")
+    for cfg in pools:
+        value=microscopic[cfg]["physical_garfield_lut_creation_measured_seconds"]
+        print(f"  {cfg}: " + (f"{value:.1f} s measured" if value is not None
+            else "NOT RECORDED for all grid columns"))
     print("PASS: matched first-order geometry vs six frozen Garfield LUT "
           "time and multiwire comparison")
     print("Frozen result:",out)
