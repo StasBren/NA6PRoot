@@ -98,6 +98,26 @@ def render(source_file,out,source,station,template=TEMPLATE):
     page=template_text.replace("__PAYLOAD__",json.dumps(
         data,ensure_ascii=False,separators=(",",":"),allow_nan=False
     ).replace("</","<\\/")).replace("__STATIC_FALLBACK__",fallback)
+    n_parents=int(data["meta"].get("n_generated_parent_events_per_source",3000))
+    if n_parents!=3000:
+        if n_parents<3000:
+            raise ValueError("Unsupported native V3 parent exposure")
+        page=page.replace(
+            "Трёхтысячный первый чанк J/ψ / ϕ / ω на источник.",
+            f"{n_parents:,} сгенерированных родительских событий на "
+            "источник; объединены проверенные независимые Geant4-чанки."
+        ).replace(
+            "истинные native Geant4 газовые пересечения первого чанка "
+            "(3 000 сгенерированных событий на канал)",
+            "истинные native Geant4 газовые пересечения из независимых "
+            f"чанков (по {n_parents:,} сгенерированных событий на канал)"
+        ).replace(
+            "18 детальных страниц и исходные 496 809 групп не изменяются.",
+            "Оригинальные отчёты на 3 000 событий сохранены отдельно."
+        )
+        if "Трёхтысячный первый чанк" in page:
+            raise AssertionError("High-stat V3 page still labelled 3000")
+    
     dest=Path(out)
     dest.parent.mkdir(parents=True,exist_ok=True)
     dest.write_text(page,encoding="utf-8")
