@@ -3034,3 +3034,97 @@ LUT trials also carry separate finite-sampling uncertainty.
 Do not run FULL 2M/channel Geant4 extension until representative
 Heed/LUT folding wall time, memory, and intermediate file sizes
 have been measured and reviewed.
+
+
+### 2026-10-23: matched physical geometry/binomial vs 6 Garfield LUT timing study
+
+The user has now measured a COMPLETE first source/station 50k-parent
+Heed+six-frozen-Garfield fold:
+  Jpsi, chunk0001, MS0: 92,017 actual native muon gas hits;
+  18,738 grouped response histograms; 4.5 MiB compressed;
+  wall time 158.0 seconds, checkpoint PASS.
+This is distinct from the upstream 50k-parent Geant4 elapsed time
+(~4 minutes for this 50k Jpsi chunk) and from ORIGINAL microscopic
+Garfield map construction.
+
+The PI also requested a first-order geometric/control model and
+F-A-I-R wall-clock comparison with the microscopic Garfield approach.
+Existing original October 2026 prototype:
+  c_pi_geant_wire_split.py
+  analyze_c_pi_geometric_split.py
+  fold_c_pi_geometric_clusters_with_transport.py
+This prototype operated on the previous geometry and should not be
+mistaken for the current symmetric 3+3 mm six-field comparison.
+
+NEW on the CURRENT actual native Geant4 benchmark data:
+  pi_geometric_vs_lut_benchmark.py
+  test_pi_geometric_vs_lut_benchmark.py
+  run_pi_geometric_vs_lut_benchmark.sh
+
+It samples genuine station muon gas segments uniformly by deterministic
+reservoir, preserving source/chunk/local_event/track identity. Each hit
+uses the ORIGINAL seed and RNG sequence from the 100k/source six-field
+Heed fold (proven byte-identical for primary positions and quantiles by
+test), draws a shared Ncl~Poisson(lambda*L), and independently marked
+cluster multiplicities from empirical Heed. These exact cluster births
+are shared by BOTH geometry and LUT methods.
+
+GEOMETRY: assign each COMPLETE primary-electron CLUSTER to the closest
+finite physical anode. Exact track arc-length fractions through
+nearest-anode Voronoi cells determine binomial/multinomial cluster
+counts. For exactly two cells with p=L1/L:
+  N1|Ncl ~ Binomial(Ncl,p);
+  P(both cells occupied | Ncl)=1-p**Ncl-(1-p)**Ncl.
+With Poisson marginalization:
+  P(both)= (1-exp(-lambda*L1))*(1-exp(-lambda*L2)).
+No geometric loss, avalanches, electronic thresholds or intrinsic
+drift timing are asserted. Unlike LUT, the two field-wire variants at
+the SAME pitch have identical geometric nearest-wire predictions.
+
+LUT: for the SAME individual Heed primary electrons and same q, call
+the original six independently computed Garfield lookup-table kernels.
+Real finite-wire collection, migration and noncollection are allowed.
+Compare for each configuration:
+  P(Ndistinct_anodes>=2) with thresholds >=1,2,3,5 collected primary
+  electrons PER anode, LUT collection and migration fractions, and
+  conditional on native gas hits crossing exactly two geometric cells
+  analytic binomial and Poisson expectations vs sampled Geom and LUT.
+
+Measured wall time is split rather than conflated:
+  - source native CSV disk read and reproducible selection,
+  - LUT load from disk,
+  - SHARED Poisson/Heed cluster generation (identical both models),
+  - GEOMETRY path split and per-anode electron count, PER config,
+  - GARFIELD LUT lookup and per-anode electron count, PER config,
+  - original microscopic Garfield++ LUT creation, IF verified per-column
+    wall-time sidecars survived from old pilot,
+  - original upstream 50k Geant4 elapsed from completed.json.
+This never claims a new direct microscopic Garfield++ simulation was
+performed, or calls the 6 LUT fold itself an independent full
+detector physics simulator.
+
+FIRST confirm synthetic physics tests plus 200 real crossing benchmark:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_geometric_vs_lut_benchmark.sh smoke
+
+Then with 2,000 uniformly sampled real Jpsi MS0 crossing segments:
+
+    bash test/mwpc-stage-c/run_pi_geometric_vs_lut_benchmark.sh benchmark
+
+Native result JSON (English keys) appears at:
+  test_runs/mwpc_stage_c/pi_geometric_vs_lut_benchmark_v1/
+    jpsi_chunk0001_MS0_sample2000.json
+
+Separately COMPLETE six-field Heed+LUT stage already has a validated
+Jpsi MS0 chunk0001 checkpoint. Resume other 35 source-station-chunk
+physics shards without recomputing that checkpoint:
+
+    bash test/mwpc-stage-c/run_pi_2m_heed_six_geometry_fold.sh fold
+    bash test/mwpc-stage-c/run_pi_2m_heed_six_geometry_fold.sh merge
+
+The current final merge still requires all 36 native shards before
+any 100k GENERATED parents/source high-stat V3 pages can be labelled
+complete. English localisation of V3 and PI slide deck are deferred
+until full statistical comparisons and physics claims are verified.
