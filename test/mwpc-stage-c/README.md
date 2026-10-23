@@ -3128,3 +3128,57 @@ The current final merge still requires all 36 native shards before
 any 100k GENERATED parents/source high-stat V3 pages can be labelled
 complete. English localisation of V3 and PI slide deck are deferred
 until full statistical comparisons and physics claims are verified.
+
+
+### 2026-10-23: user verified all six-source/geometry native 100k pages
+
+User reports the 36 independent Heed+six Garfield response shards AND
+the strict two-chunk/source MERGE all completed and the high-stat
+Russian V3 pages opened and worked correctly in Windows browser.
+This is genuine 100,000 GENERATED parent events for EACH of the 3
+sources, not 2,000,000 yet. Event-level parent bootstrap errors still
+have NOT been calculated. No new 2M/channel transport should be
+initiated until further scaling and scientific review.
+
+English-localisation stage (read-only on physics):
+  test/mwpc-stage-c/build_pi_100k_english_dashboard.py
+  test/mwpc-stage-c/test_pi_100k_english_dashboard.py
+  test/mwpc-stage-c/run_pi_2m_english_dashboard.sh
+
+Run from the existing checkout (DO NOT rerun Geant4, Heed, Garfield,
+ROOT or the expensive native fold, and do not need to re-merge):
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_2m_english_dashboard.sh check
+    bash test/mwpc-stage-c/run_pi_2m_english_dashboard.sh build
+
+The check mode first runs a synthetic fixture for English portal,
+interactive V3, and detailed per-anode dashboard with Python
+no-JavaScript static fallback, then validates the 36 already merged
+Russian HTMLs and their true 100k parent exposure without writing
+translated files. Build mode writes English copies next to all 36
+original HTMLs without overwriting any physics JSON or original
+Russian pages. It localises ALL dynamic JavaScript selection text,
+labels, legends, plot axes, warnings, event-exposure notices,
+detailed anode spectra, clickable station navigation, and the
+static Python fallback.
+The embedded <script type=application/json id=payload/data> physics
+payload must match EXACTLY byte-for-byte between original and English.
+Every output must contain no Cyrillic outside physics JSON and must
+retain six configs, logarithmic timing mode, and angular observables.
+An English page refusing an untranslated Russian term is a deliberate
+QA FAIL: adjust localisation, DO NOT change the numeric physics data.
+
+The English entrypoint is:
+
+    test_runs/mwpc_stage_c/pi_six_geometry_2m_timing_v1/full/pages/
+      pi_pitch_fieldwire_timing_dashboard_v3_en.html
+
+Open in Windows from WSL:
+
+    FILE="$HOME/na6p/src/NA6PRoot-mwpc/test_runs/mwpc_stage_c/pi_six_geometry_2m_timing_v1/full/pages/pi_pitch_fieldwire_timing_dashboard_v3_en.html"
+    explorer.exe "$(wslpath -w "$FILE")"
+
+A detailed physics slide deck should wait for parent-level uncertainty
+analysis and controlled normalisation/efficiency comparisons.
