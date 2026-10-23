@@ -210,7 +210,7 @@ def sum_across_stations(records):
                 # RMS cannot be recovered from the station-level rounded
                 # moments alone. Instead preserve exact mean and RMS by
                 # reconstructing E[t^2] from the unrounded station values.
-                if r["known"]:
+                if r["known_times"]:
                     b["sum_drift_ns"]+=r["known_times"]*r["mean_ns"]
                     b["sum_drift_ns2"]+=r["known_times"]*(
                         r["centered_rms_ns"]**2+r["mean_ns"]**2)
