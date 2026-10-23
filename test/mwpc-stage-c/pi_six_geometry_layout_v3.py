@@ -80,8 +80,11 @@ def construct_payload(blob,source,station):
         "meta":meta,"sourceNames":list(meta["gas_hit_counts"]),
         "selected_source":source,"selected_station":station,
         "layout":layout,"groups":data,"dashboard_version":VERSION,
-        "scope":"First 3000 GENERATED Geant4 dimuon parents/source; B=0 "
-                "transport lookup, six p/field-wire configurations.",
+        "scope":(
+            f"{int(meta.get('n_generated_parent_events_per_source',3000)):,} "
+            "GENERATED Geant4 dimuon parents/source; B=0 transport lookup, "
+            "six p/field-wire configurations."
+        ),
     }
     return payload
 
@@ -126,7 +129,7 @@ def render(source_file,out,source,station,template=TEMPLATE):
     return dest
 
 
-def make_portal(output,refs):
+def make_portal(output,refs,n_generated_parent_events_per_source=3000):
     """Browsable local launcher, source-station URLs are all relative."""
     cards=[]
     for src,st in refs:
@@ -162,6 +165,20 @@ padding:14px}.card:hover{border-color:#59d9c5;background:#24435a}
 LUT; не пороговая электроника. Базовые результаты не изменяются.</p>
 </body></html>"""
     source=source.replace("__CARDS__","\n".join(cards))
+    nparents=int(n_generated_parent_events_per_source)
+    if nparents!=3000:
+        if nparents<3000:raise ValueError("Unsupported high-stat portal exposure")
+        source=source.replace(
+            "реальный нативный первый чанк Geant4/Heed + шесть Garfield",
+            f"{nparents:,} сгенерированных родительских событий на источник; "
+            "Geant4/Heed + шесть Garfield"
+        )
+        source=source.replace(
+            '<p><a href="index.html">Упрощённый обзор</a> ·\n'
+            '<a href="../pi_six_geometry_native_timing.html">\n'
+            'Первоначальный подробный дашборд</a></p>',"")
+        if "реальный нативный первый чанк" in source:
+            raise AssertionError("Old first-chunk label in high-stat portal")
     portal=Path(output)/"pi_pitch_fieldwire_timing_dashboard_v3.html"
     portal.write_text(source,encoding="utf-8")
     return portal
