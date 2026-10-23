@@ -38,7 +38,7 @@ def main():
     assert math.isclose(out["mean_ns"],float(np.mean(truth)),abs_tol=1.e-12)
     assert math.isclose(out["rms_ns"],float(np.std(truth)),abs_tol=1.e-12)
     assert out["angle_n"]==5 and out["phi_n"]==5
-    assert out["angle_hist"][3]==5
+    assert out["angle_hist"][3]==3 and out["angle_hist"][4]==2
     # Arithmetic mean of individual chunk RMS is NOT true merged RMS.
     assert abs(out["rms_ns"]-(np.std(t1)+np.std(t2))/2)>1.e-2
     # Original first-chunk pipeline still supports source overview by
