@@ -93,13 +93,18 @@ void audit_pi_muon_truth_bank(const char* directory, int expected_events = 50000
       const auto& particle=tracks->at(id);
       const int mother=particle.GetFirstMother();
       if (mother>=0 && mother<static_cast<int>(tracks->size()))++nmother;
-      for (const auto x: {hit.getXIn(),hit.getYIn(),hit.getZIn(),
-                          hit.getXOut(),hit.getYOut(),hit.getZOut(),
-                          hit.getPXIn(),hit.getPYIn(),hit.getPZIn(),
-                          hit.getPXOut(),hit.getPYOut(),hit.getPZOut(),
-                          hit.getTime(),hit.getHitValue(),
-                          particle.Px(),particle.Py(),particle.Pz(),
-                          particle.Vx(),particle.Vy(),particle.Vz()}) {
+      // NA6PMuonSpecHit getters are float; TParticle getters are double.
+      // Force an explicit double-valued list instead of letting C++ deduce
+      // conflicting initializer_list element types (ACLiC compilation error).
+      const std::vector<double> measured_values{
+          hit.getXIn(),hit.getYIn(),hit.getZIn(),
+          hit.getXOut(),hit.getYOut(),hit.getZOut(),
+          hit.getPXIn(),hit.getPYIn(),hit.getPZIn(),
+          hit.getPXOut(),hit.getPYOut(),hit.getPZOut(),
+          hit.getTime(),hit.getHitValue(),
+          particle.Px(),particle.Py(),particle.Pz(),
+          particle.Vx(),particle.Vy(),particle.Vz()};
+      for (const double x: measured_values) {
         if (!std::isfinite(x)) {
           fail("Nonfinite native particle vertex, momentum, hit or time");return;
         }
