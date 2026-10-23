@@ -112,7 +112,7 @@ import sys,json
 print(json.load(open(sys.argv[1]))["frozen_inputs"]["workers"])
 PY
 )"
-echo "PHASE 1/3: Native Geant4; preserve original 298-detector geometry."
+echo "PHASE 1/4: Native Geant4; preserve original 298-detector geometry."
 python3 "$HERE/run_pi_geant4_campaign.py" \
   --mode full --events-per-source 2000000 --chunk-size 50000 \
   --workers "$WORKERS" --hours 0 --min-free-gib 35 --suite "$SUITE"
@@ -121,12 +121,17 @@ if [[ ! -f "$SUITE/campaign_complete.json" ]]; then
   echo "No new exports/folds started. Extend disk, then rerun start."
   exit 5
 fi
-echo "PHASE 2/3: ROOT exports; source+chunk+event identity retained."
+echo "PHASE 2/4: ROOT exports; source+chunk+event identity retained."
 python3 "$HERE/pi_2m_export_completed_chunks.py" \
   --root "$(command -v root)" --max-chunks-per-source 40
-echo "PHASE 3/3: Matched six frozen Garfield LUTs and common Heed births."
+echo "PHASE 3/4: Matched six frozen Garfield LUTs and common Heed births."
 python3 "$HERE/pi_2m_native_six_geometry_fold.py" fold \
   --channel all --station -1 --chunks 40
+echo "PHASE 4/4: measured computational runtime comparison."
+echo "This compares the same Heed clusters with nearest-anode Poisson/"
+echo "binomial geometry versus six FROZEN Garfield LUTs, separately"
+echo "recording one-time microscopic Garfield grid production costs."
+python3 "$HERE/pi_2m_runtime_comparison.py" benchmark
 echo "PRODUCTION PASS: 120 Geant4 chunks, 120 native exports, "
 echo "720 station/chunk six-Garfield folds. Strict 40-chunk final merge "
 echo "and parent-bootstrap to be handled separately; 100k reports preserved."
