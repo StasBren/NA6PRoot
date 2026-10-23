@@ -38,9 +38,14 @@ def translate_page(src,dst,kind,*,write=True):
     if kind in ("layout","detail") and len(embedded)!=1:
         raise ValueError(f"Expected EXACTLY one frozen analysis JSON payload: {src}")
     if kind in ("layout","detail"):
-        source_data=json.loads(DATA_TAG.search(html).group(2))
-        physics_meta=(source_data.get("meta") or {})
-        nparents=physics_meta.get("n_generated_parent_events_per_source")
+        # The per-anode pages can embed tens of megabytes of group JSON.
+        # Check frozen exposure directly in the metadata text without
+        # deserialising every electron bin into a second Python object tree.
+        data_text=DATA_TAG.search(html).group(2)
+        exposure=re.search(
+            r'"n_generated_parent_events_per_source"\s*:\s*(\d+)',
+            data_text[:131072])
+        nparents=int(exposure.group(1)) if exposure else None
         if nparents!=100_000:
             raise ValueError(
                 f"Refusing English 100k label: true parent exposure is {nparents}"
