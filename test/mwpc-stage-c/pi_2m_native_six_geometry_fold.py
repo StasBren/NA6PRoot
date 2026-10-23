@@ -211,6 +211,8 @@ def merge(out,limit,number):
     portal.mkdir(parents=True,exist_ok=True)
     all_refs=[]
     for channel in CHANNELS:
+        source_hits=0
+        expected_immutable=None
         for station in range(6):
             combined=defaultdict(Count)
             provenance=[]
@@ -228,6 +230,14 @@ def merge(out,limit,number):
                    m["n_generated_parent_events_in_chunk"]!=50000 or \
                    sha_file(path)!=m["gzip_sha256"]:
                     raise ValueError(f"Inconsistent merge inputs: {path}")
+                same_keys=("garfield_map_provenance","heed_tracks_sha256",
+                           "heed_clusters_sha256","fold_source_sha256",
+                           "fold_driver_sha256","rng_semantics")
+                fingerprint={k:m["immutable_inputs"][k] for k in same_keys}
+                if expected_immutable is None:
+                    expected_immutable=fingerprint
+                elif fingerprint!=expected_immutable:
+                    raise ValueError(f"Attempted mixed physics provenance: {path}")
                 with gzip.open(path,"rt",encoding="utf-8") as f:
                     shard=json.load(f)
                 if shard["group_count"]!=m["n_groups"]:
@@ -241,6 +251,7 @@ def merge(out,limit,number):
             validate_conservation(combined)
             if hits<=0:
                 raise ValueError("Zero total muon gas hit source exposure")
+            source_hits+=hits
             meta={
                 "model_version":VERSION,
                 "data_scope":"SIX-GEOMETRY NATIVE Geant4/Heed/Garfield, "
@@ -278,6 +289,16 @@ def merge(out,limit,number):
             print(f"PASS merged source {SOURCE[channel]} MS{station}: "
                   f"{hits:,} real native muon gas hits, "
                   f"{len(combined):,} groups",flush=True)
+        expected_hits=sum(crossing_provenance(channel,i)[1][
+            "n_muon_gas_crossings"] for i in range(1,number+1))
+        if source_hits!=expected_hits:
+            raise ValueError(
+                f"Native source muon exposure mismatch {channel}: "
+                f"{source_hits:,} folded across six stations vs "
+                f"{expected_hits:,} verified exported muon crossings")
+        print(f"PASS source exposure {channel}: {source_hits:,} "
+              "unique real muon gas segments across all six stations",
+              flush=True)
     launcher=make_portal(portal,all_refs)
     print("PASS: complete 100k-generated-parent/channel first two ROOT "
           "chunks refolded through six frozen Garfield LUTs.")
