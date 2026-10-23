@@ -50,6 +50,8 @@ for ch in ("Jpsi","Phi","Omega"):
 print("INVENTORY PASS: six 50k Geant4 checkpoints, event/kine/hit/geometry/"
       "worker truth and native CSV ROOT hashes agree.",flush=True)
 PY
+echo "ARCHIVE: copy actual frozen installed field maps, cuts, source and binaries"
+python3 "$HERE/freeze_pi_2m_transport_inputs.py"
 for source in jpsi phi omega; do
   for chunk in 1 2; do
     dir="$SUITE/$source/$(printf 'chunk%04d' "$chunk")"
