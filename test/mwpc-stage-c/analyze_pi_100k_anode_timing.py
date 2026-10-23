@@ -247,7 +247,18 @@ def render_text(records,totals):
                 f"{r['mean_ns']:7.2f} | {r['centered_rms_ns']:7.2f} | "
                 f"{safe_percent(r['fast_collected_fraction_all_primaries'])} | "
                 f"{safe_percent(r['fraction_ge300_of_known'])}")
-    lines+=["","Paired FIELD WIRE effect at FIXED anode pitch (fw minus no-fw):"]
+    lines+=["","Paired FIELD WIRE effect, pooled over all MS0..MS5 "
+            "gas crossings (fw minus no-fw, at FIXED pitch):"]
+    for source in SOURCES:
+        for p in (3.,3.5,4.):
+            x=totals[(source,tag(p,0.))];y=totals[(source,tag(p,75.))]
+            lines.append(f"  {source:5s} p={p:g}mm: "
+              f"Δcollection = {100*(y['collection_fraction']-x['collection_fraction']):+.2f} pp; "
+              f"Δmean = {y['mean_ns']-x['mean_ns']:+.2f} ns; "
+              f"ΔRMS = {y['centered_rms_ns']-x['centered_rms_ns']:+.2f} ns; "
+              f"Δfast/all = {100*(y['fast_collected_fraction_all_primaries']-x['fast_collected_fraction_all_primaries']):+.2f} pp")
+    lines+=["","Paired FIELD WIRE effect within each station "
+            "(fw minus no-fw):"]
     for source in SOURCES:
         for st in range(6):
             cfgs=records[(source,st)]
@@ -454,7 +465,10 @@ def write_reports(records,totals,out):
                     w.writerow({k:r.get(k) for k in COLS})
     summary=render_text(records,totals)
     (out/"summary.txt").write_text(summary,encoding="utf-8")
-    print(summary,flush=True)
+    short=summary.split("Paired FIELD WIRE effect within each station")[0]
+    print(short,flush=True)
+    print("Additional per-station and centre-versus-outer anode results "
+          "are saved to summary.txt and station_summary.csv.")
     print("PASS: 18 station datasets, six frozen geometries, "
           "native anode/chamber/station conservation")
     print("English interactive anode timing:",out/"anode_timing_report_en.html")
