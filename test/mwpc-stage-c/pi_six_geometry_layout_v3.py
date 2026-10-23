@@ -129,7 +129,7 @@ def render(source_file,out,source,station,template=TEMPLATE):
     return dest
 
 
-def make_portal(output,refs,n_generated_parent_events_per_source=3000):
+def make_portal(output,refs,n_generated_parent_events_per_source=None):
     """Browsable local launcher, source-station URLs are all relative."""
     cards=[]
     for src,st in refs:
@@ -165,6 +165,21 @@ padding:14px}.card:hover{border-color:#59d9c5;background:#24435a}
 LUT; не пороговая электроника. Базовые результаты не изменяются.</p>
 </body></html>"""
     source=source.replace("__CARDS__","\n".join(cards))
+    if n_generated_parent_events_per_source is None:
+        # High-stat merge is a different, independent output directory.
+        # Read its already-written VERIFIED native exposure metadata;
+        # never infer an exposure from the directory name.
+        n_generated_parent_events_per_source=3000
+        if refs:
+            src,st=refs[0]
+            channel={"jpsi40-bore":"jpsi","phi40-bore":"phi",
+                     "omega40-bore":"omega"}.get(src)
+            if channel:
+                merged=Path(output).parent/"merged"/channel/f"MS{st}.json"
+                if merged.is_file():
+                    info=json.loads(merged.read_text(encoding="utf-8"))
+                    n_generated_parent_events_per_source=int(
+                        info["meta"].get("n_generated_parent_events_per_source",3000))
     nparents=int(n_generated_parent_events_per_source)
     if nparents!=3000:
         if nparents<3000:raise ValueError("Unsupported high-stat portal exposure")
