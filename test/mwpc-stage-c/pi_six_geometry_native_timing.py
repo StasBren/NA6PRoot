@@ -242,7 +242,8 @@ def birth_sample(row, lam, marks, seed):
     return uvw,quantiles
 
 
-def aggregate(records,root,lam,marks,limit=0):
+def aggregate(records,root,lam,marks,limit=0,*,chunk_key="chunk0001",
+              source_overview=True,station_filter=None):
     """Consume CSV dict rows, no change to native Geant4 or Garfield data.
 
     Stable source parent/event/segment seed. Group key:
@@ -254,16 +255,18 @@ def aggregate(records,root,lam,marks,limit=0):
     for source,row in records:
         if abs(int(row["pdg"]))!=13:
             continue
+        st=int(row["station"]);det=int(row["det_id"])
+        if station_filter is not None and st!=station_filter:
+            continue
         if limit and processed[source]>=limit:
             continue
-        st=int(row["station"]);det=int(row["det_id"])
         if det not in GEOMETRY or GEOMETRY[det].station!=st:
             raise ValueError("Native module geometry identity failure")
         th_u=float(row["theta_u_in_deg"])
         th_w=float(row["theta_w_in_deg"])
         bu,bw=signed_bin(th_u),signed_bin(th_w)
         seed=stable_seed("native-six-pitch-shared-Heed-v1",source,
-            "chunk0001",row["event"],row["hit_index"],row["track_id"])
+            chunk_key,row["event"],row["hit_index"],row["track_id"])
         positions,q=birth_sample(row,lam,marks,seed)
         nprim=len(q)
         processed[source]+=1
@@ -278,7 +281,7 @@ def aggregate(records,root,lam,marks,limit=0):
             phis=samples[idx,4]
             known=np.isfinite(times)&(times>=0)
             edge=int(np.count_nonzero(rawcol&~finite))
-            for src in (source,"all"):
+            for src in ((source,"all") if source_overview else (source,)):
                 # ALL station, chamber, station-angle and chamber-angle.
                 groups=[
                     (src,config,st,-1,-1,"all",-1),
