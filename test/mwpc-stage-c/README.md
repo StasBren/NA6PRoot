@@ -3256,3 +3256,49 @@ User can share summary.txt or station_summary.csv to enable a
 rigorous numerical interpretation and discussion of physical tradeoffs
 based on actual measured results. A separate parent-event bootstrap
 and independent finite-LUT Monte Carlo systematic study should follow.
+
+
+### 2026-10-23: mandatory per-muon truth retention BEFORE 6M launch
+
+The user wants to avoid a future full Geant4 rerun if prototype readout,
+anode layout, Garfield drift, event reconstruction or electronics change.
+The canonical detailed retention specification now lives at:
+  test/mwpc-stage-c/PI_2M_MUON_DATA_RETENTION.md
+
+DO NOT press start before:
+  bash test/mwpc-stage-c/run_pi_weekend_2m.sh check
+
+CHECK now calls:
+  run_pi_2m_truth_preservation_check.sh
+  audit_pi_muon_truth_bank.C
+  freeze_pi_2m_transport_inputs.py
+
+These scripts verify six original 50k-parent ROOT benchmarks with
+event-indexed TParticle/hits, inspect 200 spread events per chunk
+for track associations, require original raw worker ROOT, positive
+Edep gas steps, virtual plane trees, source+chunk ROOT-to-CSV SHA
+consistency; they also archive actual original field/cuts/source and
+simulator-binary file bytes with SHA and immutable snapshot manifest.
+This is only a SAMPLE per-object audit, not a complete simulation proof.
+Every future 50k chunk still passes the original complete ROOT tree
+and SHA validator. Do NOT change frozen Geant4 input source/binaries
+to add diagnostics now: that would conflict with successful 100k chunks.
+
+Stored input is 3 forced dimuon types, NOT realistic minimum-bias
+heavy-ion backgrounds or beam-time occupancy/pileup. MCKine remapped
+track IDs and raw worker original step IDs must not be joined blindly.
+Reference planes are virtual interpolations, not exact sensitive hits.
+The 20-normalized-position-bin station_anode_timing.json uploaded by
+user is a summary, NOT per-muon event data. Original ROOT and native
+CSV are the reusable track bank.
+
+After check PASS:
+  bash test/mwpc-stage-c/run_pi_weekend_2m.sh start
+  bash test/mwpc-stage-c/run_pi_weekend_2m.sh status
+
+Three production stages checkpoint independently; however the current
+40-chunk full merge and parent-event bootstraps are still downstream
+development. Always distinguish user-local simulation clock from
+geometry vs precomputed six-Garfield-LUT postprocessing timing. Separate
+the precomputed LUT creation clock, Heed, Geant4, native ROOT export and
+folding costs in eventual study.
