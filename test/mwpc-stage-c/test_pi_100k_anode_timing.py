@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import math
 import tempfile
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 
 from analyze_pi_100k_anode_timing import (
@@ -81,7 +83,8 @@ def main():
         assert math.isclose(a["mean_ns"],47)
         assert math.isclose(a["centered_rms_ns"],math.sqrt(726),abs_tol=1e-10)
         out=Path(folder)/"analysis"
-        write_reports(records,totals,out)
+        with redirect_stdout(StringIO()):
+            write_reports(records,totals,out)
         page=(out/"anode_timing_report_en.html").read_text()
         assert "id=\"anode\"" in page and "id=\"fast\"" in page
         assert "id=\"time\"" in page and "100,000 generated parents" in page
