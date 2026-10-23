@@ -82,8 +82,13 @@ if [[ -f "$LOG" ]];then echo "--- Last 25 production log lines ---";tail -n 25 "
 }
 if [[ "$MODE" == status ]];then status;exit 0;fi
 preflight
+if [[ "$MODE" == check || "$MODE" == start ]];then
+  echo "MANDATORY: independently audit retained original ROOT muon truth "
+  echo "and stable native TGeo CSV identity on all six benchmark chunks."
+  bash "$HERE/run_pi_2m_truth_preservation_check.sh"
+fi
 if [[ "$MODE" == check ]];then
-  echo "PREFLIGHT PASS (no physics executed).";exit 0
+  echo "PREFLIGHT+TRUTH RETENTION PASS (no physics executed).";exit 0
 fi
 mkdir -p "$OPER"
 if [[ "$MODE" == start ]];then
