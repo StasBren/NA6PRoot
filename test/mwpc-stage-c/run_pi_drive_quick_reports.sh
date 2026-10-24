@@ -35,6 +35,17 @@ FILES=(
   "pi_six_geometry_2m_timing_v1/full/anode_timing_analysis_en/station_summary.csv"
   "pi_six_geometry_2m_timing_v1/full/anode_timing_analysis_en/station_anode_timing.json"
   "pi_six_geometry_2m_timing_v1/full/pages/english_dashboard_manifest.json"
+  "pi_pi_meeting_20261025_v1/selected_data.json"
+  "pi_pi_meeting_20261025_v1/README.txt"
+  "pi_pi_meeting_20261025_v1/01_time_six_station.png"
+  "pi_pi_meeting_20261025_v1/01_time_six_chamber.png"
+  "pi_pi_meeting_20261025_v1/02_time_overlay_station.png"
+  "pi_pi_meeting_20261025_v1/03_numbered_anodes_mean_rms_chamber.png"
+  "pi_pi_meeting_20261025_v1/04_electron_approach_vs_muon_theta_u_heatmaps.png"
+  "pi_pi_meeting_20261025_v1/04_electron_approach_vs_muon_theta_w_heatmaps.png"
+  "pi_pi_meeting_20261025_v1/05_electron_approach_angle_slices_theta_u.png"
+  "pi_pi_meeting_20261025_v1/05_electron_approach_angle_slices_theta_w.png"
+  "pi_pi_meeting_20261025_v1/06_chamber_vs_station.png"
 )
 rclone lsf "$REMOTE" --max-depth 1 >/dev/null || {
   echo "ERROR: Drive remote not reachable" >&2;exit 4;
