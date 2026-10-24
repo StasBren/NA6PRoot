@@ -3302,3 +3302,37 @@ development. Always distinguish user-local simulation clock from
 geometry vs precomputed six-Garfield-LUT postprocessing timing. Separate
 the precomputed LUT creation clock, Heed, Geant4, native ROOT export and
 folding costs in eventual study.
+
+
+### 2026-10-24: 6M campaign resumes + connected Google Drive backup
+
+User reports 120 verified native Geant4 CSV exports COMPLETE, all 120
+Geant4 50k-parent chunks complete, and a later Heed/LUT fold failure:
+Jpsi chunk0009 MS3, event 4040, hit index 3, track 2, detector 110.
+The independent frozen CSV audit finds exactly one sub-eV zero-length
+chord with identical gas entry/exit points, Edep 0.0465400322447 eV,
+out of 78,928 muon crossings; 78,927 were valid.
+
+Do NOT modify the original Heed sampler or fold driver: their SHAs
+are frozen in all earlier manifests. The new compatibility wrapper
+pi_2m_zero_path_compatible_resume.py keeps such an exact zero chord
+in gas-hit exposure but samples Poisson(lambda*0)=0 Heed electrons,
+and writes a separate per-shard exception ledger. Any other invalid
+path is rejected by the original code. A separate regression test and
+one-pass audit_pi_2m_all_native_paths.py on all 120 verified exports
+are now mandatory in run_pi_weekend_2m.sh check/start, so all future
+rare native path anomalies are identified before resuming long folds.
+The main work mode calls this wrapper, and phase 4 runs paired
+Poisson/binomial geometry-vs-six-frozen-Garfield-LUT timing benchmarks
+on matching Heed births for each source/station.
+
+A connected Google Drive project folder was created with ID
+1Svbp3E230YmVk53D0M1AHwTGo6cBxy38 and title NA60plus_MWPC_Research.
+URL: https://drive.google.com/drive/folders/1Svbp3E230YmVk53D0M1AHwTGo6cBxy38
+The user must authorize WSL rclone separately (remote na60drive,
+advanced root_folder_id set to that ID) to upload local WSL results.
+Script run_pi_drive_archive.sh supports check/copy/verify; copy is
+idempotent and non-deleting; verify checks local vs Drive checksums.
+Cloud is an offsite archive and a connector-accessible reporting surface,
+NOT the live native ROOT/Geant4 working filesystem. Preserve all
+original MCKine/Hit/ReferencePlane ROOT and raw worker data locally.
