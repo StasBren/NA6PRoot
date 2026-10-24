@@ -86,6 +86,14 @@ if [[ "$MODE" == check || "$MODE" == start ]];then
   echo "MANDATORY: independently audit retained original ROOT muon truth "
   echo "and stable native TGeo CSV identity on all six benchmark chunks."
   bash "$HERE/run_pi_2m_truth_preservation_check.sh"
+  python3 "$HERE/test_pi_2m_zero_path_compatible_resume.py"
+  # The 120 full ROOT native exports now exist. Validate EVERY recorded
+  # gas path before resuming the expensive 720 station/LUT-fold pipeline.
+  if [[ -f "$EXPORT/omega/chunk0040/crossings_manifest.json" ]]; then
+    echo "AUDIT: all 120 exact native CSV source/chunk files and rare "
+    echo "strict zero-path Geant4 crossings before prolonged Heed folding."
+    python3 "$HERE/audit_pi_2m_all_native_paths.py"
+  fi
 fi
 if [[ "$MODE" == check ]];then
   echo "PREFLIGHT+TRUTH RETENTION PASS (no physics executed).";exit 0
