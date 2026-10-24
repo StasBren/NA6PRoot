@@ -135,10 +135,32 @@ def fold_one_recorded(channel,index,station,limit,pools,provenance,lam,marks,out
 RAW_FOLD_ONE=fold.fold_one
 
 
+def benchmark():
+    """Same zero-chord physics with original matched geometry/LUT clocks."""
+    import pi_geometric_vs_lut_benchmark as bench
+    original=bench.shared_heed_births
+    def sample(row,lam,marks,seed):
+        if not coincident_zero_chord(row):
+            return original(row,lam,marks,seed)
+        coords=np.asarray(
+            [[float(row[f"{a}_in_mm"]) for a in "uvw"],
+             [float(row[f"{a}_out_mm"]) for a in "uvw"]],dtype=np.float64)
+        return (np.empty((0,3)),np.empty(0),np.empty(0),
+                np.empty(0,dtype=np.int64),0.,coords)
+    bench.shared_heed_births=sample
+    # Preserve the original benchmark CLI and all per-config time scopes.
+    sys.argv=[str(Path(bench.__file__))]+sys.argv[2:]
+    bench.main()
+
+
 def run():
-    if len(sys.argv)<2 or sys.argv[1] not in ("fold","smoke"):
+    if len(sys.argv)<2 or sys.argv[1] not in ("fold","smoke","benchmark"):
         raise SystemExit("Usage: python3 pi_2m_zero_path_compatible_resume.py "
-                         "fold --channel all --station -1 --chunks 40")
+                         "fold --channel all --station -1 --chunks 40 OR "
+                         "benchmark --channel Jpsi --chunk 40 --station 0 ...")
+    if sys.argv[1]=="benchmark":
+        benchmark()
+        return
     timing.birth_sample=guarded_birth_sample
     fold.fold_one=fold_one_recorded
     fold.main()
