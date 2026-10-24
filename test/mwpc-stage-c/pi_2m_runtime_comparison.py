@@ -64,7 +64,8 @@ def benchmark():
                     raise ValueError(f"Invalid completed paired runtime benchmark: {outfile}")
                 print(f"SKIP verified matched runtime: {ch} MS{st}",flush=True)
                 continue
-            cmd=[sys.executable,str(HERE/"pi_geometric_vs_lut_benchmark.py"),
+            cmd=[sys.executable,str(HERE/"pi_2m_zero_path_compatible_resume.py"),
+                 "benchmark",
                  "--channel",ch,"--chunk","40","--station",str(st),
                  "--sample-muon-hits",str(SAMPLE),
                  "--out",str(outfile)]
