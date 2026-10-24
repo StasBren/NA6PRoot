@@ -47,6 +47,8 @@ FILES=(
   "pi_pi_meeting_20261025_v1/05_electron_approach_angle_slices_theta_w.png"
   "pi_pi_meeting_20261025_v1/06_chamber_vs_station.png"
   "pi_pi_meeting_20261025_v1/07_time_per_physical_anode_heatmaps.png"
+  "pi_pi_meeting_20261025_v1/08_electron_phi_vs_muon_theta_u_heatmaps.png"
+  "pi_pi_meeting_20261025_v1/08_electron_phi_vs_muon_theta_w_heatmaps.png"
 )
 rclone lsf "$REMOTE" --max-depth 1 >/dev/null || {
   echo "ERROR: Drive remote not reachable" >&2;exit 4;
