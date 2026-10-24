@@ -344,6 +344,48 @@ def plot_angle_overlays(report,axis,out):
     plt.close(fig)
 
 
+def plot_anode_time_heatmaps(report,out):
+    """One 10-ns drift spectrum per physical wire, all 6 pitch/FW options.
+
+    Use each wire's OWN known collected-electron denominator, no invalid
+    primary-electron efficiency claim. Empty wires remain visually masked.
+    Numbered anodes are meaningful within a fixed pitch only.
+    """
+    fig,axes=plt.subplots(2,3,figsize=(15.5,8.4),sharey=True)
+    max_pct=0.
+    matrices=[]
+    for cfg in CONFIGS:
+        pitch=float(cfg.split("_")[0][1:].replace("p","."))
+        n=n_anodes(report["station"],pitch)
+        h=np.full((10,n),np.nan)
+        for row in report["data"][cfg]["anodes"]:
+            if row["known"]>=30:
+                h[:,row["anode"]]=100*np.asarray(row["hist"][:10],
+                                                  dtype=float)/row["known"]
+        matrices.append(h)
+        if np.isfinite(h).any():
+            max_pct=max(max_pct,float(np.nanmax(h)))
+    if max_pct<=0:raise ValueError("No sufficiently sampled physical wires")
+    for cfg,ax,h in zip(CONFIGS,axes.ravel(),matrices):
+        im=ax.imshow(h,origin="lower",aspect="auto",cmap="magma",
+                     vmin=0,vmax=max_pct,extent=(0,h.shape[1],0,100))
+        ax.set_title(config_label(cfg),fontsize=10)
+        ax.set_xlabel("Physical anode number within chamber")
+        ax.set_ylabel("Drift time [ns]")
+    fig.colorbar(im,ax=axes.ravel().tolist(),fraction=.022,pad=.015,
+                 label="Known collected electrons per 10 ns [%]")
+    fig.suptitle(
+        f"Electron drift-time spectrum at EACH numbered anode · "
+        f"DET{report['chosen_detector']} / MS{report['station']} · "
+        f"{report['source']}\n"
+        "Different anode pitch ⇒ different wire grids; blank = fewer than "
+        "30 known-time collected electrons",fontsize=13)
+    fig.subplots_adjust(top=.88,bottom=.09,left=.07,right=.88,
+                        wspace=.22,hspace=.35)
+    fig.savefig(out/"07_time_per_physical_anode_heatmaps.png",dpi=190)
+    plt.close(fig)
+
+
 def plot_station_chamber_comparison(report,out):
     fig,ax=plt.subplots(figsize=(10.5,6.0))
     for level,ls in (("station","-"),("chamber","--")):
@@ -381,6 +423,7 @@ def main():
         plot_six_times(report,level,args.out)
     plot_overlay_times(report,args.out)
     plot_numbered_anode_means(report,args.out)
+    plot_anode_time_heatmaps(report,args.out)
     for axis in ("u","w"):
         plot_angle_heatmaps(report,axis,args.out)
         plot_angle_overlays(report,axis,args.out)
