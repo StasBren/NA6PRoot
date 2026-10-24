@@ -39,6 +39,7 @@ if [[ "$MODE" == check ]];then
   exit 0
 fi
 SKIP=(
+  --exclude '*:Zone.Identifier'
   --exclude '*.incomplete'
   --exclude '*.tmp'
   --exclude '*.lock'
