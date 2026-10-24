@@ -3376,3 +3376,59 @@ separate anomaly ledgers. Production is detached, original 100k and
 newly completed gz station shards are reused. Stage 4 automatically
 compares geometric Poisson/binomial timing against six frozen Garfield
 LUTs with matched Heed births.
+
+
+### 2026-10-25 PI meeting: two separate presentation observables
+
+Use pre-existing, completed, independently validated **100k generated
+parents/source** station-level six-Garfield native merged input; no
+Heed, Garfield, Geant4, 6M campaign, or 720-shard calculations rerun.
+
+The presentation postprocessor:
+`pi_pi_meeting_preliminary_20261025.py`
+
+**Question A**: electron drift time from birth to anode collection, per
+station/per actual chamber/anode, six geometric configurations (3.0, 3.5,
+4.0 mm × grounded 75 µm field-wire absent/present). It produces matched
+six-panel 10 ns histograms, six-curve overlaid distributions, mean/RMS
+for each numbered physical anode versus pitch-normalized position, and
+six-panel heatmaps P(drift time | actual physical anode).
+
+**Question B**: distribution of GARFIELD microscopic last-step electron
+incidence angle with respect to the *local wire surface normal*,
+conditional on native signed muon gas-entrance angles:
+P(alpha_e | theta_mu,u), P(alpha_e | theta_mu,w). Treat theta_u and
+theta_w separately; electron `incidence_normal_deg` (0..180°)
+and signed azimuth `phi_hit_deg` are different observables. The current
+plots use the polar-angle histogram, 10° bins, conditionally normalized
+by collected electrons with finite angle in the corresponding muon
+entrance-angle bin. White heatmap cells have fewer than 200 measured
+finite-angle electrons; no pseudocounts. Muon bin edges are frozen
+(-180,-30,-10,-5,-2,0,2,5,10,30,180) degrees.
+
+The original 100k station inputs are:
+`test_runs/mwpc_stage_c/pi_six_geometry_2m_timing_v1/full/merged/<source>/MS<station>.json`.
+Do **NOT** apply the new script to the incomplete 6M run station shards.
+The script verifies input source/station/100k/six-LUT identity and exact
+per-anode and per-muon-angle conservation before plotting.
+
+```bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git pull --ff-only
+python3 test/mwpc-stage-c/pi_pi_meeting_preliminary_20261025.py \
+  --source Jpsi --station 4 --det 143
+# Outputs (PNG + compact selected_data.json):
+ls -lh test_runs/mwpc_stage_c/pi_pi_meeting_20261025_v1/
+# Publish only this compact preview plus regular numeric QA/status:
+bash test/mwpc-stage-c/run_pi_drive_quick_reports.sh copy
+```
+
+No parent-bootstrap statistical errors nor finite-LUT systematic
+uncertainties are available; electron bins MUST NOT be treated as
+independent parent events. Conditional drift-time histograms retain
+t>=300 ns overflow in their denominator but display up to 120/150 ns
+for legibility; this is electron birth-to-anode time, **not signal time**.
+LUTs are B=0, no avalanche/ion/ASIC/strip electronics effects. Angle
+is the last microscopic step and is **not** the direction of the full
+electron drift path. The 100k presentation subset remains clearly
+separate from the ongoing 6M-parent production.
