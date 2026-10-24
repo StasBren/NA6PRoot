@@ -8,7 +8,7 @@ REPO="$(cd "$HERE/../.." && pwd -P)"
 MODE="${1:-check}"
 REMOTE="${NA60_DRIVE_REMOTE:-na60drive:}"
 SRC="$REPO/test_runs/mwpc_stage_c"
-DEST="${REMOTE%/}/test_runs/mwpc_stage_c"
+DEST="${REMOTE}test_runs/mwpc_stage_c"
 LOG="$HOME/na60plus_drive_archive.log"
 [[ "$#" -eq 1 && "$MODE" =~ ^(check|copy|verify)$ ]] || {
   echo "Usage: bash $0 check|copy|verify" >&2;exit 2;
