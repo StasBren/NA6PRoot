@@ -49,6 +49,13 @@ FILES=(
   "pi_pi_meeting_20261025_v1/07_time_per_physical_anode_heatmaps.png"
   "pi_pi_meeting_20261025_v1/08_electron_phi_vs_muon_theta_u_heatmaps.png"
   "pi_pi_meeting_20261025_v1/08_electron_phi_vs_muon_theta_w_heatmaps.png"
+  "pi_pitch_fieldwire_50_v1/pilot/all_six_configurations.json"
+  "pi_pitch_fieldwire_50_v1/pilot/p3p0_anode_only/summary.json"
+  "pi_pitch_fieldwire_50_v1/pilot/p3p0_field75p0um/summary.json"
+  "pi_pitch_fieldwire_50_v1/pilot/p3p5_anode_only/summary.json"
+  "pi_pitch_fieldwire_50_v1/pilot/p3p5_field75p0um/summary.json"
+  "pi_pitch_fieldwire_50_v1/pilot/p4p0_anode_only/summary.json"
+  "pi_pitch_fieldwire_50_v1/pilot/p4p0_field75p0um/summary.json"
 )
 rclone lsf "$REMOTE" --max-depth 1 >/dev/null || {
   echo "ERROR: Drive remote not reachable" >&2;exit 4;
