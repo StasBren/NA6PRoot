@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Privacy policy for the NA60 MWPC Archive personal rclone and Google Drive synchronization utility.">
+<title>Privacy Policy — NA60 MWPC Archive</title>
+<link rel="stylesheet" href="./site.css">
+</head>
+<body>
+<div class="shell">
+<header class="topbar">
+  <a class="brand" href="./index.html"><span class="mark" aria-hidden="true">⟐</span> NA60 MWPC Archive</a>
+  <nav aria-label="Site pages"><a href="./index.html">Overview</a><a href="./privacy.html" aria-current="page">Privacy policy</a></nav>
+</header>
+<main>
+<section class="hero hero-small">
+  <p class="eyebrow">DATA PRACTICES</p>
+  <h1>Privacy Policy</h1>
+  <p class="lead">This policy describes how the personal NA60 MWPC Archive rclone configuration interacts with Google Drive. The static website itself does not provide a file upload, authentication or hosted storage service.</p>
+  <p class="date">Effective date: 24 October 2026</p>
+</section>
+<article class="policy">
+  <section>
+    <h2>1. What the application is</h2>
+    <p>NA60 MWPC Archive is a personal workflow using the open-source command-line tool <a href="https://rclone.org/" rel="noopener noreferrer">rclone</a> to synchronize selected research files from a user's computer with the user's own Google Drive account. The tool is operated locally, and this website is informational only.</p>
+  </section>
+  <section>
+    <h2>2. Google information accessed</h2>
+    <p>When the user authorizes the Google Drive integration, rclone may access Drive file names, identifiers, paths, sizes, modification timestamps, checksums and file contents needed to perform the user's chosen commands. Depending on the command, it may also upload new files, replace existing files, create folders, or remove files. The Google Drive full-access OAuth scope, if selected, permits broader operations than a single upload.</p>
+    <p>No Gmail messages, Google Contacts or Google Calendar information are requested by this configuration. The data actually accessed depends on which commands and paths the user chooses.</p>
+  </section>
+  <section>
+    <h2>3. How that information is used</h2>
+    <p>Google Drive data is used only to perform the user's locally initiated file synchronization, backup, retrieval and integrity-verification operations. It is not used for advertising, profiling, sale, or training machine-learning models through this utility.</p>
+  </section>
+  <section>
+    <h2>4. Storage and security</h2>
+    <p>OAuth credentials and refresh tokens are managed by rclone in the user's local configuration, normally at <code>~/.config/rclone/rclone.conf</code>, rather than by this public website. The user is responsible for restricting access to that configuration and local machine. The local files remain under the user's control; cloud copies are stored in the user's Google Drive account under Google's applicable terms and security practices.</p>
+    <p>This informational site contains no login form, OAuth callback, upload endpoint or analytics scripts. As a hosting provider, GitHub may process ordinary website access metadata under its own privacy policy.</p>
+  </section>
+  <section>
+    <h2>5. Sharing and disclosure</h2>
+    <p>The NA60 MWPC Archive workflow does not independently send Google Drive file contents to a separate application server, sell Google user data, or share it with advertisers. Data transfers are between the local rclone client and Google's Drive service, subject to the commands the user executes. The user may separately choose to share files from Google Drive or authorize other services; those actions are outside this rclone configuration.</p>
+  </section>
+  <section>
+    <h2>6. Retention and deletion</h2>
+    <p>Data remains on the local computer and/or in the user's Google Drive until the user modifies or deletes it. The user can revoke rclone's access in their Google Account's third-party access settings, remove the local rclone configuration, and delete archived Drive files using Google Drive. Revoking access does not automatically delete files previously uploaded to Drive.</p>
+  </section>
+  <section>
+    <h2>7. Limited use</h2>
+    <p>Use of information received from Google APIs follows the <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener noreferrer">Google API Services User Data Policy</a>, including its Limited Use requirements, insofar as they apply to this local personal workflow.</p>
+  </section>
+  <section>
+    <h2>8. Changes and inquiries</h2>
+    <p>This policy will be updated if the workflow's data practices change. For questions about this personal integration, the maintainer can be contacted through the <a href="https://github.com/StasBren/NA6PRoot/issues" rel="noopener noreferrer">repository issue tracker</a>. Do not post personal research files, authorization codes or credentials in a public issue. The Google consent screen separately identifies the app's support email.</p>
+  </section>
+</article>
+<p class="back"><a href="./index.html">← Back to overview</a></p>
+</main>
+<footer class="footer">
+  <p>Personal research utility; not an official service of NA60+, CERN, Google, GitHub or the rclone project.</p>
+  <p><a href="./index.html">Overview</a><span> · </span><a href="./privacy.html">Privacy policy</a></p>
+  <p class="small">Last updated: 24 October 2026</p>
+</footer>
+</div>
+</body>
+</html>
