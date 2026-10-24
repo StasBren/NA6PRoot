@@ -320,6 +320,43 @@ def plot_angle_heatmaps(report,axis,out):
     plt.close(fig)
 
 
+def plot_azimuth_heatmaps(report,axis,out):
+    """Supplementary signed phi approach-angle study, not circular means."""
+    bounds=report["muon_angle_bin_edges_deg"]
+    labels=[f"{a:g}…{b:g}" for a,b in zip(bounds,bounds[1:])]
+    matrices=[]
+    for cfg in CONFIGS:
+        values,counts=angle_array(report,cfg,axis,"station",
+                                  angle_field="phi_hist")
+        values[counts<200,:]=np.nan
+        matrices.append(values)
+    vmax=max([100*np.nanmax(v) for v in matrices if np.isfinite(v).any()]
+             +[1.0])
+    fig,axs=plt.subplots(2,3,figsize=(16,9),sharex=True,sharey=True)
+    im=None
+    for cfg,ax,v in zip(CONFIGS,axs.ravel(),matrices):
+        im=ax.imshow(100*v.T,origin="lower",aspect="auto",
+                     vmin=0,vmax=vmax,cmap="cividis")
+        ax.set_title(config_label(cfg),fontsize=10)
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels(labels,rotation=65,ha="right",fontsize=7)
+        ax.set_yticks(np.arange(0,36,5))
+        ax.set_yticklabels([f"{-180+10*i}°" for i in range(0,36,5)])
+        ax.set_xlabel(f"Signed muon entrance θ_{axis} [degrees]")
+        ax.set_ylabel("Electron last-step azimuth φ [degrees]")
+    fig.colorbar(im,ax=axs.ravel().tolist(),fraction=.02,pad=.015,
+                 label="Known-azimuth collected electrons per 10° [%]")
+    fig.suptitle(f"Supplementary arrival-direction azimuth: "
+        f"P(φ_e | signed muon θ_{axis})\n"
+        f"{report['source']} · MS{report['station']} · six Garfield LUTs; "
+        "phi is circular (no arithmetic-mean comparison)",fontsize=13)
+    fig.subplots_adjust(top=.88,bottom=.13,left=.07,right=.88,
+                        hspace=.43,wspace=.28)
+    fig.savefig(out/f"08_electron_phi_vs_muon_theta_{axis}_heatmaps.png",
+                dpi=190)
+    plt.close(fig)
+
+
 def plot_angle_overlays(report,axis,out):
     cfg=tag(3.5,0)
     prob,counts=angle_array(report,cfg,axis,"station")
@@ -427,6 +464,7 @@ def main():
     for axis in ("u","w"):
         plot_angle_heatmaps(report,axis,args.out)
         plot_angle_overlays(report,axis,args.out)
+        plot_azimuth_heatmaps(report,axis,args.out)
     plot_station_chamber_comparison(report,args.out)
     status={
         "source":args.source,"station":args.station,"det_id":args.det,
