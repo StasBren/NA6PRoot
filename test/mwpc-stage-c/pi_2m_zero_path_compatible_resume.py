@@ -49,15 +49,19 @@ def hashed(p):
 
 
 def coincident_zero_chord(row):
+    # The overwhelming majority of real muon crossings have positive
+    # lengths. Avoid creating NumPy arrays for tens of millions of hits.
+    length=float(row["path_length_mm"])
+    if length!=0.:
+        return False  # Original sampler performs all normal-path validation.
     try:
-        length=float(row["path_length_mm"])
         edep=float(row["edep_eV"])
         points=np.asarray(
             [[float(row[f"{a}_in_mm"]) for a in "uvw"],
              [float(row[f"{a}_out_mm"]) for a in "uvw"]],dtype=np.float64)
     except (KeyError,ValueError,TypeError) as err:
-        raise ValueError("Bad native crossing schema, not a physical zero chord") from err
-    if (length != 0. or not np.isfinite(points).all() or
+        raise ValueError("Bad zero-length native crossing schema") from err
+    if (not np.isfinite(points).all() or
         not np.array_equal(points[0],points[1]) or
         abs(points[:,1]).max()>3.05 or not math.isfinite(edep) or
         not 0<=edep<NORMALIZED_EDEP_LIMIT_EV):
