@@ -108,7 +108,17 @@ echo "NEW Garfield physics calculation: six independent configs."
 echo "p=3,3.5,4mm; with/without grounded midpoint field wires; B=0."
 echo "Field-wire diameter: $FIELD_DIAM_UM um (requested study setting)."
 echo "Mode=$MODE; trials/box=$SAMPLES."
+# Keep historical defaults unchanged; new high-stat LUTs require an explicit
+# namespace and seed to avoid modifying/overwriting the frozen 20-trial maps.
+EXTRA_ARGS=()
+if [[ -n "${NA60_PI_PITCH_LUT_OUT:-}" ]]; then
+  EXTRA_ARGS+=(--out "$NA60_PI_PITCH_LUT_OUT")
+fi
+if [[ -n "${NA60_PI_PITCH_LUT_SEED:-}" ]]; then
+  EXTRA_ARGS+=(--seed "$NA60_PI_PITCH_LUT_SEED")
+fi
 python3 "$HERE/pi_pitch_fieldwire_pilot.py" \
  --mode "$MODE" --samples "$SAMPLES" \
- --field-wire-diam-um "$FIELD_DIAM_UM"
+ --field-wire-diam-um "$FIELD_DIAM_UM" \
+ "${EXTRA_ARGS[@]}"
 echo "PASS: new independent pitch/field-wire $MODE finished."
