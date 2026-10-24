@@ -3336,3 +3336,43 @@ idempotent and non-deleting; verify checks local vs Drive checksums.
 Cloud is an offsite archive and a connector-accessible reporting surface,
 NOT the live native ROOT/Geant4 working filesystem. Preserve all
 original MCKine/Hit/ReferencePlane ROOT and raw worker data locally.
+
+
+### 2026-10-24: WORK LOCALLY, incremental Google Drive research results only
+
+The full 252GiB rclone archive is rate-limited by many tiny files
+(including Windows Zone.Identifier sidecars). User decided to pause the
+full transfer and continue the checkpointed six-LUT local fold immediately.
+Stop the original rclone copy with Ctrl+C in its OWN terminal; already
+copied Google Drive objects and WSL originals are retained. The big
+archive can be resumed by copy/verify later, without a destructive move.
+
+The new `run_pi_drive_results_only.sh` handles only the valuable new
+local physics outputs, excluding original Geant4 ROOT and native CSV:
+
+    bash test/mwpc-stage-c/run_pi_drive_results_only.sh check
+    bash test/mwpc-stage-c/run_pi_drive_results_only.sh copy
+    bash test/mwpc-stage-c/run_pi_drive_results_only.sh verify
+
+It copies only full six-geometry Heed/Garfield station shards and
+reports, 6M operations provenance including 120-path audit and matched
+runtime benchmarks, plus existing paired benchmark JSONs. `copy` is
+resumable, non-deleting, excludes incomplete/temp and Zone.Identifier,
+and skips files younger than 2 minutes. To avoid drive load, run it
+occasionally or after the fold pauses/completes, not concurrently with
+the original all-file archive process. `verify` after production and
+copy settle.
+
+To resume native physics preserving all previously completed fold SHA:
+
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_weekend_2m.sh check
+    bash test/mwpc-stage-c/run_pi_weekend_2m.sh start
+    bash test/mwpc-stage-c/run_pi_weekend_2m.sh status
+
+`check/start` validate 120 native CSV gas paths; the new wrapper keeps
+exactly zero-length sub-eV chords with zero new Heed electrons and records
+separate anomaly ledgers. Production is detached, original 100k and
+newly completed gz station shards are reused. Stage 4 automatically
+compares geometric Poisson/binomial timing against six frozen Garfield
+LUTs with matched Heed births.
