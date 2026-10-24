@@ -125,7 +125,11 @@ echo "PHASE 2/4: ROOT exports; source+chunk+event identity retained."
 python3 "$HERE/pi_2m_export_completed_chunks.py" \
   --root "$(command -v root)" --max-chunks-per-source 40
 echo "PHASE 3/4: Matched six frozen Garfield LUTs and common Heed births."
-python3 "$HERE/pi_2m_native_six_geometry_fold.py" fold \
+# Preserve pi_2m_native_six_geometry_fold.py's frozen source SHA.
+# Strict verified zero-path native crossings are assigned Poisson(0)
+# Heed electrons but remain counted as crossed gas segments; a separate
+# per-shard exception ledger is saved. All nonzero paths unchanged.
+python3 "$HERE/pi_2m_zero_path_compatible_resume.py" fold \
   --channel all --station -1 --chunks 40
 echo "PHASE 4/4: measured computational runtime comparison."
 echo "This compares the same Heed clusters with nearest-anode Poisson/"
