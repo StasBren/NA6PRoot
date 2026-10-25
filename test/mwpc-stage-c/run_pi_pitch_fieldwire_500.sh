@@ -37,7 +37,7 @@ pid_running() {
   [[ "$pid" =~ ^[0-9]+$ ]] || return 1
   kill -0 "$pid" 2>/dev/null || return 1
   # Avoid a stale PID file accidentally matching some unrelated process.
-  ps -p "$pid" -o args= 2>/dev/null | grep -q 'run_pi_pitch_fieldwire_pilot.sh pilot 75 50'
+  ps -p "$pid" -o args= 2>/dev/null | grep -q 'run_pi_pitch_fieldwire_pilot.sh pilot 75 500'
 }
 
 if [[ "$MODE" == start ]]; then
