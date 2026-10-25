@@ -77,6 +77,15 @@ def main():
         assert 'MS"+S.st+"_layout_v3_en.html"' in text
         assert "id=\"timeScale\"" in text
         assert "id=\"arrival\"" in text
+        # Offline multi-chamber controls and native six-plot modes must
+        # survive localization without rewriting the embedded physics JSON.
+        for marker in ('id="detList"','id="timeMode"',
+                       'id="angleMode"','id="timeRebin"',
+                       'id="angleRebin"','id="timeMultiples"',
+                       'id="arrivalMultiples"','function mergeChambers',
+                       'function rebinCounts','function setChambers',
+                       'out.mean_ns=out.known','Cannot subdivide a frozen histogram'):
+            assert marker in text, marker
         # Render real detailed page HTML + real Python static fallback,
         # using small but physically conserved synthetic histogram rows.
         detail_json=base/"mock_station.json"
