@@ -20,6 +20,33 @@ explorer.exe test_runs/mwpc_stage_c/pi_full_jpsi_2m_dashboard_v1/pages
 
 Open `pages/index.html` locally (ideally Firefox/Chrome/Edge; pages embed their physical data and work offline). Each of the six station links contains an interactive XY physical chamber map, numbered anodes, full 10 ns birth-to-anode electron drift PDF, signed muon entrance angle slices θu/θw, Garfield last-step approach angle relative to the inward wire normal and wire-surface impact-position azimuth φ (not a direction azimuth), and six pitch/field-wire geometries. There is also a detailed spectrum dashboard for every station, with logarithmic Y and time/angle selections.
 
+## Wire-surface electron impact-position φ_hit: every station and DET
+
+The main dashboard `pages/index.html` now links to a six-station polar atlas.
+Each station page `pages/jpsi40-bore/MS0_phi_atlas.html` through `MS5_phi_atlas.html`
+includes *every physical chamber* and an `Entire station` option. Chambers
+without finite-φ collected electrons remain visibly empty. Six polar histograms
+compare 3, 3.5, and 4 mm pitches with and without the grounded 75 μm field wire.
+The selected Geant4 muon entrance angle can be all, signed θu, or signed θw.
+The common radial scale is normalized by the finite-φ electron count in
+each selected configuration and angle bin. The page also displays the
+field-wire vs no-field-wire histogram total-variation distance and the
+separate absolute anode collection fractions.
+
+The machine-readable `phi_atlas_stats.csv` contains results for every
+(station, DET, pitch) combination, including station-wide sums. New atlas
+pages and CSV are included in the complete SHA256 manifest and Drive export.
+Raw physical-anode groups are excluded to avoid double counting; the
+per-chamber and per-angle phi histograms must conserve station-wide counts.
+Run the normal dashboard `start` command again to add this atlas to a
+previously built dashboard: already SHA-verified station JSON and legacy
+HTML are reused without rerunning Geant4, Heed, Garfield, or frozen folds.
+
+φ_hit is the electron ENDPOINT POSITION on the anode circumference,
+not the electron velocity direction or incidence angle. The 2M value counts
+generated J/ψ parents, not independent electron tracks. No parent-event
+bootstrap error bars are claimed, and the original B=0 / 20-trial-per-cell
+Garfield limitations remain.
 Both **English** `*_en.html` and Russian `.html` variants are generated; the dashboard landing page and numerical CSV are in English. Existing source/station/DET shapes and physical anode numbers are used directly; no interpolation or modeled curves are substituted.
 
 ## How the science is verified
@@ -28,7 +55,7 @@ Both **English** `*_en.html` and Russian `.html` variants are generated; the das
 2. On build, all source gzip files are SHA256-verified and their original per-chunk full Heed/Garfield six-LUT fingerprints checked, including the frozen 20-independent-microscopic-trials-per-box Garfield provenance.
 3. All raw histogram counts and *unrounded electron moments* are summed; no re-sampling. Per-anode → chamber → station time histograms and both signed muon-angle bin sets are conserved across the entire source.
 4. For each station, one merged JSON, four independent Russian/English HTML pages and SHA-pinned compact statistics are retained in the new, isolated dashboard folder. A successful rerun verifies finished outputs and skips them.
-5. `verify` checks all six station JSON/HTML SHA256 digests, the 40 input manifest SHA256 values for each station, the portal and the summary CSV.
+5. `verify` checks all six station JSON/HTML SHA256 digests, the 40 input manifest SHA256 values for each station, the portal, φ_hit atlas pages, and the summary CSV files.
 
 ## Data scope
 
@@ -51,4 +78,4 @@ bash test/mwpc-stage-c/run_pi_drive_full_jpsi_2m_dashboard.sh copy
 bash test/mwpc-stage-c/run_pi_drive_full_jpsi_2m_dashboard.sh verify
 ```
 
-Publishes only the standalone HTML pages, the portal, station numerical summaries and a complete manifest to `na60drive:test_runs/mwpc_stage_c/pi_full_jpsi_2m_dashboard_v1`. Large native ROOT files, original Heed fold .gz checkpoints and merged source JSON remain on local WSL. HTML previews inside Google Drive might not execute JavaScript: download/open the HTML files locally for full interactivity.
+Publishes only standalone HTML pages (including φ_hit atlases), the portal, numerical summaries, phi_atlas_stats.csv and a complete manifest to `na60drive:test_runs/mwpc_stage_c/pi_full_jpsi_2m_dashboard_v1`. Large native ROOT files, original Heed fold .gz checkpoints and merged source JSON remain on local WSL. HTML previews inside Google Drive might not execute JavaScript: download/open the HTML files locally for full interactivity.
