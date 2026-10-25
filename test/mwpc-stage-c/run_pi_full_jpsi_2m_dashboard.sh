@@ -34,6 +34,11 @@ if [[ "$MODE" == status ]]; then
     fi
   done
   echo "Station dashboards: $completed/6 (40 completed 50k-parent chunks each)"
+  for st in 0 1 2 3 4 5; do
+    if [[ -f "$BASE/pages/jpsi40-bore/MS${st}_phi_atlas.html" ]];then
+      echo "PHI ATLAS READY: MS$st (all physical DET modules)"
+    fi
+  done
   if active; then echo "RUNNING builder PID=$(cat "$PIDFILE")"
   else echo "No active dashboard builder detected";fi
   if [[ -f "$BASE/complete_dashboard_manifest.json" ]];then
@@ -46,7 +51,10 @@ if [[ "$MODE" == status ]]; then
   exit 0
 fi
 
-python3 -m py_compile "$SCRIPT" "$HERE/build_pi_100k_english_dashboard.py"
+python3 -m py_compile "$SCRIPT" "$HERE/build_pi_100k_english_dashboard.py" \
+  "$HERE/pi_full_jpsi_2m_phi_atlas.py" \
+  "$HERE/test_pi_full_jpsi_2m_phi_atlas.py"
+python3 "$HERE/test_pi_full_jpsi_2m_phi_atlas.py"
 if [[ "$MODE" == check ]];then
   python3 "$SCRIPT" check
   exit
@@ -61,7 +69,7 @@ if active;then
 fi
 python3 "$SCRIPT" check
 echo "BUILD: read-only 240 SHA-verified Jpsi/6-station fold checkpoints."
-echo "Output: $BASE/pages/index.html"
+echo "Output: $BASE/pages/index.html (includes all-chamber phi atlas)"
 echo "Original 6M Geant4 + Heed/Garfield continues uninterrupted."
 nohup nice -n 15 python3 "$SCRIPT" build \
   > "$LOG" 2>&1 < /dev/null &
