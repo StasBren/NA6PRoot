@@ -259,6 +259,8 @@ function chooseUI(){
  $("axis").disabled=S.wire>=0;
  $("detailPage").href="MS"+S.st+".html";
  $("phiAtlas").href="MS"+S.st+"_phi_atlas.html";
+ $("phiAtlas").hidden=!(D.meta.n_generated_parent_events_per_source===2000000 &&
+    S.src==="jpsi40-bore");
 }
 function mapColor(c){
  const b=directLookup(S.cfg,c.id,S.bin,-1);
@@ -389,7 +391,8 @@ function histogram(root,series,opts){
  const nonzero=series.flatMap(s=>s.values.filter(v=>v>0));
  const ymax=Math.max(opts.ymax||1,1e-8);
  const log=!!opts.log&&nonzero.length>0;
- const ymin=log?Math.pow(10,Math.floor(Math.log10(Math.min(...nonzero)))-1):0;
+ const ymin=log?(opts.logMin||
+   Math.pow(10,Math.floor(Math.log10(Math.min(...nonzero)))-1)):0;
  const ytop=log?Math.pow(10,Math.ceil(Math.log10(ymax))):ymax;
  const y=v=>log
    ? y1-(y1-y0)*(Math.log10(Math.max(v,ymin))-Math.log10(ymin))/
@@ -490,9 +493,13 @@ function renderTime(){
  const all=configs.map(c=>makeSeries(c,"hist","known",S.timeRebin,false));
  const chosen=all.find(x=>x.cfg===S.cfg);
  const plotSeries=S.timeMode==="single"?[chosen]:all;
+ const positive=plotSeries.flatMap(x=>x.values.filter(v=>v>0));
+ const sameLogMin=positive.length?Math.pow(10,
+   Math.floor(Math.log10(Math.min(...positive)))-1):null;
  const common={left:0,right:300,binWidth:S.timeRebin,angular:false,
    xLabel:"Время дрейфа от рождения до анода, нс",ticks:6,
-   log:S.scale==="log",ymax:maxProbability(plotSeries)*1.15};
+   log:S.scale==="log",logMin:sameLogMin,
+   ymax:maxProbability(plotSeries)*1.15};
  const inPanels=S.timeMode==="panels";
  $("time").hidden=inPanels;$("timeMultiples").hidden=!inPanels;
  $("legend").hidden=inPanels;
@@ -563,7 +570,11 @@ function draw(){
  renderComparison();
  const valid=lookup();
  $("diagnostic").textContent=valid?"":"Нет подходящих данных для выбора; измените фильтр.";
- if($("map").children.length>5&&$("time").children.length>5&&
+ const timeOk=S.timeMode==="panels"?
+    $("timeMultiples").children.length===6:$("time").children.length>5;
+ const arrivalOk=S.angleMode==="panels"?
+    $("arrivalMultiples").children.length===6:$("arrival").children.length>5;
+ if($("map").children.length>5&&timeOk&&arrivalOk&&
     $("statistics").children.length>=9){
    $("staticFallback").hidden=true;
  }
