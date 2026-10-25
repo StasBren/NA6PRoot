@@ -20,6 +20,44 @@ explorer.exe test_runs/mwpc_stage_c/pi_full_jpsi_2m_dashboard_v1/pages
 
 Open `pages/index.html` locally (ideally Firefox/Chrome/Edge; pages embed their physical data and work offline). Each of the six station links contains an interactive XY physical chamber map, numbered anodes, full 10 ns birth-to-anode electron drift PDF, signed muon entrance angle slices θu/θw, Garfield last-step approach angle relative to the inward wire normal and wire-surface impact-position azimuth φ (not a direction azimuth), and six pitch/field-wire geometries. There is also a detailed spectrum dashboard for every station, with logarithmic Y and time/angle selections.
 
+## NEW: polar azimuth diagrams inside the main XY dashboard
+
+In addition to rectangular electron-angle histograms and the separate
+`MS*_phi_atlas.html`, the main `MS*_layout_v3.html` / `_en.html`
+pages now contain **section 5: two actual 2×3 SVG polar-plot grids**:
+
+- **5a: six polar-bar distributions** of the signed near-anode endpoint
+  azimuth φ_hit, integrated over *all* incoming muon angles;
+- **5b: six polar-line comparisons** P(φ_hit | signed θu or θw) with
+  four most populated muon-angle bins by default, and checkboxes allowing
+  custom selection of up to six nonempty muon-angle bins.
+
+The native **36×10° φ-hit histogram** is drawn around a schematic anode;
+0° = +u, 90° = +v, 180° = -u and 270° = -v. All six panels
+share a common radial probability scale, separately for 5a and 5b.
+Each conditional curve uses its *own* collected finite-φ denominator;
+changing the muon entrance-angle axis resets the auto-angle set.
+The polar grids use *all physical anodes* in the selected DETs, ignoring
+the physical-anode index selector on the time histogram to avoid comparing
+different physical wire positions across different pitches.
+
+Select chambers on the XY map with click / Ctrl+click, or use the checkbox
+multi-select panel. The two polar grids then use station-wide, single-DET
+or exactly summed multi-DET stored chamber φ-histograms. No interpolation,
+finer binning, or independent Garfield sampling is implied.
+
+Below 5a is a **numerical interpretation** for each pitch: quadrupolar
+anisotropy Q2 = mean cos(2φ_hit), FW/no-FW histogram total-variation
+distance, and separately the anode collection fractions. Q2 > 0 indicates
+preferred ±u sectors; Q2 < 0 indicates preferred ±v sectors. This is
+descriptive of B=0 Garfield single-electron drift geometry, not of avalanche
+or electronics response. Parent-level uncertainty estimates are not available.
+
+A previously verified full J/ψ dashboard is updated by repeating the normal
+`run_pi_full_jpsi_2m_dashboard.sh start` command: only existing station
+HTML pages are re-rendered from already merged `MS*.json`, and new
+SHA256 hashes are recorded. All 240 original frozen checkpoints are reused.
+
 ## New XY dashboard controls: multiple DETs, six histogram panels and rebin
 
 The existing `MS0_layout_v3.html` ... `MS5_layout_v3.html` and their
