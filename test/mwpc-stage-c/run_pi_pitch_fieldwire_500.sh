@@ -23,7 +23,7 @@ LOG="$BASE/runner.log"
 SAMPLES=500
 SEED=260500
 FW_UM=75
-MODE="$1"
+MODE="${1:-}"
 if [[ "$#" -ne 1 || ! "$MODE" =~ ^(check|start|status|verify)$ ]]; then
   echo "Usage: bash $0 check|start|status|verify" >&2
   exit 2
@@ -66,7 +66,7 @@ if [[ "$MODE" == start ]]; then
       pilot "$FW_UM" "$SAMPLES" > "$LOG" 2>&1 < /dev/null &
   child=$!
   echo "$child" > "$PIDFILE"
-  echo "Started Garfield 50-trial launcher PID=$child"
+  echo "Started Garfield 500-trial launcher PID=$child"
   echo "Status: bash '$HERE/run_pi_pitch_fieldwire_500.sh' status"
   echo "Log: tail -f '$LOG'"
   exit 0
@@ -166,7 +166,7 @@ if mode=="verify":
     if len(final.get("results",[]))!=2 or len(summary_check)!=2 or \
        {(r["pitch_mm"],r["field_wire_diameter_um"]) for r in final["results"]} != {(3.0,0.0),(3.0,75.0)}:
         raise ValueError("Incomplete two-geometry final summary")
-    print("PASS: TWO p3 LUTs, 500 trajectories/box in each, 900,000 ""
+    print("PASS: TWO p3 LUTs, 500 trajectories/box in each, 900,000 "
           "raw microscopic Garfield trajectories; independent SHA-checked "
           "column checkpoints and electron conservation.")
     print(f"SUM measured independent column wall time: {total_elapsed/3600:.3f} h "
