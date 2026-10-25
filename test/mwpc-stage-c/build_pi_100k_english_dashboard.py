@@ -306,6 +306,32 @@ TRANSLATIONS.extend([
     "No angle bins selected."
   ]
 ])
+TRANSLATIONS.extend([
+  [
+    "Численная интерпретация: Q₂ = ⟨cos(2φ_hit)⟩.",
+    "Quantitative interpretation: Q₂ = ⟨cos(2φ_hit)⟩."
+  ],
+  [
+    "Q₂ > 0 означает преимущественное попадание со сторон ±u; Q₂ < 0 — со сторон ±v.",
+    "Q₂ > 0 means impacts preferentially near ±u; Q₂ < 0 indicates ±v."
+  ],
+  [
+    "TV сравнивает <em>форму нормированных</em> распределений с field wire и без него;",
+    "TV compares the <em>shape of normalized</em> distributions with and without a field wire;"
+  ],
+  [
+    "долю собранных электронов сравниваем отдельно.",
+    "absolute anode collection fractions are compared separately."
+  ],
+  [
+    " мм",
+    " mm"
+  ],
+  [
+    " · сбор: ",
+    " · collection: "
+  ]
+])
 
 def sha(data):
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
