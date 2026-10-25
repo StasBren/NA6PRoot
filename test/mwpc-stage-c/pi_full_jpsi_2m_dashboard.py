@@ -355,7 +355,7 @@ def refresh_layout_ui_if_needed(st):
     """
     folder=PAGES/NAME
     en=folder/f"MS{st}_layout_v3_en.html"
-    marker=b'id="detList"'
+    marker=b'id="polarOverall"'
     with en.open("rb") as handle:
         if marker in handle.read(120_000):
             return False
