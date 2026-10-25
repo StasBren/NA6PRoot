@@ -161,6 +161,11 @@ footer{color:var(--muted);font-size:12px}
 <p>Каждый столбец — 10° по окружности. Радиальная высота — доля от электронов
 с известным φ_hit в данной конфигурации. Масштаб радиуса одинаков для всех шести графиков.</p>
 <div class="polar-grid" id="polarOverall"></div>
+<p class="polar-caption">Численная интерпретация: Q₂ = ⟨cos(2φ_hit)⟩.
+Q₂ > 0 означает преимущественное попадание со сторон ±u; Q₂ < 0 — со сторон ±v.
+TV сравнивает <em>форму нормированных</em> распределений с field wire и без него;
+долю собранных электронов сравниваем отдельно.</p>
+<div id="polarPhysics" class="stats"></div>
 <h3>5b. Зависимость от знакового угла входа мюона — по шесть круговых графиков</h3>
 <p>Каждая цветная линия — нормированное отдельно распределение
 P(φ_hit | θμ). Ось θu/θw берётся из верхнего выбора. По умолчанию
@@ -606,7 +611,7 @@ function polarSector(inner,outer,lo,hi){
         " L"+p3+" A"+inner+" "+inner+" 0 0 1 "+p0+" Z";
 }
 function polarFrame(root,peak){
- root.setAttribute("viewBox","-154 -158 308 318");
+ root.setAttribute("viewBox","-179 -170 358 340");
  for(let i=1;i<=4;i++){
   const r=34+i*23;
   make("circle",{cx:0,cy:0,r,fill:"none",stroke:"#55718a",
@@ -691,10 +696,40 @@ function polarAngularBins(){
   b=>b>=0&&b<edges.length-1).sort((a,b)=>a-b);
  return {ranked,auto,chosen};
 }
+function polarQ2(row){
+ if(!row?.phi_n)return null;
+ let q=0;
+ row.phi_hist.forEach((n,i)=>q+=n*Math.cos(2*(-175+i*10)*Math.PI/180));
+ return q/row.phi_n;
+}
+function polarTV(a,b){
+ if(!a?.phi_n||!b?.phi_n)return null;
+ return .5*a.phi_hist.reduce((acc,n,i)=>
+   acc+Math.abs(n/a.phi_n-b.phi_hist[i]/b.phi_n),0);
+}
+function polarPhysicsSummary(rows){
+ const target=$("polarPhysics");target.replaceChildren();
+ for(let i=0;i<configs.length;i+=2){
+  const no=rows[i].row,fw=rows[i+1].row,dist=polarTV(no,fw);
+  const frac=r=>r?.primaries?100*r.collected/r.primaries:null;
+  const qn=polarQ2(no),qf=polarQ2(fw);
+  const card=document.createElement("span");card.className="stat";
+  const title=document.createElement("b");
+  title.textContent="p = "+[3,3.5,4][i/2].toFixed(1)+" мм";
+  const detail=document.createElement("span");
+  const f=v=>v===null?"—":v.toFixed(3);
+  const percentage=v=>v===null?"—":v.toFixed(2)+"%";
+  detail.textContent="Q₂: "+f(qn)+" → "+f(qf)+
+   " · TV="+f(dist)+" · сбор: "+
+   percentage(frac(no))+" → "+percentage(frac(fw));
+  card.append(title,detail);target.append(card);
+ }
+}
 function renderPolar(){
  const all=configs.map(cfg=>({cfg,row:lookup(cfg,S.det,-1,-1)}));
  const maxAll=Math.max(0,...all.flatMap(({row})=>row?.phi_n?
    row.phi_hist.map(n=>100*n/row.phi_n):[0]));
+ polarPhysicsSummary(all);
  const {auto,chosen}=polarAngularBins();
  const colors=chosen.map((bin,i)=>({bin,color:polarColors[i%polarColors.length]}));
  const maxConditional=Math.max(0,...configs.flatMap(cfg=>
