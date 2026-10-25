@@ -148,14 +148,76 @@ const $=id=>document.getElementById(id),NS="http://www.w3.org/2000/svg";
 const SOURCE_NAMES={"jpsi40-bore":"J/ψ","phi40-bore":"ϕ","omega40-bore":"ω"};
 const styles=["#59d9c5","#82b5ff","#ffbe79","#d4a3fa","#f08490","#a3d36f"];
 const configs=Object.keys(D.meta.garfield_luts);
-const S={src:D.selected_source,st:D.selected_station,cfg:"p3p0_anode_only",det:-1,wire:-1,axis:"u",bin:-1,overlay:false,arrival:"incidence",scale:"linear"};
+const S={src:D.selected_source,st:D.selected_station,cfg:"p3p0_anode_only",det:-1,selectedDets:null,wire:-1,axis:"u",bin:-1,timeMode:"panels",angleMode:"panels",timeRebin:10,angleRebin:10,arrival:"incidence",scale:"linear"};
 const entries=new Map(D.groups.map(g=>[
  [g.source,g.config,g.station,g.det_id,g.anode,g.axis,g.anglebin].join("|"),g]));
 const chambers=D.layout;
-function lookup(cfg=S.cfg,det=S.det,bin=S.bin,wire=S.wire){
+function directLookup(cfg,det,bin=-1,wire=-1){
  const axis=wire>=0?"all":bin===-1?"all":S.axis;
- const angle=wire>=0?-1:bin;
- return entries.get([S.src,cfg,S.st,det,wire,axis,angle].join("|"))||null;
+ return entries.get([S.src,cfg,S.st,det,wire,axis,wire>=0?-1:bin].join("|"))||null;
+}
+const sums=["segments","primaries","collected","known","unknown","edge","angle_n","phi_n",
+ "sum_drift_ns","sum_drift_ns2","sum_incidence_deg","sum_incidence_deg2",
+ "sum_phi_deg","sum_phi_deg2"];
+const arrays=["hist","angle_hist","phi_hist"];
+const mergedCache=new Map();
+function mergeChambers(rows){
+ if(!rows.length)return null;
+ const out={};
+ for(const k of sums)out[k]=rows.reduce((a,r)=>a+(Number(r[k])||0),0);
+ for(const k of arrays){
+   const length=rows[0][k].length;
+   if(rows.some(r=>r[k].length!==length))throw Error("Unequal native histogram widths");
+   out[k]=Array.from({length},(_,i)=>rows.reduce((a,r)=>a+r[k][i],0));
+ }
+ if(out.hist.reduce((a,b)=>a+b,0)!==out.known ||
+    out.phi_hist.reduce((a,b)=>a+b,0)!==out.phi_n ||
+    out.angle_hist.reduce((a,b)=>a+b,0)!==out.angle_n ||
+    out.collected!==out.known+out.unknown)
+    throw Error("Aggregated chamber histogram conservation failed");
+ out.mean_ns=out.known?out.sum_drift_ns/out.known:null;
+ out.rms_ns=out.known?Math.sqrt(Math.max(0,out.sum_drift_ns2/out.known-
+   out.mean_ns*out.mean_ns)):null;
+ return out;
+}
+function lookup(cfg=S.cfg,det=S.det,bin=S.bin,wire=S.wire){
+ if(wire>=0||det>=0||S.selectedDets===null)return directLookup(cfg,det,bin,wire);
+ if(S.selectedDets.size===0)return null;
+ const cacheKey=[cfg,S.axis,bin,[...S.selectedDets].sort((a,b)=>a-b).join(",")].join("|");
+ if(mergedCache.has(cacheKey))return mergedCache.get(cacheKey);
+ const result=mergeChambers([...S.selectedDets].map(id=>
+  directLookup(cfg,id,bin,-1)).filter(Boolean));
+ mergedCache.set(cacheKey,result);
+ return result;
+}
+function setChambers(ids){
+ S.selectedDets=ids===null?null:new Set(ids);
+ S.det=S.selectedDets&&S.selectedDets.size===1?[...S.selectedDets][0]:-1;
+ S.wire=-1;S.bin=-1;safeDraw();
+}
+function selectionLabel(){
+ if(S.selectedDets===null)return "все камеры";
+ if(S.selectedDets.size===0)return "0 камер";
+ if(S.selectedDets.size===1)return "DET"+S.det;
+ return S.selectedDets.size+" камер (сумма)";
+}
+function updateDetCheckboxes(){
+ const root=$("detList"),query=$("detSearch").value.trim().toLowerCase();
+ root.replaceChildren();
+ for(const c of chambers){
+  const description="DET"+c.id+" row "+c.row+" col "+c.col+" layer "+c.layer;
+  if(query&&!description.toLowerCase().includes(query))continue;
+  const label=document.createElement("label");label.className="det-item";
+  const cb=document.createElement("input");cb.type="checkbox";
+  cb.checked=S.selectedDets===null||S.selectedDets.has(c.id);
+  cb.addEventListener("change",()=>{
+   const ids=S.selectedDets===null?new Set(chambers.map(x=>x.id)):new Set(S.selectedDets);
+   if(cb.checked)ids.add(c.id);else ids.delete(c.id);
+   setChambers(ids);
+  });
+  const cap=document.createElement("span");cap.textContent=description;
+  label.append(cb,cap);root.append(label);
+ }
 }
 function make(name,attrs,parent){const n=document.createElementNS(NS,name);
  for(const k in attrs)n.setAttribute(k,attrs[k]);(parent||$("time")).append(n);return n;}
@@ -172,7 +234,10 @@ function chooseUI(){
  select("station",Array.from({length:6},(_,i)=>[i,"MS"+i]),S.st);
  select("config",configs.map(c=>[c,c.replace("anode_only","без field wire")
      .replace(/field75p0um/,"field wire 75 мкм")]),S.cfg);
- $("axis").value=S.axis;$("overlay").value=S.overlay?"six":"single";
+ $("axis").value=S.axis;$("timeMode").value=S.timeMode;
+ $("angleMode").value=S.angleMode;
+ $("timeRebin").value=String(S.timeRebin);
+ $("angleRebin").value=String(S.angleRebin);
  $("timeScale").value=S.scale;
  $("arrivalType").value=S.arrival;
  const available=[[-1,"Все углы ("+format(lookup(S.cfg,S.det,-1,-1)?.segments||0)+" хитов)"]];
@@ -193,9 +258,10 @@ function chooseUI(){
  $("angle").disabled=S.wire>=0;
  $("axis").disabled=S.wire>=0;
  $("detailPage").href="MS"+S.st+".html";
+ $("phiAtlas").href="MS"+S.st+"_phi_atlas.html";
 }
 function mapColor(c){
- const b=lookup(S.cfg,c.id,S.bin,-1);
+ const b=directLookup(S.cfg,c.id,S.bin,-1);
  if(!b||b.primaries===0)return null;
  const p=b.hist.slice(0,10).reduce((sum,x)=>sum+x,0)/b.primaries;
  if(!(p>=0&&p<=1))throw Error("Invalid <=100ns fraction in DET"+c.id);
@@ -211,20 +277,27 @@ function map(){
  root.setAttribute("viewBox",[X0-pad,Y0-pad,X1-X0+2*pad,Y1-Y0+2*pad].join(" "));
  const probs=chambers.map(c=>mapColor(c)).filter(x=>x!==null);
  const hi=Math.max(.05,...probs);
- const sorted=chambers.filter(c=>c.id!==S.det).concat(chambers.filter(c=>c.id===S.det));
+ const marked=c=>S.selectedDets!==null&&S.selectedDets.has(c.id);
+ const sorted=chambers.filter(c=>!marked(c)).concat(chambers.filter(marked));
  for(const c of sorted){
-   const g=make("g",{},root),p=mapColor(c),marked=c.id===S.det;
+   const g=make("g",{},root),p=mapColor(c),chosen=marked(c);
    const r=p===null?0:Math.min(1,p/hi);
    const fill=p===null?"#4b5c6c":"rgb("+Math.round(26+191*r)+","+
      Math.round(106+45*(1-r))+","+Math.round(107-63*r)+")";
    make("rect",{x:c.x-c.hx,y:-c.y-c.hy,width:c.hx*2,height:c.hy*2,
-      fill,stroke:marked?"#ffe5b3":"#8daabd",
-      "stroke-width":marked?3.2:.65},g);
+      fill,stroke:chosen?"#ffe5b3":"#8daabd",
+      "stroke-width":chosen?3.2:.65},g);
    text(c.id,c.x,-c.y+1.6,g,{"text-anchor":"middle","font-size":Math.max(
        3.7,Math.min(5.6,(X1-X0)/74)),fill:"#f5faff","pointer-events":"none"});
    const hot=make("rect",{x:c.x-c.hx,y:-c.y-c.hy,width:c.hx*2,
        height:c.hy*2,fill:"transparent",cursor:"pointer"},g);
-   hot.addEventListener("click",()=>{S.det=c.id;S.wire=-1;S.bin=-1;draw();});
+   hot.addEventListener("click",event=>{
+ if(event.ctrlKey||event.metaKey||event.shiftKey){
+  const ids=S.selectedDets===null?new Set(chambers.map(c=>c.id)):new Set(S.selectedDets);
+  if(ids.has(c.id))ids.delete(c.id);else ids.add(c.id);
+  setChambers(ids);
+ }else setChambers([c.id]);
+});
    const desc=make("title",{},hot);
    desc.textContent="DET"+c.id+" · "+c.layer+" · row "+c.row+
       " col "+c.col+" · "+(p===null?"нет данных":"P(e⁻≤100нс)="+pct(p));
@@ -248,12 +321,13 @@ function map(){
  text("Y, см ↑",X0-pad*.84,Y0-pad*.5,root,
      {"font-size":font,"font-weight":"700"});
  const b=lookup();
- $("selection").textContent=(S.det===-1?"Все камеры":"DET"+S.det)+
+ $("selection").textContent=(selectionLabel())+
    " · MS"+S.st+" · газовых хитов "+format(b?.segments||0)+
    (S.wire>=0?" · анод "+S.wire:"");
+ updateDetCheckboxes();
  $("mapLegend").textContent="Цветовая шкала: 0–"+pct(hi)+
    " P(первичный электрон собран за первые 100 нс). Серый: нет первичных e⁻. "+
-   "Жёлтая рамка: выбранная камера. НЕ P(N≥2).";
+   "Жёлтая рамка: выбранные камеры. Ctrl/Cmd/Shift+клик: изменить список. НЕ P(N≥2).";
 }
 function axes(root,plot,titleX,titleY,xTicks,yTicks,xFn,yFn){
  const [x0,y0,x1,y1]=plot;
@@ -437,6 +511,7 @@ function draw(){
  }
 }
 function safeDraw(){
+ mergedCache.clear();
  try{draw();}
  catch(e){
   console.error("V3 native map/timing dashboard error",e);
@@ -461,9 +536,19 @@ $("axis").addEventListener("change",e=>{S.axis=e.target.value;S.bin=-1;safeDraw(
 $("angle").addEventListener("change",e=>{S.bin=Number(e.target.value);safeDraw()});
 $("wire").addEventListener("change",e=>{S.wire=Number(e.target.value);if(S.wire>=0)S.bin=-1;safeDraw()});
 $("arrivalType").addEventListener("change",e=>{S.arrival=e.target.value;safeDraw()});
-$("overlay").addEventListener("change",e=>{S.overlay=e.target.value==="six";safeDraw()});
+$("timeMode").addEventListener("change",e=>{S.timeMode=e.target.value;safeDraw()});
+$("angleMode").addEventListener("change",e=>{S.angleMode=e.target.value;safeDraw()});
+$("timeRebin").addEventListener("change",e=>{S.timeRebin=Number(e.target.value);safeDraw()});
+$("angleRebin").addEventListener("change",e=>{S.angleRebin=Number(e.target.value);safeDraw()});
 $("timeScale").addEventListener("change",e=>{S.scale=e.target.value;safeDraw()});
-$("allModules").addEventListener("click",()=>{S.det=-1;S.wire=-1;S.bin=-1;safeDraw()});
+$("allModules").addEventListener("click",()=>setChambers(null));
+$("noneModules").addEventListener("click",()=>setChambers([]));
+$("allCheckboxes").addEventListener("click",()=>setChambers(null));
+$("clearCheckboxes").addEventListener("click",()=>setChambers([]));
+$("detSearch").addEventListener("input",updateDetCheckboxes);
+document.querySelectorAll("[data-layer]").forEach(button=>
+ button.addEventListener("click",()=>setChambers(
+  chambers.filter(c=>c.layer===button.dataset.layer).map(c=>c.id))));
 safeDraw();
 })();
 </script></body></html>
