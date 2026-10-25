@@ -502,6 +502,7 @@ function renderTime(){
    ymax:maxProbability(plotSeries)*1.15};
  const inPanels=S.timeMode==="panels";
  $("time").hidden=inPanels;$("timeMultiples").hidden=!inPanels;
+ $("timeMultiples").closest(".panel").classList.toggle("full",inPanels);
  $("legend").hidden=inPanels;
  if(inPanels)multiples($("timeMultiples"),all,common);
  else histogram($("time"),plotSeries,{...common,
@@ -535,6 +536,7 @@ function renderArrival(){
     xLabel:angular.title,angular:true,log:false,
     ticks:angular.left<0?4:6,ymax:maxProbability(inPanels?all:[chosen])*1.15};
  $("arrival").hidden=inPanels;$("arrivalMultiples").hidden=!inPanels;
+ $("arrivalMultiples").closest(".panel").classList.toggle("full",inPanels);
  if(inPanels)multiples($("arrivalMultiples"),all,opts);
  else histogram($("arrival"),[chosen],{...opts,mode:"bars"});
 }
