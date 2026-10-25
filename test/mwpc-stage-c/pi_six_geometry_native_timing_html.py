@@ -360,9 +360,10 @@ def build(source,dest):
             "оценки данного первого чанка",
             f"оценки выборки из {n_parents:,} сгенерированных "
             "родительских событий на источник")
+        label="100K" if n_parents==100_000 else f"{n_parents//1_000_000}M" if n_parents%1_000_000==0 else f"{n_parents}"
         page=page.replace(
             "MWPC-NATIVE-STATIC-FALLBACK-20261021-v2",
-            "MWPC-NATIVE-CHUNK-MERGE-100K-V1")
+            f"MWPC-NATIVE-CHUNK-MERGE-{label}-V1")
     dest.parent.mkdir(parents=True,exist_ok=True)
     dest.write_text(page,encoding="utf-8")
     print("Open offline interactive native timing dashboard:",dest)
