@@ -20,7 +20,7 @@ from pi_six_geometry_native_timing_html import static_native_spectrum
 
 HERE=Path(__file__).resolve().parent
 TEMPLATE=HERE/"pi_six_geometry_layout_v3_template.html"
-VERSION="NA60-SIX-GEOMETRY-XY-V3-MULTIDET-20261025"
+VERSION="NA60-SIX-GEOMETRY-XY-V3-POLAR-20261025"
 
 
 def construct_payload(blob,source,station):
