@@ -165,6 +165,25 @@ def main():
     with (a.out/"phi_hit_FW_comparison.csv").open("w",newline="") as f:
         w=csv.DictWriter(f,fieldnames=comparisons[0].keys())
         w.writeheader();w.writerows(comparisons)
+    # Explicit denominator and muon-crossing exposures for every plotted curve.
+    bounds=src["muon_angle_bin_edges_deg"]
+    with (a.out/"conditional_angle_statistics.csv").open(
+            "w",newline="",encoding="utf-8") as output:
+        w=csv.writer(output)
+        w.writerow(("scope","config","pitch_mm","field_wire_um",
+                    "muon_angle_axis","theta_bin_index",
+                    "theta_low_deg","theta_high_deg",
+                    "muon_gas_crossings","anode_electrons_known_phi"))
+        for level in ("station","chamber"):
+            for cfg,p,fw in CONFIGS:
+                for axis in ("u","w"):
+                    rows=src["data"][cfg][f"theta_{axis}_{level}"]
+                    for j in range(len(bounds)-1):
+                        row=rows.get(str(j),{})
+                        if row:
+                            hist(row)
+                        w.writerow((level,cfg,p,fw,axis,j,bounds[j],bounds[j+1],
+                                    row.get("segments",0),row.get("phi_n",0)))
     (a.out/"README.txt").write_text(
       f"Jpsi, MS{src['station']}, DET{src['chosen_detector']}, "
       f"{n:,} generated parents.\\n"
