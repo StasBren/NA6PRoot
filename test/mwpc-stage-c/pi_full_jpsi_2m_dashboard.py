@@ -37,6 +37,7 @@ from pi_six_geometry_native_timing import (
 from pi_six_geometry_layout_v3 import render as render_xy, make_portal
 from pi_six_geometry_native_timing_html import build as render_detail
 from build_pi_100k_english_dashboard import translate_page
+from pi_full_jpsi_2m_phi_atlas import render_all as render_phi_atlas, SCHEMA as PHI_SCHEMA
 
 HERE=Path(__file__).resolve().parent
 BASE=OUTPUT.parent/"pi_full_jpsi_2m_dashboard_v1"
@@ -388,6 +389,11 @@ wire-surface impact-position φ, and six-way pitch / field-wire comparisons.</p>
 <b>__TOTAL__ gas-crossing segments across six stations</b>
 <b>Six geometries · 20 Garfield independent trials/cell</b></div>
 <div class="grid">__CARDS__</div>
+<h2>Wire-surface impact-position atlas · all physical chambers</h2>
+<p>Interactive polar distributions of φ<sub>hit</sub> for all DET modules,
+six wire geometries, and signed muon entrance-angle bins. Open a station:
+__ATLAS_LINKS__</p>
+<p><a href="../phi_atlas_stats.csv">Field-wire azimuth and collection comparisons by chamber (CSV)</a></p>
 <p><a href="pi_pitch_fieldwire_timing_dashboard_v3_en.html">
 Alternative compact source/station navigation</a> ·
 <a href="../summary.csv">Numerical statistics (CSV)</a></p>
@@ -399,6 +405,11 @@ provisional. No avalanche or detector-efficiency inference; parent-event
 bootstrap uncertainty not yet reported. The original J/ψ/ϕ/ω 6M production
 is left unchanged.</div>
 </main></body></html>"""
+    atlas_links=" · ".join(
+        f'<a href="{NAME}/MS{st}_phi_atlas.html">MS{st} φ_hit</a>'
+        for st in range(6)
+    )
+    page=page.replace("__ATLAS_LINKS__",atlas_links)
     page=page.replace("__TOTAL__",f"{total:,}").replace("__CARDS__",
                                                    "\n".join(blocks))
     location=PAGES/"index.html"
@@ -437,6 +448,8 @@ def finalize():
     portal=make_portal(PAGES,refs,n_generated_parent_events_per_source=N_PARENTS)
     translate_page(portal,PAGES/"pi_pitch_fieldwire_timing_dashboard_v3_en.html",
                    "portal",expected_parents=N_PARENTS)
+    # Extract all chamber histograms from existing merged data; do not re-fold.
+    atlas_pages,atlas_csv=render_phi_atlas(MERGED,PAGES,NAME,N_PARENTS)
     index=html_index(summaries)
     out=BASE/"complete_dashboard_manifest.json"
     payload={
@@ -449,7 +462,12 @@ def finalize():
        "scope_limitations":"No new Garfield, Heed or Geant4; no parent bootstrap; "
                            "individual electrons are not statistically independent "
                            "Geant4 parent events.",
-       "station_reports":{f"MS{v['station']}":{
+       "phi_atlas_schema":PHI_SCHEMA,
+        "phi_atlas_sha256":{
+            "csv":sha_file(atlas_csv),
+            **{f"MS{st}":sha_file(atlas_pages[st]) for st in range(6)}
+        },
+        "station_reports":{f"MS{v['station']}":{
            "sha256":sha_file(BASE/"station_summaries"/f"MS{v['station']}.json"),
            "muon_gas_crossings":v["gas_crossings"],
            "heed_primaries":v["heed_primaries"],
@@ -490,6 +508,15 @@ def verify():
                 raise ValueError("Original frozen source manifest changed: "+str(manifest))
         print(f"PASS verified MS{st}: 40 immutable file SHAs and four "
               "HTML variants; station merged SHA",flush=True)
+    if complete.get("phi_atlas_schema")!=PHI_SCHEMA or \
+       set(complete.get("phi_atlas_sha256",{}))!=(
+           {"csv"}|{f"MS{st}" for st in range(6)}):
+        raise ValueError("Missing or obsolete all-chamber azimuth atlas")
+    for key,digest in complete["phi_atlas_sha256"].items():
+        path=(BASE/"phi_atlas_stats.csv" if key=="csv" else
+              PAGES/NAME/f"{key}_phi_atlas.html")
+        if sha_file(path)!=digest:
+            raise ValueError("Jpsi phi atlas changed: "+str(path))
     for rel,digest in complete["files_sha256"].items():
         file={"index.html":PAGES/"index.html",
               "portal_en":PAGES/"pi_pitch_fieldwire_timing_dashboard_v3_en.html",
