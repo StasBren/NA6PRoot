@@ -18,7 +18,7 @@ bash test/mwpc-stage-c/run_pi_full_jpsi_2m_dashboard.sh verify
 explorer.exe test_runs/mwpc_stage_c/pi_full_jpsi_2m_dashboard_v1/pages
 ```
 
-Open `pages/index.html` locally (ideally Firefox/Chrome/Edge; pages embed their physical data and work offline). Each of the six station links contains an interactive XY physical chamber map, numbered anodes, full 10 ns birth-to-anode electron drift PDF, signed muon entrance angle slices θu/θw, Garfield last-step normal approach angle and φ, and six pitch/field-wire geometries. There is also a detailed spectrum dashboard for every station, with logarithmic Y and time/angle selections.
+Open `pages/index.html` locally (ideally Firefox/Chrome/Edge; pages embed their physical data and work offline). Each of the six station links contains an interactive XY physical chamber map, numbered anodes, full 10 ns birth-to-anode electron drift PDF, signed muon entrance angle slices θu/θw, Garfield last-step approach angle relative to the inward wire normal and wire-surface impact-position azimuth φ (not a direction azimuth), and six pitch/field-wire geometries. There is also a detailed spectrum dashboard for every station, with logarithmic Y and time/angle selections.
 
 Both **English** `*_en.html` and Russian `.html` variants are generated; the dashboard landing page and numerical CSV are in English. Existing source/station/DET shapes and physical anode numbers are used directly; no interpolation or modeled curves are substituted.
 
