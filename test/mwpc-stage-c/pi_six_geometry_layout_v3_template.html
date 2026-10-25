@@ -112,7 +112,7 @@ footer{color:var(--muted);font-size:12px}
 </section>
 <section class="panel">
 <h2 id="timeTitle">2. Время дрейфа — все камеры</h2>
-<p>Время от рождения электрона до сбора на аноде. Один прямоугольник — 10 нс.</p>
+<p>Время от рождения электрона до сбора на аноде. Исходные бины 10 нс; можно объединить их в 20 или 50 нс без интерполяции.</p>
 <div id="statistics" class="stats"></div>
 <svg id="time" viewBox="0 0 760 315" role="img" aria-label="Время дрейфа от рождения электрона, проценты по 10 нс"></svg>
 <div id="timeMultiples" class="mini-grid" hidden></div>
@@ -124,7 +124,7 @@ footer{color:var(--muted);font-size:12px}
 <p id="angleDescription">Угол между последним микроскопическим шагом Garfield и внутренней нормалью к аноду. Не угол входа мюона.</p>
 <svg id="arrival" viewBox="0 0 760 330" role="img" aria-label="Распределение углов прихода электронов"></svg>
 <div id="arrivalMultiples" class="mini-grid" hidden></div>
-<p class="small">Бины по 10°. Выбор станции, камеры, анода, поля и знакового угла мюона синхронизован со временем. Для отдельного анода доступна только интеграция по всем углам входа мюона.</p>
+<p class="small">Исходные угловые бины 10°; доступно суммирование до 20° или 30°. Выбранные камеры, анод, геометрия и угол входа мюона синхронизованы со временем. Для отдельного анода доступна только интеграция по всем углам мюона.</p>
 </section>
 <section class="panel">
 <h2>4. Шесть вариантов: сбор, Mean и centered RMS</h2>
@@ -295,7 +295,7 @@ function map(){
        height:c.hy*2,fill:"transparent",cursor:"pointer"},g);
    hot.addEventListener("click",event=>{
  if(event.ctrlKey||event.metaKey||event.shiftKey){
-  const ids=S.selectedDets===null?new Set(chambers.map(c=>c.id)):new Set(S.selectedDets);
+  const ids=S.selectedDets===null?new Set():new Set(S.selectedDets);
   if(ids.has(c.id))ids.delete(c.id);else ids.add(c.id);
   setChambers(ids);
  }else setChambers([c.id]);
