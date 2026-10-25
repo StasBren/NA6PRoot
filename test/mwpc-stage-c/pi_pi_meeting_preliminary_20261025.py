@@ -214,7 +214,7 @@ def plot_six_times(report,level,out):
     marker=(f"DET{report['chosen_detector']}" if level=="chamber" else
             f"all MS{report['station']} chambers")
     fig.suptitle(f"Electron drift-time PDFs · {report['source']} · MS{report['station']} · {marker}\n"
-        "Same native muon crossings + shared Heed births · preliminary 100k generated parents",
+        f"Matched native muon crossings + shared Heed births · preliminary {report.get('generated_parent_events',100000):,} generated parents",
         fontsize=14,weight="bold")
     fig.text(.5,.008,"Each panel normalised by its own collected known-time electrons; "
         "t≥300 ns overflow included in denominator, not in drawn 0–150 ns range.",
@@ -312,7 +312,7 @@ def plot_angle_heatmaps(report,axis,out):
                  fraction=.02,pad=.015)
     fig.suptitle(f"PI question: P(e⁻ approach angle | muon θ_{axis}) · "
                  f"{report['source']} · MS{report['station']}\n"
-                 "Six Garfield geometries, native 100k-parent subset · "
+                 f"Six Garfield geometries, {report.get('generated_parent_events',100000):,} generated parents · "
                  "white = <200 collected angle-known e⁻",fontsize=14)
     fig.subplots_adjust(top=.88,bottom=.12,left=.07,right=.89,
                         hspace=.41,wspace=.26)
