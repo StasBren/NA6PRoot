@@ -30,6 +30,17 @@ table{border-collapse:collapse;width:100%;font-size:12px;font-variant-numeric:ta
 th,td{text-align:right;border-bottom:1px solid #3c5369;padding:8px 6px}
 th:first-child,td:first-child{text-align:left}th{color:#c6e0f4}
 tr:nth-child(even){background:#20384a}.help{border-left:3px solid var(--a);padding:5px 0 5px 11px;margin:10px 0}
+.det-picker{margin:10px 0;padding:10px;border:1px solid #44677d;border-radius:8px;background:#112c41}
+.det-picker summary{cursor:pointer;font-weight:650;color:#d8f3ef}.det-actions{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}
+.det-actions button{font-size:12px;padding:5px 8px}.det-filter{width:100%;max-width:320px;padding:7px;background:#244360;color:white;border:1px solid #7193a9;border-radius:6px}
+.det-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:5px;max-height:200px;overflow:auto;padding:8px}
+.det-item{display:flex;align-items:center;gap:6px;padding:5px;background:#1c3c52;border-radius:4px;color:#e4f4fb;cursor:pointer}
+.det-item input{accent-color:#59d9c5}.mini-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.mini-card{min-width:0;background:#10263a;border:1px solid #37566d;border-radius:8px;padding:8px}
+.mini-card h3{font-size:12px;line-height:1.35;min-height:32px}.mini-card svg{width:100%;height:auto}
+.mini-card p{font-size:11px;margin-top:3px}
+@media(max-width:1180px){.mini-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.mini-grid{grid-template-columns:1fr}}
 #diagnostic{font-size:12px;color:#ffbd8b;padding:6px 0;white-space:pre-line}
 [hidden]{display:none!important}
 footer{color:var(--muted);font-size:12px}
@@ -41,7 +52,8 @@ footer{color:var(--muted);font-size:12px}
 <p>Физическая геометрия камер сохраняется; шаг анодов и заземлённые промежуточные проволоки диаметром 75 мкм переключаются без новой симуляции. Трёхтысячный первый чанк J/ψ / ϕ / ω на источник.</p>
 <p><a href="../pi_pitch_fieldwire_timing_dashboard_v3.html">← Навигация по источникам и станциям</a> ·
 <a href="../../../pi_fixed_wire_maps/pi_centered_timing_dashboard_v2.html">Исходный V2, только 4 мм</a> ·
-<a id="detailPage" href="#">Детальные спектры отдельных анодов</a></p>
+<a id="detailPage" href="#">Детальные спектры отдельных анодов</a> ·
+<a id="phiAtlas" href="#">Круговые φ_hit по всем DET</a></p>
 <div class="axis-note">Версия: <span id="version">NA60-SIX-GEOMETRY-XY-V3-20261021</span></div>
 </header>
 <section class="controls" aria-label="Выбор камеры, угла и проволок">
@@ -56,20 +68,44 @@ footer{color:var(--muted);font-size:12px}
 <div class="ctrl"><label for="timeScale">Вертикальная шкала времени</label><select id="timeScale">
 <option value="linear">Линейная</option>
 <option value="log">Логарифмическая</option></select></div>
-<div class="ctrl"><label for="overlay">Время: сравнить конфигурации</label><select id="overlay">
-<option value="single">Один вариант</option><option value="six">Все 6 вариантов</option>
+<div class="ctrl"><label for="timeMode">Время: режим графика</label><select id="timeMode">
+<option value="panels">6 отдельных гистограмм</option><option value="lines">6 линий вместе</option>
+<option value="steps">6 ступенчатых кривых</option><option value="single">Столбцы: выбранный вариант</option>
+</select></div>
+<div class="ctrl"><label for="timeRebin">Ширина бина времени</label><select id="timeRebin">
+<option value="10">10 нс (исходные)</option><option value="20">20 нс</option><option value="50">50 нс</option>
+</select></div>
+<div class="ctrl"><label for="angleMode">Угол: режим графика</label><select id="angleMode">
+<option value="panels">6 отдельных гистограмм</option><option value="single">Столбцы: выбранный вариант</option>
+</select></div>
+<div class="ctrl"><label for="angleRebin">Ширина углового бина</label><select id="angleRebin">
+<option value="10">10° (исходные)</option><option value="20">20°</option><option value="30">30°</option>
 </select></div>
 <div class="ctrl"><label for="arrivalType">Угол прихода электрона</label><select id="arrivalType">
 <option value="incidence">К нормали проволоки</option>
 <option value="phi">Положение попадания на проволоке φ</option>
 </select></div>
 </section>
-<div class="notice"><p><strong>Выбор камеры — кликом на XY-карту.</strong> Угол входа мюона сохраняет знак. Временной PDF относится к первичным электронам, собранным анодами с известным временем, включая хвост ≥300 нс. Ниже — не аналоговый сигнал и не время срабатывания ASIC. <strong>В этом наборе отсутствуют</strong> распределения рождения электронов по времени и P(N≥2): старый V2 считал их для другой, единственной конфигурации. Они не подменяются модельными величинами.</p></div>
+<div class="notice"><p><strong>Выбор камер — кликом на XY-карту (Ctrl/Cmd/Shift — добавить или убрать) либо галочками ниже.</strong> Угол входа мюона сохраняет знак. Временной PDF относится к первичным электронам, собранным анодами с известным временем, включая хвост ≥300 нс. Ниже — не аналоговый сигнал и не время срабатывания ASIC. <strong>В этом наборе отсутствуют</strong> распределения рождения электронов по времени и P(N≥2): старый V2 считал их для другой, единственной конфигурации. Они не подменяются модельными величинами.</p></div>
 <main>
 <section class="panel">
 <h2>1. Выбор камеры на XY-плане станции</h2>
 <p>Кликните на прямоугольник DET. Цвет — доля первичных электронов, достигших анода за первые 100 нс, относительно всех первичных электронов из газовых сегментов этой камеры и выбранного углового бина. <strong>Это не P(N≥2).</strong> Серый — недостаточно данных. Оси XY в сантиметрах.</p>
 <button id="allModules" type="button">Все камеры станции</button>
+<button id="noneModules" type="button">Снять выделение</button>
+<details class="det-picker" id="detPicker">
+<summary>Камеры с галочками — выбрать несколько DET</summary>
+<div class="det-actions">
+<button id="allCheckboxes" type="button">Выбрать все</button>
+<button id="clearCheckboxes" type="button">Снять все</button>
+<button type="button" data-layer="A">Только слой A</button>
+<button type="button" data-layer="B">Только слой B</button>
+<button type="button" data-layer="C">Только слой C</button>
+<button type="button" data-layer="D">Только слой D</button>
+</div>
+<input class="det-filter" id="detSearch" type="search" placeholder="Фильтр: DET, row, col, layer">
+<div id="detList" class="det-list" role="group" aria-label="Выбранные физические камеры"></div>
+</details>
 <p id="selection" class="axis-note">Ожидание загрузки интерактивной XY-карты…</p>
 <svg id="map" viewBox="-200 -200 400 400" role="img" aria-label="Карта физических камер с выбором DET и осями X,Y, сантиметры"></svg>
 <p id="mapLegend" class="small"></p>
@@ -79,6 +115,7 @@ footer{color:var(--muted);font-size:12px}
 <p>Время от рождения электрона до сбора на аноде. Один прямоугольник — 10 нс.</p>
 <div id="statistics" class="stats"></div>
 <svg id="time" viewBox="0 0 760 315" role="img" aria-label="Время дрейфа от рождения электрона, проценты по 10 нс"></svg>
+<div id="timeMultiples" class="mini-grid" hidden></div>
 <div id="legend" class="key"></div>
 <p class="small">Нормировка каждого варианта: все собранные первичные электроны с известным временем, включая хвост ≥300 нс. Отбор по углу входа мюона действует и для времени, и для карты камер.</p>
 </section>
@@ -86,6 +123,7 @@ footer{color:var(--muted);font-size:12px}
 <h2>3. Как электроны подходят к аноду?</h2>
 <p id="angleDescription">Угол между последним микроскопическим шагом Garfield и внутренней нормалью к аноду. Не угол входа мюона.</p>
 <svg id="arrival" viewBox="0 0 760 330" role="img" aria-label="Распределение углов прихода электронов"></svg>
+<div id="arrivalMultiples" class="mini-grid" hidden></div>
 <p class="small">Бины по 10°. Выбор станции, камеры, анода, поля и знакового угла мюона синхронизован со временем. Для отдельного анода доступна только интеграция по всем углам входа мюона.</p>
 </section>
 <section class="panel">
