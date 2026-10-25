@@ -41,6 +41,24 @@ tr:nth-child(even){background:#20384a}.help{border-left:3px solid var(--a);paddi
 .mini-card p{font-size:11px;margin-top:3px}
 @media(max-width:1180px){.mini-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){.mini-grid{grid-template-columns:1fr}}
+.polar-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:10px 0 19px}
+.polar-tile{border:1px solid #385971;background:#10263a;border-radius:8px;
+ text-align:center;min-width:0;padding:8px 6px}
+.polar-tile h3{font-size:13px;font-weight:650;color:#edf6fa;margin:6px 0}
+.polar-tile svg{display:block;max-width:350px;height:auto;width:100%;margin:auto;background:transparent}
+.polar-tile small{display:block;color:#b9cfe0;font-size:11px;line-height:1.3;margin:0 0 6px}
+.polar-caption{color:#bed4e0;font-size:12px}
+.polar-bin-picker{display:flex;flex-wrap:wrap;gap:8px 13px;margin:9px 0}
+.polar-bin-picker label{display:inline-flex;align-items:center;gap:6px;color:#e0f0f8;
+ background:#203c52;padding:5px 8px;border-radius:6px;font-size:12px}
+.polar-bin-picker input{accent-color:#52c9b9}
+.polar-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.polar-controls button{font-size:12px;padding:5px 8px}
+.polar-legend{display:flex;gap:10px 16px;flex-wrap:wrap;margin:12px 0}
+.polar-legend span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#d8eaf3}
+.polar-legend i{display:inline-block;width:19px;height:3px}
+@media(max-width:950px){.polar-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:550px){.polar-grid{grid-template-columns:1fr}}
 #diagnostic{font-size:12px;color:#ffbd8b;padding:6px 0;white-space:pre-line}
 [hidden]{display:none!important}
 footer{color:var(--muted);font-size:12px}
@@ -132,6 +150,35 @@ footer{color:var(--muted);font-size:12px}
 <svg id="comparison" viewBox="0 0 760 320" role="img" aria-label="Среднее время дрейфа шести геометрий"></svg>
 <table><thead><tr><th>p / проволока</th><th>Электронов</th><th>Доля сбора*</th><th>Mean, нс</th><th>RMS, нс</th></tr></thead><tbody id="comparisonRows"></tbody></table>
 <p class="small">*Доля сбора по всем первичным электронам определяется на уровне камеры/станции. Для выбранного физического анода знаменатель первичных электронов, принадлежащих именно аноду, не определён. Числа — без bootstrap-ошибок; отдельный event-level отчёт будет подготовлен.</p>
+</section>
+<section class="panel full" id="polarSection">
+<h2>5. Полярные распределения попадания электронов на анод (φ_hit)</h2>
+<p>Точка, где электрон достигает окружности анода: 0° = +u, 90° = +v, 180° = −u, 270° = −v.
+Это <strong>положение точки попадания</strong>, не направление скорости электрона.
+Шесть вариантов: шаг анода 3 / 3.5 / 4 мм, без и с field wire 75 мкм.</p>
+<p class="polar-caption" id="polarScope"></p>
+<h3>5a. Все углы входа мюона — по шесть круговых гистограмм</h3>
+<p>Каждый столбец — 10° по окружности. Радиальная высота — доля от электронов
+с известным φ_hit в данной конфигурации. Масштаб радиуса одинаков для всех шести графиков.</p>
+<div class="polar-grid" id="polarOverall"></div>
+<h3>5b. Зависимость от знакового угла входа мюона — по шесть круговых графиков</h3>
+<p>Каждая цветная линия — нормированное отдельно распределение
+P(φ_hit | θμ). Ось θu/θw берётся из верхнего выбора. По умолчанию
+показаны четыре наиболее заполненных угловых интервала для выбранных камер.</p>
+<div class="polar-controls">
+<button type="button" id="polarDefault">Четыре наиболее заполненных</button>
+<button type="button" id="polarClear">Снять угловые кривые</button>
+<span id="polarBinHelp" class="polar-caption"></span>
+</div>
+<div id="polarBinPicker" class="polar-bin-picker" role="group" aria-label="Выбрать углы мюона для полярных кривых"></div>
+<div id="polarLegend" class="polar-legend"></div>
+<div class="polar-grid" id="polarConditional"></div>
+<p class="polar-caption">Полярные графики суммируют <strong>все аноды</strong> выбранных DET,
+даже если выше выбран отдельный анод: одинаковый номер проволоки при разном pitch
+не означает одинаковую физическую координату. Для нескольких камер берутся
+исходные histograms каждого DET и суммируются без пересчёта Garfield.
+Используются только исходные бины φ по 10° и сохранённые интервалы θμ;
+сглаживания и искусственных угловых данных нет.</p>
 </section>
 <section class="panel full" id="staticFallback">
 __STATIC_FALLBACK__
