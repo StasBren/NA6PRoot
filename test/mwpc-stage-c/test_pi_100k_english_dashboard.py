@@ -86,6 +86,15 @@ def main():
                        'function rebinCounts','function setChambers',
                        'out.mean_ns=out.known','Cannot subdivide a frozen histogram'):
             assert marker in text, marker
+        # Both kinds of six circular phi-hit plots must survive the
+        # English translation and preserve the physics JSON byte-for-byte.
+        for marker in ('id="polarSection"','id="polarOverall"',
+                       'id="polarConditional"','id="polarBinPicker"',
+                       'id="polarDefault"','id="polarClear"',
+                       'id="polarPhysics"','function renderPolar()',
+                       'function polarQ2(','function polarTV(',
+                       'function polarAngularBins('):
+            assert marker in text, marker
         # Render real detailed page HTML + real Python static fallback,
         # using small but physically conserved synthetic histogram rows.
         detail_json=base/"mock_station.json"
