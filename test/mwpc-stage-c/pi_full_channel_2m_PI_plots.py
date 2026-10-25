@@ -222,12 +222,12 @@ def build_report(ch,station,det,out,*,precheck=False):
             [int(sum(x["hist"][j] for x in target["anodes"]))
                  for j in range(31)]!=chamber["hist"]):
             raise ValueError(f"Physical anode drift-hist conservation failed: {cfg}")
-        station=target["station"]
-        if station["segments"]!=total_gas_segments:
+        station_row=target["station"]
+        if station_row["segments"]!=total_gas_segments:
             raise ValueError(f"Expected {total_gas_segments} muon gas segments "
-                             f"but {cfg} has {station['segments']}")
-        station_muon_counts.append(station["segments"])
-        primary_counts.append(station["primaries"])
+                             f"but {cfg} has {station_row['segments']}")
+        station_muon_counts.append(station_row["segments"])
+        primary_counts.append(station_row["primaries"])
     if len(set(station_muon_counts))!=1 or len(set(primary_counts))!=1:
         raise ValueError("Six configurations use different parent/exposure")
     output["n_muon_gas_segments_station"]=total_gas_segments
