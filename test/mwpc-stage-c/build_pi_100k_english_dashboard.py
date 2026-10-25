@@ -219,6 +219,93 @@ TRANSLATIONS.extend([
     "Native angular bins are 10°; 20° or 30° grouping is available. Selected DETs, anodes, configuration and muon incidence angle are synchronized with the time plots. Per-anode distributions are integrated over all muon entrance angles."
   ]
 ])
+# Circular phi-hit plots (Russian V3 UI / lossless English localization).
+TRANSLATIONS.extend([
+  [
+    "5. Полярные распределения попадания электронов на анод (φ_hit)",
+    "5. Polar electron impact-position azimuth around the anode (φ_hit)"
+  ],
+  [
+    "Точка, где электрон достигает окружности анода:",
+    "The point where the electron reaches the anode circumference:"
+  ],
+  [
+    "Это <strong>положение точки попадания</strong>, не направление скорости электрона.",
+    "This is the <strong>impact-position location</strong>, not the electron velocity direction."
+  ],
+  [
+    "Шесть вариантов: шаг анода 3 / 3.5 / 4 мм, без и с field wire 75 мкм.",
+    "Six geometries: 3 / 3.5 / 4 mm pitches, with and without a 75 µm field wire."
+  ],
+  [
+    "5a. Все углы входа мюона — по шесть круговых гистограмм",
+    "5a. All muon entrance angles — six circular histograms"
+  ],
+  [
+    "Каждый столбец — 10° по окружности. Радиальная высота — доля от электронов\nс известным φ_hit в данной конфигурации. Масштаб радиуса одинаков для всех шести графиков.",
+    "Each polar sector spans 10° around the wire. Radial height is the fraction of collected electrons with finite φ_hit for that geometry. All six panels share the same radial probability scale."
+  ],
+  [
+    "5b. Зависимость от знакового угла входа мюона — по шесть круговых графиков",
+    "5b. Conditional distribution for signed muon entrance angles — six circular plots"
+  ],
+  [
+    "Каждая цветная линия — нормированное отдельно распределение\nP(φ_hit | θμ). Ось θu/θw берётся из верхнего выбора. По умолчанию\nпоказаны четыре наиболее заполненных угловых интервала для выбранных камер.",
+    "Each colored curve is a separately normalized P(φ_hit | θμ). The θu/θw axis follows the selector above. By default, the four most populated muon-angle intervals for the selected chambers are displayed."
+  ],
+  [
+    "Четыре наиболее заполненных",
+    "Four most populated bins"
+  ],
+  [
+    "Снять угловые кривые",
+    "Clear angle curves"
+  ],
+  [
+    "Выбрать углы мюона для полярных кривых",
+    "Select muon-angle bins for polar curves"
+  ],
+  [
+    "Полярные графики суммируют <strong>все аноды</strong> выбранных DET,\nдаже если выше выбран отдельный анод: одинаковый номер проволоки при разном pitch\nне означает одинаковую физическую координату. Для нескольких камер берутся\nисходные histograms каждого DET и суммируются без пересчёта Garfield.\nИспользуются только исходные бины φ по 10° и сохранённые интервалы θμ;\nсглаживания и искусственных угловых данных нет.",
+    "Polar plots aggregate <strong>all physical anodes</strong> of the selected DETs, even if one anode was selected above. The same wire index at different pitches does not mean the same physical position. Multi-DET mode sums original per-chamber histogram counts without a new Garfield run. Only saved native 10° phi bins and recorded muon-angle intervals are used; no smoothing or synthetic angular data."
+  ],
+  [
+    " электронов; ",
+    " electrons; "
+  ],
+  [
+    "Nφ (выбранные θμ): ",
+    "Nφ (selected θμ): "
+  ],
+  [
+    " электронов · собраны на анодах: ",
+    " electrons · anode-collected: "
+  ],
+  [
+    " · все физические аноды выбранных камер (отбор по аноду выше здесь ",
+    " · all physical anodes in selected chambers (single-anode filter above "
+  ],
+  [
+    "не применяется). Ось угловых линий: θ",
+    "is ignored). Conditional angle axis: θ"
+  ],
+  [
+    "Можно сравнивать до шести интервалов одновременно.",
+    "Compare up to six angle bins at once."
+  ],
+  [
+    "Цветных интервалов: ",
+    "Colored intervals: "
+  ],
+  [
+    " (каждый нормирован отдельно).",
+    " (each normalized separately)."
+  ],
+  [
+    "Не выбраны угловые интервалы.",
+    "No angle bins selected."
+  ]
+])
 
 def sha(data):
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
