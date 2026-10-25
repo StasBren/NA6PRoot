@@ -20,6 +20,41 @@ explorer.exe test_runs/mwpc_stage_c/pi_full_jpsi_2m_dashboard_v1/pages
 
 Open `pages/index.html` locally (ideally Firefox/Chrome/Edge; pages embed their physical data and work offline). Each of the six station links contains an interactive XY physical chamber map, numbered anodes, full 10 ns birth-to-anode electron drift PDF, signed muon entrance angle slices θu/θw, Garfield last-step approach angle relative to the inward wire normal and wire-surface impact-position azimuth φ (not a direction azimuth), and six pitch/field-wire geometries. There is also a detailed spectrum dashboard for every station, with logarithmic Y and time/angle selections.
 
+## New XY dashboard controls: multiple DETs, six histogram panels and rebin
+
+The existing `MS0_layout_v3.html` ... `MS5_layout_v3.html` and their
+`*_en.html` siblings now support **additive physical-chamber selection**.
+Click a chamber on the XY map to select only it. Hold Ctrl, Cmd or Shift
+and click to add/remove chambers; alternatively open the checkbox list
+under the map. Select all, clear all and layer A/B/C/D filters are available.
+An empty chamber selection produces no data rather than silently reverting
+to the entire station. Single-DET physical-anode selection remains enabled;
+for multiple DETs the anode selector is disabled to avoid mixing distinct
+physical wires with the same index.
+
+Each selected chamber contributes its saved chamber-level counters and
+histograms **exactly once**. Primary births, gas crossing segments,
+collected electrons, 31-bin time histograms, 18-bin electron incidence
+histograms, 36-bin φ_hit histograms and time moments are summed.
+The aggregate drift mean and centered RMS are recalculated from native
+`sum_drift_ns` and `sum_drift_ns2`, not averaged by detector. The native
+10 ns timing histogram retains the >=300 ns overflow in its denominator.
+
+The time plot modes are: six separate histograms (default), six overlaid
+lines, six stepped histograms, and bars for one selected configuration.
+The electron arrival angle plot also has six separate histograms (default),
+for both last-step incidence to normal and wire-surface φ_hit.
+All six mini-panels use the same Y range; log-Y is supported for time.
+Grouping can only use **native or coarser bins**: 10/20/50 ns for drift
+time, and 10°/20°/30° for electron angles. No fake 5 ns or 5° interpolation.
+
+To upgrade a previously built/verified 2M dashboard, repeat the regular
+`run_pi_full_jpsi_2m_dashboard.sh start`. If the station summary and
+merged JSON pass SHA256 verification, the runner re-renders **only the
+outdated layout HTML** and recomputes its publication SHA, without
+rerunning the original 240 Geant4/Heed/Garfield fold checkpoints or
+modifying `merged/jpsi/MS*.json`.
+
 ## Wire-surface electron impact-position φ_hit: every station and DET
 
 The main dashboard `pages/index.html` now links to a six-station polar atlas.
