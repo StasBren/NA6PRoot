@@ -92,7 +92,8 @@ def selected_data(filename,source,station,det):
                         " local gas normal component); "
                         "electron incidence_normal_deg is the last "
                         "Garfield microscopic step relative to local anode normal; "
-                        "phi_hit_deg is electron incidence azimuth",
+                        "phi_hit_deg is the wire-surface impact POSITION azimuth, "
+                        "not the azimuth of electron arrival direction",
       "muon_angle_bin_edges_deg":edges,
       "electron_incidence_bin_edges_deg":INC_EDGES.tolist(),
       "electron_phi_bin_edges_deg":list(range(-180,181,10)),
