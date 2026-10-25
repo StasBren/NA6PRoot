@@ -345,6 +345,38 @@ def reusable_station(st):
         return False
 
 
+
+def refresh_layout_ui_if_needed(st):
+    """Upgrade verified station XY UI from merged histogram JSON, never re-fold.
+
+    Old SHA-pinned station data and detailed per-anode HTML are retained.
+    Only the new Russian/English XY layout HTML and publication SHA values
+    change, so rerunning build is cheap and source-reproducible.
+    """
+    folder=PAGES/NAME
+    en=folder/f"MS{st}_layout_v3_en.html"
+    marker=b'id="detList"'
+    with en.open("rb") as handle:
+        if marker in handle.read(120_000):
+            return False
+    source=MERGED/f"MS{st}.json"
+    if not source.is_file():
+        raise FileNotFoundError("Need complete frozen station JSON: "+str(source))
+    ru=folder/f"MS{st}_layout_v3.html"
+    render_xy(source,ru,NAME,st)
+    translate_page(ru,en,"layout",expected_parents=N_PARENTS)
+    publication=BASE/"station_summaries"/f"MS{st}.json"
+    meta=json.loads(publication.read_text(encoding="utf-8"))
+    if sha_file(source)!=meta["merged_json_sha256"]:
+        raise ValueError("Input station JSON SHA changed during UI upgrade")
+    meta["files"][ru.name]=sha_file(ru)
+    meta["files"][en.name]=sha_file(en)
+    atomic_json(publication,meta)
+    print(f"UPDATED UI: Jpsi MS{st}, all-DET multi-select / six histograms "
+          "(read-only native merged JSON)",flush=True)
+    return True
+
+
 def html_index(summaries):
     # Standalone landing page, navigates all six independent offline pages.
     blocks=[]
@@ -535,6 +567,7 @@ def main():
     for st in range(6):
         if reusable_station(st):
             print(f'SKIP already SHA-verified complete J/psi MS{st} dashboard',flush=True)
+            refresh_layout_ui_if_needed(st)
         else:
             make_station(st)
     finalize()
