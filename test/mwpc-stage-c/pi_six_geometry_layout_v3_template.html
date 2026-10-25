@@ -195,7 +195,7 @@ const $=id=>document.getElementById(id),NS="http://www.w3.org/2000/svg";
 const SOURCE_NAMES={"jpsi40-bore":"J/ψ","phi40-bore":"ϕ","omega40-bore":"ω"};
 const styles=["#59d9c5","#82b5ff","#ffbe79","#d4a3fa","#f08490","#a3d36f"];
 const configs=Object.keys(D.meta.garfield_luts);
-const S={src:D.selected_source,st:D.selected_station,cfg:"p3p0_anode_only",det:-1,selectedDets:null,wire:-1,axis:"u",bin:-1,timeMode:"panels",angleMode:"panels",timeRebin:10,angleRebin:10,arrival:"incidence",scale:"linear"};
+const S={src:D.selected_source,st:D.selected_station,cfg:"p3p0_anode_only",det:-1,selectedDets:null,wire:-1,axis:"u",bin:-1,timeMode:"panels",angleMode:"panels",timeRebin:10,angleRebin:10,arrival:"incidence",scale:"linear",polarBins:null};
 const entries=new Map(D.groups.map(g=>[
  [g.source,g.config,g.station,g.det_id,g.anode,g.axis,g.anglebin].join("|"),g]));
 const chambers=D.layout;
@@ -240,7 +240,7 @@ function lookup(cfg=S.cfg,det=S.det,bin=S.bin,wire=S.wire){
 function setChambers(ids){
  S.selectedDets=ids===null?null:new Set(ids);
  S.det=S.selectedDets&&S.selectedDets.size===1?[...S.selectedDets][0]:-1;
- S.wire=-1;S.bin=-1;safeDraw();
+ S.wire=-1;S.bin=-1;S.polarBins=null;safeDraw();
 }
 function selectionLabel(){
  if(S.selectedDets===null)return "все камеры";
@@ -587,6 +587,164 @@ function renderArrival(){
  if(inPanels)multiples($("arrivalMultiples"),all,opts);
  else histogram($("arrival"),[chosen],{...opts,mode:"bars"});
 }
+// Polar φ_hit atlas. Six geometries are always shown at the SAME radial
+// probability scale, with all-entrance-angle bars and separately normalized
+// P(φ_hit | θμ) curves. Every numerator is a saved integer 10-degree count.
+const polarColors=["#4faef3","#f2a44c","#57cf79","#f27783",
+                   "#c1a5f4","#f3db74"];
+function polarPoint(radius,angleDeg){
+ const rad=angleDeg*Math.PI/180;
+ return [radius*Math.cos(rad),-radius*Math.sin(rad)];
+}
+function polarXY(radius,angleDeg){
+ return polarPoint(radius,angleDeg).map(v=>v.toFixed(3)).join(" ");
+}
+function polarSector(inner,outer,lo,hi){
+ const p0=polarXY(inner,lo),p1=polarXY(outer,lo),
+       p2=polarXY(outer,hi),p3=polarXY(inner,hi);
+ return "M"+p0+" L"+p1+" A"+outer+" "+outer+" 0 0 0 "+p2+
+        " L"+p3+" A"+inner+" "+inner+" 0 0 1 "+p0+" Z";
+}
+function polarFrame(root,peak){
+ root.setAttribute("viewBox","-154 -158 308 318");
+ for(let i=1;i<=4;i++){
+  const r=34+i*23;
+  make("circle",{cx:0,cy:0,r,fill:"none",stroke:"#55718a",
+    "stroke-width":.8,"stroke-opacity":.55},root);
+ }
+ for(const angle of [0,90,180,270]){
+  const [xx,yy]=polarPoint(130,angle);
+  make("line",{x1:0,y1:0,x2:xx,y2:yy,stroke:"#66809a",
+    "stroke-width":.7,"stroke-dasharray":"3 4","stroke-opacity":.8},root);
+ }
+ for(const [angle,label] of [[0,"0° (+u)"],[90,"90° (+v)"],
+                            [180,"180° (−u)"],[270,"270° (−v)"]]){
+  const [xx,yy]=polarPoint(145,angle);
+  text(label,xx,yy+3.5,root,{"text-anchor":"middle",
+      "font-size":10.3,fill:"#d2e5f4"});
+ }
+ make("circle",{cx:0,cy:0,r:32.5,fill:"#afb7bd",
+    stroke:"#edf6fc","stroke-width":1.4},root);
+ text("ANODE",0,3,root,{"text-anchor":"middle","font-size":11,
+    "font-weight":"700",fill:"#213445"});
+ if(peak>0){
+  text("max "+peak.toFixed(2)+"% / 10°",0,156,root,
+    {"text-anchor":"middle","font-size":10,fill:"#d5e3ef"});
+ }
+}
+function polarTile(container,cfg,row,allPeak,angles,conditionalPeak){
+ const card=document.createElement("article");
+ card.className="polar-tile";
+ const label=document.createElement("h3");
+ label.textContent=labelConfig(cfg);card.append(label);
+ const svg=make("svg",{"role":"img","aria-label":angles?
+    "P(phi hit | muon angle) for "+cfg:
+    "Anode circumference phi hit histogram for "+cfg},card);
+ polarFrame(svg,angles?conditionalPeak:allPeak);
+ if(angles){
+  angles.forEach((a,index)=>{
+   const b=lookup(cfg,S.det,a.bin,-1);
+   if(!b||!b.phi_n)return;
+   const radiusFor=v=>34+92*(100*v/b.phi_n)/Math.max(1e-9,conditionalPeak);
+   const points=b.phi_hist.map((n,i)=>polarXY(
+        radiusFor(n),-175+i*10));
+   points.push(points[0]);
+   const line=make("polyline",{points:points.join(" "),
+     stroke:a.color,fill:"none","stroke-width":2.4,
+     "stroke-linejoin":"round","stroke-linecap":"round"},svg);
+   make("title",{},line).textContent="θ"+S.axis+" ["+
+     D.meta.angle_bins_deg[a.bin]+", "+D.meta.angle_bins_deg[a.bin+1]+
+     ")°: "+format(b.phi_n)+" e⁻ with finite φ_hit";
+  });
+ }else if(row&&row.phi_n>0){
+  row.phi_hist.forEach((count,i)=>{
+   if(!count)return;
+   const r=34+92*(100*count/row.phi_n)/Math.max(1e-9,allPeak);
+   const wedge=make("path",{d:polarSector(34,r,-180+i*10+0.5,
+      -180+(i+1)*10-0.5),fill:"#56b2f1",stroke:"#17334b",
+      "stroke-width":.25},svg);
+   make("title",{},wedge).textContent=(-180+i*10)+"° … "+
+     (-170+i*10)+"°: "+format(count)+" электронов; "+
+      (100*count/row.phi_n).toFixed(3)+"%";
+  });
+ }
+ const count=document.createElement("small");
+ if(angles){
+  const selectedCount=angles.reduce((a,v)=>
+    a+(lookup(cfg,S.det,v.bin,-1)?.phi_n||0),0);
+  count.textContent="Nφ (выбранные θμ): "+format(selectedCount)+
+    (selectedCount?"":" · нет данных");
+ }else{
+  count.textContent="Nφ = "+format(row?.phi_n||0)+
+    " электронов · собраны на анодах: "+format(row?.collected||0);
+ }
+ card.append(count);container.append(card);
+}
+function polarAngularBins(){
+ const edges=D.meta.angle_bins_deg;
+ const ranked=Array.from({length:edges.length-1},(_,bin)=>{
+  const rec=lookup(configs[0],S.det,bin,-1);
+  return {bin,n:rec?.phi_n||0};
+ }).filter(r=>r.n>0).sort((a,b)=>b.n-a.n||a.bin-b.bin);
+ const auto=ranked.slice(0,4).map(r=>r.bin).sort((a,b)=>a-b);
+ const chosen=(S.polarBins===null?auto:S.polarBins).filter(
+  b=>b>=0&&b<edges.length-1).sort((a,b)=>a-b);
+ return {ranked,auto,chosen};
+}
+function renderPolar(){
+ const all=configs.map(cfg=>({cfg,row:lookup(cfg,S.det,-1,-1)}));
+ const maxAll=Math.max(0,...all.flatMap(({row})=>row?.phi_n?
+   row.phi_hist.map(n=>100*n/row.phi_n):[0]));
+ const {auto,chosen}=polarAngularBins();
+ const colors=chosen.map((bin,i)=>({bin,color:polarColors[i%polarColors.length]}));
+ const maxConditional=Math.max(0,...configs.flatMap(cfg=>
+   chosen.flatMap(bin=>{
+    const r=lookup(cfg,S.det,bin,-1);
+    return r?.phi_n?r.phi_hist.map(v=>100*v/r.phi_n):[0];
+   })));
+ $("polarScope").textContent="MS"+S.st+" · "+selectionLabel()+
+    " · все физические аноды выбранных камер (отбор по аноду выше здесь "+
+    "не применяется). Ось угловых линий: θ"+S.axis+".";
+ const overall=$("polarOverall");overall.replaceChildren();
+ const conditional=$("polarConditional");conditional.replaceChildren();
+ for(const {cfg,row} of all){
+  polarTile(overall,cfg,row,maxAll,null,0);
+  polarTile(conditional,cfg,row,0,colors,maxConditional);
+ }
+ const legend=$("polarLegend");legend.replaceChildren();
+ for(const {bin,color} of colors){
+  const item=document.createElement("span"),stroke=document.createElement("i");
+  stroke.style.background=color;
+  const label=document.createElement("span");
+  label.textContent="θ"+S.axis+" ["+D.meta.angle_bins_deg[bin]+", "+
+    D.meta.angle_bins_deg[bin+1]+")°";
+  item.append(stroke,label);legend.append(item);
+ }
+ const picker=$("polarBinPicker");picker.replaceChildren();
+ const edges=D.meta.angle_bins_deg;
+ for(let j=0;j<edges.length-1;j++){
+  const r=lookup(configs[0],S.det,j,-1);
+  const label=document.createElement("label"),cb=document.createElement("input");
+  cb.type="checkbox";cb.checked=chosen.includes(j);cb.disabled=!(r?.phi_n>0);
+  cb.addEventListener("change",()=>{
+   const selected=new Set(chosen);
+   if(cb.checked)selected.add(j);else selected.delete(j);
+   if(selected.size>6){
+    $("polarBinHelp").textContent="Можно сравнивать до шести интервалов одновременно.";
+    cb.checked=false;return;
+   }
+   S.polarBins=[...selected].sort((a,b)=>a-b);
+   safeDraw();
+  });
+  const caption=document.createElement("span");
+  caption.textContent="["+edges[j]+", "+edges[j+1]+")° · "+
+   format(r?.phi_n||0)+" e⁻";
+  label.append(cb,caption);picker.append(label);
+ }
+ $("polarBinHelp").textContent=chosen.length?
+    "Цветных интервалов: "+chosen.length+" (каждый нормирован отдельно).":
+    "Не выбраны угловые интервалы.";
+}
 function renderComparison(){
  const root=$("comparison"),tb=$("comparisonRows");
  root.replaceChildren();tb.replaceChildren();
@@ -617,6 +775,7 @@ function draw(){
  renderTime();
  renderArrival();
  renderComparison();
+ renderPolar();
  const valid=lookup();
  $("diagnostic").textContent=valid?"":"Нет подходящих данных для выбора; измените фильтр.";
  const timeOk=S.timeMode==="panels"?
@@ -650,7 +809,7 @@ $("station").addEventListener("change",e=>{
  if(v!==S.st){S.st=v;navigation();}
 });
 $("config").addEventListener("change",e=>{S.cfg=e.target.value;S.wire=-1;safeDraw()});
-$("axis").addEventListener("change",e=>{S.axis=e.target.value;S.bin=-1;safeDraw()});
+$("axis").addEventListener("change",e=>{S.axis=e.target.value;S.bin=-1;S.polarBins=null;safeDraw()});
 $("angle").addEventListener("change",e=>{S.bin=Number(e.target.value);safeDraw()});
 $("wire").addEventListener("change",e=>{S.wire=Number(e.target.value);if(S.wire>=0)S.bin=-1;safeDraw()});
 $("arrivalType").addEventListener("change",e=>{S.arrival=e.target.value;safeDraw()});
@@ -663,6 +822,8 @@ $("allModules").addEventListener("click",()=>setChambers(null));
 $("noneModules").addEventListener("click",()=>setChambers([]));
 $("allCheckboxes").addEventListener("click",()=>setChambers(null));
 $("clearCheckboxes").addEventListener("click",()=>setChambers([]));
+$("polarDefault").addEventListener("click",()=>{S.polarBins=null;safeDraw()});
+$("polarClear").addEventListener("click",()=>{S.polarBins=[];safeDraw()});
 $("detSearch").addEventListener("input",updateDetCheckboxes);
 document.querySelectorAll("[data-layer]").forEach(button=>
  button.addEventListener("click",()=>setChambers(
