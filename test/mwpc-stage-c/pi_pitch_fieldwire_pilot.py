@@ -351,6 +351,10 @@ def main():
     parser.add_argument("--field-wire-diam-um", type=float, default=75.,
                         help="Study default 75 um; may override explicitly")
     parser.add_argument("--seed", type=int, default=260020)
+    parser.add_argument("--only-pitch", type=float, choices=PITCHES,
+                        default=None,
+                        help="Run exactly one pitch with both field-wire settings. "
+                             "Default retains the original six geometries.")
     parser.add_argument("--binary", type=Path, default=DEFAULT_BINARY)
     parser.add_argument("--out", type=Path, default=ROOT)
     args = parser.parse_args()
@@ -365,11 +369,14 @@ def main():
     output = args.out / args.mode
     output.mkdir(parents=True, exist_ok=True)
     results = []
-    for pitch in PITCHES:
+    pitches=(args.only_pitch,) if args.only_pitch is not None else PITCHES
+    for pitch in pitches:
         for fw in (0., args.field_wire_diam_um):
             results.append(config(pitch, fw, args.mode, args.samples,
                                   args.seed, args.binary.resolve(), output))
-    summary = output / "all_six_configurations.json"
+    summary = output / ("two_pitch_configurations.json"
+                        if args.only_pitch is not None
+                        else "all_six_configurations.json")
     summary.write_text(json.dumps({
         "scope": "NEW Garfield-only one-cell B=0 field-wire pilot",
         "mode": args.mode,
@@ -378,7 +385,7 @@ def main():
         "not": "Not Geant4 2M run, not conditional on muon entrance angle, "
                "not finite chamber edge model or verified hardware diameter",
     }, indent=2)+"\n", encoding="utf-8")
-    print("PASS: all SIX independent configurations validated:", summary)
+    print(f"PASS: all {len(results)} independent configurations validated:", summary)
     for row in results:
         t = row["drift_time_ns"]
         print(f"p={row['pitch_mm']:.1f}mm, field={row['field_wire_diameter_um']:.1f}um "
