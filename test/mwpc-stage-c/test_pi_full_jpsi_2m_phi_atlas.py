@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""Small synthetic regression for the ALL-chamber J/psi phi_hit atlas.
+
+Real 2M J/psi histograms are NOT needed for this test, but the actual
+checkerboard physical DET geometry is used to test empty module coverage.
+"""
+from __future__ import annotations
+import copy
+import json
+import tempfile
+from pathlib import Path
+
+from mwpc_checkerboard_projection import build_chambers
+from pi_full_jpsi_2m_phi_atlas import (
+    CONFIGS,SCHEMA,source_index,render_station,
+)
+
+
+def fixture(st=0):
+    det=next(c.det_id for group in build_chambers() for c in group
+             if c.station==st)
+    src="jpsi40-bore"
+    data={"meta":{
+        "n_generated_parent_events_per_source":2_000_000,
+        "source_channel":"Jpsi",
+        "source_station":f"{src} MS{st}",
+        "garfield_luts":{k:{"samples_per_box":20} for k in CONFIGS},
+        "electron_phi_hit_edges_deg":list(range(-180,181,10)),
+        "angle_bins_deg":[-90,0,90],
+    },"groups":[]}
+    for cfg in CONFIGS:
+        fw="field75p0um" in cfg
+        hist=[2,6 if fw else 8]+[0]*34
+        for det_id in (-1,det):
+            for axis,bi in (("all",-1),("u",0),("w",1)):
+                data["groups"].append({
+                    "source":src,"config":cfg,"station":st,
+                    "det_id":det_id,"anode":-1,
+                    "axis":axis,"anglebin":bi,
+                    "segments":2,"primaries":30,
+                    "collected":8 if fw else 10,
+                    "phi_hist":hist,"phi_n":sum(hist),
+                })
+    return data,det,src
+
+
+def main():
+    blob,det,src=fixture()
+    payload=source_index(blob,0,src,2_000_000)
+    assert payload["schema"]==SCHEMA
+    assert len(payload["configs"])==6
+    assert payload["hist"]["-1"][CONFIGS[0]]["all"]["n"]==10
+    assert payload["hist"][str(det)][CONFIGS[1]]["all"]["n"]==8
+    assert len(payload["detectors"])>1
+    empty=next(r["id"] for r in payload["detectors"] if r["id"]!=det)
+    assert payload["hist"][str(empty)][CONFIGS[0]]["all"]["n"]==0
+    assert payload["hist"]["-1"][CONFIGS[0]]["u"][0]["n"]==10
+    assert payload["hist"]["-1"][CONFIGS[0]]["w"][1]["n"]==10
+    with tempfile.TemporaryDirectory(prefix="jpsi_all_phi_synthetic_") as t:
+        base=Path(t)
+        infile=base/"MS0.json"
+        outfile=base/"pages"/src/"MS0_phi_atlas.html"
+        infile.write_text(json.dumps(blob),encoding="utf-8")
+        stats=render_station(infile,outfile,src,0)
+        html=outfile.read_text(encoding="utf-8")
+        assert "2,000,000" in html
+        assert "MS5_phi_atlas.html" in html
+        assert "phi_hit_total_variation_FW_vs_noFW" in stats[0]
+        assert len(stats)==3*(len(payload["detectors"])+1)
+        assert "const D=JSON.parse" in html
+        assert "__DATA__" not in html
+        # Station=chamber+all empty ones; check failure on a single wrong bin.
+        broken=copy.deepcopy(blob)
+        broken["groups"][0]["phi_hist"][0]+=1
+        try:source_index(broken,0,src,2_000_000)
+        except ValueError:pass
+        else:raise AssertionError("Bad φ histogram accepted")
+        broken=copy.deepcopy(blob)
+        broken["groups"]=[r for r in broken["groups"]
+            if not (r["config"]==CONFIGS[0] and r["det_id"]==det
+                    and r["axis"]=="u")]
+        try:source_index(broken,0,src,2_000_000)
+        except ValueError:pass
+        else:raise AssertionError("Incomplete angular projection accepted")
+        broken=copy.deepcopy(blob)
+        broken["meta"]["n_generated_parent_events_per_source"]=100_000
+        try:source_index(broken,0,src,2_000_000)
+        except ValueError:pass
+        else:raise AssertionError("False 2M exposure accepted")
+    print("PASS synthetic Jpsi phi-hit atlas: all actual physical DETs, "
+          "six configurations, signed muon-angle slices, polar offline HTML, "
+          "conservation, empty chambers, and corrupt/provenance rejection")
+
+
+if __name__=="__main__":main()
