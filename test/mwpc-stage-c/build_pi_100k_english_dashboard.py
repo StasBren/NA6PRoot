@@ -25,7 +25,7 @@ TRANSLATIONS=[["NA60+ — PI · XY-карта, время дрейфа и угл
 def sha(data):
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
 
-def translate_page(src,dst,kind,*,write=True):
+def translate_page(src,dst,kind,*,write=True,expected_parents=100_000):
     if not src.is_file():
         raise FileNotFoundError(src)
     html=src.read_text(encoding="utf-8")
@@ -46,10 +46,10 @@ def translate_page(src,dst,kind,*,write=True):
             r'"n_generated_parent_events_per_source"\s*:\s*(\d+)',
             data_text[:131072])
         nparents=int(exposure.group(1)) if exposure else None
-        if nparents!=100_000:
+        if nparents!=expected_parents:
             raise ValueError(
-                f"Refusing English 100k label: true parent exposure is {nparents}"
-                f" in {src}")
+                f"Refusing translated HTML: true parent exposure {nparents} "
+                f"does not match expected {expected_parents} in {src}")
     if kind=="portal" and embedded:
         raise ValueError("Portal unexpectedly embeds JSON analysis")
     if kind=="layout":
