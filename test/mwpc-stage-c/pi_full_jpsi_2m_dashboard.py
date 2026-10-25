@@ -241,8 +241,11 @@ def make_station(st):
                       "birth-coordinate/quantile ensemble fed to six "
                       "separately frozen sampled Garfield response LUTs",
         "angle_semantics":"Geant4 signed θ_u/θ_w entrance angle; "
-                          "electron incidence_normal_deg is from LAST "
-                          "microscopic Garfield step, φ_hit is circular",
+                          "electron incidence_normal_deg is angle of the LAST "
+                          "Garfield electron step to the local inward "
+                          "anode normal; phi_hit_deg = atan2(radial_v,radial_u) "
+                          "is wire-surface IMPACT POSITION azimuth, not "
+                          "electron velocity or arrival direction azimuth",
         "simulation_limitations":"B=0 ideal field; 20 independent Garfield "
                           "drift trials per u/v cell, reused via lookup; "
                           "no avalanche, ionic pulse, cathode strips or "
@@ -379,7 +382,7 @@ six-geometry sampled Garfield LUT dashboard. Choose one of six muon
 spectrometer stations. On each page: clickable physical XY chamber map,
 individual DET modules and numbered anodes, 10 ns electron drift time,
 signed muon entrance angles (θu/θw), polar electron approach angles,
-signed φ, and six-way pitch / field-wire comparisons.</p>
+wire-surface impact-position φ, and six-way pitch / field-wire comparisons.</p>
 <div class="meta">
 <b>2,000,000 generated parent events</b>
 <b>__TOTAL__ gas-crossing segments across six stations</b>
