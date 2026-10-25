@@ -365,113 +365,171 @@ function renderStats(b){
   stat.append(main,cap);root.append(stat);
  }
 }
-function renderTime(){
- const root=$("time");root.replaceChildren();
- const selected=lookup();renderStats(selected);
- const plotted=S.overlay?configs.map(c=>[c,lookup(c)]):[[S.cfg,selected]];
- const valid=plotted.filter(([c,b])=>b&&b.known>0);
- const nonzero=valid.flatMap(([c,b])=>b.hist.slice(0,30).filter(n=>n>0)
-     .map(n=>100*n/b.known));
- const max=Math.max(1,...nonzero)*1.2;
- const x=t=>65+t*635/300;
- const logarithmic=S.scale==="log"&&nonzero.length>0;
- const minLog=logarithmic?Math.pow(10,Math.floor(Math.log10(Math.min(...nonzero)))-1):0;
- const maxLog=logarithmic?Math.pow(10,Math.ceil(Math.log10(max))):1;
- const y=logarithmic
-    ? v=>255-185*(Math.log10(v)-Math.log10(minLog))/
-        (Math.log10(maxLog)-Math.log10(minLog))
-    : v=>255-185*v/max;
- const yticks=logarithmic
-    ? Array.from({length:Math.round(Math.log10(maxLog/minLog))+1},
-        (_,i)=>minLog*Math.pow(10,i)).map(v=>[v,
-            v>=1?v.toFixed(0):Number(v.toPrecision(2)).toString()])
-    : [0,.25,.5,.75,1].map(j=>[max*j,(max*j).toFixed(1)]);
- axes(root,[65,70,700,255],"Время дрейфа от рождения до анода, нс",
-     logarithmic?"Доля e⁻ / 10 нс, % (логарифмическая шкала)":
-                   "Доля e⁻ в интервале 10 нс, %",
-     [0,50,100,150,200,250,300].map(t=>[t,String(t)]),
-     yticks,x,y);
- const legend=$("legend");legend.replaceChildren();
- plotted.forEach(([config,b])=>{
-   if(!b||!b.known)return;
-   const color=styles[configs.indexOf(config)];
-   if(!S.overlay){
-     b.hist.slice(0,30).forEach((n,k)=>{
-       const v=100*n/b.known;
-       if(logarithmic&&v<=0)return;  // zero is undefined on log axis
-       const Y=y(v);
-       const rect=make("rect",{x:x(k*10)+.8,y:Y,
-         width:635/30-1.6,height:255-Y,fill:color},root);
-       make("title",{},rect).textContent=(k*10)+"–"+(k*10+10)+
-           "нс: "+format(n)+" электронов, "+v.toFixed(2)+"%";
-     });
-   }else{
-     if(logarithmic){
-       let segment=[];
-       function flush(){
-         if(segment.length>1)make("polyline",{points:segment.join(" "),
-          fill:"none",stroke:color,"stroke-width":2.5},root);
-         else if(segment.length===1){
-          const [px,py]=segment[0].split(",").map(Number);
-          make("circle",{cx:px,cy:py,r:2.5,fill:color},root);
-         }
-         segment=[];
-       }
-       b.hist.slice(0,30).forEach((n,k)=>{
-         if(n<=0){flush();return;}
-         segment.push(x(k*10+5)+","+y(100*n/b.known));
-       });
-       flush();
-     }else{
-       const points=b.hist.slice(0,30).map((n,k)=>
-         x(k*10+5)+","+y(100*n/b.known)).join(" ");
-       make("polyline",{points,fill:"none",stroke:color,"stroke-width":2.5},root);
-     }
-   }
-   const item=document.createElement("span"),line=document.createElement("i");
-   line.className="swatch";line.style.background=color;
-   const label=document.createElement("span");label.textContent=config;
-   item.append(line,label);legend.append(item);
+// Integer-only rebinning. Values below the native resolution are forbidden.
+function rebinCounts(hist,nativeWidth,targetWidth){
+ if(targetWidth<nativeWidth||targetWidth%nativeWidth!==0)
+  throw Error("Cannot subdivide a frozen histogram");
+ const step=targetWidth/nativeWidth;
+ if(hist.length%step!==0)throw Error("Incompatible native histogram/bin size");
+ return Array.from({length:hist.length/step},(_,i)=>
+  hist.slice(i*step,(i+1)*step).reduce((a,b)=>a+b,0));
+}
+function labelConfig(c){
+ const p=c.includes("p3p0")?"3.0":c.includes("p3p5")?"3.5":"4.0";
+ return p+" мм · "+(c.includes("field75")?"field wire 75 µm":"без field wire");
+}
+// A single renderer is shared by all large and mini plots. The same
+// denominator is used before and after rebinning, including time overflow.
+function histogram(root,series,opts){
+ root.replaceChildren();
+ const mini=!!opts.mini,width=mini?460:760,height=mini?235:315;
+ root.setAttribute("viewBox","0 0 "+width+" "+height);
+ const x0=mini?56:65,x1=mini?412:700,y0=mini?33:70,y1=mini?174:255;
+ const x=t=>x0+(t-opts.left)*(x1-x0)/(opts.right-opts.left);
+ const nonzero=series.flatMap(s=>s.values.filter(v=>v>0));
+ const ymax=Math.max(opts.ymax||1,1e-8);
+ const log=!!opts.log&&nonzero.length>0;
+ const ymin=log?Math.pow(10,Math.floor(Math.log10(Math.min(...nonzero)))-1):0;
+ const ytop=log?Math.pow(10,Math.ceil(Math.log10(ymax))):ymax;
+ const y=v=>log
+   ? y1-(y1-y0)*(Math.log10(Math.max(v,ymin))-Math.log10(ymin))/
+       (Math.log10(ytop)-Math.log10(ymin))
+   : y1-(y1-y0)*v/ytop;
+ const yticks=Array.from({length:5},(_,i)=>{
+  const v=log?ymin*Math.pow(ytop/ymin,i/4):ytop*i/4;
+  return [v,v<1?v.toPrecision(2):v.toFixed(1)];
  });
- make("line",{x1:x(100),x2:x(100),y1:68,y2:255,stroke:"#ffc77e",
-   "stroke-width":2,"stroke-dasharray":"4 4"},root);
- text("100 нс",x(100)+5,62,root,{fill:"#ffc77e","font-size":11});
- if(!valid.length)text("Нет собранных электронов с известным временем",
-    380,160,root,{"text-anchor":"middle"});
- $("timeTitle").textContent="2. Время дрейфа — "+
-   (S.det<0?"все камеры":"DET"+S.det)+
+ const xticks=Array.from({length:opts.ticks+1},(_,i)=>{
+  const v=opts.left+(opts.right-opts.left)*i/opts.ticks;
+  return [v,String(Number(v.toFixed(1)))];
+ });
+ axes(root,[x0,y0,x1,y1],opts.xLabel,
+  (log?"Лог. доля e⁻":"Доля e⁻")+" / "+opts.binWidth+
+    (opts.angular?"°":" нс")+", %",xticks,yticks,x,y);
+ const dx=opts.binWidth;
+ for(const serie of series){
+  const color=serie.color,values=serie.values;
+  if(opts.mode==="bars"){
+   values.forEach((v,i)=>{
+    if(log&&v<=0)return;
+    const yy=y(v);
+    const rect=make("rect",{x:x(opts.left+i*dx)+0.8,y:yy,
+      width:Math.max(0.4,(x1-x0)/values.length-1.6),
+      height:Math.max(0,y1-yy),fill:color},root);
+    make("title",{},rect).textContent=
+      (opts.left+i*dx)+"–"+(opts.left+(i+1)*dx)+
+      (opts.angular?"°":" нс")+": "+format(serie.raw[i])+
+      " e⁻, "+v.toFixed(3)+"%";
+   });
+  }else if(opts.mode==="lines"){
+   let pending=[];
+   const flush=()=>{if(pending.length>1)make("polyline",
+      {points:pending.join(" "),stroke:color,fill:"none","stroke-width":2.4},root);
+     else if(pending.length===1){
+      const [cx,cy]=pending[0].split(",").map(Number);
+      make("circle",{cx,cy,r:2.2,fill:color},root);}
+     pending=[];};
+   values.forEach((v,i)=>{
+    if(log&&v<=0){flush();return;}
+    pending.push(x(opts.left+(i+0.5)*dx)+","+y(v));
+   });flush();
+  }else if(opts.mode==="steps"){
+   let previous=null;
+   values.forEach((v,i)=>{
+    if(log&&v<=0){previous=null;return;}
+    const start=x(opts.left+i*dx),end=x(opts.left+(i+1)*dx),cy=y(v);
+    make("line",{x1:start,y1:cy,x2:end,y2:cy,stroke:color,"stroke-width":2.3},root);
+    if(previous!==null){
+     make("line",{x1:start,y1:previous,x2:start,y2:cy,stroke:color,
+       "stroke-width":2.3},root);
+    }
+    previous=cy;
+   });
+  }
+ }
+ if(!opts.angular){
+  make("line",{x1:x(100),y1:y0,x2:x(100),y2:y1,
+    stroke:"#ffc77e","stroke-width":1.8,"stroke-dasharray":"4 4"},root);
+  text("100 нс",x(100)+4,y0-6,root,{fill:"#ffc77e","font-size":10});
+ }
+ if(!series.some(z=>z.denominator>0)){
+  text("Нет данных для выбранных камер",width/2,(y0+y1)/2,root,
+   {"text-anchor":"middle","font-size":13});
+ }
+}
+function makeSeries(cfg,field,count,angleWidth,angular){
+ const b=lookup(cfg);
+ const source=b?.[field]||[];
+ const hist=angular?source:source.slice(0,30); // 31st bin is >=300 ns overflow
+ const raw=rebinCounts(hist,10,angleWidth);
+ const denom=Number(b?.[count]||0);
+ return {cfg,raw,denominator:denom,
+         values:raw.map(n=>denom?100*n/denom:0),
+         color:styles[configs.indexOf(cfg)],row:b};
+}
+function maxProbability(series){
+ return Math.max(1,...series.flatMap(s=>s.values));
+}
+function multiples(container,series,opts){
+ container.replaceChildren();
+ for(const item of series){
+  const card=document.createElement("article");card.className="mini-card";
+  const heading=document.createElement("h3");heading.textContent=labelConfig(item.cfg);
+  card.append(heading);
+  const svg=make("svg",{},card); // make() creates SVG namespace nodes
+  histogram(svg,[item],{...opts,mini:true,mode:"bars"});
+  const caption=document.createElement("p");
+  caption.textContent="e⁻ с известной величиной: "+
+      format(item.denominator)+(opts.angular?"":" · ≥300 нс: "+
+       format(item.row?.hist?.[30]||0));
+  card.append(caption);container.append(card);
+ }
+}
+function renderTime(){
+ const selected=lookup();renderStats(selected);
+ const all=configs.map(c=>makeSeries(c,"hist","known",S.timeRebin,false));
+ const chosen=all.find(x=>x.cfg===S.cfg);
+ const plotSeries=S.timeMode==="single"?[chosen]:all;
+ const common={left:0,right:300,binWidth:S.timeRebin,angular:false,
+   xLabel:"Время дрейфа от рождения до анода, нс",ticks:6,
+   log:S.scale==="log",ymax:maxProbability(plotSeries)*1.15};
+ const inPanels=S.timeMode==="panels";
+ $("time").hidden=inPanels;$("timeMultiples").hidden=!inPanels;
+ $("legend").hidden=inPanels;
+ if(inPanels)multiples($("timeMultiples"),all,common);
+ else histogram($("time"),plotSeries,{...common,
+    mode:S.timeMode==="single"?"bars":S.timeMode});
+ const legend=$("legend");legend.replaceChildren();
+ if(!inPanels){
+  for(const item of plotSeries){
+   const el=document.createElement("span"),sw=document.createElement("i");
+   sw.className="swatch";sw.style.background=item.color;
+   const tx=document.createElement("span");tx.textContent=labelConfig(item.cfg);
+   el.append(sw,tx);legend.append(el);
+  }
+ }
+ $("timeTitle").textContent="2. Время дрейфа — "+selectionLabel()+
    (S.wire>=0?", анод "+S.wire:"")+" · MS"+S.st;
 }
 function renderArrival(){
- const root=$("arrival");root.replaceChildren();
- const b=lookup();
- const field=S.arrival==="incidence"?"angle_hist":"phi_hist";
- const count=S.arrival==="incidence"?"angle_n":"phi_n";
- const left=S.arrival==="incidence"?0:-180;
- const right=180,N=(right-left)/10;
- const hist=b?.[field]||[];
- const maximum=Math.max(1,...hist.map(n=>b&&b[count]?100*n/b[count]:0))*1.18;
- const x=t=>65+(t-left)*635/(right-left),y=v=>268-190*v/maximum;
+ const angular=S.arrival==="incidence"?{
+  field:"angle_hist",count:"angle_n",left:0,right:180,
+  title:"Угол подхода относительно нормали анода, градусы"}:{
+  field:"phi_hist",count:"phi_n",left:-180,right:180,
+  title:"Азимут точки попадания φ_hit на поверхность анода, градусы"};
  $("angleDescription").textContent=S.arrival==="incidence"?
-   "Угол подхода электрона к внутренней нормали поверхности анода; направление последнего микроскопического шага Garfield.":
-   "Геометрический угол положения попадания на поверхность анода φ (со знаком), а НЕ угол направления электрона.";
- axes(root,[65,78,700,268],
-     S.arrival==="incidence"?"Угол к нормали анода, градусы":
-      "Угол положения попадания φ, градусы",
-     "Доля электронов в интервале 10°, %",
-     [0,.25,.5,.75,1].map(f=>[left+f*(right-left),
-          String(left+f*(right-left))]),
-     [0,.25,.5,.75,1].map(f=>[f*maximum,(f*maximum).toFixed(1)]),x,y);
- if(!b||!b[count]){
-  text("Для выбранного фильтра нет известных углов",370,175,root,
-      {"text-anchor":"middle"});
-  return;
- }
- hist.forEach((n,k)=>{
-   const value=100*n/b[count],Y=y(value);
-   make("rect",{x:x(left+k*10)+.9,y:Y,
-      width:635/N-1.8,height:268-Y,fill:"#82b5ff"},root);
- });
+   "Угол последнего шага Garfield к внутренней нормали анода (не угол мюона).":
+   "Положение электронного endpoint на окружности анода, а НЕ направление скорости.";
+ const all=configs.map(c=>makeSeries(c,angular.field,angular.count,
+   S.angleRebin,true));
+ const chosen=all.find(x=>x.cfg===S.cfg);
+ const inPanels=S.angleMode==="panels";
+ const opts={left:angular.left,right:angular.right,binWidth:S.angleRebin,
+    xLabel:angular.title,angular:true,log:false,
+    ticks:angular.left<0?4:6,ymax:maxProbability(inPanels?all:[chosen])*1.15};
+ $("arrival").hidden=inPanels;$("arrivalMultiples").hidden=!inPanels;
+ if(inPanels)multiples($("arrivalMultiples"),all,opts);
+ else histogram($("arrival"),[chosen],{...opts,mode:"bars"});
 }
 function renderComparison(){
  const root=$("comparison"),tb=$("comparisonRows");
