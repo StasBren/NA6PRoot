@@ -824,6 +824,8 @@ $("allCheckboxes").addEventListener("click",()=>setChambers(null));
 $("clearCheckboxes").addEventListener("click",()=>setChambers([]));
 $("polarDefault").addEventListener("click",()=>{S.polarBins=null;safeDraw()});
 $("polarClear").addEventListener("click",()=>{S.polarBins=[];safeDraw()});
+$("polarDefault").addEventListener("click",()=>{S.polarBins=null;safeDraw()});
+$("polarClear").addEventListener("click",()=>{S.polarBins=[];safeDraw()});
 $("detSearch").addEventListener("input",updateDetCheckboxes);
 document.querySelectorAll("[data-layer]").forEach(button=>
  button.addEventListener("click",()=>setChambers(
