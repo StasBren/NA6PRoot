@@ -18,7 +18,7 @@ echo "Verified FULL two-million-parent Jpsi dashboard."
 echo "Drive destination: $DEST"
 echo "Original native ROOT/CSV and frozen Garfield files remain in WSL."
 if [[ "$MODE" == check ]];then
-  du -sh "$SRC/pages" "$SRC/station_summaries" "$SRC/summary.csv"
+  du -sh "$SRC/pages" "$SRC/station_summaries" "$SRC/summary.csv" "$SRC/phi_atlas_stats.csv"
   rclone lsf na60drive: --max-depth 1
   exit 0
 fi
@@ -30,6 +30,7 @@ if [[ "$MODE" == copy ]];then
     --include '/station_summaries/**' \
     --include '/complete_dashboard_manifest.json' \
     --include '/summary.csv' \
+    --include '/phi_atlas_stats.csv' \
     --exclude '**' \
     --checksum --transfers 2 --checkers 4 \
     --drive-chunk-size 16M --tpslimit 3 --retries 5 \
@@ -41,6 +42,7 @@ else
     --include '/station_summaries/**' \
     --include '/complete_dashboard_manifest.json' \
     --include '/summary.csv' \
+    --include '/phi_atlas_stats.csv' \
     --exclude '**' \
     --checksum --checkers 4 --tpslimit 3 --retries 4
   echo "PASS: cloud files check out against local published dashboard."
