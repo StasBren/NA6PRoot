@@ -246,7 +246,7 @@ def source_index(blob,station,source,parents,configs=CONFIGS):
     if (m.get("n_generated_parent_events_per_source")!=parents or
         m.get("source_channel")!="Jpsi" or
         int(m.get("source_station","").split("MS")[-1])!=station or
-        tuple(m.get("garfield_luts",{}))!=tuple(configs) or
+        set(m.get("garfield_luts",{}))!=set(configs) or
         m.get("electron_phi_hit_edges_deg")!=list(range(-180,181,10))):
         raise ValueError("Wrong J/psi exposure, station, or six frozen LUTs")
     edges=m["angle_bins_deg"]
@@ -311,9 +311,7 @@ def source_index(blob,station,source,parents,configs=CONFIGS):
             bins=[-1] if axis=="all" else range(len(edges)-1)
             for bi in bins:
                 station_row=(hist["-1"][cfg]["all"] if axis=="all" else
-                             hist["-1"][cfg][bi if isinstance(bi,int) else 0])
-                if axis=="w":station_row=hist["-1"][cfg]["w"][bi]
-                if axis=="u":station_row=hist["-1"][cfg]["u"][bi]
+                             hist["-1"][cfg][axis][bi])
                 module_rows=[hist[str(d)][cfg]["all"] if axis=="all" else
                              hist[str(d)][cfg][axis][bi] for d in sorted(ids)]
                 for k in ("n","segments","primaries","collected"):
