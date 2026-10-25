@@ -123,7 +123,8 @@ def build_report(ch,station,det,out,*,precheck=False):
         "angle_semantics":"Signed muon theta_u,theta_w in detector-local axes; "
                   "Garfield electron incidence_normal_deg is last microscopic "
                   "step w.r.t. local anode surface normal; phi_hit_deg is "
-                  "last-step azimuth, NOT line direction along the anode",
+                  "wire-surface IMPACT POSITION azimuth, NOT last-step "
+                  "velocity azimuth or approach direction",
         "muon_angle_bin_edges_deg":ANGLES.tolist(),
         "electron_incidence_bin_edges_deg":list(range(0,181,10)),
         "electron_phi_bin_edges_deg":list(range(-180,181,10)),
