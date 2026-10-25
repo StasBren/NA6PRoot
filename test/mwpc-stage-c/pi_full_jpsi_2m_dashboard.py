@@ -184,6 +184,7 @@ def make_station(st):
     validate_conservation(merged)
     collected={}
     primaries={}
+    heads={}
     all_groups=[]
     # Histogram conservation by angle projection in every station and chamber.
     for k,bucket in sorted(merged.items()):
@@ -212,6 +213,7 @@ def make_station(st):
                                      f"{cfg} {dimension} MS{st}")
         collected[cfg]=head["collected"]
         primaries[cfg]=head["primaries"]
+        heads[cfg]=head
 
     meta={
         "model_version":VERSION,"dashboard_version":SCHEMA,
@@ -289,9 +291,7 @@ def make_station(st):
         "merged_json_sha256":sha_file(target)
     }
     for cfg in PLOTS:
-        head=next(g for g in json.loads(target.read_text(encoding="utf-8"))["groups"]
-                  if g["config"]==cfg and g["det_id"]==-1 and
-                  g["anode"]==-1 and g["axis"]=="all")
+        head=heads[cfg]
         summary["six_geometries"][cfg]={
            "n_anode_collected":head["collected"],
            "n_heed_primaries":head["primaries"],
@@ -307,6 +307,38 @@ def make_station(st):
           f"signed muon entrance and electron arrival-angle histograms",
           flush=True)
     return summary
+
+
+def reusable_station(st):
+    """Re-enter an interrupted run without rebuilding finished station pages.
+
+    Resuming never trusts only filenames: scientific source-manifest SHAs
+    and local output SHA256 are compared against the station publication.
+    """
+    publication=BASE/"station_summaries"/f"MS{st}.json"
+    if not publication.is_file():return False
+    try:
+        info=json.loads(publication.read_text(encoding="utf-8"))
+        if info.get("schema")!=SCHEMA or info.get("station")!=st or \
+           info.get("generated_parent_events")!=N_PARENTS or \
+           set(info.get("six_geometries",{}))!=set(PLOTS):
+            return False
+        if sha_file(MERGED/f"MS{st}.json")!=info["merged_json_sha256"]:
+            return False
+        dest=PAGES/NAME
+        for name,digest in info["files"].items():
+            if sha_file(dest/name)!=digest:return False
+        sources=info.get("sha256_input_files",[])
+        if len(sources)!=N_CHUNKS:return False
+        for item in sources:
+            location,manifest,m,_=checked_manifest(
+                item["chunk"],st,verify_sha=False)
+            if (m["gzip_sha256"]!=item["gzip_sha256"] or
+                sha_file(manifest)!=item["immutable_manifest_sha256"]):
+                return False
+        return True
+    except (KeyError,ValueError,OSError,TypeError):
+        return False
 
 
 def html_index(summaries):
@@ -471,7 +503,10 @@ def main():
     precheck()
     if args.mode=="check":return
     for st in range(6):
-        make_station(st)
+        if reusable_station(st):
+            print(f'SKIP already SHA-verified complete J/psi MS{st} dashboard',flush=True)
+        else:
+            make_station(st)
     finalize()
     verify()
 
