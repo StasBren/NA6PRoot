@@ -117,6 +117,9 @@ fi
 if [[ -n "${NA60_PI_PITCH_LUT_SEED:-}" ]]; then
   EXTRA_ARGS+=(--seed "$NA60_PI_PITCH_LUT_SEED")
 fi
+if [[ -n "${NA60_PI_PITCH_LUT_ONLY_PITCH:-}" ]]; then
+  EXTRA_ARGS+=(--only-pitch "$NA60_PI_PITCH_LUT_ONLY_PITCH")
+fi
 python3 "$HERE/pi_pitch_fieldwire_pilot.py" \
  --mode "$MODE" --samples "$SAMPLES" \
  --field-wire-diam-um "$FIELD_DIAM_UM" \
