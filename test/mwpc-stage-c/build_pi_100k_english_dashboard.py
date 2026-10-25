@@ -209,6 +209,16 @@ TRANSLATIONS.extend([["Фильтр: DET, row, col, layer","Filter: DET, row, co
     "All chambers"
   ]
 ])
+TRANSLATIONS.extend([
+  [
+    "Время от рождения электрона до сбора на аноде. Исходные бины 10 нс; можно объединить их в 20 или 50 нс без интерполяции.",
+    "Electron birth-to-anode drift time. Native 10 ns bins can be combined into 20 or 50 ns bins without interpolation."
+  ],
+  [
+    "Исходные угловые бины 10°; доступно суммирование до 20° или 30°. Выбранные камеры, анод, геометрия и угол входа мюона синхронизованы со временем. Для отдельного анода доступна только интеграция по всем углам мюона.",
+    "Native angular bins are 10°; 20° or 30° grouping is available. Selected DETs, anodes, configuration and muon incidence angle are synchronized with the time plots. Per-anode distributions are integrated over all muon entrance angles."
+  ]
+])
 
 def sha(data):
     return hashlib.sha256(data.encode("utf-8")).hexdigest()
