@@ -71,6 +71,7 @@ FILES=(
   "pi_full_channel_2m_PI_v1/Jpsi_MS4_DET143/anode_wraparound/02_wraparound_phi_muon_theta_u_chamber.png"
   "pi_full_channel_2m_PI_v1/Jpsi_MS4_DET143/anode_wraparound/02_wraparound_phi_muon_theta_w_chamber.png"
   "pi_full_channel_2m_PI_v1/Jpsi_MS4_DET143/anode_wraparound/phi_hit_FW_comparison.csv"
+  "pi_full_channel_2m_PI_v1/Jpsi_MS4_DET143/anode_wraparound/conditional_angle_statistics.csv"
   "pi_full_channel_2m_PI_v1/Jpsi_MS4_DET143/anode_wraparound/README.txt"
   "pi_pitch_fieldwire_50_v1/pilot/all_six_configurations.json"
   "pi_pitch_fieldwire_50_v1/pilot/p3p0_anode_only/summary.json"
