@@ -55,6 +55,7 @@ python3 -m py_compile "$SCRIPT" "$HERE/build_pi_100k_english_dashboard.py" \
   "$HERE/pi_full_jpsi_2m_phi_atlas.py" \
   "$HERE/test_pi_full_jpsi_2m_phi_atlas.py"
 python3 "$HERE/test_pi_full_jpsi_2m_phi_atlas.py"
+python3 "$HERE/test_pi_100k_english_dashboard.py"
 if [[ "$MODE" == check ]];then
   python3 "$SCRIPT" check
   exit
