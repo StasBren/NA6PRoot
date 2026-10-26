@@ -198,6 +198,9 @@ def blocks(pairs):
 def group_report(pairs,seed,bootstrap):
     ref=[r for r,_ in pairs]
     mc=[m for _,m in pairs]
+    cpu_us=np.asarray([float(m["drift_wall_us"]) for m in mc],dtype=float)
+    if not np.all(np.isfinite(cpu_us)) or np.any(cpu_us<0):
+        raise ValueError("Nonfinite or negative measured MC CPU timing")
     if any(m["mc_attachment"]!="off" for m in mc):
         raise ValueError("Transport report requires MC attachment OFF")
     joint=[(a,b) for a,b in pairs
@@ -209,6 +212,11 @@ def group_report(pairs,seed,bootstrap):
     common=summary_distribution(times(joint_micro,"micro"),times(joint_mc,"mc"))
     return {
        "n_birth_sites":len(pairs),
+       "measured_mc_drift_wall_us_per_start":{
+           "mean":float(cpu_us.mean()),"median":float(np.median(cpu_us)),
+           "p95":float(np.quantile(cpu_us,.95)),
+           "sum_us":float(cpu_us.sum()),
+           "excludes":"gas table creation/load, startup, CSV IO"},
        "n_micro_anode_survivors":sum(int(x["reference_collected"]) for x in ref),
        "n_mc_anode_survivors":sum(int(x["anode_collected"]) for x in mc),
        "n_common_survivor_birth_sites":len(joint),
@@ -273,6 +281,7 @@ def report(reference_path,mc_path,out,bootstrap,seed):
             print(f"{geom} {split}: N_common="
                   f"{stats['n_common_survivor_birth_sites']}, "
                   f"dt_common={v['mean_difference_mc_minus_micro_ns']:+.3f} ns, "
+                  f"MC={stats['measured_mc_drift_wall_us_per_start']['mean']:.1f}us/e, "
                   f"KS_time={v['KS_distribution_distance']:.4f}, "
                   f"phiTV_common={stats['common_birth_survivor_angular_pdf_36bins']['TV']:.4f}, "
                   f"wirePDF_TV={stats['wire_index']['wire_pdf_TV']:.4f}",
