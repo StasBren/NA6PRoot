@@ -198,7 +198,8 @@ int main(int argc,char**argv){
       const auto points=Starts(trials,fieldFlag);
       const std::string geometry=fieldFlag?"p3_field75um":"p3_no_fw";
       for(const std::string method: {"microscopic","mc","rkf"}){
-        long long totalUs=0,anodes=0;
+        double totalUs=0.;
+        long long anodes=0;
         for(const auto& p:points){
           Garfield::RandomEngineRoot engine(p.seed);
           Garfield::Random::SetEngine(engine);
@@ -227,7 +228,7 @@ int main(int argc,char**argv){
               e.u=u1;e.v=v1;e.t=s1;
             }
           }
-          const auto microseconds=std::chrono::duration_cast<std::chrono::microseconds>(
+          const double microseconds=1.e-3*std::chrono::duration_cast<std::chrono::nanoseconds>(
              std::chrono::steady_clock::now()-t0).count();
           totalUs+=microseconds;
           auto c=Classify(e,fieldFlag);
