@@ -120,46 +120,34 @@ until a controlled convergence test with independently seeded LUTs and
 uncertainties has been performed.
 
 
-## PI single-slide ROOT-style presentation (one configuration)
+## PI one-slide PNG/PPTX presentation (one geometry)
 
-The script reads **only existing** measured phi_comparison.csv from the
-mean-Heed first-two-chunk convergence test. It draws two vertically stacked
-ROOT TH1D histograms in memory (LUT20 above, LUT500 below) with matching axes,
-1-sigma Garfield-LUT sampling uncertainties, and the nominal factor-5
-scaling law from K=20 to 500 independent microscopic trajectories per cell.
+Run the isolated one-slide renderer on already measured
+`pi_pitch_fieldwire_20_vs_500_expected_v1/phi_comparison.csv`.
+The image has scientific ROOT-style step histograms, but uses Matplotlib
+and **does not depend on the ROOT executable**. Only PNG and PPTX are
+written; the original Geant4, Heed, Garfield and six-LUT checkpoint
+data remain unchanged.
 
-The script writes **only PNG and PPTX**, not .root, PDF or an extra JSON
-provenance file. It does not rerun Garfield, Geant4, or Heed. python-pptx
-must be available in the local WSL interpreter for the PPTX output.
+In Ubuntu/WSL use the existing venv with python-pptx, adding matplotlib
+if it is not installed:
 
 ```bash
 cd ~/na6p/src/NA6PRoot-mwpc
 git pull --ff-only
-python3 -m py_compile test/mwpc-stage-c/pi_lut_root_slide.py
-python3 test/mwpc-stage-c/pi_lut_root_slide.py --validate-only
-python3 test/mwpc-stage-c/pi_lut_root_slide.py
-
-# Display the PNG with Windows:
-explorer.exe "$(wslpath -w test_runs/mwpc_stage_c/pi_lut_root_slide_v1/p3p0_field75p0um_slide.png)"
-
-# Ubuntu 24.04: if python-pptx is missing, use a local virtualenv:
-python3 -m venv --system-site-packages test_runs/mwpc_stage_c/.venv_pi_slides
-test_runs/mwpc_stage_c/.venv_pi_slides/bin/python -m pip install python-pptx
+test_runs/mwpc_stage_c/.venv_pi_slides/bin/python -m pip install matplotlib
+test_runs/mwpc_stage_c/.venv_pi_slides/bin/python -m py_compile test/mwpc-stage-c/pi_lut_root_slide.py
+test_runs/mwpc_stage_c/.venv_pi_slides/bin/python test/mwpc-stage-c/pi_lut_root_slide.py --validate-only
 test_runs/mwpc_stage_c/.venv_pi_slides/bin/python test/mwpc-stage-c/pi_lut_root_slide.py
-
-# Optional alternate electrode geometry without FW:
-python3 test/mwpc-stage-c/pi_lut_root_slide.py --geometry p3p0_anode_only
+explorer.exe "$(wslpath -w test_runs/mwpc_stage_c/pi_lut_root_slide_v1/p3p0_field75p0um_slide.pptx)"
 ```
 
-PNG and PPTX outputs are in
-`test_runs/mwpc_stage_c/pi_lut_root_slide_v1/`:
-`p3p0_field75p0um_slide.png` and
-`p3p0_field75p0um_slide.pptx`.
-The PowerPoint slide embeds the ROOT-rendered image; original numerical
-CSV and Garfield LUTs remain in their read-only sources.
-
-**The fivefold reduction is the expected standard-error scaling** for
-independent microscopic trials per LUT cell, not an exact numerical
-fivefold reduction of observed neighbouring-bin differences. This is
-a fixed-Geant4, analytically expected-Heed diagnostic, not the
-event-by-event asymmetry calculation.
+The files are `p3p0_field75p0um_slide.png` and
+`p3p0_field75p0um_slide.pptx` in `pi_lut_root_slide_v1`.
+Optionally select `--geometry p3p0_anode_only` for the no-FW case.
+The two plots use identical x/y scales and show 1-sigma uncertainties
+from the *finite Garfield LUT*, conditioned on analytically expected
+Heed occupancy and the same native Geant4 track sample. The stated 5x
+improvement is the expected 1/sqrt(K) scaling from K=20 to 500 per
+independent spatial cell, not a measured universal reduction in every
+adjacent-bin jump. Eventwise Heed asymmetry is a separate study.
