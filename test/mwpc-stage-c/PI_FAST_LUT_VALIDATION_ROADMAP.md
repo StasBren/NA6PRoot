@@ -1,5 +1,28 @@
 # NA60+ MWPC — fast Garfield LUT validation roadmap
 
+> **Current decision (2026-10-26): transport-only workstream, attachment DEFERRED.**
+> Our immediate observable is electron drift time and impact angle
+> with intrinsic stochastic diffusion, not detector survival, avalanche
+> gain, collected charge, or threshold. For this explicitly limited
+> purpose we use AvalancheMC with --mc-attachment off and a preliminary
+> 5 um step. No calibrated k is accepted or used; the previous
+> attachment results are retained as archived diagnostics.
+>
+> Important limitation: the existing microscopic LUT500 was made with
+> attachment ON, so its collected-electron time/angle distribution
+> is survivor-selected. Comparing it to MC-off is a diagnostic but
+> does NOT independently validate the un-killed transport distribution.
+> For a clean final transport-only validation, produce a *small,
+> isolated* microscopic attachment-off control if the installed
+> Garfield API supports it, or explicitly label residual survivor bias.
+> Production detector efficiency, attachment, gain and charge signals
+> still require the more complete physical treatment later.
+>
+> **Immediate next action:** run the read-only script
+> pi_fast_lut_transport_only_audit.py on selected_micro_reference.csv
+> and mc_no_attach_5um.csv; see PI_FAST_LUT_TRANSPORT_ONLY_README.md.
+
+
 Status: **research plan, not a validated replacement**. Current branch
 feature/mwpc-stage-c. Frozen 20- and 500-trial microscopic LUTs and the
 Geant4/Heed native folds remain immutable.
