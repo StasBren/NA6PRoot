@@ -23,6 +23,15 @@ def full_test():
                   "NA60+ Simulation", "Fraction of parent events"):
         assert token in template, ("Missing plot-style requirement",token)
     assert 'const entries=[["No FW",a]]' not in template
+    # Catch dark-mode regression shown by real WSL screenshot: tick labels
+    # are black, so the entire 900x520 SVG must have a white background
+    # BEFORE the inner frame, not only CSS or a white plot rectangle.
+    full_canvas='el("rect",{x:0,y:0,width:900,height:520,fill:"#ffffff"'
+    inner_frame='el("rect",{x:L,y:T,width:W,height:H,fill:"white"'
+    assert template.count(full_canvas)==1
+    assert template.index(full_canvas)<template.index(inner_frame)
+    assert 'L=113,R=846,T=39,B=416' in template
+    assert '#hist{height:420px;background:#fff!important}' in template
     with tempfile.TemporaryDirectory(prefix="mwpc_asym_root_") as tmp:
         root=Path(tmp)
         source=root/"fake_crossings.csv"
