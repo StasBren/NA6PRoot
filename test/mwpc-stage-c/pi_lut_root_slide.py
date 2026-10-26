@@ -61,8 +61,13 @@ def require_pptx():
     except ImportError as exc:
         raise RuntimeError(
             "python-pptx is required for the PPTX output. "
-            "Install with: sudo apt update && sudo apt install python3-pptx "
-            "(or install python-pptx inside your active Python venv)."
+            "On Ubuntu 24.04, use a virtual environment rather than "
+            "sudo apt install python3-pptx: "
+            "python3 -m venv --system-site-packages "
+            "test_runs/mwpc_stage_c/.venv_pi_slides; "
+            "test_runs/mwpc_stage_c/.venv_pi_slides/bin/python "
+            "-m pip install python-pptx; "
+            "then run the script with that venv's Python."
         ) from exc
     return Presentation, Inches
 
