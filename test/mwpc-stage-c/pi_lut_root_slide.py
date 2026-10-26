@@ -176,3 +176,7 @@ def main():
     print("PASS: PNG and PPTX slide; no ROOT executable required",flush=True)
     print("OUTPUT",png,flush=True)
     print("OUTPUT",pptx,flush=True)
+
+
+if __name__=="__main__":
+    main()
