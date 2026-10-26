@@ -29,3 +29,7 @@ target_compile_features(mwpc_stage_c_wire_response PRIVATE cxx_std_17)
 add_executable(mwpc_stage_c_transport_box_map c_transport_box_map.cxx)
 target_link_libraries(mwpc_stage_c_transport_box_map PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_stage_c_transport_box_map PRIVATE cxx_std_17)
+
+add_executable(pi_garfield_drift_methods_benchmark pi_garfield_drift_methods_benchmark.cxx)
+target_link_libraries(pi_garfield_drift_methods_benchmark PRIVATE Garfield::Garfield)
+target_compile_features(pi_garfield_drift_methods_benchmark PRIVATE cxx_std_17)
