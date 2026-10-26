@@ -30,7 +30,7 @@ footer{margin:12px max(20px,3vw) 30px;color:#606a75;font-size:12px}
 <header><div class="tag">NA60+ · MS0–MS5 · ROOT-STYLE HISTOGRAMS · p = 3 mm · Garfield LUT500</div>
 <h1>Event-by-event asymmetry A</h1>
 <p>J/ψ parent events · native Geant4 gas crossings · Heed primaries · Garfield++ LUT500 · B = 0</p>
-<p class="small">Independent of the older <a href="../pi_full_jpsi_2m_dashboard_v1/pages/index.html">2M J/ψ dashboard (LUT20, six geometries)</a>. Do not combine its LUT20 and this LUT500 statistics.</p>
+<p class="small">Independent of the older <a id="backTo2M" href="../pi_full_jpsi_2m_dashboard_v1/pages/index.html">2M J/ψ dashboard (LUT20, six geometries)</a>. Do not combine its LUT20 and this LUT500 statistics.</p>
 </header>
 <div class="note">A = (N<sub>up</sub> − N<sub>down</sub>)/(N<sub>up</sub> + N<sub>down</sub>) for finite anode-surface φ<sub>hit</sub>.
 A is <b>undefined</b> when no classified electron arrives; it is not set to zero.
@@ -266,6 +266,10 @@ function setDetOptions(){
 function refresh(){drawHist();drawMap();table();}
 for(const s of D.computed_stations){
  const opt=document.createElement("option");opt.value=s;opt.textContent="MS"+s;$("station").appendChild(opt);
+}
+// Pilot is nested one directory deeper than the full LUT500 dashboard.
+if(window.location.pathname.includes("/pilot200/")){
+ $("backTo2M").setAttribute("href","../../pi_full_jpsi_2m_dashboard_v1/pages/index.html");
 }
 $("station").value=String(station);setDetOptions();refresh();
 $("station").addEventListener("change",e=>{station=Number(e.target.value);det=-1;setDetOptions();refresh();});
