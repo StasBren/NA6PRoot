@@ -193,6 +193,18 @@ function plot(svg,r,maxFraction,color){
    }
   }
  }
+ // Polar radial coordinate: electron fraction / 10-degree phi bin [%].
+ // Same numeric radial scale is retained across the six geometries.
+ for(let k=1;k<=4;k++){
+   const rr=34+105*k/4;
+   node(svg,"circle",{cx:0,cy:0,r:rr,fill:"none",
+       stroke:"#747c86","stroke-width":.7,"stroke-dasharray":"2 3"});
+   node(svg,"text",{x:6,y:-rr+3,fill:"#111",
+       "font-size":9,stroke:"#fff","stroke-width":2,
+       "paint-order":"stroke"},(100*maxFraction*k/4).toFixed(2)+"%");
+ }
+ node(svg,"text",{x:0,y:166,fill:"#111","font-size":9,
+     "text-anchor":"middle"},"Radial: fraction of electrons / 10° [%]");
  node(svg,"circle",{cx:0,cy:0,r:32,fill:"#949ba5",stroke:"#e1e8ed",
    "stroke-width":1.5});
  node(svg,"text",{x:0,y:-2,fill:"#132637","font-size":12,
