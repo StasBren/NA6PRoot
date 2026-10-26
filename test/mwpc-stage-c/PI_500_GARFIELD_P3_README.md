@@ -145,9 +145,19 @@ explorer.exe "$(wslpath -w test_runs/mwpc_stage_c/pi_lut_root_slide_v1/p3p0_fiel
 The files are `p3p0_field75p0um_slide.png` and
 `p3p0_field75p0um_slide.pptx` in `pi_lut_root_slide_v1`.
 Optionally select `--geometry p3p0_anode_only` for the no-FW case.
+The slide also reads the matching `comparison.json` and verifies its
+36-bin probabilities against the CSV. It prints the actual source exposure
+(Geant4 generated J/psi parents, MS0 muon gas crossings, expected Heed
+primary electrons and expected LUT500 anode-collected electrons). Statistics
+therefore update automatically when the comparison scope changes.
 The two plots use identical x/y scales and show 1-sigma uncertainties
 from the *finite Garfield LUT*, conditioned on analytically expected
-Heed occupancy and the same native Geant4 track sample. The stated 5x
+Heed occupancy and the same native Geant4 track sample.
+The small-note fluctuation estimate is the binomial
+`SE(p_j)≈sqrt(p_j*(1-p_j)/K)` for ONE spatial cell.
+Full plotted error bars correctly use weighted independent Garfield trials
+across cells; repeated Heed occupancy is not counted as new microscopic
+statistics. The stated 5x
 improvement is the expected 1/sqrt(K) scaling from K=20 to 500 per
 independent spatial cell, not a measured universal reduction in every
 adjacent-bin jump. Eventwise Heed asymmetry is a separate study.
