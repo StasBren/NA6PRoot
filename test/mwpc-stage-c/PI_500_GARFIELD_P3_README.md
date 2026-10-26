@@ -42,41 +42,55 @@ two assembled map outputs and electron conservation. All generated data are
 
 ## First PI question: quantitative LUT angular fluctuation test
 
-After `run_pi_pitch_fieldwire_500.sh verify` passes, use the isolated,
-**read-only** 20-vs-500 report. It does not need Garfield, Geant4 or the old
-720-fold pipeline and does not modify frozen checkpoints:
+Use the **fast analytically expected Heed occupancy** by default. The former
+same-RNG sampled-Heed mode is left unchanged in the original script.
+The fast mode integrates the **mean Heed electron density along each actual
+straight native Geant4 gas chord** and partitions its length EXACTLY at every
+0.1mm-u and 0.2mm-v LUT grid boundary, with periodic physical-anode
+indexing and finite detector edges. This removes millions of per-event
+NumPy RNG, Poisson, mark, and electron-list operations. Geant4 gas chords
+and Heed cluster rate and multiplicity mean remain unchanged. This mode
+answers **LUT-only angular convergence at fixed Geant4 muon exposure**;
+it does not reproduce a particular sampled Heed experiment, and must not
+be used for event-by-event asymmetry or Heed fluctuation calculations.
 
 ```bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git pull --ff-only
 python3 test/mwpc-stage-c/test_pi_lut_20_vs_500_convergence.py
-python3 test/mwpc-stage-c/pi_lut_20_vs_500_convergence.py --station 0 --chunks 2
-explorer.exe "$(wslpath -w test_runs/mwpc_stage_c/pi_pitch_fieldwire_20_vs_500_v1/compare.html)"
+python3 test/mwpc-stage-c/test_pi_lut_20_vs_500_expected.py
 
-# After the quick first-two-chunk validation, full existing 2M J/psi exposure:
-python3 test/mwpc-stage-c/pi_lut_20_vs_500_convergence.py --station 0 --chunks 40
+# Quick speed check, 2 existing 50k-parent Geant4 chunks:
+python3 test/mwpc-stage-c/pi_lut_20_vs_500_expected.py --station 0 --chunks 2
+
+# HTML output (distinct from original sampled-Heed mode):
+explorer.exe "$(wslpath -w test_runs/mwpc_stage_c/pi_pitch_fieldwire_20_vs_500_expected_v1/compare.html)"
+
+# All 2M already generated J/psi parents, still without new Geant4/Garfield:
+python3 test/mwpc-stage-c/pi_lut_20_vs_500_expected.py --station 0 --chunks 40
+
+# Optional exact original Heed RNG realization (much more CPU intensive):
+python3 test/mwpc-stage-c/pi_lut_20_vs_500_convergence.py --station 0 --chunks 2 --max-hits 2000
 ```
 
-Outputs: `compare.html`, `phi_comparison.csv`, `comparison.json`. The
-comparison uses exact deterministic Heed **birth positions** from the same
-native J/psi source/chunks and folds their spatial cell occupancies over
-**all** stored Garfield outcomes at each LUT cell. This avoids an expensive
-electron-by-electron repeated random LUT lookup. Finite physical anode
-boundaries and relative Garfield wire migration are retained, including
-Heed births just beyond the outermost nearest physical anodes.
+Each mode creates `compare.html`, `phi_comparison.csv`,
+`comparison.json` in **distinct** output directories.
+The uncertainty is from independent microscopic Garfield drift trials
+per LUT cell, weighted by the fixed Heed spatial occupancy; physically
+distinct wire locations reusing the same LUT trial are treated as
+correlated. The fast mode further conditions on the *mean* Heed
+occupancy, not sampled Heed shot noise. These are NOT independent
+Geant4 parent-event uncertainties, and they do not quantify systematic
+grid/coarse-graining or detector-model bias. Same event/chunk Geant4
+track ensemble and same expected Heed physics are used for 20 and 500;
+different microscopic LUT seeds are independent.
 
-The error estimate is conditioned on fixed Heed spatial occupancies and
-comes from K independent microscopic Garfield trials *per spatial cell*,
-with reuse of each trial at different physical wire locations treated as
-correlated. It is **not** a Geant4-event statistical error and not a
-substitute for independent repeat LUT seeds. Differences between 20 and
-500 should be compared with the displayed Garfield uncertainty, not
-claimed to be proof of total physical convergence.
-
-The 20-vs-500 integrated PDF has the same expected electron response as
-the frozen old LUT resampling approach but will not yield identical old
-integer counts: the new method analytically averages over the finite LUT
-sample rather than performing per-electron pseudo-random re-draws.
-Likewise, the `--chunks 2` exposure has different Heed cell weights from
-the full 40-chunk dashboard; use `--chunks 40` for source-matched plots.
+The original 720 native production folds, original 20-trial LUT and both
+500-trial Garfield input archives are read-only. The new script does
+not start Garfield or ROOT. It also does not overwrite the old dashboard.
+This expectation-based first-PI-question diagnostic is intentionally
+**different** from the second PI question about per-event up/down
+asymmetry, which needs seeded individual electron responses and event IDs.
 
 ## Existing 720-shard production progress (independent)
 
