@@ -150,6 +150,68 @@ The portal will show a verified link to the companion LUT500
 event-asymmetry dashboard once the latter's manifest and HTML SHA
 exist. DO NOT modify the original publication manifest by hand.
 
+## ATLAS-inspired plotting style guidelines and axes (2026-10-26)
+
+Source: CERN ATLAS Style Guide §3.3.3, General Rules for Graphs and
+Plots, https://cds.cern.ch/record/1110290/files/gen-pub-2008-001.pdf
+
+The NA60+ research plots adopt PLOTTING CONVENTIONS only. We must NOT
+use the ATLAS name or claim ATLAS approval; show "NA60+ Simulation"
+(and "work in progress" as needed) instead of "ATLAS Preliminary".
+
+Applied rules:
+- Every Cartesian graph: labeled axes, physical units [cm], [ns],
+  [deg] where applicable, dimensionless A explicitly identified.
+- Axis titles are legible with black labels and top/right ticks.
+- Vertical A histogram label specifies exact bin width 2/41 ≈ 0.04878;
+  "Fraction of parent events / 0.049" for area normalized to unity
+  and "Parent events / 0.049" for raw counts. These are NOT counts
+  per unit A; each bin sums parent events in that fixed ΔA.
+- Physical detector map is Cartesian X [cm], Y [cm]; coordinate
+  values follow NA6P build_chambers(), never arbitrary pixel units.
+  The colour scale itself has numerical min/max and names/units.
+- Polar φ plots have angles in degrees, annotated numerical radial
+  scale "Fraction of electrons / 10° [%]" with the SAME scale across
+  corresponding geometry panels.
+- Overlay styling uses blue solid noFW vs red DASHED FW75; distinguish
+  geometry by line style, not only by colour.
+- Figure legends are explicit, with readable typography.
+- Do not put ROOT's automatic histogram title or statistics box on
+  the scientific plot; retain entries/mean/RMS in the DASHBOARD
+  metadata panel, where they are clearly labeled.
+
+These plots are simulation-level exploratory diagnostics, not
+publication-approved ATLAS figures. Full uncertainty bands (finite
+LUT500 + shared-parent correlation) are still a separate physics
+validation task; there is currently no assumption of independent
+Gaussian errors on reused LUT lookups.
+
+### Update existing pilot HTML WITHOUT recalculating anything
+
+Existing dashboard build commands refuse to overwrite HTML. Use
+the dedicated checksum-verified style-only refresh command:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_lut500_event_asymmetry_root_dashboard.sh check
+    bash test/mwpc-stage-c/run_pi_lut500_event_asymmetry_root_dashboard.sh style
+
+This performs verification of summary.json, dashboard.html and
+event_counts.csv.gz SHA256 against manifest.json before regenerating
+ONLY dashboard.html and the dashboard HTML SHA in manifest.
+It keeps all physics samples, raw per-parent counts, and the summary
+unchanged. It updates pilot200/ and the full output if they exist.
+
+To refresh the OLD complete 2M LUT20 histogram/browser axes without
+re-running any simulation (the HTML theme ID is root-atlas-axes-v2):
+
+    bash test/mwpc-stage-c/run_pi_full_jpsi_2m_dashboard.sh check
+    bash test/mwpc-stage-c/run_pi_full_jpsi_2m_dashboard.sh start
+    bash test/mwpc-stage-c/run_pi_full_jpsi_2m_dashboard.sh status
+
+The builder reads SHA-verified frozen merged station JSON to re-render
+the HTML. The old 2M physics input and its LUT20 are NOT altered.
+
 ## Physics interpretation limits
 
 - This is electron endpoint **count** asymmetry, not induced U/V
