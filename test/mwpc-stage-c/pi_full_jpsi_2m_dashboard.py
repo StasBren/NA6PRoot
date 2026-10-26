@@ -356,8 +356,10 @@ def refresh_layout_ui_if_needed(st):
     folder=PAGES/NAME
     en=folder/f"MS{st}_layout_v3_en.html"
     marker=b'id="polarOverall"'
+    root_theme=b'data-ui-theme="root-light-v1"'
     with en.open("rb") as handle:
-        if marker in handle.read(120_000):
+        snapshot=handle.read(120_000)
+        if marker in snapshot and root_theme in snapshot:
             return False
     source=MERGED/f"MS{st}.json"
     if not source.is_file():
@@ -365,15 +367,24 @@ def refresh_layout_ui_if_needed(st):
     ru=folder/f"MS{st}_layout_v3.html"
     render_xy(source,ru,NAME,st)
     translate_page(ru,en,"layout",expected_parents=N_PARENTS)
+    detail=folder/f"MS{st}.html"
+    detail_en=folder/f"MS{st}_en.html"
+    render_detail(source,detail)
+    translate_page(detail,detail_en,"detail",expected_parents=N_PARENTS)
+    dt=detail_en.read_text(encoding="utf-8")
+    if "MWPC-NATIVE-CHUNK-MERGE-100K-V1" in dt:
+        detail_en.write_text(
+            dt.replace("MWPC-NATIVE-CHUNK-MERGE-100K-V1",
+                       "MWPC-NATIVE-CHUNK-MERGE-2M-V1"),encoding="utf-8")
     publication=BASE/"station_summaries"/f"MS{st}.json"
     meta=json.loads(publication.read_text(encoding="utf-8"))
     if sha_file(source)!=meta["merged_json_sha256"]:
         raise ValueError("Input station JSON SHA changed during UI upgrade")
-    meta["files"][ru.name]=sha_file(ru)
-    meta["files"][en.name]=sha_file(en)
+    for page in (ru,en,detail,detail_en):
+        meta["files"][page.name]=sha_file(page)
     atomic_json(publication,meta)
-    print(f"UPDATED UI: Jpsi MS{st}, all-DET multi-select / six histograms "
-          "(read-only native merged JSON)",flush=True)
+    print(f"UPDATED ROOT-STYLE UI: Jpsi MS{st}, four station HTML pages "
+          "(read-only native merged JSON; no physics re-fold)",flush=True)
     return True
 
 
@@ -407,6 +418,14 @@ background:#153047;color:#eaf5fc;text-decoration:none}.card:hover{border-color:#
 .card small{font-size:12px;color:#69e5d4}.notice{margin-top:27px;border-left:3px solid
 #f1bf83;padding:12px 16px;color:#c5d6df;background:#173047}
 a{color:#83e0e2}
+
+/* ROOT-inspired light portal */
+body{background:#ebedf2!important;color:#171717!important;font-family:Arial,Helvetica,sans-serif}
+.intro,.card span,.card small{color:#4d5a68!important}
+.card{background:white!important;color:#171717!important;border:1px solid #aeb7c1!important;border-radius:2px!important}
+.meta b{background:#e6edf9!important;color:#1c468c!important;border-radius:2px!important}
+.notice{background:#fff8e1!important;color:#454036!important}
+a{color:#2451a0!important}
 </style></head><body><main>
 <p style="color:#5adccf;font-weight:700;letter-spacing:.12em">NA60+ / STAGE C / FULL PARENT SAMPLE</p>
 <h1>J/ψ · 2,000,000 generated parents</h1>
@@ -426,6 +445,7 @@ wire-surface impact-position φ, and six-way pitch / field-wire comparisons.</p>
 six wire geometries, and signed muon entrance-angle bins. Open a station:
 __ATLAS_LINKS__</p>
 <p><a href="../phi_atlas_stats.csv">Field-wire azimuth and collection comparisons by chamber (CSV)</a></p>
+__LUT500_ASYM_LINK__
 <p><a href="pi_pitch_fieldwire_timing_dashboard_v3_en.html">
 Alternative compact source/station navigation</a> ·
 <a href="../summary.csv">Numerical statistics (CSV)</a></p>
@@ -441,7 +461,25 @@ is left unchanged.</div>
         f'<a href="{NAME}/MS{st}_phi_atlas.html">MS{st} φ_hit</a>'
         for st in range(6)
     )
+    sidecar=BASE.parent/"pi_lut500_parent_asymmetry_root_v1"
+    index_sidecar=sidecar/"dashboard.html"
+    meta_sidecar=sidecar/"manifest.json"
+    sidecar_link=""
+    if index_sidecar.is_file() and meta_sidecar.is_file():
+        companion=json.loads(meta_sidecar.read_text(encoding="utf-8"))
+        if (companion.get("schema")==
+            "PI_JPSI_SIX_STATIONS_PER_DET_PARENT_ASYM_P3_LUT500_ROOT_V1"
+            and companion.get("files_sha256",{}).get("dashboard.html")==
+                sha_file(index_sidecar)):
+            sidecar_link=(
+                '<h2>New: parent-event asymmetry by station and chamber</h2>'
+                '<p><a href="../../pi_lut500_parent_asymmetry_root_v1/dashboard.html">'
+                'Open ROOT-style LUT500 p=3 mm event-by-event A dashboard '
+                '(MS0–MS5, only p=3mm noFW / FW75; independent from LUT20)</a></p>'
+                '<p>The 2M J/psi dashboard is based on LUT20; the LUT500 '
+                'asymmetry uses its own explicitly stated parent exposure.</p>')
     page=page.replace("__ATLAS_LINKS__",atlas_links)
+    page=page.replace("__LUT500_ASYM_LINK__",sidecar_link)
     page=page.replace("__TOTAL__",f"{total:,}").replace("__CARDS__",
                                                    "\n".join(blocks))
     location=PAGES/"index.html"
