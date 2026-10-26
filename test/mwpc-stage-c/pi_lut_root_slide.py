@@ -23,32 +23,35 @@ OUTPUT=REPO/"test_runs/mwpc_stage_c/pi_lut_root_slide_v1"
 GEOMS=("p3p0_field75p0um","p3p0_anode_only")
 
 
-def validate_csv(path,geometry):
-    with path.open(newline="",encoding="utf-8") as stream:
-        r=csv.DictReader(stream)
-        expected={"geometry","phi_lower_deg","phi_upper_deg",
-                  "p20","se20","p500","se500"}
-        if not expected.issubset(r.fieldnames or []):
-            raise ValueError("Missing phi_comparison.csv fields")
-        selected=[row for row in r if row["geometry"]==geometry]
-    if len(selected)!=36:
-        raise ValueError(f"Expected 36 angular bins, got {len(selected)}")
-    sums={"p20":0.,"p500":0.}
-    for i,row in enumerate(sorted(selected,key=lambda z:float(z["phi_lower_deg"]))):
+def validate_csv(path: Path, geometry: str):
+    """Return ordered, normalized 36-bin P(phi) and finite-LUT errors."""
+    with path.open(newline="", encoding="utf-8") as handle:
+        reader=csv.DictReader(handle)
+        needed={"geometry","phi_lower_deg","phi_upper_deg",
+                "p20","se20","p500","se500"}
+        if not needed.issubset(reader.fieldnames or []):
+            raise ValueError("Missing required angular CSV columns")
+        rows=[row for row in reader if row["geometry"]==geometry]
+    if len(rows)!=36:
+        raise ValueError(f"Expected 36 angular bins for {geometry}, got {len(rows)}")
+    rows.sort(key=lambda r:float(r["phi_lower_deg"]))
+    values={k:[] for k in ("p20","se20","p500","se500")}
+    for i,row in enumerate(rows):
         lo=float(row["phi_lower_deg"])
         hi=float(row["phi_upper_deg"])
-        if not math.isclose(lo,-180.+i*10.,abs_tol=1e-6) or not \
-           math.isclose(hi,lo+10.,abs_tol=1e-6):
-            raise ValueError(f"Invalid angular bin {i}")
-        for key in ("p20","se20","p500","se500"):
+        if not (math.isfinite(lo) and math.isfinite(hi)
+                and math.isclose(lo,-180+10*i,abs_tol=1e-6)
+                and math.isclose(hi,lo+10,abs_tol=1e-6)):
+            raise ValueError(f"Wrong or duplicate phi bin {i}")
+        for key in values:
             v=float(row[key])
             if not math.isfinite(v) or v<0:
                 raise ValueError(f"Invalid {key} in bin {i}")
-        sums["p20"]+=float(row["p20"])
-        sums["p500"]+=float(row["p500"])
-    if any(abs(sums[name]-1.)>1e-4 for name in sums):
-        raise ValueError(f"PDFs do not normalize: {sums}")
-    return sums
+            values[key].append(v)
+    for key in ("p20","p500"):
+        if not math.isclose(sum(values[key]),1.,abs_tol=1e-4,rel_tol=0.):
+            raise ValueError("Angular distribution not normalized: "+key)
+    return values
 
 
 def require_pptx():
