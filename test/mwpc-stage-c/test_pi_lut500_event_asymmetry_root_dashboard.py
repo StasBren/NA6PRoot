@@ -36,9 +36,11 @@ def full_test():
         # Same generated birth positions for both Garfield geometries;
         # endpoint phi chosen from original hit_index for fixture only.
         def synthetic_birth(row,lam,marks,seed):
-            return np.array([[0.,0.,float(row["hit_index"])]]),np.array([.3])
+            # Production sends positions[:,0] and positions[:,1] to
+            # response_for_births; encode the fixture hit_index in v,
+            # not in w (which the response never receives).
+            return np.array([[0.,float(row["hit_index"]),0.]]),np.array([.3])
         def synthetic_response(u,v,q,pitch,st,table):
-            index=int(table[0,0,0]) # marker gives noFW=0, FW=1
             hitnum=int(v[0]) if len(v) else 0
             phi=+90. if hitnum in (0,2,4) else -90.
             samples=np.array([[1.,0.,8.,0.,phi]]) if len(v) else np.empty((0,5))
