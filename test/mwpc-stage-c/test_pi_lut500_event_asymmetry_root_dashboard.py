@@ -83,7 +83,7 @@ def full_test():
             assert "__PAYLOAD__" not in (out/"dashboard.html").read_text()
             with gzip.open(out/"event_counts.csv.gz","rt") as f:
                 data=list(csv.DictReader(f))
-            assert len(data)==8 # 3 MS0 station, 3 MS0 DET, 1 MS1 station, 1 MS1 DET
+            assert len(data)==9 # 3 MS0 station, 4 MS0 DET, 1 MS1 station, 1 MS1 DET
             try:
                 d.summary_for_chunks(1,[0,1],0,out,True)
             except FileExistsError:pass
