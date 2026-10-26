@@ -2,10 +2,10 @@
 """Build a ONE-SLIDE ROOT-style PI presentation from real 20-vs-500 CSV.
 
 Reads the previously computed, identical-exposure J/psi MS0
-phi_comparison.csv; launches a ROOT C++ macro making two vertically
-stacked TH1D histograms (20 above, 500 below), matched x/y scales and
-individual 1-sigma Garfield-LUT errors. Writes only PNG and PPTX.
-The histograms are rendered using ROOT but no .root/.pdf files are saved.
+phi_comparison.csv; draws two vertically stacked ROOT-style histograms
+(20 above, 500 below) with matched axes and 1-sigma Garfield-LUT errors.
+Matplotlib renders PNG, inserted into one-slide PPTX. No ROOT executable,
+ROOT file or PDF is needed.
 
 No Garfield, Geant4, Heed or frozen 720-fold jobs are run or changed.
 """
@@ -14,15 +14,12 @@ from __future__ import annotations
 import argparse
 import csv
 import math
-import shutil
-import subprocess
 from pathlib import Path
 
 HERE=Path(__file__).resolve().parent
 REPO=HERE.parents[1]
 INPUT=REPO/"test_runs/mwpc_stage_c/pi_pitch_fieldwire_20_vs_500_expected_v1/phi_comparison.csv"
 OUTPUT=REPO/"test_runs/mwpc_stage_c/pi_lut_root_slide_v1"
-MACRO=HERE/"pi_lut_root_slide.C"
 GEOMS=("p3p0_field75p0um","p3p0_anode_only")
 
 
@@ -84,6 +81,70 @@ def save_pptx(png,out,presentation,inches):
         raise RuntimeError("PowerPoint slide was not saved")
 
 
+
+def render_matplotlib(data, png, geometry):
+    """Reproduce scientific ROOT-style histogram presentation without ROOT."""
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import numpy as np
+        from matplotlib.ticker import MultipleLocator, MaxNLocator
+    except ImportError as exc:
+        raise RuntimeError(
+            "matplotlib is missing in the slide Python environment. "
+            "Install via .venv_pi_slides/bin/python -m pip install matplotlib"
+        ) from exc
+    edges=np.arange(-180.,181.,10.)
+    centers=(edges[:-1]+edges[1:])/2
+    max_y=1.22*max(
+        max(p+e for p,e in zip(data["p20"],data["se20"])),
+        max(p+e for p,e in zip(data["p500"],data["se500"])))
+    fig,axes=plt.subplots(2,1,figsize=(13.3333,7.5),dpi=160)
+    fig.patch.set_facecolor("white")
+    fig.subplots_adjust(left=.10,right=.955,top=.82,bottom=.205,hspace=.45)
+    fig.text(.10,.961,
+        "Electron-hit azimuth: convergence of the microscopic Garfield LUT",
+        fontsize=19,weight="bold",ha="left",va="top")
+    label="field wire 75 μm" if geometry=="p3p0_field75p0um" else "no field wire"
+    fig.text(.10,.913,
+        f"J/ψ  |  MS0  |  pitch 3.0 mm  |  {label}  |  B = 0",
+        fontsize=12,color="#444444",ha="left",va="top")
+    for ax,key,count,color,label in (
+        (axes[0],"20",20,"#343434","Original LUT"),
+        (axes[1],"500",500,"#136999","Updated LUT")):
+        p=np.asarray(data["p"+key],dtype=float)
+        se=np.asarray(data["se"+key],dtype=float)
+        ax.stairs(p,edges,color=color,linewidth=1.65)
+        ax.errorbar(centers,p,yerr=se,fmt="o",markersize=2.7,
+            color=color,ecolor=color,elinewidth=.9,capsize=1.8,capthick=.8)
+        ax.set_xlim(-180,180)
+        ax.set_ylim(0,max_y)
+        ax.set_xticks(np.arange(-180,181,30))
+        ax.xaxis.set_minor_locator(MultipleLocator(10))
+        ax.yaxis.set_major_locator(MaxNLocator(5))
+        ax.tick_params(axis="both",labelsize=10,direction="in",top=True,right=True)
+        ax.tick_params(axis="both",which="minor",direction="in",top=True,right=True)
+        for spine in ax.spines.values():
+            spine.set_linewidth(.8)
+        ax.set_xlabel(r"$\phi_{\mathrm{hit}}$ [degrees]",fontsize=12,labelpad=3)
+        ax.set_ylabel("Probability / 10° bin",fontsize=11)
+        ax.text(.012,.965,f"{label}: {count} trajectories / spatial cell",
+            transform=ax.transAxes,fontsize=12,ha="left",va="top")
+    fig.text(.10,.118,
+        r"$\sigma_{\mathrm{LUT}}\propto 1/\sqrt{K}$"
+        r"$\qquad \sqrt{500/20}=5$"
+        "  —  fivefold reduction in expected statistical uncertainty",
+        fontsize=15,ha="left",va="center",color="#111111")
+    fig.text(.10,.061,
+        "Same native Geant4 muon crossings; analytically expected Heed occupancy. "
+        "Error bars: ±1σ finite-Garfield-LUT sampling only.",
+        fontsize=9,ha="left",color="#555555")
+    fig.savefig(png,dpi=160,facecolor="white")
+    plt.close(fig)
+    if not png.is_file() or png.stat().st_size==0:
+        raise RuntimeError("PNG plotting failed: "+str(png))
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--csv",type=Path,default=INPUT,
@@ -98,47 +159,20 @@ def main():
         raise FileNotFoundError(
             f"Missing real angular data: {a.csv}\n"
             "First run pi_lut_20_vs_500_expected.py --station 0 --chunks 2")
-    normalizations=validate_csv(a.csv,a.geometry)
+    data=validate_csv(a.csv,a.geometry)
+    normalizations={"p20":sum(data["p20"]),"p500":sum(data["p500"])}
     print(f"PASS: measured CSV, 36 normalized angular bins, "
           f"geometry={a.geometry}; {normalizations}",flush=True)
     if a.validate_only:
         return
-    if not MACRO.is_file():
-        raise FileNotFoundError(f"Missing ROOT plotting macro: {MACRO}")
+
     presentation,inches=require_pptx()
-    root=shutil.which("root")
-    if not root:
-        raise EnvironmentError("ROOT executable 'root' not on PATH")
     a.out.mkdir(parents=True,exist_ok=True)
     prefix=a.geometry+"_slide"
     png=a.out/(prefix+".png")
     pptx=a.out/(prefix+".pptx")
-    # Never use stale successful results to mask rendering failures.
-    for target in (png,pptx):
-        if target.exists():
-            target.unlink()
-    # Standard WSL POSIX paths; no arbitrary shell invocation.
-    def quote_root(p):
-        s=str(p.resolve())
-        if any(char in s for char in ('"',"\n","\r")):
-            raise ValueError("Unexpected filename characters")
-        return '"'+s+'"'
-    command=(str(MACRO.resolve())+"("+
-             quote_root(a.csv)+","+quote_root(a.out)+
-             ',"'+a.geometry+'")')
-    process=subprocess.run(
-        [root,"-l","-b","-q",command],cwd=REPO,
-        stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
-        text=True,check=False)
-    print(process.stdout,flush=True)
-    if process.returncode or "PASS: ROOT-rendered TH1D" not in process.stdout or \
-       not png.is_file() or png.stat().st_size==0:
-        raise RuntimeError("ROOT PNG rendering failed; see preceding log")
+    render_matplotlib(data,png,a.geometry)
     save_pptx(png,pptx,presentation,inches)
-    print("PASS: one PI slide from measured ROOT histograms and LUT errors")
+    print("PASS: PNG and PPTX slide; no ROOT executable required",flush=True)
     print("OUTPUT",png,flush=True)
     print("OUTPUT",pptx,flush=True)
-
-
-if __name__=="__main__":
-    main()
