@@ -8,7 +8,7 @@ from pathlib import Path
 from pi_six_geometry_native_timing import OUT
 
 
-HTML=r'''<!doctype html><html lang="ru"><head><meta charset="utf-8">
+HTML=r'''<!doctype html><html lang="ru" data-ui-theme="root-light-v1"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NA60+ — время дрейфа для разных анодов</title>
 <style>
@@ -31,6 +31,18 @@ svg{display:block;width:100%;height:auto}
 .circ{display:inline-block;width:9px;height:9px;border-radius:100%;margin-right:4px}
 .info{font-size:13px;color:var(--quiet)}
 a{color:#89d0ff} .note{padding:12px;border-left:3px solid #7890a0}
+
+/* ROOT-inspired white histogram canvas. UI-only. */
+:root{--bg:#edf0f3;--bg2:#f2f3f6;--fg:#171717;--quiet:#515e6d;--accent:#2856aa;--grid:#bfc3cb}
+body{background:var(--bg);color:var(--fg);font-family:Arial,Helvetica,sans-serif}
+.panel{background:#fff;border:1px solid #b8c1ca;border-radius:2px}
+select{background:#fff;color:#171717;border-color:#828b94;border-radius:2px}
+.stat{background:#f2f3f6;border-radius:2px}
+small,p,.info{color:#515e6d}
+svg{background:#fff;border:1px solid #d0d0d0}
+svg text{fill:#151515!important}
+a{color:#20529c}
+
 </style></head><body>
 <h1>NA60+ · Дрейф электронов к анодным проволокам</h1>
 <p class="info">Версия интерфейса: <b>MWPC-NATIVE-STATIC-FALLBACK-20261021-v2</b></p>
