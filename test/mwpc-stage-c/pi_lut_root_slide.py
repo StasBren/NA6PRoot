@@ -4,8 +4,8 @@
 Reads the previously computed, identical-exposure J/psi MS0
 phi_comparison.csv; launches a ROOT C++ macro making two vertically
 stacked TH1D histograms (20 above, 500 below), matched x/y scales and
-individual 1-sigma Garfield-LUT errors. Saves ROOT, PDF and PNG plus a
-single-slide PPTX when python-pptx is installed.
+individual 1-sigma Garfield-LUT errors. Writes only PNG and PPTX.
+The histograms are drawn using ROOT but no .root/.pdf files are saved.
 
 No Garfield, Geant4, Heed or frozen 720-fold jobs are run or changed.
 """
@@ -13,8 +13,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import hashlib
-import json
 import math
 import shutil
 import subprocess
@@ -56,23 +54,29 @@ def validate_csv(path,geometry):
     return sums
 
 
-def save_pptx(png,out):
+def require_pptx():
     try:
         from pptx import Presentation
         from pptx.util import Inches
-    except ImportError:
-        print("NOTE: python-pptx not installed; PDF, PNG and ROOT will "
-              "still be available. Optional: python3 -m pip install python-pptx",
-              flush=True)
-        return False
-    ppt=Presentation()
-    ppt.slide_width=Inches(13.333333)
-    ppt.slide_height=Inches(7.5)
+    except ImportError as exc:
+        raise RuntimeError(
+            "python-pptx is required to create the requested PPTX. "
+            "Install with: sudo apt update && sudo apt install python3-pptx "
+            "(or install python-pptx inside your active Python venv)."
+        ) from exc
+    return Presentation, Inches
+
+
+def save_pptx(png,out,presentation,inches):
+    ppt=presentation()
+    ppt.slide_width=inches(13.333333)
+    ppt.slide_height=inches(7.5)
     slide=ppt.slides.add_slide(ppt.slide_layouts[6])
     slide.shapes.add_picture(str(png),0,0,width=ppt.slide_width,
                              height=ppt.slide_height)
     ppt.save(str(out))
-    return True
+    if not out.is_file() or out.stat().st_size==0:
+        raise RuntimeError("PowerPoint slide was not saved")
 
 
 def main():
@@ -96,56 +100,18 @@ def main():
         return
     if not MACRO.is_file():
         raise FileNotFoundError(f"Missing ROOT plotting macro: {MACRO}")
+    presentation,inches=require_pptx()
     root=shutil.which("root")
     if not root:
         raise EnvironmentError("ROOT executable 'root' not on PATH")
     a.out.mkdir(parents=True,exist_ok=True)
     prefix=a.geometry+"_slide"
-    expected=[a.out/(prefix+"."+ext) for ext in ("png","pdf","root")]
-    # Never use stale successful results to mask ROOT macro errors.
-    for target in expected:
-        if target.exists():
-            target.unlink()
-    # Standard WSL POSIX paths; no arbitrary shell invocation.
-    def quote_root(p):
-        s=str(p.resolve())
-        if any(char in s for char in ('"',"\n","\r")):
-            raise ValueError("Unexpected filename characters")
-        return '"'+s+'"'
-    command=(str(MACRO.resolve())+"("+
-             quote_root(a.csv)+","+quote_root(a.out)+
-             ',"'+a.geometry+'")')
-    process=subprocess.run(
-        [root,"-l","-b","-q",command],cwd=REPO,
-        stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
-        text=True,check=False)
-    print(process.stdout,flush=True)
-    if process.returncode or "PASS: ROOT TH1D" not in process.stdout or \
-       any(not p.is_file() or p.stat().st_size==0 for p in expected):
-        raise RuntimeError("ROOT slide rendering failed; see preceding log")
-    pptx=a.out/(prefix+".pptx")
-    made=save_pptx(expected[0],pptx)
-    report={
-        "analysis":"J/psi MS0, p=3mm, original 20 vs independent 500",
-        "geometry":a.geometry,"angular_bins":36,
-        "data_sha256":hashlib.sha256(a.csv.read_bytes()).hexdigest(),
-        "presentation_statement":"Expected per-cell independent Garfield "
-            "statistical uncertainty scales as 1/sqrt(K), nominal 5x "
-            "reduction from 20 to 500",
-        "probability_source":"Fixed Geant4 muon crossing exposure; "
-            "analytically expected Heed spatial occupancy; "
-            "not the individual parent-event Heed realization",
-        "error_bar_meaning":"Individual 1-sigma microscopic LUT uncertainty",
-        "ROOT_pdf":str(expected[1]),
-        "ROOT_file":str(expected[2]),
-        "PNG":str(expected[0]),
-        "PPTX":str(pptx) if made else None,
-    }
-    (a.out/(prefix+"_provenance.json")).write_text(
-        json.dumps(report,indent=2)+"\n",encoding="utf-8")
-    print("PASS: one PI slide, actual ROOT histograms and 1-sigma error bars")
-    for file in expected+([pptx] if made else []):
-        print("OUTPUT",file,flush=True)
+    png=a.out/(prefix+".png")
+    save_pptx(png,pptx,presentation,inches)
+    print("PASS: one PI slide, actual ROOT-rendered histograms, 1-sigma error bars")
+    print("OUTPUT",png,flush=True)
+    print("OUTPUT",pptx,flush=True)
+
 
 
 if __name__=="__main__":
