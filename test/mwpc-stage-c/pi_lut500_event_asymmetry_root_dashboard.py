@@ -363,7 +363,10 @@ def summary_for_chunks(chunks,stations,max_crossings,out,make_html=True):
                                allow_nan=False).replace("</","<\\/")
             page=template.replace("__PAYLOAD__",payload)
             (out/"dashboard.html").write_text(page,encoding="utf-8")
-        manifest={"schema":SCHEMA,"complete":not bool(max_crossings),
+        manifest={"schema":SCHEMA,
+                  "complete":not bool(max_crossings) and stations==list(range(6)),
+                  "computed_stations":list(stations),
+                  "source_chunks":chunks,
                   "files_sha256":{p.name:sha(p) for p in targets[:-1] if p.exists()},
                   "source_csv_sha256":[x["crossing_sha256"]
                                        for x in input_provenance]}
