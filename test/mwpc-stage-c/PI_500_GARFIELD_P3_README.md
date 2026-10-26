@@ -122,41 +122,42 @@ uncertainties has been performed.
 
 ## PI single-slide ROOT-style presentation (one configuration)
 
-No model rerun is needed. Use the real 20-versus-500 results stored in the
-mean-Heed-exposure comparison CSV. The ROOT macro writes two **separate**
-vertically stacked TH1D histograms with identical axes/scales, per-bin
-1-sigma *Garfield LUT* errors, and a single factor-five statistical
-uncertainty statement.
+The script reads **only existing** measured phi_comparison.csv from the
+mean-Heed first-two-chunk convergence test. It draws two vertically stacked
+ROOT TH1D histograms in memory (LUT20 above, LUT500 below) with matching axes,
+1-sigma Garfield-LUT sampling uncertainties, and the nominal factor-5
+scaling law from K=20 to 500 independent microscopic trajectories per cell.
+
+The script writes **only PNG and PPTX**, not .root, PDF or an extra JSON
+provenance file. It does not rerun Garfield, Geant4, or Heed. python-pptx
+must be available in the local WSL interpreter for the PPTX output.
 
 ```bash
 cd ~/na6p/src/NA6PRoot-mwpc
 git pull --ff-only
-
-# Verify all 36 phi bins normalize and match the selected FW geometry:
+python3 -m py_compile test/mwpc-stage-c/pi_lut_root_slide.py
 python3 test/mwpc-stage-c/pi_lut_root_slide.py --validate-only
-
-# ROOT native TH1D + PDF + PNG + (if python-pptx present) single PPTX slide:
 python3 test/mwpc-stage-c/pi_lut_root_slide.py
 
-# Open slide PDF in Windows:
-explorer.exe "$(wslpath -w test_runs/mwpc_stage_c/pi_lut_root_slide_v1/p3p0_field75p0um_slide.pdf)"
+# Display the PNG with Windows:
+explorer.exe "$(wslpath -w test_runs/mwpc_stage_c/pi_lut_root_slide_v1/p3p0_field75p0um_slide.png)"
 
-# Change to geometry without FW, if useful:
+# If python-pptx is absent in WSL, install it there:
+# sudo apt update && sudo apt install python3-pptx
+
+# Optional alternate electrode geometry without FW:
 python3 test/mwpc-stage-c/pi_lut_root_slide.py --geometry p3p0_anode_only
 ```
 
-Generated files are isolated in
+PNG and PPTX outputs are in
 `test_runs/mwpc_stage_c/pi_lut_root_slide_v1/`:
-`p3p0_field75p0um_slide.{pdf,png,root,pptx}` (PPTX optional), plus JSON
-provenance. The ROOT file preserves the two histograms and their independent
-per-bin standard errors for additional inspection in ROOT itself.
-PPTX is a high-fidelity image of the ROOT canvas. It is not an editable
-PowerPoint chart; the underlying numerical histograms remain in .root.
+`p3p0_field75p0um_slide.png` and
+`p3p0_field75p0um_slide.pptx`.
+The PowerPoint slide embeds the ROOT-rendered image; original numerical
+CSV and Garfield LUTs remain in their read-only sources.
 
-**The 5x reduction refers to the expected per-cell independent Garfield
-sampling SE** scaling as 1/sqrt(K) for the same underlying probabilities and
-spatial weights (500/20=25). It does NOT mean every observed neighbouring
-bin difference shrinks exactly fivefold. Same Geant4 crossings and
-analytic expected Heed occupancy are used for both curves; this is
-not the event-by-event Heed fluctuation analysis.
-
+**The fivefold reduction is the expected standard-error scaling** for
+independent microscopic trials per LUT cell, not an exact numerical
+fivefold reduction of observed neighbouring-bin differences. This is
+a fixed-Geant4, analytically expected-Heed diagnostic, not the
+event-by-event asymmetry calculation.
