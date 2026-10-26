@@ -45,6 +45,26 @@ for the two field-wire options; n_valid, n_undefined, mean(A),
 population RMS(A), paired mean FW-minus-noFW A are all shown.
 Raw event-level (up,down) counters are also saved in gzip CSV.
 
+## Convenient safe command
+
+The runner checks Python syntax plus the synthetic full
+parent/DET conservation fixture before it starts anything:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    bash test/mwpc-stage-c/run_pi_lut500_event_asymmetry_root_dashboard.sh check
+    bash test/mwpc-stage-c/run_pi_lut500_event_asymmetry_root_dashboard.sh pilot
+
+After verifying the pilot HTML and source counts, run:
+
+    bash test/mwpc-stage-c/run_pi_lut500_event_asymmetry_root_dashboard.sh full
+    bash test/mwpc-stage-c/run_pi_lut500_event_asymmetry_root_dashboard.sh status
+
+The runner does not overwrite results. A full publication manifest has
+complete=true ONLY if all MS0..MS5 stations are computed without a
+crossing limit. The 2M LUT20 main portal links to the LUT500 dashboard
+only if its six-station manifest and HTML SHA256 are valid.
+
 ## 1. Update and perform ZERO-physics regression
 
     cd ~/na6p/src/NA6PRoot-mwpc
