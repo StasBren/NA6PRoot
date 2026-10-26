@@ -240,7 +240,7 @@ int main(int argc,char** argv){
        "anode_collected,field_wire_collected,other_end,wire_index,"
        "phi_hit_deg,drift_wall_us,"
        "hazard_eta_vdt,hazard_eta_chord,drift_length_cm,chord_length_cm,"
-       "path_steps,eta_E_min_Vcm,eta_E_max_Vcm\n";
+       "path_steps,eta_E_min_Vcm,eta_E_max_Vcm,hazard_wall_us\n";
   for(const std::string geom:{"p3p0_anode_only","p3p0_field75p0um"}){
     const bool fw=IsFw(geom);
     Garfield::ComponentAnalyticField field;
@@ -269,7 +269,10 @@ int main(int argc,char** argv){
       const double us=1.e-3*std::chrono::duration_cast<std::chrono::nanoseconds>(
           std::chrono::steady_clock::now()-t0).count();
       const auto c=Classify(u,v,status,fw);
+      const auto hStart=std::chrono::steady_clock::now();
       const auto h=ComputeHazard(mc,sensor,gas);
+      const double hazardUs=1.e-3*std::chrono::duration_cast<std::chrono::nanoseconds>(
+          std::chrono::steady_clock::now()-hStart).count();
       ++n;collected+=c.anode;statusAttach+=(status==-7);totalUs+=us;
       out<<geom<<","<<s.split<<","<<s.iu<<","<<s.iv<<","
          <<s.sample<<","<<s.seed<<","<<10*s.u<<","<<10*s.v<<","
@@ -279,7 +282,7 @@ int main(int argc,char** argv){
          <<c.phi<<","<<us<<","
          <<h.h_vdt<<","<<h.h_chord<<","<<h.drift_s_cm<<","
          <<h.chord_s_cm<<","<<h.n_steps<<","
-         <<h.e_min_vcm<<","<<h.e_max_vcm<<"\n";
+         <<h.e_min_vcm<<","<<h.e_max_vcm<<","<<hazardUs<<"\n";
     }
     out.flush();
     std::cout<<geom<<": starts="<<n<<", anode="<<collected
