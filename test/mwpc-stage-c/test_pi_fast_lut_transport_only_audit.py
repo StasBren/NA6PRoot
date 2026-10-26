@@ -25,7 +25,7 @@ def synthetic_pairs():
                 mc={
                     "anode_collected":1,"mc_attachment":"off",
                     "wire_index":0,"phi_hit_deg":phi,
-                    "drift_time_ns":t+1.5}
+                    "drift_time_ns":t+1.5,"drift_wall_us":700.}
                 records.append((ref,mc))
     return records
 
@@ -35,6 +35,7 @@ def main():
     pairs=synthetic_pairs()
     report=group_report(pairs,123,100)
     assert report["n_birth_sites"]==3600
+    assert report["measured_mc_drift_wall_us_per_start"]["mean"]==700.
     assert report["n_micro_anode_survivors"]==2700
     assert report["n_mc_anode_survivors"]==3600
     assert report["n_common_survivor_birth_sites"]==2700
