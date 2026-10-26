@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import math
 from pathlib import Path
 
@@ -54,6 +55,50 @@ def validate_csv(path: Path, geometry: str):
     return values
 
 
+def study_statistics(csv_path: Path, geometry: str, data: dict):
+    """Read matched native Geant4/Heed exposure from the companion report.
+
+    Never label a new slide with outdated or mismatched exposure counts.
+    Collection is geometry-dependent; use LUT500 to state the approximate
+    anode-collected exposure shown in the new (lower) histogram.
+    """
+    path=csv_path.with_name("comparison.json")
+    if not path.is_file():
+        raise FileNotFoundError(
+            "Missing companion study metadata: "+str(path)+
+            ". Re-run the isolated pi_lut_20_vs_500_expected.py comparison.")
+    report=json.loads(path.read_text(encoding="utf-8"))
+    scope=report["scope"]
+    if scope.get("source")!="jpsi40-bore" or int(scope["station"])!=0:
+        raise ValueError("Slide expects the J/psi MS0 native Geant4 study")
+    if scope.get("heed_occupancy_mode")!="analytic_expectation":
+        raise ValueError("Slide expects the analytically expected Heed exposure")
+    if int(scope["selected_muon_gas_crossings"])!=int(
+            scope["all_muon_gas_crossings_seen"]):
+        raise ValueError("Slide statistics require complete selected chunk exposure")
+    chunks=int(scope["chunks"])
+    if not 1<=chunks<=40:
+        raise ValueError("Unexpected number of J/psi Geant4 chunks")
+    results=report["results"][geometry]
+    for key,version in (("20","LUT20"),("500","LUT500")):
+        expected=results[version]["phi_probabilities"]
+        measured=data["p"+key]
+        if len(expected)!=36 or any(
+                not math.isclose(float(x),float(y),rel_tol=0.,abs_tol=1e-10)
+                for x,y in zip(expected,measured)):
+            raise ValueError("JSON and CSV angular distributions do not match")
+    primaries=float(scope["heed_primaries"])
+    collected=float(results["LUT500"]["expected_collected_heed_electrons"])
+    if not(0.<collected<=primaries):
+        raise ValueError("Unphysical expected electron collection")
+    return {
+        "generated_parents":chunks*50000,
+        "ms0_crossings":int(scope["selected_muon_gas_crossings"]),
+        "expected_primaries":primaries,
+        "expected_collected_lut500":collected,
+    }
+
+
 def require_pptx():
     try:
         from pptx import Presentation
@@ -85,7 +130,7 @@ def save_pptx(png,out,presentation,inches):
 
 
 
-def render_matplotlib(data, png, geometry):
+def render_matplotlib(data, png, geometry, stats):
     """Reproduce scientific ROOT-style histogram presentation without ROOT."""
     try:
         import matplotlib
@@ -113,6 +158,12 @@ def render_matplotlib(data, png, geometry):
     fig.text(.10,.913,
         f"J/ψ  |  MS0  |  pitch 3.0 mm  |  {label}  |  B = 0",
         fontsize=12,color="#444444",ha="left",va="top")
+    fig.text(.10,.867,
+        f"Statistics: {stats['generated_parents']:,} generated J/ψ events  |  "
+        f"{stats['ms0_crossings']:,} MS0 muon gas crossings  |  "
+        f"{stats['expected_primaries']/1e6:.2f}M expected Heed electrons  |  "
+        f"{stats['expected_collected_lut500']/1e6:.2f}M anode-collected (LUT500)",
+        fontsize=10.4,color="#333333",ha="left",va="top")
     for ax,key,count,color,label in (
         (axes[0],"20",20,"#343434","Original LUT"),
         (axes[1],"500",500,"#136999","Updated LUT")):
@@ -134,15 +185,20 @@ def render_matplotlib(data, png, geometry):
         ax.set_ylabel("Probability / 10° bin",fontsize=11)
         ax.text(.012,.965,f"{label}: {count} trajectories / spatial cell",
             transform=ax.transAxes,fontsize=12,ha="left",va="top")
-    fig.text(.10,.118,
+    fig.text(.10,.142,
         r"$\sigma_{\mathrm{LUT}}\propto 1/\sqrt{K}$"
         r"$\qquad \sqrt{500/20}=5$"
         "  —  fivefold reduction in expected statistical uncertainty",
-        fontsize=15,ha="left",va="center",color="#111111")
-    fig.text(.10,.061,
-        "Same native Geant4 muon crossings; analytically expected Heed occupancy. "
-        "Error bars: ±1σ finite-Garfield-LUT sampling only.",
-        fontsize=9,ha="left",color="#555555")
+        fontsize=14,ha="left",va="center",color="#111111")
+    fig.text(.10,.098,
+        r"Per spatial cell: $\mathrm{SE}(p_j)\approx"
+        r"\sqrt{p_j(1-p_j)/K}$"
+        r"; $K$ = independent microscopic Garfield drifts.",
+        fontsize=10.5,ha="left",va="center",color="#333333")
+    fig.text(.10,.052,
+        "Millions of Heed electrons reuse the finite LUT. "
+        "Error bars: ±1σ from the weighted Garfield samples, not Heed counting noise.",
+        fontsize=9,ha="left",va="center",color="#555555")
     fig.savefig(png,dpi=160,facecolor="white")
     plt.close(fig)
     if not png.is_file() or png.stat().st_size==0:
@@ -163,9 +219,15 @@ def main():
             f"Missing real angular data: {a.csv}\n"
             "First run pi_lut_20_vs_500_expected.py --station 0 --chunks 2")
     data=validate_csv(a.csv,a.geometry)
+    stats=study_statistics(a.csv,a.geometry,data)
     normalizations={"p20":sum(data["p20"]),"p500":sum(data["p500"])}
     print(f"PASS: measured CSV, 36 normalized angular bins, "
           f"geometry={a.geometry}; {normalizations}",flush=True)
+    print(f"PASS: exposure {stats['generated_parents']:,} J/ψ parents; "
+          f"{stats['ms0_crossings']:,} MS0 crossings; "
+          f"{stats['expected_primaries']/1e6:.2f}M expected Heed, "
+          f"{stats['expected_collected_lut500']/1e6:.2f}M collected (LUT500)",
+          flush=True)
     if a.validate_only:
         return
 
@@ -174,7 +236,7 @@ def main():
     prefix=a.geometry+"_slide"
     png=a.out/(prefix+".png")
     pptx=a.out/(prefix+".pptx")
-    render_matplotlib(data,png,a.geometry)
+    render_matplotlib(data,png,a.geometry,stats)
     save_pptx(png,pptx,presentation,inches)
     print("PASS: PNG and PPTX slide; no ROOT executable required",flush=True)
     print("OUTPUT",png,flush=True)
