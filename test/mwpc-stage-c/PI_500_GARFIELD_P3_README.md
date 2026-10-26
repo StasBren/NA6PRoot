@@ -39,6 +39,45 @@ Do not edit the `frozen_config.json` or remove files from the running output.
 two assembled map outputs and electron conservation. All generated data are
 **microscopic single-electron Garfield LUT samples**, NOT 900,000 Geant4 events.
 
+
+## First PI question: quantitative LUT angular fluctuation test
+
+After `run_pi_pitch_fieldwire_500.sh verify` passes, use the isolated,
+**read-only** 20-vs-500 report. It does not need Garfield, Geant4 or the old
+720-fold pipeline and does not modify frozen checkpoints:
+
+```bash
+python3 test/mwpc-stage-c/test_pi_lut_20_vs_500_convergence.py
+python3 test/mwpc-stage-c/pi_lut_20_vs_500_convergence.py --station 0 --chunks 2
+explorer.exe "$(wslpath -w test_runs/mwpc_stage_c/pi_pitch_fieldwire_20_vs_500_v1/compare.html)"
+
+# After the quick first-two-chunk validation, full existing 2M J/psi exposure:
+python3 test/mwpc-stage-c/pi_lut_20_vs_500_convergence.py --station 0 --chunks 40
+```
+
+Outputs: `compare.html`, `phi_comparison.csv`, `comparison.json`. The
+comparison uses exact deterministic Heed **birth positions** from the same
+native J/psi source/chunks and folds their spatial cell occupancies over
+**all** stored Garfield outcomes at each LUT cell. This avoids an expensive
+electron-by-electron repeated random LUT lookup. Finite physical anode
+boundaries and relative Garfield wire migration are retained, including
+Heed births just beyond the outermost nearest physical anodes.
+
+The error estimate is conditioned on fixed Heed spatial occupancies and
+comes from K independent microscopic Garfield trials *per spatial cell*,
+with reuse of each trial at different physical wire locations treated as
+correlated. It is **not** a Geant4-event statistical error and not a
+substitute for independent repeat LUT seeds. Differences between 20 and
+500 should be compared with the displayed Garfield uncertainty, not
+claimed to be proof of total physical convergence.
+
+The 20-vs-500 integrated PDF has the same expected electron response as
+the frozen old LUT resampling approach but will not yield identical old
+integer counts: the new method analytically averages over the finite LUT
+sample rather than performing per-electron pseudo-random re-draws.
+Likewise, the `--chunks 2` exposure has different Heed cell weights from
+the full 40-chunk dashboard; use `--chunks 40` for source-matched plots.
+
 ## Existing 720-shard production progress (independent)
 
 ```bash
