@@ -203,6 +203,15 @@ def evaluate(reference_path,hazards_path,out,baseline):
       "schema":"PI_FAST_LUT_ATTACHMENT_K_FIRST_PASS_V1",
       "source_micro_selection_sha256":sha256(reference_path),
       "hazard_csv_sha256":sha256(hazards_path),
+      "hazard_timing_us_per_electron":{
+        "drift_only":float(np.mean([
+          float(r["drift_wall_us"]) for r in rows.values()])),
+        "hazard_extraction_only":float(np.mean([
+          float(r.get("hazard_wall_us",0.)) for r in rows.values()])),
+        "drift_plus_hazard":float(np.mean([
+          float(r["drift_wall_us"])+float(r.get("hazard_wall_us",0.))
+          for r in rows.values()]))
+      },
       "source_frozen_micro_shas":{
         k:v["sha256"] for k,v in manifest["source_provenance"].items()},
       "mc_step_um":step,"scope":"p3, B=0, Ar/CO2 70:30, 293.15K, 760Torr",
