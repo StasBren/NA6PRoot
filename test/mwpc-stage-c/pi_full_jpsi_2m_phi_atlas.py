@@ -29,7 +29,7 @@ PITCHES=(3.0,3.5,4.0)
 SCHEMA="NA60_JPSI_2M_PHI_HIT_ALL_CHAMBERS_V1"
 
 HTML=r'''<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
+<html lang="en" data-ui-theme="root-light-v1"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NA60+ / J/ψ / wire-surface electron impact azimuth</title>
 <style>
@@ -56,6 +56,20 @@ background:#24485b;border-radius:6px;font-variant-numeric:tabular-nums}
 padding:8px 13px}strong{color:#fff}
 @media(max-width:820px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.grid{grid-template-columns:1fr}}
+
+/* ROOT-like lightweight white polar plot panels. */
+:root{color-scheme:light;--bg:#ebeff3;--card:#fff;--muted:#53606e;--fg:#171717}
+body{background:var(--bg);color:var(--fg);font-family:Arial,Helvetica,sans-serif}
+.panel,.plot{background:white;border:1px solid #bac2cb;border-radius:2px}
+.plot svg{background:white}
+.plot svg text{fill:#151515!important}
+strong{color:#111}
+select{background:white;color:#111;border:1px solid #8b96a1;border-radius:2px}
+.compare span{background:#f0f2f5}
+.nav a{border-radius:2px}.nav a.active{background:#234e9a;color:white}
+.note{color:#475362}
+a{color:#2456a7}
+
 </style></head><body><main>
 <p class="meta">NA60+ / STAGE C / FROZEN GEANT4 + HEED + GARFIELD LUT</p>
 <h1>Electron impact position around the anode · J/ψ</h1>
