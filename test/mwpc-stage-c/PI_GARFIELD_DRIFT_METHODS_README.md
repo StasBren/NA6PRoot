@@ -149,6 +149,65 @@ or transport-table problem. Endpoints by the cathodes or field wires
 indicate genuine different trajectories/collection basins. No diagnosis
 can be concluded from status code alone.
 
+## Why the 5 um MC efficiency was low: status -7 = ATTACHMENT
+
+Diagnostic results from 100 matched starts/config:
+
+| Geometry | Microscopic -7 (attachment) | AvalancheMC -7 | RKF -7 |
+|---|---:|---:|---:|
+| No FW | 9/100 | 41/100 | 0/100 |
+| FW 75 um | 17/100 | 43/100 | 0/100 |
+
+Garfield's -7 endpoint means **electron attachment** (capture in the gas),
+NOT an out-of-bounds drift and NOT a failure of our 1.5-wire-radius
+geometrical hit criterion. See the Garfield++ User Guide termination codes
+and developer explanation at:
+https://root-forum.cern.ch/t/help-on-garfield-avalanchemicroscopic-and-avalanchemc/53678
+
+The RKF solver integrates the deterministic mean drift path and does NOT
+sample single-electron attachment; its 100% collection is therefore
+NOT a direct prediction for actual electron survival.
+
+### Diagnostic physics intervention: disable MC attachment ONLY
+
+DO NOT alter the frozen microscopic LUT or original matched_5um.csv.
+Compile the benchmark new target after pulling the code:
+
+    git pull --ff-only
+    cmake --build test/mwpc-stage-c/build \
+      --target pi_garfield_drift_methods_benchmark -j2
+
+Then run the SAME 100 matched start sites/config, same 5 um stepping and
+gas table, with only the macroscopic MC attachment process switched OFF:
+
+    BASE=test_runs/mwpc_stage_c/pi_garfield_drift_methods_v1
+    BIN=test/mwpc-stage-c/build/pi_garfield_drift_methods_benchmark
+    GAS="$BASE/ar70_co230_B0_transport.gas"
+    "$BIN" --mode run --gas-file "$GAS" \
+      --mc-attachment off --trials-per-box 4 --mc-step-um 5 \
+      --output "$BASE/matched_5um_no_attachment.csv"
+
+    PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+    "$PY" test/mwpc-stage-c/pi_garfield_drift_methods_report.py \
+      "$BASE/matched_5um_no_attachment.csv" \
+      --out "$BASE/report_5um_no_attachment"
+    python3 test/mwpc-stage-c/pi_garfield_drift_methods_diagnose.py \
+      "$BASE/matched_5um_no_attachment.csv" \
+      --out "$BASE/diagnose_5um_no_attachment.json"
+
+The new CSV records `mc_attachment=off`. Reporting remains compatible
+with the previous on-by-default CSV, which did not record this flag.
+The benchmark never silently overwrites gas tables or result CSV files.
+This test isolates the role of tabulated attachment. **MC with attachment
+OFF is an unphysical diagnostic control for Ar/CO2; do not use its
+collection efficiency to claim model agreement.**
+
+If the MC collected-anode fraction grows to near the RKF baseline, the
+dominant disagreement is the attachment modelling, not the geometry
+classification. We then need to examine the Magboltz attachment
+coefficient eta(E) and its coarse high-field interpolation separately.
+If it remains low, examine diffusion/step numerics and stopping positions.
+
 ## Step-size numerical convergence test
 
 Only after first 5 um run and diagnostic complete, run:
