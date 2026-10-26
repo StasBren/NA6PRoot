@@ -239,7 +239,7 @@ def main():
     args=ap.parse_args()
     if not 1 <= args.chunks <= 40 or args.max_hits < 0:
         ap.error("chunks must be in 1..40, max-hits nonnegative")
-    old,new={},{}
+    old,new={},{}\n    lut_identity={}
     for fw in CONFIGS:
         key=tag(PITCH,fw)
         old[key],oldmeta=load_map(PITCH,fw,args.root20)
@@ -247,7 +247,7 @@ def main():
         if (old[key].shape!=(NCELL,20,5) or
             new[key].shape!=(NCELL,500,5)):
             raise ValueError(f"Expected original 20 and new 500 trial LUTs: {key}")
-        if (oldmeta["csv_sha256"]==newmeta["csv_sha256"]):
+        lut_identity[key]={"LUT20":oldmeta,"LUT500":newmeta}\n        if (oldmeta["csv_sha256"]==newmeta["csv_sha256"]):
             raise ValueError("New LUT must be independently computed")
     lam,marks=read_heed(HEED_TRACKS,HEED_CLUSTERS)
     occ,scope=occupancies(args.station,args.chunks,args.max_hits,lam,marks)
@@ -321,7 +321,7 @@ def main():
     (args.out/"compare.html").write_text("\n".join(html),encoding="utf-8")
     (args.out/"comparison.json").write_text(
         json.dumps({"schema":"NA60_GARFIELD_LUT_20_VS_500_V1",
-                    "scope":scope,"results":results},indent=2,
+                    "scope":scope,"lut_identity":lut_identity,"results":results},indent=2,
                    ensure_ascii=False,allow_nan=False)+"\n",
         encoding="utf-8")
     print(f"PASS: 20 vs 500 read-only LUT convergence data: {args.out}",flush=True)
