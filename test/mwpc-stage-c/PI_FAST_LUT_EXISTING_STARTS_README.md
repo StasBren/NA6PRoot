@@ -23,6 +23,7 @@ arrival, and time values remain the reference.
       test/mwpc-stage-c/pi_fast_lut_existing_starts_report.py \
       test/mwpc-stage-c/test_pi_fast_lut_existing_starts.py
     "$PY" test/mwpc-stage-c/test_pi_fast_lut_existing_starts.py
+    cmake -S test/mwpc-stage-c -B test/mwpc-stage-c/build
     cmake --build test/mwpc-stage-c/build \
       --target pi_fast_lut_existing_starts_mc -j2
 
