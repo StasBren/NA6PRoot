@@ -171,12 +171,15 @@ int main(int argc,char**argv){
     gas.Initialise(false);
     const int trials=Integer(argc,argv,"--trials-per-box",4);
     const double stepUm=Float(argc,argv,"--mc-step-um",5.);
+    const std::string mcAttachment=Arg(argc,argv,"--mc-attachment","on");
+    if(mcAttachment!="on"&&mcAttachment!="off")
+      throw std::runtime_error("--mc-attachment must be on or off");
     if(trials<1||trials>100||stepUm<0.2||stepUm>20.)
        throw std::runtime_error("Invalid trial count/MC step (0.2..20um)");
     std::ofstream csv(output);
     if(!csv)throw std::runtime_error("Cannot write benchmark output CSV");
     csv<<std::setprecision(13)
-       <<"geometry,method,mc_step_um,iu,iv,trial,random_seed,"
+       <<"geometry,method,mc_step_um,mc_attachment,iu,iv,trial,random_seed,"
        <<"u_start_mm,v_start_mm,drift_ok,status,"
        <<"u_end_mm,v_end_mm,drift_time_ns,"
        <<"anode_collected,field_wire_collected,other_end,wire_index,"
@@ -191,6 +194,7 @@ int main(int argc,char**argv){
       microscopic.EnableSignalCalculation(false);
       Garfield::AvalancheMC mc(&sensor);
       mc.SetDistanceSteps(stepUm*1.e-4);
+      mc.EnableAttachment(mcAttachment=="on");
       Garfield::DriftLineRKF rkf(&sensor);
       rkf.EnableSignalCalculation(false);
       rkf.EnableAvalanche(false);
@@ -233,7 +237,7 @@ int main(int argc,char**argv){
           totalUs+=microseconds;
           auto c=Classify(e,fieldFlag);
           anodes+=c.anode;
-          csv<<geometry<<","<<method<<","<<stepUm<<","
+          csv<<geometry<<","<<method<<","<<stepUm<<","<<mcAttachment<<","
              <<p.iu<<","<<p.iv<<","<<p.trial<<","<<p.seed<<","
              <<10*p.u<<","<<10*p.v<<","<<(e.ok?1:0)<<","<<e.status<<","
              <<10*e.u<<","<<10*e.v<<","<<e.t<<","
@@ -247,7 +251,8 @@ int main(int argc,char**argv){
                  <<" mean_us="<<double(totalUs)/points.size()<<"\n"<<std::flush;
       }
     }
-    std::cout<<"PASS: matched-start benchmark CSV: "<<output<<"\n";
+    std::cout<<"PASS: matched-start benchmark CSV: "<<output
+             <<", MC attachment="<<mcAttachment<<"\n";
     return 0;
   }catch(const std::exception&e){
     std::cerr<<"Benchmark error: "<<e.what()<<"\n";
