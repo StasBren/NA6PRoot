@@ -356,7 +356,7 @@ def refresh_layout_ui_if_needed(st):
     folder=PAGES/NAME
     en=folder/f"MS{st}_layout_v3_en.html"
     marker=b'id="polarOverall"'
-    root_theme=b'data-ui-theme="root-light-v1"'
+    root_theme=b'data-ui-theme="root-atlas-axes-v2"'
     with en.open("rb") as handle:
         snapshot=handle.read(120_000)
         if marker in snapshot and root_theme in snapshot:
