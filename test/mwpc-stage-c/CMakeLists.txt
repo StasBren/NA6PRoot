@@ -41,3 +41,7 @@ target_compile_features(pi_garfield_attachment_field_probe PRIVATE cxx_std_17)
 add_executable(pi_fast_lut_existing_starts_mc pi_fast_lut_existing_starts_mc.cxx)
 target_link_libraries(pi_fast_lut_existing_starts_mc PRIVATE Garfield::Garfield)
 target_compile_features(pi_fast_lut_existing_starts_mc PRIVATE cxx_std_17)
+
+add_executable(pi_fast_lut_attachment_hazards pi_fast_lut_attachment_hazards.cxx)
+target_link_libraries(pi_fast_lut_attachment_hazards PRIVATE Garfield::Garfield)
+target_compile_features(pi_fast_lut_attachment_hazards PRIVATE cxx_std_17)
