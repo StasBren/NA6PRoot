@@ -95,22 +95,25 @@ function drawHist(){
    num(b.mean_A,4)+", RMS="+num(b.rms_A,4)+", undefined="+cnt(b.undefined_A)+
    "; paired parent ΔA (FW−noFW)="+num(s.paired.mean_delta_FW_minus_noFW,4)+
    " [both valid: "+cnt(s.paired.both_valid_parents)+"]";
- const L=80,R=847,T=37,B=446,W=R-L,H=B-T;
+ const L=102,R=845,T=41,B=436,W=R-L,H=B-T;
  const mode=$("ymode").value;
  const ys=[a,b].map(v=>v.hist.map(k=>mode==="count"?k:(v.valid_A?k/v.valid_A:0)));
  const peak=Math.max(1e-10,...ys.flat())*1.16;
- const x=i=>L+(i/41)*W,y=v=>B-v/peak*H;
+ const nbins=E.length-1,binwidth=(E[E.length-1]-E[0])/nbins;
+ const x=i=>L+(i/nbins)*W,y=v=>B-v/peak*H;
  el("rect",{x:L,y:T,width:W,height:H,fill:"white",stroke:"#111","stroke-width":1.5},r);
  for(let i=0;i<=5;i++){
   const value=i/5*peak,pos=y(value);
   el("line",{x1:L,y1:pos,x2:R,y2:pos,stroke:"#e0e0e0"},r);
   el("line",{x1:L-8,y1:pos,x2:L,y2:pos,stroke:"#111"},r);
+  el("line",{x1:R-7,y1:pos,x2:R,y2:pos,stroke:"#111"},r);
   el("text",{x:L-11,y:pos+4,"text-anchor":"end",fill:"#111","font-size":13},r,
     mode==="count"?String(Math.round(value)):value.toFixed(3));
  }
  for(let i=0;i<=8;i++){
   const xx=L+W*i/8;
   el("line",{x1:xx,y1:B,x2:xx,y2:B+8,stroke:"#111"},r);
+  el("line",{x1:xx,y1:T,x2:xx,y2:T+7,stroke:"#111"},r);
   el("text",{x:xx,y:B+27,"text-anchor":"middle",fill:"#111","font-size":12},r,(-1+i*.25).toFixed(2));
  }
  const colours=["#2754aa","#bf2745"];
@@ -121,21 +124,20 @@ function drawHist(){
    path+=" L "+x(i+1)+" "+y(array[i]);
    if(i+1<array.length)path+=" L "+x(i+1)+" "+y(array[i+1]);
   }
-  path+=" L "+x(41)+" "+y(0);
+  path+=" L "+x(nbins)+" "+y(0);
   el("path",{d:path,stroke:colours[j],fill:"none","stroke-width":2.3},r);
  });
- el("text",{x:460,y:500,fill:"#111","text-anchor":"middle","font-size":16},r,"A = (Nup − Ndown) / (Nup + Ndown)");
- el("text",{transform:"translate(23 252) rotate(-90)",fill:"#111","text-anchor":"middle","font-size":13},r,
-    mode==="count"?"Parent event counts":"P(A) per bin");
- el("rect",{x:580,y:58,width:245,height:106,fill:"#fff",stroke:"#111"},r);
- const entries=[["No FW",a],["FW75",b]];
- el("text",{x:590,y:78,fill:"#111","font-size":12,"font-family":"monospace"},r,"                    Entries    Mean    RMS");
- entries.forEach((pair,i)=>{
-  const v=pair[1];
-  el("text",{x:590,y:106+i*26,fill:i===0?colours[0]:colours[1],
-      "font-size":12,"font-family":"monospace"},r,
-      pair[0]+"    "+cnt(v.valid_A)+"    "+num(v.mean_A,3)+"   "+num(v.rms_A,3));
- });
+ el("text",{x:(L+R)/2,y:491,fill:"#111","text-anchor":"middle","font-size":17},r,
+     "Electron-count asymmetry A (dimensionless)");
+ el("text",{transform:"translate(26 242) rotate(-90)",fill:"#111",
+     "text-anchor":"middle","font-size":15},r,
+     (mode==="count"?"Parent events":"Fraction of parent events")+" / "+binwidth.toFixed(3));
+ // ATLAS-inspired academic plot practice: no ROOT auto-stat box.
+ // Numeric Entries/Mean/RMS remain visible in the adjacent dashboard panels.
+ el("text",{x:L+14,y:T+25,fill:"#111","font-size":15,
+     "font-weight":"bold"},r,"NA60+ Simulation");
+ el("text",{x:L+14,y:T+44,fill:"#333","font-size":12},r,
+     "LUT500 • p = 3 mm • work in progress");
 }
 function colour(v,min,max){
  if(v===null||v===undefined||!Number.isFinite(v))return "#fff";
@@ -149,8 +151,11 @@ function drawMap(){
  const rows=stationData().layout;
  const xmin=Math.min(...rows.map(c=>c.x-c.hx)),xmax=Math.max(...rows.map(c=>c.x+c.hx));
  const ymin=Math.min(...rows.map(c=>c.y-c.hy)),ymax=Math.max(...rows.map(c=>c.y+c.hy));
- const scale=Math.min(680/(xmax-xmin),430/(ymax-ymin));
- const X=x=>370+(x-(xmin+xmax)/2)*scale,Y=y=>240-(y-(ymin+ymax)/2)*scale;
+ // Source NA6P chamber centres and dimensions are in cm.
+ const ml=102,mr=687,mt=52,mb=386;
+ const scale=Math.min((mr-ml)/(xmax-xmin),(mb-mt)/(ymax-ymin));
+ const X=x=>(ml+mr)/2+(x-(xmin+xmax)/2)*scale;
+ const Y=y=>(mt+mb)/2-(y-(ymin+ymax)/2)*scale;
  const mode=$("mapmode").value;
  const value=c=>{
   const o=stationData().chambers[String(c.id)];
@@ -163,7 +168,40 @@ function drawMap(){
  };
  const valid=rows.map(value).filter(v=>v!==null&&Number.isFinite(v));
  const min=valid.length?Math.min(...valid):0,max=valid.length?Math.max(...valid):1;
- el("rect",{x:1,y:1,width:738,height:478,fill:"#fff",stroke:"#444"},svg);
+ el("rect",{x:1,y:1,width:738,height:478,fill:"#fff",stroke:"#bbb"},svg);
+ el("rect",{x:ml,y:mt,width:mr-ml,height:mb-mt,
+    fill:"#fff",stroke:"#171717","stroke-width":1.4},svg);
+ // Scientific axes for the physical projected chamber layout.
+ // The spatial units are centimetres, matching build_chambers().
+ function majorTicks(a,b,step){
+   const first=Math.ceil((a-1e-10)/step)*step,ticks=[];
+   for(let t=first;t<=b+1e-9;t+=step)ticks.push(Math.abs(t)<1e-7?0:t);
+   return ticks;
+ }
+ const niceStep=range=>{
+   const ideal=range/5,mag=Math.pow(10,Math.floor(Math.log10(ideal)));
+   return [1,2,2.5,5,10].map(m=>m*mag).find(v=>v>=ideal)||10*mag;
+ };
+ for(const v of majorTicks(xmin,xmax,niceStep(xmax-xmin))){
+   const xp=X(v);
+   el("line",{x1:xp,y1:mb,x2:xp,y2:mb+7,stroke:"#111","stroke-width":1.3},svg);
+   el("line",{x1:xp,y1:mt,x2:xp,y2:mt+6,stroke:"#111","stroke-width":1.3},svg);
+   el("text",{x:xp,y:mb+23,"text-anchor":"middle",fill:"#111","font-size":13},svg,
+      String(Number(v.toFixed(3))));
+ }
+ for(const v of majorTicks(ymin,ymax,niceStep(ymax-ymin))){
+   const yp=Y(v);
+   el("line",{x1:ml-7,y1:yp,x2:ml,y2:yp,stroke:"#111","stroke-width":1.3},svg);
+   el("line",{x1:mr-6,y1:yp,x2:mr,y2:yp,stroke:"#111","stroke-width":1.3},svg);
+   el("text",{x:ml-11,y:yp+4,"text-anchor":"end",fill:"#111","font-size":13},svg,
+      String(Number(v.toFixed(3))));
+ }
+ el("text",{x:(ml+mr)/2,y:mb+47,"text-anchor":"middle",fill:"#111",
+           "font-size":16},svg,"X [cm]");
+ el("text",{transform:"translate(25 219) rotate(-90)","text-anchor":"middle",
+           fill:"#111","font-size":16},svg,"Y [cm]");
+ el("text",{x:ml+11,y:mt+20,fill:"#111","font-size":13,
+             "font-weight":"bold"},svg,"NA60+ Simulation");
  rows.forEach(c=>{
   const x=X(c.x-c.hx),y=Y(c.y+c.hy),w=2*c.hx*scale,h=2*c.hy*scale;
   const g=el("g",{},svg);
@@ -174,8 +212,27 @@ function drawMap(){
   el("title",{},g,"DET "+c.id+" · layer "+c.layer+" · "+mode+"="+num(value(c),4));
   g.addEventListener("click",()=>{det=c.id;$("det").value=String(det);refresh();});
  });
- $("mapinfo").textContent="MS"+station+" · "+rows.length+" physical DETs · "+mode+
-   " range ["+num(min,3)+", "+num(max,3)+"] · selected: "+(det<0?"all station":"DET "+det);
+ // Continuous colour key with signed values for delta/mean and counts for exposure.
+ const barL=355,barR=610,barY=446;
+ for(let j=0;j<50;j++){
+   const t=j/50;
+   el("rect",{x:barL+(barR-barL)*t,y:barY,
+      width:(barR-barL)/50+0.35,height:10,
+      fill:colour(min+(max-min)*t,min,max),stroke:"none"},svg);
+ }
+ el("rect",{x:barL,y:barY,width:barR-barL,height:10,
+    fill:"none",stroke:"#111","stroke-width":.7},svg);
+ el("text",{x:barL-9,y:barY+9,"text-anchor":"end",
+    "font-size":11,fill:"#111"},svg,num(min,2));
+ el("text",{x:barR+8,y:barY+9,"text-anchor":"start",
+    "font-size":11,fill:"#111"},svg,num(max,2));
+ el("text",{x:barL-15,y:barY-3,"text-anchor":"end",
+    "font-size":11,fill:"#111"},svg,
+    ({rms:"RMS(A)",delta:"ΔRMS(A)",mean:"Mean(A)",
+      exposure:"Events"})[mode]);
+ $("mapinfo").textContent="MS"+station+" · "+rows.length+
+   " physical DETs · X,Y in cm · map: "+mode+
+   " · selected: "+(det<0?"all station":"DET "+det);
 }
 function table(){
  const tbody=$("dettable").querySelector("tbody");tbody.replaceChildren();
