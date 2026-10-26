@@ -130,14 +130,19 @@ def summarize_parent_counts(all_chunks):
     vals=[]
     n_with_crossing=0
     n_with_classified=0
+    n_empty_with_crossing=0
     total_parent_slots=0
     up=down=0
     for item in all_chunks:
         pair=item["pair"]
         valid=(pair[:,0]+pair[:,1])>0
         total_parent_slots+=len(pair)
+        if np.any(valid & ~item["has_crossing"]):
+            raise AssertionError("No event can collect electrons without a gas crossing")
         n_with_crossing+=int(np.count_nonzero(item["has_crossing"]))
         n_with_classified+=int(np.count_nonzero(valid))
+        n_empty_with_crossing+=int(np.count_nonzero(
+            item["has_crossing"] & ~valid))
         up+=int(pair[:,0].sum())
         down+=int(pair[:,1].sum())
         v=((pair[valid,0]-pair[valid,1])/
@@ -145,20 +150,20 @@ def summarize_parent_counts(all_chunks):
         vals.append(v)
     a=np.concatenate(vals) if vals else np.empty(0,dtype=float)
     if not len(a):
-        return dict(parents_generated=total_parent_slots,
+        return dict(parents_in_input_chunks=total_parent_slots,
                     parents_with_MS0_crossing=n_with_crossing,
                     parents_with_classified_electrons=0,
-                    n_with_undefined_asymmetry=total_parent_slots,
+                    n_with_undefined_asymmetry=n_empty_with_crossing,
                     mean=None,rms=None,hist=[0]*41,
                     histogram_edges=A_EDGES.tolist(),
                     total_up=up,total_down=down)
     hist,_=np.histogram(a,bins=A_EDGES)
     if hist.sum()!=len(a) or np.any(a < -1) or np.any(a > 1):
         raise AssertionError("Parent-event A histogram conservation")
-    return dict(parents_generated=total_parent_slots,
+    return dict(parents_in_input_chunks=total_parent_slots,
         parents_with_MS0_crossing=n_with_crossing,
         parents_with_classified_electrons=n_with_classified,
-        n_with_undefined_asymmetry=total_parent_slots-n_with_classified,
+        n_with_undefined_asymmetry=n_empty_with_crossing,
         mean=float(np.mean(a)),rms=float(np.std(a,ddof=0)),
         median=float(np.median(a)),
         histogram_counts=hist.tolist(),
@@ -329,6 +334,10 @@ def run(chunks,max_hits,out,make_plots=True):
                          sampled_muon_gas_crossings=processed,
                          zero_path_crossings=zero_paths,
                          partial_exposure=bool(max_hits),
+                         subset_requires_care="For a limited --max-hits pilot, "
+                            "the 50000 parent slots per input chunk are "
+                            "NOT fully processed: report only processed "
+                            "crossings/parents with observed MS0 crossings.",
                          parent_identifier="source+chunk+local parent event",
                          crossing_definition="one native chamber gas crossing",
                          entrance_angles="signed theta_u_in_deg and theta_w_in_deg",
