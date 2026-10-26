@@ -151,3 +151,76 @@ Before promotion we still need: k=1 comparison with native Garfield
 attachment-on, sensitivity to Magboltz E-table resolution (currently
 only 16 logarithmic field grid points), fit/validation reproducibility,
 and the existing native Geant4/Heed event-level fold.
+
+
+## CRITICAL: first fit produces k>1 but native MC over-attaches
+
+14,400-source first-pass results (5 um MC, microscopic 500-trial
+reference subset) for primary H_vdt:
+- k_joint = 1.6167, k_noFW = 1.52325, k_FW75 = 1.71956.
+- joint k validation noFW: micro 0.8286, predicted 0.8107.
+- joint k validation FW75: micro 0.7883, predicted 0.8131.
+- 6x6 spatial-block RMS fraction residual ~0.157-0.158 (!!).
+- 36-bin phi TV ~0.056-0.061, similar to reference noise but does not
+  rescue spatial agreement.
+- H_chord and H_vdt fitted coefficients close (within ~1%), so
+  naive chord vs vd*dt difference does NOT resolve major bias.
+
+This is NOT a successful physical attachment calibration.
+An earlier 100-start native AvalancheMC attachment-on pilot collected
+only 0.59/0.57, much less than microscopic 0.91/0.83, yet our
+postprocessed survival formula requires k>1 to match microscopic.
+The original pilot had a different selection, so the contradiction
+must now be verified on EXACT same 14,400 selected birth sites.
+
+### Required NEXT experiment: native attachment ON, 5 um, same starts
+
+The already-built executable pi_fast_lut_existing_starts_mc supports
+--mc-attachment on. This is fast; no microscopic tracks and no
+regeneration of Magboltz .gas. Output a NEW, separate CSV:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+    "$PY" -m py_compile test/mwpc-stage-c/pi_fast_lut_native_attachment_audit.py
+
+    export ROOTSYS="$HOME/na6p/install/root"
+    export LD_LIBRARY_PATH="$ROOTSYS/lib:$HOME/na6p/install/garfieldpp/lib:$HOME/na6p/install/garfieldpp/lib64:$LD_LIBRARY_PATH"
+
+    BASE=test_runs/mwpc_stage_c/pi_fast_lut_reference_v1
+    GAS=test_runs/mwpc_stage_c/pi_garfield_drift_methods_v1/ar70_co230_B0_transport.gas
+    BIN=test/mwpc-stage-c/build/pi_fast_lut_existing_starts_mc
+    "$BIN" \
+      --starts "$BASE/selected_micro_reference.csv" \
+      --gas-file "$GAS" --mc-attachment on --mc-step-um 5 \
+      --output "$BASE/mc_native_attach_on_5um.csv"
+
+Now quantify native-vs-offline eta hazard k=1 on the SAME population:
+
+    "$PY" test/mwpc-stage-c/pi_fast_lut_native_attachment_audit.py \
+      --reference "$BASE/selected_micro_reference.csv" \
+      --hazards "$BASE/mc_no_attach_5um_hazards.csv" \
+      --baseline-mc "$BASE/mc_no_attach_5um.csv" \
+      --native "$BASE/mc_native_attach_on_5um.csv" \
+      --out "$BASE/native_attachment_vs_offline_hazard_v1.json"
+
+The read-only audit validates every birth/seed and sample exposure.
+For fit and validation separately, it reports:
+- microscopic vs native MC attachment-on collected fraction;
+- offshore postprocessed exp(-H) survival for k=1;
+- postprocessed survival using k fitted to microscopic FIT;
+- *effective k_native* required for offline H to match Garfield's native
+  attachment-on FIT collection, or an error if native losses are
+  impossible using a finite k due to zero-hazard survivor floor;
+- discrepancy and RMS across 6x6 spatial blocks;
+- loss versus integrated hazard H deciles.
+
+k_native is a diagnostic of mismatch between two attachment
+implementations and is NOT a corrected gas-physics coefficient.
+
+If native k1 and offline k1 disagree substantially, our offline
+integration has not been established as a reproduction of Garfield's
+native attachment. Do NOT deploy an empirically fitted k until this
+origin and spatial residuals are understood. Investigate Garfield's
+projected path integration, coefficients, energy table and finite step
+sampling. Do NOT blame Magboltz solely on this evidence.
