@@ -7,6 +7,7 @@ import numpy as np
 from pi_fast_lut_select_reference import NCELL,GEOMS,sample_plan
 from pi_fast_lut_existing_starts_report import (
   read_micro,read_mc,compare,phi_pdf)
+from pi_fast_lut_noise_floor import reference_null,matched_step_comparison,tv_from_counts
 
 HEADER=["geometry","split","iu","iv","sample","random_seed","u_start_mm",
     "v_start_mm","reference_collected","reference_field_wire_collected",
@@ -106,6 +107,26 @@ def main():
             assert np.isclose(stats["phi_total_variation_36bins_conditional_survival"],0.)
             assert stats["n_independent_start_cells"]==8
             assert stats["delta_95ci_cell_clustered"] is not None
+        # A 36-bin TV distance must have the proper normalization.
+        assert np.isclose(tv_from_counts([1,1,0],[2,0,0]),.5)
+        diag=matched_step_comparison(
+            {i:row for i,row in enumerate(sim[:8])},
+            {i:row for i,row in enumerate(sim[:8])})
+        assert diag["n_same_birth_sites"]==8
+        assert diag["individual_anode_outcome_mismatches"]==0
+        assert diag["phi_total_variation_36bins"]==0.
+        # Full 900-cell stratified permutation smoke: 4 fit + 4 validation
+        # per cell, with exactly equal coarse phi distributions.
+        null_rows=[]
+        for cell in range(NCELL):
+            for k in range(8):
+                null_rows.append({
+                    "iu":str(cell//30),"iv":str(cell%30),
+                    "split":"fit" if k<4 else "validation",
+                    "reference_collected":"1","reference_phi_hit_deg":"90"})
+        null=reference_null(null_rows,50,12345)
+        assert null["observed_fit_vs_validation_phi_TV_36bins"]==0.
+        assert null["permutation_TV_p05_p50_p95"]==[0.,0.,0.]
         broken=sim.copy()
         broken[0]={**broken[0],"u_start_mm":999}
         with mcpath.open("w",newline="") as f:
