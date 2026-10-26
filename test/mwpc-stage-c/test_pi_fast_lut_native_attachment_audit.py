@@ -15,13 +15,13 @@ def entry(i,p):
     }
 
 def main():
-    entries=[entry(i,1) for i in range(200)]
+    entries=[entry(i,1) for i in range(3600)]
     native={r["id"]:{"anode_collected":(1 if j%2==0 else 0)}
         for j,r in enumerate(entries)}
     k=kfit_target(entries,native)
     assert abs(k-1.)<1e-9,k
     bins=bin_checks(entries,native,k)
-    assert len(bins)==10 and all(x["n"]==20 for x in bins)
+    assert len(bins)==10 and all(x["n"]==360 for x in bins)
     assert all(abs(x["estimated_k1_survival"]-.5)<1e-9 for x in bins)
     assert all(abs(x["native_mc_attachment_on_anode"]-.5)<1e-9 for x in bins)
     blocks=residuals(entries,k)
