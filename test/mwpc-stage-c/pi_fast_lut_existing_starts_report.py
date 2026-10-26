@@ -110,9 +110,11 @@ def u_zone(u):
         "intermediate_u" if a<1.0 else "half_pitch_u")
 
 
+# Region boundaries must align with full (0.2 mm) v-cell edges,
+# otherwise one spatial cell would be split and cell-clustered CI invalid.
 def v_zone(v):
     a=abs(v)
-    return "wire_near_v" if a<.5 else (
+    return "wire_near_v" if a<.6 else (
         "mid_gap_v" if a<2.0 else "near_cathode_v")
 
 
