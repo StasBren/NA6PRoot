@@ -101,8 +101,18 @@ def study(reference_path,hazard_path,native_path,baseline_path,out):
                "hazard":float(o["hazard_eta_vdt"])}
             (fit if ref["split"]=="fit" else validation).append(e)
         k_micro=fit_global_k(fit)
-        k_native=kfit_target(fit,native)
-        g={"k_fit_micro":k_micro,"k_fit_native":k_native,"splits":{}}
+        try:
+            k_native=kfit_target(fit,native)
+            k_native_fit_error=None
+        except ValueError as exc:
+            # A nonzero population with H==0 has an irreducible survival
+            # floor in the offline model. Native MC may violate that floor.
+            # This is important evidence of model non-equivalence; do not
+            # abort or silently force k to a huge arbitrary constant.
+            k_native=None
+            k_native_fit_error=str(exc)
+        g={"k_fit_micro":k_micro,"k_fit_native":k_native,
+           "k_native_fit_error":k_native_fit_error,"splits":{}}
         for name,values in (("fit",fit),("validation",validation)):
             n=len(values)
             native_fraction=sum(int(native[x["id"]]["anode_collected"]) for x in values)/n
@@ -130,7 +140,8 @@ def study(reference_path,hazard_path,native_path,baseline_path,out):
               "native_endpoint_status_counts":dict(statuses),
               "offline_survival_k1":mean_pred(values,1.),
               "offline_survival_fitted_micro_k":mean_pred(values,k_micro),
-              "offline_survival_fitted_native_k":mean_pred(values,k_native),
+              "offline_survival_fitted_native_k":(
+                  mean_pred(values,k_native) if k_native is not None else None),
               "native_minus_offline_k1":native_vs_k1,
               "native_vs_offline_k1_block_RMS":native_rms,
               "micro_vs_offline_kmicro_block_RMS":block_micro["rms"],
@@ -149,7 +160,7 @@ def study(reference_path,hazard_path,native_path,baseline_path,out):
                   f"blockRMS(native vs k1)={native_rms:.4f}",flush=True)
         result["geometry"][geom]=g
         print(f"  {geom}: k to micro FIT={k_micro:.5g}, "
-              f"k to native FIT={k_native:.5g}",flush=True)
+              f"k to native FIT={k_native if k_native is not None else k_native_fit_error}",flush=True)
     # Joint fit transfer between geometry is handled by prior first-pass
     # script; this audit specifically checks Garfield native-k1 consistency.
     out.parent.mkdir(parents=True,exist_ok=True)
