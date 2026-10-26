@@ -14,7 +14,7 @@ from collections import Counter,defaultdict
 from pathlib import Path
 import numpy as np
 from pi_fast_lut_existing_starts_report import GEOMS,read_micro,read_mc,sha256
-from pi_fast_lut_attachment_fit import load_hazards,vectorize,fit_global_k,mean_pred
+from pi_fast_lut_attachment_fit import load_hazards,fit_global_k,mean_pred
 
 def group_map(entries):
     groups=defaultdict(list)
@@ -71,10 +71,6 @@ def study(reference_path,hazard_path,native_path,baseline_path,out):
     native,step_native,mode=read_mc(native_path,reference)
     if mode!="on" or step!=step_native:
         raise ValueError("Native MC must have attachment=on and identical step")
-    grouped=vectorize(reference,off,"hazard_eta_vdt")
-    # Attach immutable key to rows for direct lookup in native MC.
-    for key,ref in reference.items():
-        pass
     result={"schema":"PI_FAST_LUT_NATIVE_ATTACHMENT_AUDIT_V1",
         "micro_selected_sha256":sha256(reference_path),
         "hazards_sha256":sha256(hazard_path),
