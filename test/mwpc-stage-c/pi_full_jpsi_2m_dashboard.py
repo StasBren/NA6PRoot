@@ -469,6 +469,8 @@ is left unchanged.</div>
         companion=json.loads(meta_sidecar.read_text(encoding="utf-8"))
         if (companion.get("schema")==
             "PI_JPSI_SIX_STATIONS_PER_DET_PARENT_ASYM_P3_LUT500_ROOT_V1"
+            and companion.get("complete") is True
+            and companion.get("computed_stations")==list(range(6))
             and companion.get("files_sha256",{}).get("dashboard.html")==
                 sha_file(index_sidecar)):
             sidecar_link=(
