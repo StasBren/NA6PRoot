@@ -394,9 +394,9 @@ function map(){
    text(y,X0-pad*.24,-y+font*.27,root,
        {"text-anchor":"end","font-size":font,"pointer-events":"none"});
  }
- text("X, см →",X1+pad*.85,Y1+pad*.96,root,
+ text("X [cm] →",X1+pad*.85,Y1+pad*.96,root,
      {"text-anchor":"end","font-size":font,"font-weight":"700"});
- text("Y, см ↑",X0-pad*.84,Y0-pad*.5,root,
+ text("Y [cm] ↑",X0-pad*.84,Y0-pad*.5,root,
      {"font-size":font,"font-weight":"700"});
  const b=lookup();
  $("selection").textContent=(selectionLabel())+
@@ -409,19 +409,25 @@ function map(){
 }
 function axes(root,plot,titleX,titleY,xTicks,yTicks,xFn,yFn){
  const [x0,y0,x1,y1]=plot;
- make("line",{x1:x0,y1:y0,x2:x0,y2:y1,stroke:"#c3dbeb"},root);
- make("line",{x1:x0,y1:y1,x2:x1,y2:y1,stroke:"#c3dbeb"},root);
+ make("rect",{x:x0,y:y0,width:x1-x0,height:y1-y0,
+   fill:"#fff",stroke:"#151515","stroke-width":1.25},root);
  for(const [v,label] of xTicks){
-   text(label,xFn(v),y1+22,root,{"text-anchor":"middle","font-size":11});
+   const xx=xFn(v);
+   make("line",{x1:xx,x2:xx,y1:y1,y2:y1+5,stroke:"#151515"},root);
+   make("line",{x1:xx,x2:xx,y1:y0,y2:y0+5,stroke:"#151515"},root);
+   text(label,xx,y1+22,root,{"text-anchor":"middle","font-size":11,fill:"#111"});
  }
  for(const [v,label] of yTicks){
-   const y=yFn(v);
-   make("line",{x1:x0,y1:y,x2:x1,y2:y,stroke:"#446078","stroke-width":.7},root);
-   text(label,x0-8,y+4,root,{"text-anchor":"end","font-size":11});
+   const yy=yFn(v);
+   make("line",{x1:x0,y1:yy,x2:x1,y2:yy,
+     stroke:"#d4d8dd","stroke-width":.65},root);
+   make("line",{x1:x0-5,y1:yy,x2:x0,y2:yy,stroke:"#151515"},root);
+   make("line",{x1:x1-5,y1:yy,x2:x1,y2:yy,stroke:"#151515"},root);
+   text(label,x0-8,yy+4,root,{"text-anchor":"end","font-size":11,fill:"#111"});
  }
- text(titleY,x0,20,root,{"font-size":12,"font-weight":"700"});
+ text(titleY,x0,20,root,{"font-size":12,"font-weight":"700",fill:"#111"});
  text(titleX,x1,y1+46,root,
-     {"text-anchor":"end","font-size":12,"font-weight":"700"});
+    {"text-anchor":"end","font-size":12,"font-weight":"700",fill:"#111"});
 }
 function renderStats(b){
  const root=$("statistics");root.replaceChildren();
@@ -483,8 +489,8 @@ function histogram(root,series,opts){
   return [v,String(Number(v.toFixed(1)))];
  });
  axes(root,[x0,y0,x1,y1],opts.xLabel,
-  (log?"Лог. доля e⁻":"Доля e⁻")+" / "+opts.binWidth+
-    (opts.angular?"°":" нс")+", %",xticks,yticks,x,y);
+  (log?"Лог. доля электронов":"Доля электронов")+" / "+opts.binWidth+
+    (opts.angular?"°":" ns")+" [%]",xticks,yticks,x,y);
  const dx=opts.binWidth;
  for(const serie of series){
   const color=serie.color,values=serie.values;
@@ -573,7 +579,7 @@ function renderTime(){
  const sameLogMin=positive.length?Math.pow(10,
    Math.floor(Math.log10(Math.min(...positive)))-1):null;
  const common={left:0,right:300,binWidth:S.timeRebin,angular:false,
-   xLabel:"Время дрейфа от рождения до анода, нс",ticks:6,
+   xLabel:"Время дрейфа до анода [ns]",ticks:6,
    log:S.scale==="log",logMin:sameLogMin,
    ymax:maxProbability(plotSeries)*1.15};
  const inPanels=S.timeMode==="panels";
@@ -598,9 +604,9 @@ function renderTime(){
 function renderArrival(){
  const angular=S.arrival==="incidence"?{
   field:"angle_hist",count:"angle_n",left:0,right:180,
-  title:"Угол подхода относительно нормали анода, градусы"}:{
+  title:"Угол подхода к нормали анода [deg]"}:{
   field:"phi_hist",count:"phi_n",left:-180,right:180,
-  title:"Азимут точки попадания φ_hit на поверхность анода, градусы"};
+  title:"Азимут точки попадания φ_hit [deg]"};
  $("angleDescription").textContent=S.arrival==="incidence"?
    "Угол последнего шага Garfield к внутренней нормали анода (не угол мюона).":
    "Положение электронного endpoint на окружности анода, а НЕ направление скорости.";
@@ -657,8 +663,8 @@ function polarFrame(root,peak){
  text("ANODE",0,3,root,{"text-anchor":"middle","font-size":11,
     "font-weight":"700",fill:"#213445"});
  if(peak>0){
-  text("max "+peak.toFixed(2)+"% / 10°",0,156,root,
-    {"text-anchor":"middle","font-size":10,fill:"#d5e3ef"});
+  text("Radial: electron fraction / 10° [%]",0,156,root,
+    {"text-anchor":"middle","font-size":10,fill:"#222"});
  }
 }
 function polarTile(container,cfg,row,allPeak,angles,conditionalPeak){
@@ -696,6 +702,16 @@ function polarTile(container,cfg,row,allPeak,angles,conditionalPeak){
      (-170+i*10)+"°: "+format(count)+" электронов; "+
       (100*count/row.phi_n).toFixed(3)+"%";
   });
+ }
+ // Radial probability scale: common percent-per-10° maximum per set.
+ const radialPeak=angles?conditionalPeak:allPeak;
+ if(radialPeak>0){
+  for(let k=1;k<=4;k++){
+   const rr=34+23*k;
+   text((radialPeak*k/4).toFixed(2)+"%",4,-rr+4,svg,
+     {"font-size":9,"text-anchor":"start",fill:"#111",
+      stroke:"#fff","stroke-width":2.5,"paint-order":"stroke"});
+  }
  }
  const count=document.createElement("small");
  if(angles){
