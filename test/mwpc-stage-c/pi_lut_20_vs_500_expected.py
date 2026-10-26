@@ -108,7 +108,7 @@ def expected_occupancies(station,chunks,max_hits,lam,marks):
                 np.add.at(table,(bin_idx,wire_idx),expectation*dt)
                 born+=expectation
                 selected+=1
-        print(f"J/psi chunk {chunk}/{chunks}: MS{station} crossings={selected:,}, "
+                if selected%10000==0:\n                    print(f"  progress: {selected:,} MS{station} crossings, "\n                          f"{born:,.0f} expected Heed electrons",flush=True)\n        print(f"J/psi chunk {chunk}/{chunks}: MS{station} crossings={selected:,}, "
               f"analytic expected primaries={born:,.2f}",flush=True)
     if born<=0 or not np.isclose(table.sum(),born,rtol=1.e-10,atol=1.e-6):
         raise AssertionError("Mean-Heed spatial occupancy conservation failed")
