@@ -55,6 +55,40 @@ recalculation or gas table generation occurs.
     export ROOTSYS="$HOME/na6p/install/root"
     export LD_LIBRARY_PATH="$ROOTSYS/lib:$HOME/na6p/install/garfieldpp/lib:$HOME/na6p/install/garfieldpp/lib64:$LD_LIBRARY_PATH"
 
+## Compile compatibility fix, smoke before the full run
+
+The first compilation failed on an old drift-line API:
+"GetNumberOfDriftLinePoints" / "GetDriftLinePoint" are NOT accessible
+from the user's installed AvalancheMC. The updated code uses the
+documented current API "AvalancheMC::GetElectrons()[0].path"
+(see Garfield++ 2025 User Guide charge transport). It supports either
+scalar x,y,z or Cartesian-array x fields of the returned Point struct.
+
+Rebuild after pulling and test a separate six-electron file:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    cmake --build test/mwpc-stage-c/build \
+      --target pi_fast_lut_attachment_hazards -j2
+
+    export ROOTSYS="$HOME/na6p/install/root"
+    export LD_LIBRARY_PATH="$ROOTSYS/lib:$HOME/na6p/install/garfieldpp/lib:$HOME/na6p/install/garfieldpp/lib64:$LD_LIBRARY_PATH"
+    BASE=test_runs/mwpc_stage_c/pi_fast_lut_reference_v1
+    GAS=test_runs/mwpc_stage_c/pi_garfield_drift_methods_v1/ar70_co230_B0_transport.gas
+    BIN=test/mwpc-stage-c/build/pi_fast_lut_attachment_hazards
+
+    "$BIN" --starts "$BASE/selected_micro_reference.csv" \
+      --gas-file "$GAS" --mc-attachment off --mc-step-um 5 \
+      --max-per-geometry 3 \
+      --output "$BASE/mc_no_attach_5um_hazards_smoke3.csv"
+
+The smoke output has six electron rows total (3 per geometry) and is
+NOT used for fitting. If the compiler still fails, send the exact
+diagnostic. If runtime fails, inspect its last message before running
+the full 14,400-electron command. The full run uses default
+--max-per-geometry 0, i.e. ALL starts and full validation against the
+old MC endpoint CSV.
+
 ## 2. Un-killed stochastic MC drift with hazard extraction
 
 Uses the *same* 5 um MC algorithm, exact same 14,400 selected birth
