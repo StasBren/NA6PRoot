@@ -44,8 +44,9 @@ distributions with the microscopic model.
 Generated, and never silently overwritten:
 - transport_only_5um_detailed_v1.json: fit AND validation separately,
   36-bin hit-angle PDFs, time mean/RMS and 10/50/90/99 percentiles,
-  two-sample time CDF/KS, anode wire probabilities and 6x6 coarse
-  birth-position maps. Every input includes its SHA256.
+  two-sample time CDF/KS, anode wire probabilities, measured MC-only
+  CPU microseconds/electron and 6x6 coarse birth-position maps.
+  Every input includes its SHA256.
 - transport_only_5um_detailed_v1.png: validation common-survivor
   angle PDFs, drift-time CDFs and 6x6 mean-time bias heatmaps.
 
