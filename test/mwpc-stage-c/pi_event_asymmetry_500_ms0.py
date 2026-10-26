@@ -202,7 +202,8 @@ def plot_results(result, output):
             (tag(PITCH,0.),"#404040","No field wire"),
             (tag(PITCH,75.),"#176f9b","Field wire 75 μm")):
             rows=result["crossing_by_angle"][key][axis]
-            xx=[j for j,r in enumerate(rows) if r["rms"] is not None]
+            xx=[j for j,r in enumerate(rows) if r["rms"] is not None
+                and r["valid"]>=30]
             yy=[rows[j]["rms"] for j in xx]
             ax.plot(xx,yy,marker="o",markersize=4,linewidth=1.5,
                     color=color,label=label)
@@ -215,7 +216,7 @@ def plot_results(result, output):
         ax.grid(alpha=.2)
     axes[0].set_ylabel("RMS(A) (crossing-level)")
     axes[0].legend(frameon=False)
-    fig.suptitle("Muon-angle dependence (individual chamber crossings, not full parent events)")
+    fig.suptitle("Muon-angle dependence (individual gas crossings; RMS shown only for N >= 30)")
     fig.tight_layout()
     fig.savefig(output/"crossing_RMS_vs_muon_angles.png")
     plt.close(fig)
@@ -362,9 +363,11 @@ def run(chunks,max_hits,out,make_plots=True):
         plot_results(result,out)
     for key in lut:
         v=parent_level[key]
+        mean_text=f"{v['mean']:+.5f}" if v["mean"] is not None else "undefined"
+        rms_text=f"{v['rms']:.5f}" if v["rms"] is not None else "undefined"
         print(f"{key}: {v['parents_with_classified_electrons']:,} "
-              f"valid parent events, <A>={v['mean']:+.5f}, "
-              f"RMS(A)={v['rms']:.5f}",flush=True)
+              f"valid parent events, <A>={mean_text}, "
+              f"RMS(A)={rms_text}",flush=True)
     print("PASS: independent per-parent and per-crossing LUT500 asymmetry "
           f"diagnostics: {out}",flush=True)
     return result
