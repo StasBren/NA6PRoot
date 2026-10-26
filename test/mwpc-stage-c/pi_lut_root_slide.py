@@ -150,7 +150,7 @@ def render_matplotlib(data, png, geometry, stats):
         max(p+e for p,e in zip(data["p500"],data["se500"])))
     fig,axes=plt.subplots(2,1,figsize=(13.3333,7.5),dpi=160)
     fig.patch.set_facecolor("white")
-    fig.subplots_adjust(left=.10,right=.955,top=.82,bottom=.205,hspace=.45)
+    fig.subplots_adjust(left=.10,right=.955,top=.80,bottom=.268,hspace=.48)
     fig.text(.10,.961,
         "Electron-hit azimuth: convergence of the microscopic Garfield LUT",
         fontsize=19,weight="bold",ha="left",va="top")
