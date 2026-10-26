@@ -160,6 +160,10 @@ def compare(rows):
     stderr=float(percell.std(ddof=1)/math.sqrt(len(percell))) if len(percell)>1 else None
     phi_ref,t_ref=phi_pdf(rows,"reference")
     phi_mc,t_mc=phi_pdf(rows,"mc")
+    jointly_collected=[(ref,mc) for ref,mc in rows
+        if int(ref["reference_collected"]) and int(mc["anode_collected"])]
+    matched_phi_ref,matched_time_ref=phi_pdf(jointly_collected,"reference")
+    matched_phi_mc,matched_time_mc=phi_pdf(jointly_collected,"mc")
     return {
       "n_electrons":n,"n_independent_start_cells":len(percell),
       "reference_anode_fraction":rcount/n,
@@ -172,6 +176,14 @@ def compare(rows):
       "phi_total_variation_36bins_conditional_survival":
            float(.5*np.abs(phi_ref-phi_mc).sum()),
       "phi_ref_36bins":phi_ref.tolist(),"phi_mc_36bins":phi_mc.tolist(),
+      "n_jointly_collected_at_same_birth_sites":len(jointly_collected),
+      "phi_tv_36bins_jointly_collected_start_sites":
+        (float(.5*np.abs(matched_phi_ref-matched_phi_mc).sum())
+         if jointly_collected else None),
+      "mean_drift_ref_ns_jointly_collected":
+        (float(np.mean(matched_time_ref)) if matched_time_ref else None),
+      "mean_drift_mc_ns_jointly_collected":
+        (float(np.mean(matched_time_mc)) if matched_time_mc else None),
       "mean_drift_ref_ns":float(np.mean(t_ref)) if t_ref else None,
       "mean_drift_mc_ns":float(np.mean(t_mc)) if t_mc else None,
       "rms_drift_ref_ns":float(np.std(t_ref)) if t_ref else None,
