@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru"><head><meta charset="utf-8">
+<html lang="ru" data-ui-theme="root-light-v1"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NA60+ — PI · XY-карта, время дрейфа и углы · 6 геометрий</title>
 <style>
@@ -63,6 +63,30 @@ tr:nth-child(even){background:#20384a}.help{border-left:3px solid var(--a);paddi
 [hidden]{display:none!important}
 footer{color:var(--muted);font-size:12px}
 @media(max-width:1000px){main{grid-template-columns:1fr}.panel.full{grid-column:auto}#map{height:480px}}
+
+/* ROOT-inspired light theme · UI only, no physics changes. */
+:root{color-scheme:light;--bg:#e9edf1;--panel:#fff;--panel2:#fff;--edge:#a5aab2;--text:#161616;--muted:#515c69;--a:#2754aa;--orange:#bd6633}
+body{font-family:Arial,Helvetica,sans-serif}
+header{background:#fff;border-bottom:3px solid #2754aa}
+.topline{color:#254e9b}.controls{background:#f3f5f8;border-bottom:1px solid #ccd2d8}
+.panel,.mini-card,.polar-tile{background:white;border:1px solid #bac1c9;border-radius:2px}
+.panel h2,.mini-card h3,.polar-tile h3{color:#171717}
+svg{background:#fff;border:1px solid #d1d1d1;border-radius:0}
+.polar-tile svg{background:white;border:1px solid #ddd}
+select,button,.det-filter{background:white;color:#171717;border:1px solid #8b959f;border-radius:2px}
+label,.axis-note{color:#252525}
+a{color:#2152a4}
+.notice{background:#fff9e4;border-left-color:#bc8c35}
+.notice p,.polar-caption,.polar-legend span,.polar-tile small{color:#50545d}
+.stat,.det-picker,.det-item,.polar-bin-picker label{background:#f2f3f6;color:#1b1b1b;border:1px solid #d1d3d8;border-radius:2px}
+.det-picker summary,.det-item,.polar-bin-picker label{color:#1b1b1b}
+th{color:#161616;background:#eff0f2;border-bottom:2px solid #222}
+tr:nth-child(even){background:#f4f5f7}td{border-bottom-color:#ccc}
+#map text,#time text,#arrival text,#comparison text,.mini-card svg text,.polar-tile svg text{fill:#151515!important}
+#map line,#time line,#arrival line,#comparison line{stroke:#8b9098}
+#diagnostic{color:#973b23}
+footer{color:#50545d}
+
 </style></head><body>
 <header>
 <div class="topline">NA60+ · PI · NATIVE GEANT4 + HEED + GARFIELD · ШЕСТЬ ГЕОМЕТРИЙ</div>
