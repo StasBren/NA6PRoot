@@ -12,7 +12,7 @@ select{font:14px Arial;min-width:160px;max-width:310px;background:#fff;border:1p
 main{padding:0 max(20px,3vw) 26px;display:grid;grid-template-columns:minmax(340px,.95fr) minmax(430px,1.45fr);gap:15px}
 .panel{background:white;border:1px solid #c6cbd1;padding:16px;min-width:0}
 .panel.full{grid-column:1/-1}.note{background:#fff8df;border-left:4px solid #c18b13;padding:12px 15px;margin:12px max(20px,3vw)}
-svg{display:block;width:100%;background:white;border:1px solid #aaa}#map{height:460px}#hist{height:420px}
+svg{display:block;width:100%;background:#fff!important;border:1px solid #aaa}#map{height:460px;background:#fff!important}#hist{height:420px;background:#fff!important}
 .stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:12px 0}
 .stat{background:#f0f2f5;border-top:2px solid #222;padding:8px;min-width:0}.stat b{font:700 17px monospace;display:block}
 .stat small{font-size:11px;color:#5f6874}.legend{display:flex;gap:19px;flex-wrap:wrap;margin:10px 0}
@@ -83,6 +83,12 @@ const stationData=()=>D.stations[String(station)];
 const active=()=>det<0?stationData().station_parent:stationData().chambers[String(det)];
 function drawHist(){
  const s=active(),r=$("hist");clear(r);
+ // Explicit SVG-wide white canvas, NOT just the inner plot frame.
+ // Some dark-mode renderers override the CSS background of <svg>,
+ // leaving black tick labels and axis titles on a black surround.
+ // A real SVG element is consistently rendered/exported everywhere.
+ el("rect",{x:0,y:0,width:900,height:520,fill:"#ffffff",
+   stroke:"none","pointer-events":"none"},r);
  $("histtitle").textContent="MS"+station+" / "+(det<0?"entire station":"DET "+det)+" / P(A)";
  if(!s){$("empty").hidden=false;return}
  const a=s.configurations[C0],b=s.configurations[C1];
@@ -96,7 +102,7 @@ function drawHist(){
    num(b.mean_A,4)+", RMS="+num(b.rms_A,4)+", undefined="+cnt(b.undefined_A)+
    "; paired parent ΔA (FW−noFW)="+num(s.paired.mean_delta_FW_minus_noFW,4)+
    " [both valid: "+cnt(s.paired.both_valid_parents)+"]";
- const L=102,R=845,T=41,B=436,W=R-L,H=B-T;
+ const L=113,R=846,T=39,B=416,W=R-L,H=B-T;
  const mode=$("ymode").value;
  const ys=[a,b].map(v=>v.hist.map(k=>mode==="count"?k:(v.valid_A?k/v.valid_A:0)));
  const peak=Math.max(1e-10,...ys.flat())*1.16;
