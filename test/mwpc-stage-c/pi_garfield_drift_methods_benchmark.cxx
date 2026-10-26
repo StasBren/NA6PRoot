@@ -135,6 +135,13 @@ int main(int argc,char**argv){
     Garfield::MediumMagboltz gas;
     GasSetup(gas);
     if(mode=="prepare"){
+      // Gas transport tables are physics inputs, not disposable cache.
+      // Refuse to replace a previously prepared file silently.
+      {
+        std::ifstream existing(gasfile);
+        if(existing.good())throw std::runtime_error(
+          "Existing gas file must not be overwritten: "+gasfile);
+      }
       const int ncoll=Integer(argc,argv,"--ncoll",2);
       if(ncoll<1||ncoll>50)throw std::runtime_error("--ncoll out of bounds");
       const auto start=std::chrono::steady_clock::now();
@@ -152,6 +159,11 @@ int main(int argc,char**argv){
     }
     if(mode!="run"||output.empty())throw std::runtime_error(
         "Mode run requires --output CSV; --gas-file required for MC/RKF");
+    {
+      std::ifstream old(output);
+      if(old.good())throw std::runtime_error(
+        "Existing benchmark CSV must not be overwritten: "+output);
+    }
     // LOAD FIRST: the microscopic cross sections still need Initialise().
     if(!gas.LoadGasFile(gasfile))throw std::runtime_error(
        "Cannot load transport table; first run --mode prepare");
