@@ -208,6 +208,61 @@ classification. We then need to examine the Magboltz attachment
 coefficient eta(E) and its coarse high-field interpolation separately.
 If it remains low, examine diffusion/step numerics and stopping positions.
 
+## Next test: loaded Magboltz attachment coefficient eta(E)
+
+The matched-start control with MC attachment disabled collected 100/100
+anode electrons in BOTH geometries; the microscopic reference collected
+91/100 (no FW) and 83/100 (FW75). This establishes that attachment
+accounts for the **observed** difference in this limited sample, but
+does not yet distinguish a wrong eta(E) gas table from differences
+between collision-resolved and swarm-transport modelling.
+
+Before generating a second gas table, probe the EXISTING immutable
+transport coefficients and electric fields (NO new drifts, NO Magboltz
+regeneration). This creates a separate read-only C++ target.
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    cmake --build test/mwpc-stage-c/build \
+      --target pi_garfield_attachment_field_probe -j2
+
+    export ROOTSYS="$HOME/na6p/install/root"
+    export LD_LIBRARY_PATH="$ROOTSYS/lib:$HOME/na6p/install/garfieldpp/lib:$HOME/na6p/install/garfieldpp/lib64:${LD_LIBRARY_PATH:-}"
+
+    BASE=test_runs/mwpc_stage_c/pi_garfield_drift_methods_v1
+    GAS="$BASE/ar70_co230_B0_transport.gas"
+    PROBE=test/mwpc-stage-c/build/pi_garfield_attachment_field_probe
+    ldd "$PROBE" | grep 'not found' || echo "PASS shared libraries"
+
+    "$PROBE" --gas-file "$GAS" \
+      --output "$BASE/attachment_coefficients.csv"
+
+    PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+    "$PY" -m py_compile \
+      test/mwpc-stage-c/pi_garfield_attachment_field_report.py
+    "$PY" test/mwpc-stage-c/pi_garfield_attachment_field_report.py \
+      "$BASE/attachment_coefficients.csv" \
+      --out "$BASE/attachment_field_report"
+
+Outputs:
+- attachment_coefficients.csv: 81 logarithmically sampled gas-table
+  eta(E), Townsend alpha(E), drift velocity and diffusion coefficients,
+  plus two sets of actual local field points sampled from the MWPC
+  analytic geometry (with/without the grounded 75 um field wire).
+- attachment_field_report/attachment_field_summary.json
+- attachment_field_report/attachment_eta_vs_field.png
+
+eta and alpha are **1/cm**; E is **V/cm**. This is a LOCAL
+coefficient scan: do NOT equate eta(E) at a point to the probability of
+attachment for a full drift trajectory. That requires integrating eta
+over the path and comparing the full stochastic survival statistics.
+The geometry sample locations are intentionally sparse and only serve
+to identify the relevant E field range and possible extrapolation,
+not a path-integrated loss prediction.
+
+The coefficient probe refuses to overwrite a previous CSV.
+It does not restart any original Garfield production simulation.
+
 ## Step-size numerical convergence test
 
 Only after first 5 um run and diagnostic complete, run:
