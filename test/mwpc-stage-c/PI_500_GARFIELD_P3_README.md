@@ -142,8 +142,10 @@ python3 test/mwpc-stage-c/pi_lut_root_slide.py
 # Display the PNG with Windows:
 explorer.exe "$(wslpath -w test_runs/mwpc_stage_c/pi_lut_root_slide_v1/p3p0_field75p0um_slide.png)"
 
-# If python-pptx is absent in WSL, install it there:
-# sudo apt update && sudo apt install python3-pptx
+# Ubuntu 24.04: if python-pptx is missing, use a local virtualenv:
+python3 -m venv --system-site-packages test_runs/mwpc_stage_c/.venv_pi_slides
+test_runs/mwpc_stage_c/.venv_pi_slides/bin/python -m pip install python-pptx
+test_runs/mwpc_stage_c/.venv_pi_slides/bin/python test/mwpc-stage-c/pi_lut_root_slide.py
 
 # Optional alternate electrode geometry without FW:
 python3 test/mwpc-stage-c/pi_lut_root_slide.py --geometry p3p0_anode_only
