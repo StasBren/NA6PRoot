@@ -14,6 +14,7 @@
 #include <limits>
 #include <sstream>
 #include <stdexcept>
+#include <type_traits>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -130,17 +131,44 @@ struct Hazard {
 // same as drift distance. For finite-step microscopic comparisons,
 // v_d*dt is our PRIMARY approximate macroscopic hazard convention;
 // chord-length hazard is a sensitivity diagnostic, not physics truth.
+// Garfield++ 2025 AvalancheMC exposes stored electron paths through
+// GetElectrons()[i].path. Older drift-point APIs are NOT members of
+// AvalancheMC in this installed version. Path Point::x is represented
+// either as a Cartesian array or as a scalar x (different releases).
+template <typename P> double PathX(const P& p){
+  if constexpr(std::is_arithmetic_v<std::decay_t<decltype(p.x)>>)
+    return p.x;
+  else
+    return p.x[0];
+}
+template <typename P> double PathY(const P& p){
+  if constexpr(std::is_arithmetic_v<std::decay_t<decltype(p.x)>>)
+    return p.y;
+  else
+    return p.x[1];
+}
+template <typename P> double PathZ(const P& p){
+  if constexpr(std::is_arithmetic_v<std::decay_t<decltype(p.x)>>)
+    return p.z;
+  else
+    return p.x[2];
+}
 Hazard ComputeHazard(Garfield::AvalancheMC& mc,
                      Garfield::Sensor& sensor,
                      Garfield::MediumMagboltz& gas){
   Hazard h;
-  const size_t n=mc.GetNumberOfDriftLinePoints();
-  if(n<2){h.invalid_segments=1;return h;}
-  double x0=0.,y0=0.,z0=0.,t0=0.;
-  mc.GetDriftLinePoint(0,x0,y0,z0,t0);
+  const auto& electrons=mc.GetElectrons();
+  if(electrons.size()!=1)
+    throw std::runtime_error("Expected one un-killed AvalancheMC electron path");
+  const auto& path=electrons.front().path;
+  const size_t n=path.size();
+  if(n<2)
+    throw std::runtime_error("AvalancheMC electron path has fewer than 2 points");
   for(size_t i=1;i<n;++i){
-    double x1=0.,y1=0.,z1=0.,t1=0.;
-    mc.GetDriftLinePoint(i,x1,y1,z1,t1);
+    const auto& p0=path[i-1];
+    const auto& p1=path[i];
+    const double x0=PathX(p0),y0=PathY(p0),z0=PathZ(p0),t0=p0.t;
+    const double x1=PathX(p1),y1=PathY(p1),z1=PathZ(p1),t1=p1.t;
     const double dt=t1-t0;
     const double ds=std::hypot(std::hypot(x1-x0,y1-y0),z1-z0);
     const double midx=.5*(x0+x1),midy=.5*(y0+y1),midz=.5*(z0+z1);
@@ -150,7 +178,7 @@ Hazard ComputeHazard(Garfield::AvalancheMC& mc,
     sensor.ElectricField(midx,midy,midz,ex,ey,ez,medium,status);
     const double e=std::hypot(std::hypot(ex,ey),ez);
     double eta=0.,vx=0.,vy=0.,vz=0.;
-    const bool valid = status==0 && medium!=nullptr && dt>=0.
+    const bool valid=status==0 && medium!=nullptr && dt>=0.
       && std::isfinite(dt) && std::isfinite(ds)
       && gas.ElectronAttachment(ex,ey,ez,0.,0.,0.,eta)
       && gas.ElectronVelocity(ex,ey,ez,0.,0.,0.,vx,vy,vz)
@@ -172,11 +200,10 @@ Hazard ComputeHazard(Garfield::AvalancheMC& mc,
       }
     }
     ++h.n_steps;
-    x0=x1;y0=y1;z0=z1;t0=t1;
   }
   if(h.invalid_segments || !std::isfinite(h.h_vdt) ||
      !std::isfinite(h.h_chord) || h.h_vdt<0. ||h.h_chord<0.)
-    throw std::runtime_error("Invalid eta(E) integral on un-killed MC line");
+    throw std::runtime_error("Invalid eta(E) integral on un-killed MC path");
   return h;
 }
 struct Classification{
@@ -214,6 +241,9 @@ int main(int argc,char** argv){
   if(attach!="off")
     throw std::runtime_error("Hazard extraction requires attachment OFF");
   const double step=std::stod(Arg(argc,argv,"--mc-step-um","5"));
+  const int maxPerGeometry=std::stoi(Arg(argc,argv,"--max-per-geometry","0"));
+  if(maxPerGeometry<0||maxPerGeometry>7200)
+    throw std::runtime_error("--max-per-geometry must be 0 (all) or 1..7200");
   if(input.empty()||gasfile.empty()||output.empty())
     throw std::runtime_error("Required --starts FILE --gas-file FILE --output FILE");
   if(attach!="on"&&attach!="off")
@@ -255,6 +285,7 @@ int main(int argc,char** argv){
     double totalUs=0.;
     for(const auto& s:starts){
       if(s.geometry!=geom)continue;
+      if(maxPerGeometry && n>=maxPerGeometry)break;
       Garfield::RandomEngineRoot engine(s.seed);
       Garfield::Random::SetEngine(engine);
       const auto t0=std::chrono::steady_clock::now();
