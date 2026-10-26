@@ -118,3 +118,45 @@ An independent LUT study first isolates the hypothesis that the 20
 microtrajectories/cell cause visible per-bin noise; it does not prove it
 until a controlled convergence test with independently seeded LUTs and
 uncertainties has been performed.
+
+
+## PI single-slide ROOT-style presentation (one configuration)
+
+No model rerun is needed. Use the real 20-versus-500 results stored in the
+mean-Heed-exposure comparison CSV. The ROOT macro writes two **separate**
+vertically stacked TH1D histograms with identical axes/scales, per-bin
+1-sigma *Garfield LUT* errors, and a single factor-five statistical
+uncertainty statement.
+
+```bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git pull --ff-only
+
+# Verify all 36 phi bins normalize and match the selected FW geometry:
+python3 test/mwpc-stage-c/pi_lut_root_slide.py --validate-only
+
+# ROOT native TH1D + PDF + PNG + (if python-pptx present) single PPTX slide:
+python3 test/mwpc-stage-c/pi_lut_root_slide.py
+
+# Open slide PDF in Windows:
+explorer.exe "$(wslpath -w test_runs/mwpc_stage_c/pi_lut_root_slide_v1/p3p0_field75p0um_slide.pdf)"
+
+# Change to geometry without FW, if useful:
+python3 test/mwpc-stage-c/pi_lut_root_slide.py --geometry p3p0_anode_only
+```
+
+Generated files are isolated in
+`test_runs/mwpc_stage_c/pi_lut_root_slide_v1/`:
+`p3p0_field75p0um_slide.{pdf,png,root,pptx}` (PPTX optional), plus JSON
+provenance. The ROOT file preserves the two histograms and their independent
+per-bin standard errors for additional inspection in ROOT itself.
+PPTX is a high-fidelity image of the ROOT canvas. It is not an editable
+PowerPoint chart; the underlying numerical histograms remain in .root.
+
+**The 5x reduction refers to the expected per-cell independent Garfield
+sampling SE** scaling as 1/sqrt(K) for the same underlying probabilities and
+spatial weights (500/20=25). It does NOT mean every observed neighbouring
+bin difference shrinks exactly fivefold. Same Geant4 crossings and
+analytic expected Heed occupancy are used for both curves; this is
+not the event-by-event Heed fluctuation analysis.
+
