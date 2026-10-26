@@ -75,6 +75,42 @@ micro attachment is active. Also, four trials per region-cell are not
 enough to demonstrate 2% PDF precision. This is step-convergence
 triage, not final model certification.
 
+## 3b. Intrinsic microscopic phi noise floor (read-only)
+
+The first 5 um MC run with attachment off produced:
+- noFW: 7199/7200 collected, mean MC drift 732us/e
+- FW75: 7200/7200 collected, mean MC drift 1104us/e
+- MC vs micro validation 36-bin phi TV about 0.056 / 0.059
+
+Do **not** interpret the TV numbers as a model discrepancy without
+establishing a finite-reference-statistics baseline and the
+attachment-survivor selection effect.
+
+The read-only tool checks the full microscopic fit-vs-validation
+36-bin phi difference (4+4 independent micro draws per spatial cell),
+and a cell-stratified permutation null of that difference. It
+reports MC-vs-micro TV and, once different steps are available,
+MC-step-vs-MC-step TV, arrival-time changes and CPU/electron. It
+rejects mixing attachment-on with attachment-off outputs in
+the step-convergence comparison.
+
+    PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+    BASE=test_runs/mwpc_stage_c/pi_fast_lut_reference_v1
+    "$PY" test/mwpc-stage-c/pi_fast_lut_noise_floor.py \
+      --reference "$BASE/selected_micro_reference.csv" \
+      --mc "$BASE/mc_no_attach_5um.csv" \
+      --out "$BASE/micro_phi_noise_5um.json"
+
+This is NOT a formal physics-model equivalence p-value. Once
+the two extra step outputs are available, create a NEW report filename:
+
+    "$PY" test/mwpc-stage-c/pi_fast_lut_noise_floor.py \
+      --reference "$BASE/selected_micro_reference.csv" \
+      --mc "$BASE/mc_no_attach_5um.csv" \
+           "$BASE/mc_no_attach_2um.csv" \
+           "$BASE/mc_no_attach_1um.csv" \
+      --out "$BASE/micro_phi_noise_steps_5_2_1.json"
+
 ## 4. Optional: confirm step convergence after 5um succeeds
 
     "$BIN" --starts "$BASE/selected_micro_reference.csv" \
