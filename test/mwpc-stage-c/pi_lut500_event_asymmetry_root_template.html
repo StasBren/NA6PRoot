@@ -17,6 +17,7 @@ svg{display:block;width:100%;background:white;border:1px solid #aaa}#map{height:
 .stat{background:#f0f2f5;border-top:2px solid #222;padding:8px;min-width:0}.stat b{font:700 17px monospace;display:block}
 .stat small{font-size:11px;color:#5f6874}.legend{display:flex;gap:19px;flex-wrap:wrap;margin:10px 0}
 .line{display:inline-block;width:24px;height:3px;vertical-align:middle;margin-right:6px}
+.line.fw{background:transparent!important;border-top:3px dashed var(--red);height:0}
 table{border-collapse:collapse;width:100%;font:12px monospace}
 td,th{padding:8px;border-bottom:1px solid #d1d4da;text-align:left}th{background:#f0f2f5;border-bottom:2px solid black}
 tbody tr:hover{background:#f1f5ff;cursor:pointer}tbody tr.selected{background:#dce8ff}
@@ -53,7 +54,7 @@ for DETs we use that single physical chamber. No avalanche, charge induction, el
 <div class="stat"><b id="nundef">—</b><small>Undefined A, no FW</small></div>
 </div>
 <svg id="hist" viewBox="0 0 900 520"></svg>
-<div class="legend"><span><i class="line" style="background:var(--blue)"></i>No field wire</span><span><i class="line" style="background:var(--red)"></i>Grounded field wire 75 μm</span></div>
+<div class="legend"><span><i class="line" style="background:var(--blue)"></i>No field wire</span><span><i class="line fw"></i>Grounded field wire 75 μm</span></div>
 <p id="moments" class="small"></p><p id="empty" class="small" hidden><b>No valid asymmetries in this region.</b></p>
 </section>
 <section class="panel full"><h2 id="tabletitle">Physical DET comparison</h2>
@@ -125,7 +126,8 @@ function drawHist(){
    if(i+1<array.length)path+=" L "+x(i+1)+" "+y(array[i+1]);
   }
   path+=" L "+x(nbins)+" "+y(0);
-  el("path",{d:path,stroke:colours[j],fill:"none","stroke-width":2.3},r);
+  el("path",{d:path,stroke:colours[j],fill:"none","stroke-width":2.3,
+      "stroke-dasharray":j===1?"9 4":"none"},r);
  });
  el("text",{x:(L+R)/2,y:491,fill:"#111","text-anchor":"middle","font-size":17},r,
      "Electron-count asymmetry A (dimensionless)");
