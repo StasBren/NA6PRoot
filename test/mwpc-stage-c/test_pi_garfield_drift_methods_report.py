@@ -27,7 +27,7 @@ def main():
                             anode_collected=int(anode),field_wire_collected=0,
                             other_end=int(not anode),wire_index=0,
                             phi_hit_deg=(90 if anode else "nan"),
-                            drift_wall_us=250. if method=="microscopic" else 5.)))
+                            drift_wall_us=250. if method=="microscopic" else 5.))
         groups=read(path)
         assert len(groups)==len(GEOMS)*len(METHODS)
         for rows in groups.values():
