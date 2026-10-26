@@ -14,6 +14,15 @@ from pi_lut500_event_asymmetry_root_style_refresh import refresh
 
 
 def full_test():
+    # Static plot-contract guard: published research axes must be
+    # explicit, correctly dimensioned and not show ROOT auto-stat boxes.
+    template=d.TEMPLATE.read_text(encoding="utf-8")
+    for token in ("X [cm]", "Y [cm]",
+                  "Electron-count asymmetry A (dimensionless)",
+                  "binwidth.toFixed(3)", "stroke-dasharray",
+                  "NA60+ Simulation", "Fraction of parent events"):
+        assert token in template, ("Missing plot-style requirement",token)
+    assert 'const entries=[["No FW",a]]' not in template
     with tempfile.TemporaryDirectory(prefix="mwpc_asym_root_") as tmp:
         root=Path(tmp)
         source=root/"fake_crossings.csv"
