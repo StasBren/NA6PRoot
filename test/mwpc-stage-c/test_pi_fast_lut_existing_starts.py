@@ -36,8 +36,9 @@ def main():
             for split in ("fit","validation"):
                 for k in range(8):
                     iu,iv=1+k,2+k
-                    sample=k
-                    seed=1234+k
+                    # Fit and validation must have disjoint frozen trial IDs.
+                    sample=k+(8 if split=="validation" else 0)
+                    seed=1234+sample
                     startu=-1.5+.1*(iu+.5)
                     startv=-3.+.2*(iv+.5)
                     collected=int(k!=0)
@@ -70,6 +71,27 @@ def main():
             w=csv.DictWriter(f,fieldnames=MC_HEADER)
             w.writeheader()
             w.writerows(sim)
+        # The anti-duplicate check must reject a deliberately repeated
+        # microscopic trial ID, including duplicate copies across splits.
+        bad=rows.copy()
+        bad[-1]={**bad[-1],"sample":bad[-1]["sample"]-8,
+                 "split":"validation"}
+        with refpath.open("w",newline="") as f:
+            writer=csv.DictWriter(f,fieldnames=HEADER)
+            writer.writeheader()
+            writer.writerows(bad)
+        try:
+            read_micro(refpath)
+        except ValueError as e:
+            assert "Duplicate microscopic start" in str(e)
+        else:
+            raise AssertionError("Failed to reject duplicate reference ID")
+        with refpath.open("w",newline="") as f:
+            writer=csv.DictWriter(f,fieldnames=HEADER)
+            writer.writeheader()
+            writer.writerows(rows)
+        # The regenerated content must match the original frozen hash.
+        assert hashlib.sha256(refpath.read_bytes()).hexdigest()==sha
         ref,_=read_micro(refpath)
         mc,step,attach=read_mc(mcpath,ref)
         assert len(mc)==len(ref)==len(rows)
