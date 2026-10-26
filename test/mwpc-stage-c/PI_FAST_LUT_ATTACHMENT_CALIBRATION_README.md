@@ -183,6 +183,7 @@ regeneration of Magboltz .gas. Output a NEW, separate CSV:
     git pull --ff-only
     PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
     "$PY" -m py_compile test/mwpc-stage-c/pi_fast_lut_native_attachment_audit.py
+    "$PY" test/mwpc-stage-c/test_pi_fast_lut_native_attachment_audit.py
 
     export ROOTSYS="$HOME/na6p/install/root"
     export LD_LIBRARY_PATH="$ROOTSYS/lib:$HOME/na6p/install/garfieldpp/lib:$HOME/na6p/install/garfieldpp/lib64:$LD_LIBRARY_PATH"
@@ -207,7 +208,7 @@ Now quantify native-vs-offline eta hazard k=1 on the SAME population:
 The read-only audit validates every birth/seed and sample exposure.
 For fit and validation separately, it reports:
 - microscopic vs native MC attachment-on collected fraction;
-- offshore postprocessed exp(-H) survival for k=1;
+- offline postprocessed exp(-H) survival for k=1;
 - postprocessed survival using k fitted to microscopic FIT;
 - *effective k_native* required for offline H to match Garfield's native
   attachment-on FIT collection, or an error if native losses are
