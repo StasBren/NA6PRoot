@@ -97,6 +97,29 @@ def main():
           "Speed ratios exclude gas-table preparation and executable startup. "+
           "Test MC step convergence and gas-table E-grid before large LUT."},
           indent=2)+"\n",encoding="utf-8")
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("NOTE: matplotlib unavailable; JSON summary is complete")
+    else:
+        fig,axes=plt.subplots(1,2,figsize=(12.4,4.4),sharey=True)
+        phi_edges=list(range(-180,181,30))
+        for ax,geom in zip(axes,GEOMS):
+            vals=result[geom]
+            for method,color in (("microscopic","#404040"),
+                                 ("mc","#127ca4"),("rkf","#b9783b")):
+                ax.stairs(vals[method]["phi_probability_per_30deg"],
+                          phi_edges,color=color,linewidth=1.5,label=method)
+            ax.set_title(geom)
+            ax.set_xlabel("Endpoint azimuth [degrees]")
+            ax.legend(frameon=False)
+        axes[0].set_ylabel("Probability / 30 degree bin")
+        fig.suptitle("Garfield drift-method pilot: identical start sites (sparse)")
+        fig.tight_layout()
+        fig.savefig(a.out/"method_phi_distributions.png",dpi=150)
+        plt.close(fig)
     print("PASS:",a.out/"method_comparison.json")
 if __name__=="__main__":
     main()
