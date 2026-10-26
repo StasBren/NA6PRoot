@@ -5,7 +5,7 @@ Reads the previously computed, identical-exposure J/psi MS0
 phi_comparison.csv; launches a ROOT C++ macro making two vertically
 stacked TH1D histograms (20 above, 500 below), matched x/y scales and
 individual 1-sigma Garfield-LUT errors. Writes only PNG and PPTX.
-The histograms are drawn using ROOT but no .root/.pdf files are saved.
+The histograms are rendered using ROOT but no .root/.pdf files are saved.
 
 No Garfield, Geant4, Heed or frozen 720-fold jobs are run or changed.
 """
@@ -60,7 +60,7 @@ def require_pptx():
         from pptx.util import Inches
     except ImportError as exc:
         raise RuntimeError(
-            "python-pptx is required to create the requested PPTX. "
+            "python-pptx is required for the PPTX output. "
             "Install with: sudo apt update && sudo apt install python3-pptx "
             "(or install python-pptx inside your active Python venv)."
         ) from exc
@@ -107,11 +107,32 @@ def main():
     a.out.mkdir(parents=True,exist_ok=True)
     prefix=a.geometry+"_slide"
     png=a.out/(prefix+".png")
+    pptx=a.out/(prefix+".pptx")
+    # Never use stale successful results to mask rendering failures.
+    for target in (png,pptx):
+        if target.exists():
+            target.unlink()
+    # Standard WSL POSIX paths; no arbitrary shell invocation.
+    def quote_root(p):
+        s=str(p.resolve())
+        if any(char in s for char in ('"',"\n","\r")):
+            raise ValueError("Unexpected filename characters")
+        return '"'+s+'"'
+    command=(str(MACRO.resolve())+"("+
+             quote_root(a.csv)+","+quote_root(a.out)+
+             ',"'+a.geometry+'")')
+    process=subprocess.run(
+        [root,"-l","-b","-q",command],cwd=REPO,
+        stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+        text=True,check=False)
+    print(process.stdout,flush=True)
+    if process.returncode or "PASS: ROOT-rendered TH1D" not in process.stdout or \
+       not png.is_file() or png.stat().st_size==0:
+        raise RuntimeError("ROOT PNG rendering failed; see preceding log")
     save_pptx(png,pptx,presentation,inches)
-    print("PASS: one PI slide, actual ROOT-rendered histograms, 1-sigma error bars")
+    print("PASS: one PI slide from measured ROOT histograms and LUT errors")
     print("OUTPUT",png,flush=True)
     print("OUTPUT",pptx,flush=True)
-
 
 
 if __name__=="__main__":
