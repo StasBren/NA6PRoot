@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 import numpy as np
 import pi_lut500_event_asymmetry_root_dashboard as d
+from pi_lut500_event_asymmetry_root_style_refresh import refresh
 
 
 def full_test():
@@ -84,6 +85,32 @@ def full_test():
             with gzip.open(out/"event_counts.csv.gz","rt") as f:
                 data=list(csv.DictReader(f))
             assert len(data)==9 # 3 MS0 station, 4 MS0 DET, 1 MS1 station, 1 MS1 DET
+            # Update only HTML/style, keeping provenance and counted events unchanged.
+            physics_before=(d.sha(out/"summary.json"),
+                            d.sha(out/"event_counts.csv.gz"))
+            html_before=d.sha(out/"dashboard.html")
+            newtemplate=root/"newstyle.html"
+            newtemplate.write_text(
+                "<html><body><main>AXIS_STYLE_REFRESH</main>"
+                "<script>const D=__PAYLOAD__;</script></body></html>")
+            refresh(out,newtemplate)
+            assert "AXIS_STYLE_REFRESH" in (out/"dashboard.html").read_text()
+            assert d.sha(out/"dashboard.html")!=html_before
+            assert (d.sha(out/"summary.json"),
+                    d.sha(out/"event_counts.csv.gz"))==physics_before
+            modified=json.loads((out/"manifest.json").read_text())
+            assert modified["files_sha256"]["dashboard.html"]==d.sha(out/"dashboard.html")
+            refresh(out,newtemplate) # permitted idempotent style-only refresh
+            assert d.sha(out/"dashboard.html")==modified["files_sha256"]["dashboard.html"]
+            # SHA mismatch must fail closed rather than re-publish bad data.
+            with (out/"summary.json").open("a") as corrupt:
+                corrupt.write(" ")
+            try:
+                refresh(out,newtemplate)
+            except ValueError as e:
+                assert "SHA mismatch" in str(e)
+            else:
+                raise AssertionError("Style refresh bypassed input integrity")
             try:
                 d.summary_for_chunks(1,[0,1],0,out,True)
             except FileExistsError:pass
