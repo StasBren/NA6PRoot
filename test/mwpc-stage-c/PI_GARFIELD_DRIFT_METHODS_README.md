@@ -121,6 +121,34 @@ The Python report validates identical start coordinates and computes:
 - Mean and median CPU-wall use per electron, speedup from measured
   per-electron transport time only.
 
+## Diagnose 5 um collection discrepancy BEFORE judging AvalancheMC
+
+Our first 100-start/geometry numbers gave very different anode fractions:
+microscopic 0.91 / 0.83, MC 0.59 / 0.57, RKF 1.00 / 1.00.
+This is far too large to explain by the ~55-60x measured MC speed.
+We must distinguish physically lost electrons from Garfield endpoint and
+step-size classification, before replacing any LUT.
+
+Existing matched_5um.csv ALREADY contains the exit status, endpoint
+coordinates and original proximity-based anode/FW/other flags. The
+read-only diagnostic below prints all endpoint status counts and
+distances to actual anodes, field wires and cathodes, plus a same-start
+comparison against the microscopic results. It does NOT relabel hits.
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    BASE=test_runs/mwpc_stage_c/pi_garfield_drift_methods_v1
+    python3 -m py_compile test/mwpc-stage-c/pi_garfield_drift_methods_diagnose.py
+    python3 test/mwpc-stage-c/pi_garfield_drift_methods_diagnose.py \
+      "$BASE/matched_5um.csv" --out "$BASE/diagnose_5um.json"
+
+If the MC endpoints cluster just beyond the 1.5-anode-radius criterion
+(22.5 um from the wire center), that suggests an endpoint/step geometry
+artifact. Many status -3 or missing endpoints instead suggest a numerical
+or transport-table problem. Endpoints by the cathodes or field wires
+indicate genuine different trajectories/collection basins. No diagnosis
+can be concluded from status code alone.
+
 ## Step-size numerical convergence test
 
 Only after first 5 um run and diagnostic complete, run:
