@@ -54,6 +54,27 @@ If GarfieldConfig.cmake is not found, use the same CMAKE_PREFIX_PATH
 as the existing Stage-C transport build. Do not install a different
 Garfield version to work around missing environment variables.
 
+## Garfield runtime shared libraries (WSL)
+
+CMake can compile and link this executable while the runtime ELF loader
+still cannot locate libTree.so from the independently installed ROOT.
+The working Stage-C pitch pilot explicitly resolves ROOT and Garfield libs.
+
+After building, in the **same WSL terminal** as the subsequent prepare/run:
+
+    export ROOTSYS="$HOME/na6p/install/root"
+    export LD_LIBRARY_PATH="$ROOTSYS/lib:$HOME/na6p/install/garfieldpp/lib:$HOME/na6p/install/garfieldpp/lib64:${LD_LIBRARY_PATH:-}"
+
+    BIN=test/mwpc-stage-c/build/pi_garfield_drift_methods_benchmark
+    ldd "$BIN" | grep 'not found' || echo "PASS: all libraries found"
+
+Do not run prepare unless the loader reports no missing shared libraries.
+If the ROOT install location differs, resolve libTree.so from the same
+ROOT prefix that built Garfield; do not mix multiple ROOT installations.
+These exports apply only to the current shell and need repeating in a
+new terminal. See run_pi_pitch_fieldwire_pilot.sh for the validated
+dynamic ROOT library discovery procedure.
+
 ## Prepare ONE independent gas table
 
     BASE=test_runs/mwpc_stage_c/pi_garfield_drift_methods_v1
