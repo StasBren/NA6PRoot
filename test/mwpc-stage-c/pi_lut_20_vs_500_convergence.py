@@ -33,6 +33,7 @@ from pi_six_geometry_native_timing import (
     load_map, n_anodes, stable_seed,
 )
 from pi_2m_native_six_geometry_fold import crossing_provenance
+from pi_2m_zero_path_compatible_resume import coincident_zero_chord
 from run_pi_per_chamber_response import read_heed
 
 HERE = Path(__file__).resolve().parent
@@ -69,8 +70,11 @@ def occupancies(station, chunks, max_hits, tracks, clusters):
                     continue
                 length = float(row["path_length_mm"])
                 if length == 0.:
-                    # Exact original zero-chord compatible policy:
-                    # geometrical hit is retained; Heed primaries = Poisson(0).
+                    # Match the immutable native-fold exception exactly; an
+                    # inconsistent zero chord is an input error, not silently
+                    # discarded detector response.
+                    if not coincident_zero_chord(row):
+                        raise ValueError("Invalid zero-chord native gas crossing")
                     zero_paths += 1
                     sampled += 1
                     continue
