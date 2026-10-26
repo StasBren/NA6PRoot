@@ -43,7 +43,7 @@ def sample_plan(geom,nfit,nvalid,seed):
             split="fit" if i<nfit else "validation"
             # Distinct MC stream, never the frozen microscopic seed.
             tag=f"fastmc-start-v1:{geom}:{cell}:{slot}:{seed}"
-            ms=int.from_bytes(hashlib.sha256(tag.encode()).digest()[:4],"big")&0x7fffffff
+            ms=1+(int.from_bytes(hashlib.sha256(tag.encode()).digest()[:4],"big")%2147483646)
             chosen[cell*NSOURCE+slot]=(split,ms)
     return chosen
 
