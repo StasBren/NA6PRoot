@@ -8,7 +8,7 @@ from pathlib import Path
 from pi_six_geometry_native_timing import OUT
 
 
-HTML=r'''<!doctype html><html lang="ru" data-ui-theme="root-light-v1"><head><meta charset="utf-8">
+HTML=r'''<!doctype html><html lang="ru" data-ui-theme="root-atlas-axes-v2"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>NA60+ — время дрейфа для разных анодов</title>
 <style>
