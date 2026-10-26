@@ -1,9 +1,8 @@
 // One-slide, publication-style ROOT figure from the measured 20-vs-500 CSV.
 // Two vertically stacked TH1D histograms, identical scales and 1-sigma
-// Garfield-LUT statistical error bars. Writes PDF, PNG and a ROOT file.
+// Garfield-LUT statistical error bars. Writes PNG ONLY; no ROOT/PDF files.
 #include <TCanvas.h>
 #include <TH1D.h>
-#include <TFile.h>
 #include <TStyle.h>
 #include <TPad.h>
 #include <TLatex.h>
@@ -177,13 +176,6 @@ void pi_lut_root_slide(
   const TString out(output_dir);
   gSystem->mkdir(output_dir, kTRUE);
   canvas.SaveAs(out + "/" + geom.c_str() + "_slide.png");
-  canvas.SaveAs(out + "/" + geom.c_str() + "_slide.pdf");
-  TFile file(out + "/" + geom.c_str() + "_slide.root", "RECREATE");
-  if (file.IsZombie()) throw std::runtime_error("Failed to create ROOT file");
-  old_lut.Write();
-  new_lut.Write();
-  canvas.Write();
-  file.Close();
-  std::cout << "PASS: ROOT TH1D upper/lower 20-vs-500 slide: "
+  std::cout << "PASS: ROOT-rendered TH1D 20-vs-500 PNG slide: "
             << output_dir << std::endl;
 }
