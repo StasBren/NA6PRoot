@@ -1,0 +1,220 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NA60+ · ROOT-style LUT500 event asymmetry</title>
+<style>
+:root{color-scheme:light;--blue:#2754aa;--red:#bf2745}
+*{box-sizing:border-box}body{margin:0;background:#ebedf1;color:#161616;font:14px/1.45 Arial,Helvetica,sans-serif}
+header{background:white;padding:20px max(20px,3vw);border-bottom:3px solid #2754aa}
+h1{font-size:27px;margin:5px 0}h2{font-size:18px;margin:0 0 10px}p{color:#4e5967;margin:7px 0}
+a{color:var(--blue)}.tag{color:#19458d;font:700 11px monospace;letter-spacing:1px}
+.toolbar{display:flex;flex-wrap:wrap;gap:12px;margin:18px max(20px,3vw)}
+label{font-size:12px;font-weight:700;display:flex;flex-direction:column;gap:6px}
+select{font:14px Arial;min-width:160px;max-width:310px;background:#fff;border:1px solid #747e89;padding:9px}
+main{padding:0 max(20px,3vw) 26px;display:grid;grid-template-columns:minmax(340px,.95fr) minmax(430px,1.45fr);gap:15px}
+.panel{background:white;border:1px solid #c6cbd1;padding:16px;min-width:0}
+.panel.full{grid-column:1/-1}.note{background:#fff8df;border-left:4px solid #c18b13;padding:12px 15px;margin:12px max(20px,3vw)}
+svg{display:block;width:100%;background:white;border:1px solid #aaa}#map{height:460px}#hist{height:420px}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:12px 0}
+.stat{background:#f0f2f5;border-top:2px solid #222;padding:8px;min-width:0}.stat b{font:700 17px monospace;display:block}
+.stat small{font-size:11px;color:#5f6874}.legend{display:flex;gap:19px;flex-wrap:wrap;margin:10px 0}
+.line{display:inline-block;width:24px;height:3px;vertical-align:middle;margin-right:6px}
+table{border-collapse:collapse;width:100%;font:12px monospace}
+td,th{padding:8px;border-bottom:1px solid #d1d4da;text-align:left}th{background:#f0f2f5;border-bottom:2px solid black}
+tbody tr:hover{background:#f1f5ff;cursor:pointer}tbody tr.selected{background:#dce8ff}
+#tableScroll{overflow:auto;max-height:480px}.small{font-size:12px;color:#606a75}
+footer{margin:12px max(20px,3vw) 30px;color:#606a75;font-size:12px}
+[hidden]{display:none!important}
+@media(max-width:1050px){main{grid-template-columns:1fr}.panel.full{grid-column:1/-1}}
+@media(max-width:640px){.stats{grid-template-columns:1fr 1fr}#map{height:300px}#hist{height:320px}}
+</style></head><body>
+<header><div class="tag">NA60+ · MS0–MS5 · ROOT-STYLE HISTOGRAMS · p = 3 mm · Garfield LUT500</div>
+<h1>Event-by-event asymmetry A</h1>
+<p>J/ψ parent events · native Geant4 gas crossings · Heed primaries · Garfield++ LUT500 · B = 0</p>
+<p class="small">Independent of the older <a href="../pi_full_jpsi_2m_dashboard_v1/pages/index.html">2M J/ψ dashboard (LUT20, six geometries)</a>. Do not combine its LUT20 and this LUT500 statistics.</p>
+</header>
+<div class="note">A = (N<sub>up</sub> − N<sub>down</sub>)/(N<sub>up</sub> + N<sub>down</sub>) for finite anode-surface φ<sub>hit</sub>.
+A is <b>undefined</b> when no classified electron arrives; it is not set to zero.
+For stations we pool each parent's electrons over its chambers <b>before</b> evaluating A;
+for DETs we use that single physical chamber. No avalanche, charge induction, electronics or thresholds.</div>
+<div class="toolbar">
+<label>Station<select id="station"></select></label>
+<label>Region<select id="det"></select></label>
+<label>Histogram Y<select id="ymode"><option value="prob">Probability / bin</option><option value="count">Event counts</option></select></label>
+<label>Map colour<select id="mapmode"><option value="rms">RMS(A), FW75</option><option value="delta">Δ RMS FW − no FW</option><option value="mean">Mean(A), FW75</option><option value="exposure">Valid events, FW75</option></select></label>
+</div>
+<main>
+<section class="panel"><h2>Physical detector chambers</h2>
+<p>Click a chamber rectangle to select its parent-level asymmetry. Empty chambers are shown white.</p>
+<svg id="map" viewBox="0 0 740 480"></svg><p id="mapinfo" class="small"></p></section>
+<section class="panel"><h2 id="histtitle">Parent-event distribution P(A)</h2><p id="scope" class="small"></p>
+<div class="stats">
+<div class="stat"><b id="ncross">—</b><small>Parents with crossing</small></div>
+<div class="stat"><b id="nno">—</b><small>Valid A, no FW</small></div>
+<div class="stat"><b id="nfw">—</b><small>Valid A, FW75</small></div>
+<div class="stat"><b id="nundef">—</b><small>Undefined A, no FW</small></div>
+</div>
+<svg id="hist" viewBox="0 0 900 520"></svg>
+<div class="legend"><span><i class="line" style="background:var(--blue)"></i>No field wire</span><span><i class="line" style="background:var(--red)"></i>Grounded field wire 75 μm</span></div>
+<p id="moments" class="small"></p><p id="empty" class="small" hidden><b>No valid asymmetries in this region.</b></p>
+</section>
+<section class="panel full"><h2 id="tabletitle">Physical DET comparison</h2>
+<p>One statistical unit is one parent event in a chosen DET. Chamber histograms are not simply additive to a station A histogram.</p>
+<div id="tableScroll"><table id="dettable"><thead><tr><th>DET</th><th>N valid FW</th><th>Mean A (no FW)</th><th>RMS A (no FW)</th><th>Mean A (FW)</th><th>RMS A (FW)</th><th>Δ RMS</th></tr></thead><tbody></tbody></table></div>
+</section></main>
+<footer id="provenance"></footer>
+<script>
+"use strict";
+const D=__PAYLOAD__;
+const C0=D.configs[0].key,C1=D.configs[1].key;
+const E=D.asymmetry.hist_edges;
+const $=id=>document.getElementById(id);
+const NS="http://www.w3.org/2000/svg";
+function el(tag,attrs,parent,label){
+ const n=document.createElementNS(NS,tag);
+ Object.entries(attrs||{}).forEach(pair=>n.setAttribute(pair[0],pair[1]));
+ if(label!==undefined)n.textContent=String(label);
+ parent.appendChild(n);return n;
+}
+function clear(p){p.replaceChildren();}
+const num=(v,d=3)=>v===null||v===undefined?"—":Number(v).toFixed(d);
+const cnt=v=>Number(v||0).toLocaleString("en-US");
+let station=D.computed_stations[0],det=-1;
+const stationData=()=>D.stations[String(station)];
+const active=()=>det<0?stationData().station_parent:stationData().chambers[String(det)];
+function drawHist(){
+ const s=active(),r=$("hist");clear(r);
+ $("histtitle").textContent="MS"+station+" / "+(det<0?"entire station":"DET "+det)+" / P(A)";
+ if(!s){$("empty").hidden=false;return}
+ const a=s.configurations[C0],b=s.configurations[C1];
+ $("ncross").textContent=cnt(a.parents_with_gas_crossing);
+ $("nno").textContent=cnt(a.valid_A);$("nfw").textContent=cnt(b.valid_A);
+ $("nundef").textContent=cnt(a.undefined_A);
+ $("empty").hidden=!!(a.valid_A+b.valid_A);
+ $("scope").textContent=cnt(D.parents_generated_in_input_chunks)+" source-parent slots in "+D.number_of_source_chunks+
+   " chunk(s). "+(D.partial_exposure?"PILOT subset of gas crossings; not a complete generated-parent exposure.":"Complete selected native Geant4 input chunks.");
+ $("moments").textContent="No FW: Mean="+num(a.mean_A,4)+", RMS="+num(a.rms_A,4)+"; FW75: Mean="+
+   num(b.mean_A,4)+", RMS="+num(b.rms_A,4)+", undefined="+cnt(b.undefined_A)+
+   "; paired parent ΔA (FW−noFW)="+num(s.paired.mean_delta_FW_minus_noFW,4)+
+   " [both valid: "+cnt(s.paired.both_valid_parents)+"]";
+ const L=80,R=847,T=37,B=446,W=R-L,H=B-T;
+ const mode=$("ymode").value;
+ const ys=[a,b].map(v=>v.hist.map(k=>mode==="count"?k:(v.valid_A?k/v.valid_A:0)));
+ const peak=Math.max(1e-10,...ys.flat())*1.16;
+ const x=i=>L+(i/41)*W,y=v=>B-v/peak*H;
+ el("rect",{x:L,y:T,width:W,height:H,fill:"white",stroke:"#111","stroke-width":1.5},r);
+ for(let i=0;i<=5;i++){
+  const value=i/5*peak,pos=y(value);
+  el("line",{x1:L,y1:pos,x2:R,y2:pos,stroke:"#e0e0e0"},r);
+  el("line",{x1:L-8,y1:pos,x2:L,y2:pos,stroke:"#111"},r);
+  el("text",{x:L-11,y:pos+4,"text-anchor":"end",fill:"#111","font-size":13},r,
+    mode==="count"?String(Math.round(value)):value.toFixed(3));
+ }
+ for(let i=0;i<=8;i++){
+  const xx=L+W*i/8;
+  el("line",{x1:xx,y1:B,x2:xx,y2:B+8,stroke:"#111"},r);
+  el("text",{x:xx,y:B+27,"text-anchor":"middle",fill:"#111","font-size":12},r,(-1+i*.25).toFixed(2));
+ }
+ const colours=["#2754aa","#bf2745"];
+ ys.forEach((array,j)=>{
+  if(!array.some(v=>v>0))return;
+  let path="M "+x(0)+" "+y(0)+" L "+x(0)+" "+y(array[0]);
+  for(let i=0;i<array.length;i++){
+   path+=" L "+x(i+1)+" "+y(array[i]);
+   if(i+1<array.length)path+=" L "+x(i+1)+" "+y(array[i+1]);
+  }
+  path+=" L "+x(41)+" "+y(0);
+  el("path",{d:path,stroke:colours[j],fill:"none","stroke-width":2.3},r);
+ });
+ el("text",{x:460,y:500,fill:"#111","text-anchor":"middle","font-size":16},r,"A = (Nup − Ndown) / (Nup + Ndown)");
+ el("text",{transform:"translate(23 252) rotate(-90)",fill:"#111","text-anchor":"middle","font-size":13},r,
+    mode==="count"?"Parent event counts":"P(A) per bin");
+ el("rect",{x:580,y:58,width:245,height:106,fill:"#fff",stroke:"#111"},r);
+ const entries=[["No FW",a],["FW75",b]];
+ el("text",{x:590,y:78,fill:"#111","font-size":12,"font-family":"monospace"},r,"                    Entries    Mean    RMS");
+ entries.forEach((pair,i)=>{
+  const v=pair[1];
+  el("text",{x:590,y:106+i*26,fill:i===0?colours[0]:colours[1],
+      "font-size":12,"font-family":"monospace"},r,
+      pair[0]+"    "+cnt(v.valid_A)+"    "+num(v.mean_A,3)+"   "+num(v.rms_A,3));
+ });
+}
+function colour(v,min,max){
+ if(v===null||v===undefined||!Number.isFinite(v))return "#fff";
+ let t=Math.max(0,Math.min(1,(v-min)/(max-min||1)));
+ if(t<.5){t*=2;return "rgb("+Math.round(45+210*t)+","+Math.round(105+150*t)+",255)";}
+ t=(t-.5)*2;
+ return "rgb(255,"+Math.round(255-175*t)+","+Math.round(255-192*t)+")";
+}
+function drawMap(){
+ const svg=$("map");clear(svg);
+ const rows=stationData().layout;
+ const xmin=Math.min(...rows.map(c=>c.x-c.hx)),xmax=Math.max(...rows.map(c=>c.x+c.hx));
+ const ymin=Math.min(...rows.map(c=>c.y-c.hy)),ymax=Math.max(...rows.map(c=>c.y+c.hy));
+ const scale=Math.min(680/(xmax-xmin),430/(ymax-ymin));
+ const X=x=>370+(x-(xmin+xmax)/2)*scale,Y=y=>240-(y-(ymin+ymax)/2)*scale;
+ const mode=$("mapmode").value;
+ const value=c=>{
+  const o=stationData().chambers[String(c.id)];
+  if(!o)return null;
+  const a=o.configurations[C0],b=o.configurations[C1];
+  if(mode==="rms")return b.rms_A;
+  if(mode==="mean")return b.mean_A;
+  if(mode==="exposure")return b.valid_A;
+  return a.rms_A===null||b.rms_A===null?null:b.rms_A-a.rms_A;
+ };
+ const valid=rows.map(value).filter(v=>v!==null&&Number.isFinite(v));
+ const min=valid.length?Math.min(...valid):0,max=valid.length?Math.max(...valid):1;
+ el("rect",{x:1,y:1,width:738,height:478,fill:"#fff",stroke:"#444"},svg);
+ rows.forEach(c=>{
+  const x=X(c.x-c.hx),y=Y(c.y+c.hy),w=2*c.hx*scale,h=2*c.hy*scale;
+  const g=el("g",{},svg);
+  el("rect",{x,y,width:w,height:h,fill:colour(value(c),min,max),
+     stroke:c.id===det?"#cf2025":"#666","stroke-width":c.id===det?3:0.8,cursor:"pointer"},g);
+  if(w>24&&h>13)el("text",{x:x+w/2,y:y+h/2+3,fill:"#111","font-size":Math.min(10,w*.22),
+     "text-anchor":"middle","pointer-events":"none"},g,c.id);
+  el("title",{},g,"DET "+c.id+" · layer "+c.layer+" · "+mode+"="+num(value(c),4));
+  g.addEventListener("click",()=>{det=c.id;$("det").value=String(det);refresh();});
+ });
+ $("mapinfo").textContent="MS"+station+" · "+rows.length+" physical DETs · "+mode+
+   " range ["+num(min,3)+", "+num(max,3)+"] · selected: "+(det<0?"all station":"DET "+det);
+}
+function table(){
+ const tbody=$("dettable").querySelector("tbody");tbody.replaceChildren();
+ for(const [id,r] of Object.entries(stationData().chambers).sort((a,b)=>Number(a[0])-Number(b[0]))){
+   const a=r.configurations[C0],b=r.configurations[C1];
+   const diff=a.rms_A===null||b.rms_A===null?null:b.rms_A-a.rms_A;
+   const tr=document.createElement("tr");
+   if(Number(id)===det)tr.className="selected";
+   [id,cnt(b.valid_A),num(a.mean_A,4),num(a.rms_A,4),num(b.mean_A,4),
+    num(b.rms_A,4),num(diff,4)].forEach(v=>{
+      const td=document.createElement("td");td.textContent=v;tr.appendChild(td);
+   });
+   tr.addEventListener("click",()=>{det=Number(id);$("det").value=id;refresh();});
+   tbody.appendChild(tr);
+ }
+ $("tabletitle").textContent="MS"+station+" · parent-event asymmetry by physical DET";
+}
+function setDetOptions(){
+ const select=$("det");select.replaceChildren();
+ const items=[[-1,"Entire MS"+station+" station"]];
+ for(const c of stationData().layout.sort((a,b)=>a.id-b.id))
+   items.push([c.id,"DET "+c.id+" · layer "+c.layer+" · row "+c.row+" col "+c.col]);
+ for(const pair of items){
+  const opt=document.createElement("option");opt.value=pair[0];opt.textContent=pair[1];select.appendChild(opt);
+ }
+ if(!items.some(item=>item[0]===det))det=-1;
+ select.value=String(det);
+}
+function refresh(){drawHist();drawMap();table();}
+for(const s of D.computed_stations){
+ const opt=document.createElement("option");opt.value=s;opt.textContent="MS"+s;$("station").appendChild(opt);
+}
+$("station").value=String(station);setDetOptions();refresh();
+$("station").addEventListener("change",e=>{station=Number(e.target.value);det=-1;setDetOptions();refresh();});
+$("det").addEventListener("change",e=>{det=Number(e.target.value);refresh();});
+$("ymode").addEventListener("change",drawHist);
+$("mapmode").addEventListener("change",drawMap);
+$("provenance").textContent=D.schema+" · "+D.computed_stations.length+"/6 computed MS stations · "+
+ "900 spatial LUT cells × 500 independent Garfield trajectories per geometry · "+
+ D.number_of_source_chunks+" source chunk(s) · partial="+D.partial_exposure+
+ " · No avalanche/electronics. Independent of older 2M LUT20 dashboard.";
+</script></body></html>
