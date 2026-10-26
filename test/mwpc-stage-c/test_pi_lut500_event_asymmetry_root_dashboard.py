@@ -77,6 +77,7 @@ def full_test():
             assert result["stations"]["1"]["station_parent"]["configurations"][d.CONFIGS[0]]["valid_A"]==1
             assert (out/"dashboard.html").is_file()
             assert (out/"manifest.json").is_file()
+            assert json.loads((out/"manifest.json").read_text())["complete"] is False
             assert "__PAYLOAD__" not in (out/"dashboard.html").read_text()
             with gzip.open(out/"event_counts.csv.gz","rt") as f:
                 data=list(csv.DictReader(f))
