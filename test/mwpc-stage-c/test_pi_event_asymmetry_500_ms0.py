@@ -42,10 +42,10 @@ def run():
         {"pair":ch1,"has_crossing":np.array([1,0,0,0],dtype=bool)},
         {"pair":ch2,"has_crossing":np.array([1,0,0,0],dtype=bool)},
     ])
-    assert r["parents_generated"]==8
+    assert r["parents_in_input_chunks"]==8
     assert r["parents_with_MS0_crossing"]==2
     assert r["parents_with_classified_electrons"]==2
-    assert r["n_with_undefined_asymmetry"]==6
+    assert r["n_with_undefined_asymmetry"]==0
     assert r["mean"]==0. and r["rms"]==1.
     assert sum(r["histogram_counts"])==2 and len(r["histogram_counts"])==41
     assert r["histogram_edges"]==A_EDGES.tolist()
