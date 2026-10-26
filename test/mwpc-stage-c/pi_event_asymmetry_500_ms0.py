@@ -121,8 +121,8 @@ class Moments:
             mean=mean,
             rms=math.sqrt(max(0.,self.sum_a2/self.valid-mean**2)),
             mean_collected=self.sum_n/self.valid,
-            electron_weighted_asymmetry=(self.up-self.down)/
-                (self.up+self.down) if self.up+self.down else None)
+            electron_weighted_asymmetry=((self.up-self.down)/
+                (self.up+self.down)) if self.up+self.down else None)
 
 
 def summarize_parent_counts(all_chunks):
@@ -140,8 +140,8 @@ def summarize_parent_counts(all_chunks):
         n_with_classified+=int(np.count_nonzero(valid))
         up+=int(pair[:,0].sum())
         down+=int(pair[:,1].sum())
-        v=(pair[valid,0]-pair[valid,1])/
-          (pair[valid,0]+pair[valid,1])
+        v=((pair[valid,0]-pair[valid,1])/
+           (pair[valid,0]+pair[valid,1]))
         vals.append(v)
     a=np.concatenate(vals) if vals else np.empty(0,dtype=float)
     if not len(a):
