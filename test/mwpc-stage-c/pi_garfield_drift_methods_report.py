@@ -53,7 +53,11 @@ def stats(rows):
         if not math.isfinite(deg) or not -180<=deg<=180:
             raise ValueError("Bad collected impact azimuth")
         phi[max(0,min(11,int((deg+180.)/30.)))]+=1
+    attachment_status=sum(int(r.get("status",0))==-7 for r in rows)
     return {"starts":len(rows),"anode":len(picked),
+        "status_minus7_attachment_fraction":attachment_status/len(rows),
+        "mc_attachment_setting":next(iter({r.get("mc_attachment","unrecorded") for r in rows}))
+            if len({r.get("mc_attachment","unrecorded") for r in rows})==1 else "mixed",
         "anode_fraction":len(picked)/len(rows),
         "fieldwire_fraction":sum(int(r["field_wire_collected"]) for r in rows)/len(rows),
         "mean_drift_ns":statistics.mean(drift) if drift else None,
@@ -85,6 +89,7 @@ def main():
         print("\n"+geom+"; N="+str(ref["starts"])+" matched starts")
         for m,v in vals.items():
             print(f"  {m:12s} anode={v['anode_fraction']:.3f} "+
+                f"attachment(-7)={v['status_minus7_attachment_fraction']:.3f} "+
                 f"drift mean={v['mean_drift_ns']} ns "+
                 f"CPU={v['mean_us_per_start']:.1f} us/e "+
                 f"speedup={v.get('speedup_transport_only',1.)}")
