@@ -190,9 +190,9 @@ function draw(){
  const xMin=quantity==="phi"?-180:0;
  const xMax=quantity==="time"?300:180;
  const width=(xMax-xMin)/nBins;
- const xlabel=quantity==="time"?"Время дрейфа от рождения электрона, нс":
-   quantity==="incidence"?"Угол подхода электрона к нормали, градусы":
-   "Геометрический угол попадания φ, градусы";
+ const xlabel=quantity==="time"?"Время дрейфа электрона [ns]":
+   quantity==="incidence"?"Угол подхода к нормали [deg]":
+   "Геометрический угол попадания φ_hit [deg]";
  document.getElementById("chartTitle").textContent=
    quantity==="time"?"Доля электронов в интервале 10 нс, %":
    "Доля электронов в интервале 10°, %";
@@ -212,14 +212,24 @@ function draw(){
        ? Array.from({length:Math.round(Math.log10(yCeil/yFloor))+1},
           (_,i)=>yFloor*Math.pow(10,i))
        : Array.from({length:5},(_,i)=>i*yMax/4);
+ // Black-framed axes, ticks on both sides.
+ svg("rect",{x:75,y:42,width:844,height:300,fill:"#fff",
+       stroke:"#111","stroke-width":1.4});
  for(const value of yTicks){let Y=yy(value);
+   svg("line",{x1:70,y1:Y,x2:75,y2:Y,stroke:"#111"});
+   svg("line",{x1:914,y1:Y,x2:919,y2:Y,stroke:"#111"});
  svg("line",{x1:75,y1:Y,x2:919,y2:Y,stroke:"#385b73","stroke-width":1});
  svg("text",{x:62,y:Y+4,"text-anchor":"end","font-size":12,fill:"#ddeaf0"},
      isLog?(value>=1?value.toFixed(0):Number(value.toPrecision(2)).toString()):
        fmt(value,1));}
  for(let i=0;i<=6;i++){let x=xMin+(xMax-xMin)*i/6,X=xx(x);
- svg("text",{x:X,y:366,"text-anchor":"middle","font-size":12,fill:"#ddeaf0"},x);}
+ svg("line",{x1:X,y1:342,x2:X,y2:348,stroke:"#111"});
+  svg("line",{x1:X,y1:42,x2:X,y2:48,stroke:"#111"});
+  svg("text",{x:X,y:366,"text-anchor":"middle","font-size":12,fill:"#ddeaf0"},x);}
  svg("text",{x:497,y:394,"text-anchor":"middle","font-size":14,fill:"#daeafa"},xlabel);
+ svg("text",{transform:"translate(22 205) rotate(-90)",
+   "text-anchor":"middle","font-size":14,fill:"#111"},
+   "Fraction of electrons / "+width+(quantity==="time"?" ns":"°")+" [%]");
  if(quantity==="time"){
   svg("line",{x1:xx(100),y1:42,x2:xx(100),y2:342,stroke:"#fac778",
        "stroke-dasharray":"4,5","stroke-width":2});
