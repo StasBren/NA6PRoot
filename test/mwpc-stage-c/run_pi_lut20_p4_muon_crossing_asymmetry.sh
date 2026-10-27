@@ -8,8 +8,8 @@ REPO="$(cd "$HERE/../.." && pwd -P)"
 cd "$REPO"
 
 MODE="${1:-}"
-if [[ $# -ne 1 || ! "$MODE" =~ ^(check|pilot|full|status)$ ]];then
-  echo "Usage: bash $0 check|pilot|full|status" >&2
+if [[ $# -ne 1 || ! "$MODE" =~ ^(check|pilot|full|pilot34|full34|status)$ ]];then
+  echo "Usage: bash $0 check|pilot|full|pilot34|full34|status" >&2
   exit 2
 fi
 BASE="$REPO/test_runs/mwpc_stage_c/pi_lut20_p4_muon_crossing_asymmetry_v1"
@@ -18,7 +18,7 @@ SCRIPT="$HERE/pi_lut500_muon_crossing_asymmetry.py"
 TEST="$HERE/test_pi_lut500_muon_crossing_asymmetry.py"
 
 if [[ "$MODE" == "status" ]];then
-  for folder in "$BASE/pilot200" "$BASE/full100k";do
+  for folder in "$BASE/pilot200" "$BASE/full100k" "$BASE/pilot34" "$BASE/full34";do
     if [[ -f "$folder/manifest.json" ]];then
       echo "AVAILABLE: $folder"
     elif [[ -f "$folder/crossings.csv.gz.incomplete" ]];then
@@ -41,14 +41,17 @@ if [[ "$MODE" == "check" ]];then
   exit 0
 fi
 
-if [[ "$MODE" == "pilot" ]];then
-  OUTPUT="$BASE/pilot200"
-  CHUNKS=1; MAX=200
-else
-  OUTPUT="$BASE/full100k"
-  CHUNKS=2; MAX=0
-  if [[ ! -f "$BASE/pilot200/manifest.json" ]];then
-    echo "Run pilot and inspect the figures before full." >&2
+case "$MODE" in
+  pilot) OUTPUT="$BASE/pilot200"; PITCHES=(4); CHUNKS=1; MAX=200;;
+  full) OUTPUT="$BASE/full100k"; PITCHES=(4); CHUNKS=2; MAX=0;;
+  pilot34) OUTPUT="$BASE/pilot34"; PITCHES=(3 4); CHUNKS=1; MAX=200;;
+  full34) OUTPUT="$BASE/full34"; PITCHES=(3 4); CHUNKS=2; MAX=0;;
+esac
+if [[ "$MODE" == "full" || "$MODE" == "full34" ]];then
+  if [[ "$MODE" == "full34" ]];then PILOT="$BASE/pilot34/manifest.json"
+  else PILOT="$BASE/pilot200/manifest.json";fi
+  if [[ ! -f "$PILOT" ]];then
+    echo "Run and inspect the matching pilot before full: $PILOT" >&2
     exit 2
   fi
 fi
@@ -59,12 +62,12 @@ if [[ -e "$OUTPUT/summary.json" ||
   echo "SAFE STOP: existing result (or incomplete result) preserved: $OUTPUT" >&2
   exit 2
 fi
-echo "READ-ONLY p=4mm LUT20 analysis for 6 stations; field wires 0 / 75 um."
+echo "READ-ONLY p=${PITCHES[*]}mm LUT20 analysis for 6 stations; field wires 0 / 75 um."
 echo "Original 20-trial/cell maps, not the ongoing new p4 500-trial/cell maps."
 echo "One physical muon gas crossing per observation; no parent pooling."
 echo "NO new Garfield physics. Input generated J/psi parent slots: $((CHUNKS*50000))."
-"$PY" "$SCRIPT" --chunks "$CHUNKS" --stations 0 1 2 3 4 5 \
-  --pitches 4 --lut-trials 20 --max-crossings "$MAX" --out "$OUTPUT"
+nice -n 15 "$PY" "$SCRIPT" --chunks "$CHUNKS" --stations 0 1 2 3 4 5 \
+  --pitches "${PITCHES[@]}" --lut-trials 20 --max-crossings "$MAX" --out "$OUTPUT"
 echo "PASS output: $OUTPUT"
 if command -v wslpath >/dev/null 2>&1;then
   echo "Windows path: $(wslpath -w "$OUTPUT")"
