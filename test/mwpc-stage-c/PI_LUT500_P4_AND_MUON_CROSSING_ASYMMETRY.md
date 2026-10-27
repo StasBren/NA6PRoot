@@ -4,6 +4,70 @@ Branch: `feature/mwpc-stage-c`. These are **independent, non-destructive
 sidecar calculations**. Never replace the previous p=3 mm LUT500, the
 six-geometry LUT20, parent-event dashboard or original 2M source results.
 
+## Interim analysis while the independent p4 LUT500 is running
+
+The original six-geometry p=3/3.5/4 mm **LUT20** maps were already
+completed, including BOTH p=4 mm field wire OFF and FW 75 μm. They
+remain frozen in \`test_runs/mwpc_stage_c/pi_pitch_fieldwire_pilot_v1/pilot/\`.
+No need to wait for the independent p4 LUT500 in order to estimate the
+physical muon gas-crossing asymmetry at p4.
+
+The same crossing-level analysis script now accepts \`--lut-trials 20\`.
+This selects the original six-geometry LUT20, NOT the new p4 LUT500.
+All output/plot metadata explicitly records the microscopic trial count.
+The new dedicated runner is
+
+\`test/mwpc-stage-c/run_pi_lut20_p4_muon_crossing_asymmetry.sh\`
+
+Run small tests/pilot before full:
+
+\`\`\`bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git switch feature/mwpc-stage-c
+git pull --ff-only
+
+bash test/mwpc-stage-c/run_pi_lut20_p4_muon_crossing_asymmetry.sh check
+bash test/mwpc-stage-c/run_pi_lut20_p4_muon_crossing_asymmetry.sh pilot
+# Inspect p4 noFW/FW75 six-station plots before full:
+bash test/mwpc-stage-c/run_pi_lut20_p4_muon_crossing_asymmetry.sh full
+
+# Optional MATCHED p3-vs-p4 comparison at the SAME LUT20 resolution:
+bash test/mwpc-stage-c/run_pi_lut20_p4_muon_crossing_asymmetry.sh pilot34
+bash test/mwpc-stage-c/run_pi_lut20_p4_muon_crossing_asymmetry.sh full34
+
+bash test/mwpc-stage-c/run_pi_lut20_p4_muon_crossing_asymmetry.sh status
+\`\`\`
+
+Pilot = max 200 gas crossings per station in chunk 1, NOT full source
+exposure. Full = two 50k-parent input chunks, all selected physical gas
+crossings, 6 stations. Original native crossing IDs and Heed stable
+seeds are the same for p3 and p4. Within each pitch the field-wire
+comparison is made on matched crossings/Heed birth coordinates.
+For valid cross-pitch comparisons, note that the physical anode
+lattice has a different pitch and number of anodes by design.
+
+The new runner requests a lower CPU priority (\`nice -n 15\`) to
+reduce contention with the ongoing independent Garfield LUT500 job,
+but full analysis still uses CPU, RAM, and disk read bandwidth.
+Never run the same analysis twice against the same output directory.
+
+Outputs are isolated under
+\`test_runs/mwpc_stage_c/pi_lut20_p4_muon_crossing_asymmetry_v1/\`
+(\`pilot200\`, \`full100k\`, \`pilot34\`, \`full34\`).
+They do NOT touch \`pi_pitch_fieldwire_500_p4_v1\` or 2M LUT20 data.
+
+Do NOT interpret a difference between LUT20 and LUT500 immediately
+as a physical effect: both are approximations to the same geometry with
+different finite microscopic trial statistics. Once p4 LUT500 verifies,
+repeat the EXACT same 2×50k-parent full exposure with p4 LUT500 and
+compare per-crossing IDs, conditional endpoint distributions,
+\`mean(A)\`, RMS(A), and top/bottom sector fractions. LUT20 can have
+substantial finite-LUT sampling fluctuations and correlations.
+Both current endpoint statistics are proxies for avalanche location,
+NOT a calculated upper/lower cathode current asymmetry.
+
+---
+
 ## Part A — Garfield p=4 mm, no field wire and field wire 75 μm
 
 New isolated directory:
