@@ -4,6 +4,40 @@ Branch: `feature/mwpc-stage-c`. These are **independent, non-destructive
 sidecar calculations**. Never replace the previous p=3 mm LUT500, the
 six-geometry LUT20, parent-event dashboard or original 2M source results.
 
+## Recovering interrupted LUT20 pilot plot publication (2026-10-27)
+
+An observed `pilot34` from 2026-10-27 finished **all 200 physical gas
+crossings for each MS0..MS5** and saved the per-crossing compressed raw data
+and `summary.json`, but crashed during plotting with
+`NameError: name 'summary' is not defined` in `up_down_scatter`.
+The plotting function was fixed to accept the summary argument explicitly.
+
+**Do not rerun `pilot34` and do not remove its CSV or summary.**
+The isolated saved physics data are in:
+
+`test_runs/mwpc_stage_c/pi_lut20_p4_muon_crossing_asymmetry_v1/pilot34/`
+
+Once updated with `git pull --ff-only`, do:
+
+```bash
+bash test/mwpc-stage-c/run_pi_lut20_p4_muon_crossing_asymmetry.sh check
+bash test/mwpc-stage-c/run_pi_lut20_p4_muon_crossing_asymmetry.sh repair34
+bash test/mwpc-stage-c/run_pi_lut20_p4_muon_crossing_asymmetry.sh status
+```
+
+`repair34` is **strictly plot-only**. It verifies the saved summary
+and all raw electron/classification counts, re-sums station/DET/angle
+histograms, validates matched FW-minus-noFW asymmetries and compares
+SHA256 against the original frozen Garfield LUT20 inputs. Figures
+are rendered in a staging directory before their atomic publication.
+After successful validation, it generates a new `manifest.json`.
+It refuses to run on a publication with an existing manifest and
+will never modify the saved physics `crossings.csv.gz` or
+`summary.json`. It does not invoke Geant4, Garfield or Heed sampling.
+
+A separate synthetic regression exercises the entire six-station
+plot-recovery workflow to catch this class of plotting error.
+
 ## Interim analysis while the independent p4 LUT500 is running
 
 The original six-geometry p=3/3.5/4 mm **LUT20** maps were already
