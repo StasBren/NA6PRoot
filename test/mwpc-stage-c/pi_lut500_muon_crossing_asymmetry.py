@@ -793,9 +793,15 @@ def main():
     p.add_argument("--lut-trials",type=int,choices=(20,500),default=500,
                    help="Frozen independent microscopic drifts per cell; LUT20 uses the original six-geometry maps.")
     p.add_argument("--no-plots",action="store_true")
+    p.add_argument("--repair-plots",action="store_true",
+                   help="Validate completed saved CSV+summary and regenerate plots/manifest; NEVER rerun physics.")
     a=p.parse_args()
-    run(a.chunks,sorted(set(a.stations)),a.max_crossings,
-        sorted(set(a.pitches)),a.out,not a.no_plots,
-        lut_trials=a.lut_trials)
+    if a.repair_plots:
+        repair_plots_from_saved_counts(a.out,required_trials=a.lut_trials,
+                                      required_pitches=sorted(set(a.pitches)))
+    else:
+        run(a.chunks,sorted(set(a.stations)),a.max_crossings,
+            sorted(set(a.pitches)),a.out,not a.no_plots,
+            lut_trials=a.lut_trials)
 if __name__=="__main__":
     main()
