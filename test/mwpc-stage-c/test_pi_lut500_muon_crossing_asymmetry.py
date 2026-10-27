@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Synthetic no-physics checks for crossing-level p3/p4 LUT500 analysis."""
+"""Synthetic no-physics checks for crossing-level p3/p4 LUT20/LUT500 analysis."""
 from __future__ import annotations
 import csv
 import gzip
@@ -54,9 +54,11 @@ def test_full_pipeline_without_physics():
             [SimpleNamespace(station=0,det_id=10)],
             [SimpleNamespace(station=1,det_id=20)]]
         def mock_map(pitch,fw,path):
-            table=np.zeros((round(pitch/.1)*30,500,5))
+            ntrials=20 if Path(path)==m.ROOT20 else 500
+            table=np.zeros((round(pitch/.1)*30,ntrials,5))
             table[0,0,0]=fw
-            return table,{"sha256":"fixture"+str(fw)}
+            return table,{"sha256":"fixture"+str(fw),
+                          "samples_per_box":ntrials}
         def mock_birth(row,lam,marks,seed):
             return np.array([[0.,0.,0.]]),np.array([.5])
         def mock_response(u,v,q,pitch,station,pool):
@@ -89,6 +91,23 @@ def test_full_pipeline_without_physics():
             assert saved[0]["station"]=="0"
             assert saved[0]["A_hemisphere"]=="1.0"
             assert (root/"report"/"manifest.json").is_file()
+            # Exactly the same crossing identities and synthetic Heed sources,
+            # but use the old frozen 20-trial p4 maps instead of LUT500.
+            result20=m.run(1,[0,1],0,[4.],root/"report20",
+                           plots=False,lut_trials=20)
+            assert result20["lut_trials_per_cell"]==20
+            assert result20["pitches_mm"]==[4.]
+            assert result20["schema"].endswith("LUT20_V1")
+            assert "LUT20" in result20 and "LUT500" not in result20
+            assert result20["stations"]["0"]["configs"][tag(4.,0.)][
+                "hemisphere_A"]["mean"]==1.
+            assert result20["stations"]["0"]["configs"][tag(4.,75.)][
+                "hemisphere_A"]["mean"]==-1.
+            with gzip.open(root/"report20"/"crossings.csv.gz","rt") as f20:
+                rows20=list(csv.DictReader(f20))
+            assert len(rows20)==4
+            assert all(r["lut_trials_per_cell"]=="20" for r in rows20)
+            assert (root/"report20"/"manifest.json").is_file()
             try:
                 m.run(1,[0,1],0,[3.],root/"report",plots=False)
             except FileExistsError:
