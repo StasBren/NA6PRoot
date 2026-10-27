@@ -131,6 +131,81 @@ def test_full_pipeline_without_physics():
     print("PASS: crossing-level classification, parent/track/DET IDs, "
           "paired FW comparison, conservation and no-overwrite.")
 
+
+def test_render_only_repair_for_all_six_stations():
+    """Catch plotting NameError and prove frozen physics survives failed plotting."""
+    with tempfile.TemporaryDirectory(prefix="pi_lut20_repair_") as d:
+        root=Path(d)
+        src=root/"native.csv"
+        head=("station","pdg","det_id","event","path_length_mm",
+              "hit_index","track_id","theta_u_in_deg","theta_w_in_deg",
+              "u_in_mm","u_out_mm")
+        with src.open("w",newline="") as f:
+            w=csv.writer(f);w.writerow(head)
+            for st in range(6):
+                w.writerow((st,13,100+st,st,1.,st,10+st,5.,-5.,-.2,.2))
+        modules=[[SimpleNamespace(station=st,det_id=100+st)]
+                 for st in range(6)]
+        maps=root/"maps"
+        for fw in (0.,75.):
+            folder=maps/tag(4.,fw)
+            folder.mkdir(parents=True)
+            (folder/"garfield_electrons.csv").write_text(
+                f"fixture LUT20 p4 FW{fw}\n",encoding="utf-8")
+            (folder/"frozen_config.json").write_text(
+                f"fixture frozen p4 FW{fw}\n",encoding="utf-8")
+        def fake_map(pitch,fw,directory):
+            folder=Path(directory)/tag(pitch,fw)
+            pool=np.zeros((1200,20,5),dtype=float)
+            pool[0,0,0]=fw
+            return pool,{
+                "samples_per_box":20,
+                "csv_sha256":m.sha(folder/"garfield_electrons.csv"),
+                "frozen_sha256":m.sha(folder/"frozen_config.json")}
+        def fake_birth(row,lam,marks,seed):
+            return np.array([[0.,0.,0.]]),np.array([.5])
+        def fake_response(u,v,q,pitch,station,pool):
+            phi=90. if pool[0,0,0]==0 else -90.
+            return (np.array([True]),np.array([True]),
+                    np.array([0]),np.array([[1.,0.,5.,0.,phi]]))
+        with patch.object(m,"ROOT20",maps),\
+             patch.object(m,"crossing_provenance",
+                          lambda name,chunk:(src,{"csv_sha256":m.sha(src)})),\
+             patch.object(m,"build_chambers",lambda:modules),\
+             patch.object(m,"load_map",fake_map),\
+             patch.object(m,"read_heed",lambda a,b:(1.,np.array([1]))),\
+             patch.object(m,"birth_sample",fake_birth),\
+             patch.object(m,"response_for_births",fake_response):
+            out=root/"report"
+            m.run(1,list(range(6)),10,[4.],out,plots=False,lut_trials=20)
+            before=(m.sha(out/"summary.json"),m.sha(out/"crossings.csv.gz"))
+            # Emulate the real crash: completed and closed raw data, with
+            # partial png renders but no publication manifest.
+            (out/"manifest.json").unlink()
+            (out/"hemisphere_A_p4.png").write_bytes(b"interrupted plot")
+            manifest=m.repair_plots_from_saved_counts(
+                out,required_trials=20,required_pitches=[4.])
+            after=(m.sha(out/"summary.json"),m.sha(out/"crossings.csv.gz"))
+            assert before==after
+            assert manifest["recovered_original_crossings"]==6
+            assert manifest["recovered_raw_geometry_rows"]==12
+            assert manifest["recovery"].startswith("plot-only")
+            assert (out/"manifest.json").is_file()
+            assert (out/"hemisphere_A_p4.png").stat().st_size>1000
+            assert (out/"up_down_joint_p4_FW75.png").stat().st_size>1000
+            assert (out/"RMS_A_vs_theta_w_p4.png").stat().st_size>1000
+            assert len(list(out.glob("*.png")))==8
+            try:
+                m.repair_plots_from_saved_counts(
+                    out,required_trials=20,required_pitches=[4.])
+            except FileExistsError:
+                pass
+            else:
+                raise AssertionError("Repair could overwrite completed manifest")
+    print("PASS six-station plot-only crash recovery; all figures rendered "
+          "without modifying frozen raw/summary data.")
+
 if __name__=="__main__":
     test_classification()
     test_full_pipeline_without_physics()
+    test_render_only_repair_for_all_six_stations()
