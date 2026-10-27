@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""LUT500 per-MUON-GAS-CROSSING anode hemisphere and polar-sector asymmetry.
+"""LUT20/LUT500 per-MUON-GAS-CROSSING anode hemisphere and polar-sector asymmetry.
 
 Read-only fold of original native Geant4 J/psi gas-crossing CSV, original
-stable-seeded Heed birth sampler and immutable p=3 / p=4 (optional)
-500-microscopic-trials/cell Garfield tables. Every crossing has its own
+stable-seeded Heed birth sampler and immutable p=3 / p=4
+20- or 500-microscopic-trials/cell Garfield tables (explicit selection). Every crossing has its own
 (source, chunk, event, hit_index, track_id, station, DET) provenance.
 No Geant4/Garfield/Heed library re-simulation and NO cathode signal model.
 
@@ -34,7 +34,7 @@ from pi_2m_zero_path_compatible_resume import coincident_zero_chord
 from pi_native_centered_timing_pilot import ANGLES
 from pi_six_geometry_native_timing import (
     HEED_TRACKS, HEED_CLUSTERS, birth_sample, load_map,
-    response_for_births, stable_seed,
+    response_for_births, stable_seed, MAPS as ROOT20,
 )
 from pi_lut_20_vs_500_convergence import ROOT500 as ROOT3
 from pi_pitch_fieldwire_pilot import tag
@@ -54,6 +54,7 @@ SCHEMA = "PI_JPSI_NATIVE_MUON_GAS_CROSSING_ASYM_P3_P4_LUT500_V1"
 RAW_FIELDS = (
     "source","chunk","event","hit_index","track_id","station","det_id",
     "theta_u_deg","theta_w_deg","u_in_mm","u_out_mm","pitch_mm",
+    "lut_trials_per_cell",
     "field_wire_um","n_primary","n_raw_anode","n_anode_finite",
     "n_edge_lost","up","down","hemisphere_boundary","top","bottom","side",
     "A_hemisphere","A_top_bottom","f_top_bottom",
@@ -195,7 +196,7 @@ def facing_fraction_plot(summary,out,pitch):
     ax.tick_params(direction="in",top=True,right=True)
     ax.legend(frameon=False)
     ax.set_title("NA60+ Simulation · Work in progress\n"
-                 f"J/ψ, p={pitch:g} mm, LUT500 · per-crossing facing-sector fraction",
+                 f"J/ψ, p={pitch:g} mm, LUT{summary['lut_trials_per_cell']} · per-crossing facing-sector fraction",
                  fontsize=12)
     fig.text(.5,.02,"One physical crossing has equal weight (when ≥1 anode endpoint). "
              "Geometric proxy only; NOT charge on cathodes.",
@@ -248,7 +249,7 @@ def up_down_scatter(crossings_by_pair, out, pitch, fw):
     for ax in axes[:,0]:ax.set_ylabel("Lower-hemisphere anode electrons")
     fig.suptitle("NA60+ Simulation · Work in progress\n"
                  f"J/ψ, p={pitch:g} mm · {'FW 75 μm' if fw else 'No FW'}"
-                 " · per-crossing N(up) vs N(down) · LUT500",
+                 " · per-crossing N(up) vs N(down) · LUT{summary['lut_trials_per_cell']}",
                  fontsize=13,y=.99)
     if scatter_last is not None:
         fig.colorbar(scatter_last,ax=axes.ravel().tolist(),fraction=.015,pad=.02,
@@ -296,7 +297,7 @@ def conditional_angle_curves(summary,out,pitch,axis):
     for ax in axs.flat:ax.set_ylim(0,max(.2,ymax*1.12))
     axs[0,0].legend(frameon=False,fontsize=8)
     fig.suptitle("NA60+ Simulation · Work in progress\n"
-                 f"J/ψ · p={pitch:g} mm · LUT500 · "
+                 f"J/ψ · p={pitch:g} mm · LUT{summary['lut_trials_per_cell']} · "
                  f"RMS of per-crossing hemisphere A vs θ_{axis}",
                  fontsize=13,y=.995)
     fig.text(.5,.005,"Each marker represents an ENTIRE signed entrance-angle bin "
@@ -357,7 +358,7 @@ def curves(summary, out, pitch, key, *, paired=False):
     if not paired:axs[0,0].legend(loc="upper right",frameon=False,fontsize=8)
     fig.suptitle(f"NA60+ Simulation · Work in progress\n"
                  f"J/ψ · 100k parents maximum · p = {pitch:g} mm · "
-                 f"LUT500 · B = 0 T · {'paired ΔA' if paired else key}",
+                 f"LUT{summary['lut_trials_per_cell']} · B = 0 T · {'paired ΔA' if paired else key}",
                  fontsize=13,y=.995)
     fig.text(.5,.005,
              "One physical muon gas crossing is one observation. "
@@ -371,8 +372,8 @@ def curves(summary, out, pitch, key, *, paired=False):
     plt.close(fig)
     return name
 
-def run(chunks,stations,max_crossings,pitches,out,plots=True):
-    if not (1<=chunks<=40) or max_crossings<0 or not stations or not pitches:
+def run(chunks,stations,max_crossings,pitches,out,plots=True,*,lut_trials=500):
+    if not (1<=chunks<=40) or max_crossings<0 or not stations or not pitches or lut_trials not in (20,500):
         raise ValueError("Invalid exposure selection")
     if any(st not in range(6) for st in stations):
         raise ValueError("Invalid station")
@@ -385,12 +386,12 @@ def run(chunks,stations,max_crossings,pitches,out,plots=True):
     configs={}
     provenance={}
     for pitch in pitches:
-        root=ROOT3 if pitch==3. else ROOT4
+        root=ROOT20 if lut_trials==20 else (ROOT3 if pitch==3. else ROOT4)
         for fw in (0.,75.):
             cfg=tag(pitch,fw)
             pool,details=load_map(pitch,fw,root)
-            if pool.shape!=(round(pitch/.1)*30,500,5):
-                raise ValueError("Expected p3 or p4 immutable LUT500")
+            if pool.shape!=(round(pitch/.1)*30,lut_trials,5) or details["samples_per_box"]!=lut_trials:
+                raise ValueError(f"Expected p={pitch:g}mm immutable LUT{lut_trials}")
             configs[cfg]=(pitch,fw,pool)
             provenance[cfg]=details
     layout={c.det_id:c.station for group in build_chambers() for c in group}
@@ -457,6 +458,7 @@ def run(chunks,stations,max_crossings,pitches,out,plots=True):
                             theta_w_deg=theta[1],
                             u_in_mm=row["u_in_mm"],u_out_mm=row["u_out_mm"],
                             pitch_mm=pitch,field_wire_um=fw,
+                            lut_trials_per_cell=lut_trials,
                             n_primary=len(q),n_raw_anode=rawcollected,
                             n_anode_finite=collected,
                             n_edge_lost=rawcollected-collected,
@@ -472,12 +474,13 @@ def run(chunks,stations,max_crossings,pitches,out,plots=True):
                   flush=True)
     os.replace(tmp,out/"crossings.csv.gz")
     summary={
-      "schema":SCHEMA,"source":SOURCE,
+      "schema":SCHEMA.replace("LUT500",f"LUT{lut_trials}"),"source":SOURCE,
+      "lut_trials_per_cell":lut_trials,
       "generated_parent_slots":chunks*50_000,
       "source_chunks":chunks,"partial_exposure":bool(max_crossings),
       "limit_per_station_per_chunk":max_crossings,
       "stations_selected":stations,"pitches_mm":pitches,
-      "LUT500":provenance,"native_source_csv":provenance_native,
+      f"LUT{lut_trials}":provenance,"native_source_csv":provenance_native,
       "heed":{"tracks":str(HEED_TRACKS),"clusters":str(HEED_CLUSTERS),
               "mean_clusters_per_mm":float(lam)},
       "definitions":{
@@ -488,7 +491,7 @@ def run(chunks,stations,max_crossings,pitches,out,plots=True):
           "f_top_bottom":"(N_top+N_bottom)/N_anode_collected",
           "undefined":"missing denominator => null/blank, NEVER A=0",
           "weighting":"equal-weight crossing observations (not electron-weighted)",
-          "limitations":"Primary electron endpoint counts only; no avalanche, induced charge, cathode/electronics; reused correlated LUT500."
+          "limitations":f"Primary electron endpoint counts only; no avalanche, induced charge, cathode/electronics; reused correlated LUT{lut_trials}."
       },
       "angle_edges_deg":ANGLES.tolist(),
       "stations":{}
@@ -534,7 +537,7 @@ def run(chunks,stations,max_crossings,pitches,out,plots=True):
             for axis in ("u","w"):
                 figures.append(conditional_angle_curves(summary,out,pitch,axis))
     manifest={
-        "schema":SCHEMA,
+        "schema":summary["schema"],
         "complete_six_station":max_crossings==0 and stations==list(range(6)),
         "generated_parents":chunks*50_000,
         "sha256_outputs":{p.name:sha(p) for p in
@@ -546,7 +549,7 @@ def run(chunks,stations,max_crossings,pitches,out,plots=True):
     (out/"manifest.json").write_text(
         json.dumps(manifest,indent=2)+"\n",encoding="utf-8")
     print(f"PASS: {out}, {sum(exposures.values()):,} physical crossings, "
-          f"{len(configs)} Garfield LUT500 variants. "
+          f"{len(configs)} Garfield LUT{lut_trials} variants. "
           "Plots are descriptive, no false independent-electron error bars.")
     return summary
 
@@ -558,9 +561,12 @@ def main():
     p.add_argument("--max-crossings",type=int,default=200,
                    help="Per station per 50k-parent chunk; 0 = full")
     p.add_argument("--out",type=Path,default=OUT)
+    p.add_argument("--lut-trials",type=int,choices=(20,500),default=500,
+                   help="Frozen independent microscopic drifts per cell; LUT20 uses the original six-geometry maps.")
     p.add_argument("--no-plots",action="store_true")
     a=p.parse_args()
     run(a.chunks,sorted(set(a.stations)),a.max_crossings,
-        sorted(set(a.pitches)),a.out,not a.no_plots)
+        sorted(set(a.pitches)),a.out,not a.no_plots,
+        lut_trials=a.lut_trials)
 if __name__=="__main__":
     main()
