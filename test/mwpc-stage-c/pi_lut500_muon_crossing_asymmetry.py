@@ -225,6 +225,52 @@ def up_down_scatter(crossings_by_pair, out, pitch, fw):
     plt.close(fig)
     return filename
 
+
+def conditional_angle_curves(summary,out,pitch,axis):
+    """Binned conditional RMS and mean A; x positions denote bins, not angles."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    fig,axs=plt.subplots(2,3,figsize=(14,8.1),sharex=True,sharey=True)
+    edges=np.asarray(summary["angle_edges_deg"],dtype=float)
+    xs=np.arange(len(edges)-1)
+    names=[f"{edges[i]:g}..{edges[i+1]:g}" for i in xs]
+    ymax=0.
+    for st,ax in enumerate(axs.flat):
+        station=summary["stations"][str(st)]
+        for fw,color,ls,label in (
+                (0.,"#2158a5","-","No FW"),
+                (75.,"#c52b2a","--","FW 75 μm")):
+            bins=station["angle"].get(tag(pitch,fw),{}).get(axis,{})
+            y=np.asarray([
+                bins[str(i)]["hemisphere_A"]["rms"]
+                if str(i) in bins and bins[str(i)]["hemisphere_A"]["valid"]>=30
+                else np.nan for i in xs],dtype=float)
+            if np.isfinite(y).any():
+                ymax=max(ymax,float(np.nanmax(y)))
+            ax.plot(xs,y,color=color,linestyle=ls,marker="o",
+                    markersize=3.5,label=label,lw=1.4)
+        ax.set_title(f"MS{st} · {station['gas_crossings']:,} crossings",fontsize=11)
+        ax.tick_params(direction="in",top=True,right=True)
+        ax.set_xlim(-.3,len(xs)-.7)
+        ax.set_xticks(xs,labels=names,rotation=48,ha="right",fontsize=7)
+    for ax in axs[1]:ax.set_xlabel(f"Signed muon θ_{axis} interval [deg]")
+    for ax in axs[:,0]:ax.set_ylabel("Population RMS(A), dimensionless")
+    for ax in axs.flat:ax.set_ylim(0,max(.2,ymax*1.12))
+    axs[0,0].legend(frameon=False,fontsize=8)
+    fig.suptitle("NA60+ Simulation · Work in progress\n"
+                 f"J/ψ · p={pitch:g} mm · LUT500 · "
+                 f"RMS of per-crossing hemisphere A vs θ_{axis}",
+                 fontsize=13,y=.995)
+    fig.text(.5,.005,"Each marker represents an ENTIRE signed entrance-angle bin "
+             "(not continuous theta). Bins with fewer than 30 valid crossings hidden; "
+             "RMS is not standard error.",fontsize=8,ha="center")
+    fig.tight_layout(rect=(0,.04,1,.90),h_pad=2.5)
+    filename=f"RMS_A_vs_theta_{axis}_p{int(pitch)}.png"
+    fig.savefig(out/filename,dpi=165,facecolor="white")
+    plt.close(fig)
+    return filename
+
 def curves(summary, out, pitch, key, *, paired=False):
     import matplotlib
     matplotlib.use("Agg")
@@ -447,6 +493,8 @@ def run(chunks,stations,max_crossings,pitches,out,plots=True):
             figures.append(curves(summary,out,pitch,"",paired=True))
             for fw in (0.,75.):
                 figures.append(up_down_scatter(joint,out,pitch,fw))
+            for axis in ("u","w"):
+                figures.append(conditional_angle_curves(summary,out,pitch,axis))
     manifest={
         "schema":SCHEMA,
         "complete_six_station":max_crossings==0 and stations==list(range(6)),
