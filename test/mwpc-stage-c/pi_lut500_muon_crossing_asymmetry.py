@@ -525,17 +525,7 @@ def run(chunks,stations,max_crossings,pitches,out,plots=True,*,lut_trials=500):
     (out/"summary.json").write_text(
         json.dumps(summary,indent=2,allow_nan=False,ensure_ascii=False)+"\n",
         encoding="utf-8")
-    figures=[]
-    if plots and stations==list(range(6)):
-        for pitch in pitches:
-            for key in ("hemisphere_A","top_bottom_A"):
-                figures.append(curves(summary,out,pitch,key))
-            figures.append(curves(summary,out,pitch,"",paired=True))
-            figures.append(facing_fraction_plot(summary,out,pitch))
-            for fw in (0.,75.):
-                figures.append(up_down_scatter(joint,out,pitch,fw,summary))
-            for axis in ("u","w"):
-                figures.append(conditional_angle_curves(summary,out,pitch,axis))
+    figures = render_figures(summary, joint, out) if plots and stations==list(range(6)) else []
     manifest={
         "schema":summary["schema"],
         "complete_six_station":max_crossings==0 and stations==list(range(6)),
@@ -552,6 +542,245 @@ def run(chunks,stations,max_crossings,pitches,out,plots=True,*,lut_trials=500):
           f"{len(configs)} Garfield LUT{lut_trials} variants. "
           "Plots are descriptive, no false independent-electron error bars.")
     return summary
+
+
+def render_figures(summary,joint,out):
+    """Render plots from frozen crossing counters, never transport electrons."""
+    if summary["stations_selected"] != list(range(6)):
+        raise ValueError("Six-station renderer requires all MS0..MS5")
+    figures=[]
+    for pitch in summary["pitches_mm"]:
+        for key in ("hemisphere_A","top_bottom_A"):
+            figures.append(curves(summary,out,pitch,key))
+        figures.append(curves(summary,out,pitch,"",paired=True))
+        figures.append(facing_fraction_plot(summary,out,pitch))
+        for fw in (0.,75.):
+            figures.append(up_down_scatter(joint,out,pitch,fw,summary))
+        for axis in ("u","w"):
+            figures.append(conditional_angle_curves(summary,out,pitch,axis))
+    return figures
+
+
+def repair_plots_from_saved_counts(out,*,required_trials=None,required_pitches=None):
+    """Resume ONLY failed plotting after a fully completed fold.
+
+    Do not modify the physics summary or the per-crossing gzip CSV.
+    Reconstruct/validate every station, physical DET, angle group and paired
+    FW difference from raw counters. Plot into NEW staging, publish only
+    after all plots succeed; then SHA-pin the publication manifest.
+    """
+    out=Path(out)
+    physics_files=[out/"summary.json",out/"crossings.csv.gz"]
+    manifest=out/"manifest.json"
+    if manifest.exists():
+        raise FileExistsError(f"Publication manifest exists; refuse repair: {manifest}")
+    if (out/"crossings.csv.gz.incomplete").exists():
+        raise ValueError("Incomplete physics gzip exists: cannot repair plots")
+    for p in physics_files:
+        if not p.is_file():raise FileNotFoundError(f"Missing frozen physics source: {p}")
+    original_hashes={p.name:sha(p) for p in physics_files}
+    summary=json.loads(physics_files[0].read_text(encoding="utf-8"))
+    trials=summary.get("lut_trials_per_cell")
+    pitches=summary.get("pitches_mm")
+    stations=summary.get("stations_selected")
+    if trials not in (20,500) or stations!=list(range(6)) or not pitches or \
+       not all(p in (3.,4.) for p in pitches) or pitches!=sorted(set(pitches)):
+        raise ValueError("Unexpected physics summary or station/pitch scope")
+    if required_trials is not None and trials!=required_trials:
+        raise ValueError("Wrong LUT trial count for expected recovery mode")
+    if required_pitches is not None and pitches!=required_pitches:
+        raise ValueError("Wrong pitch set for expected recovery mode")
+    if summary.get("schema")!=SCHEMA.replace("LUT500",f"LUT{trials}"):
+        raise ValueError("Unexpected physics summary schema")
+    if summary.get("source")!=SOURCE:
+        raise ValueError("Different source population: expected original J/psi")
+    configs={tag(pitch,fw) for pitch in pitches for fw in (0.,75.)}
+    lut_source=summary.get(f"LUT{trials}",{})
+    if set(lut_source)!=configs:
+        raise ValueError("Missing frozen LUT provenance")
+    # Verify the actual LUT source bytes remain the ones used for this fold.
+    for pitch in pitches:
+        for fw in (0.,75.):
+            cfg=tag(pitch,fw)
+            root=ROOT20 if trials==20 else (ROOT3 if pitch==3. else ROOT4)
+            folder=root/cfg
+            info=lut_source[cfg]
+            for name,fname in (("csv_sha256","garfield_electrons.csv"),
+                               ("frozen_sha256","frozen_config.json")):
+                if sha(folder/fname)!=info.get(name):
+                    raise ValueError(f"Garfield frozen input SHA changed: {folder/fname}")
+
+    reconstructed=defaultdict(Moments)
+    per_det=defaultdict(Moments)
+    angular=defaultdict(Moments)
+    joint=defaultdict(Counter)
+    paired=defaultdict(Paired)
+    exposures=Counter()
+    group_key=None
+    group_configs={}
+    nrows=0
+
+    def finish_crossing():
+        if group_key is None:return
+        if set(group_configs)!=configs:
+            raise ValueError(f"Missing/duplicate configurations for crossing {group_key}")
+        st=group_key[5]
+        for pitch in pitches:
+            a0=group_configs[tag(pitch,0.)]
+            a1=group_configs[tag(pitch,75.)]
+            paired[st,pitch].add(a0,a1)
+        exposures[st]+=1
+
+    with gzip.open(physics_files[1],"rt",encoding="utf-8",newline="") as f:
+        rd=csv.DictReader(f)
+        if tuple(rd.fieldnames or ())!=RAW_FIELDS:
+            raise ValueError("Unexpected raw-crossing CSV schema")
+        for row in rd:
+            nrows+=1
+            st=int(row["station"])
+            det=int(row["det_id"])
+            pitch=float(row["pitch_mm"])
+            fw=float(row["field_wire_um"])
+            if st not in range(6) or pitch not in pitches or fw not in (0.,75.) or\
+               int(row["lut_trials_per_cell"])!=trials:
+                raise ValueError("Invalid station/pitch/LUT trial count in raw file")
+            cfg=tag(pitch,fw)
+            key=(row["source"],int(row["chunk"]),int(row["event"]),
+                 int(row["hit_index"]),int(row["track_id"]),st,det)
+            if group_key!=key:
+                finish_crossing()
+                group_key=key
+                group_configs={}
+            if cfg in group_configs:
+                raise ValueError(f"Repeated geometry in one crossing: {key}/{cfg}")
+            if row["source"]!=SOURCE:
+                raise ValueError("Source switched inside recovery raw CSV")
+            finite=int(row["n_anode_finite"])
+            nprimary=int(row["n_primary"])
+            raw=int(row["n_raw_anode"])
+            edge=int(row["n_edge_lost"])
+            nums={k:int(row[k]) for k in ("up","down","hemisphere_boundary",
+                                          "top","bottom","side")}
+            if min(*nums.values(),finite,nprimary,raw,edge)<0 or\
+               finite>raw or raw>nprimary or edge!=raw-finite or\
+               nums["up"]+nums["down"]+nums["hemisphere_boundary"]!=finite or\
+               nums["top"]+nums["bottom"]+nums["side"]!=finite:
+                raise ValueError(f"Nonconserved raw electron count {key}/{cfg}")
+            expected={
+                "A_hemisphere":ratio(nums["up"]-nums["down"],nums["up"]+nums["down"]),
+                "A_top_bottom":ratio(nums["top"]-nums["bottom"],nums["top"]+nums["bottom"]),
+                "f_top_bottom":ratio(nums["top"]+nums["bottom"],finite)
+            }
+            for k,v in expected.items():
+                if v is None:
+                    if row[k]!="":
+                        raise ValueError(f"Undefined statistic was written as number: {k}")
+                elif not math.isclose(float(row[k]),v,rel_tol=1e-12,abs_tol=1e-12):
+                    raise ValueError(f"Raw event statistic mismatch: {k}")
+            rec={**nums,**expected}
+            reconstructed[st,cfg].add(rec,nprimary,finite)
+            per_det[st,det,cfg].add(rec,nprimary,finite)
+            joint[st,cfg][(nums["up"],nums["down"])]+=1
+            for axis,col in (("u","theta_u_deg"),("w","theta_w_deg")):
+                theta=float(row[col])
+                if not math.isfinite(theta) or not -180<=theta<=180:
+                    raise ValueError("Bad saved muon entrance angle")
+                ib=min(len(ANGLES)-2,max(0,int(
+                    np.searchsorted(ANGLES,theta,side="right")-1)))
+                angular[st,cfg,axis,ib].add(rec,nprimary,finite)
+            group_configs[cfg]=expected["A_hemisphere"]
+    finish_crossing()
+    if nrows != sum(exposures.values())*len(configs):
+        raise AssertionError("Crossing grouping / LUT configuration count mismatch")
+
+    def check_metrics(a,b,where):
+        if set(a)!=set(b):
+            raise ValueError(f"Summary changed field set: {where}")
+        for k,val in a.items():
+            saved=b[k]
+            if isinstance(val,dict):
+                if not isinstance(saved,dict):raise ValueError(f"Bad summary {where}/{k}")
+                check_metrics(val,saved,where+"/"+k)
+            elif isinstance(val,list):
+                if val!=saved:raise ValueError(f"Wrong histogram: {where}/{k}")
+            elif val is None:
+                if saved is not None:raise ValueError(f"Wrong undefined stat: {where}/{k}")
+            elif isinstance(val,(float,int)) and not isinstance(val,bool):
+                if not isinstance(saved,(float,int)) or not math.isclose(
+                    val,saved,rel_tol=1e-10,abs_tol=1e-10):
+                    raise ValueError(f"Wrong saved moment: {where}/{k}")
+            elif val!=saved:
+                raise ValueError(f"Wrong saved metadata: {where}/{k}")
+
+    for st in range(6):
+        station=summary["stations"].get(str(st))
+        if station is None or station["gas_crossings"]!=exposures[st]:
+            raise ValueError(f"Station crossing exposure mismatch: MS{st}")
+        if not exposures[st]:
+            raise ValueError(f"Empty MS{st} in full six-station plots")
+        for cfg in configs:
+            if sum(joint[st,cfg].values())!=exposures[st]:
+                raise ValueError("Raw joint count exposure mismatch")
+            check_metrics(reconstructed[st,cfg].result(),station["configs"][cfg],
+                          f"MS{st}/{cfg}")
+        for pitch in pitches:
+            check_metrics(paired[st,pitch].result(),station["paired"][str(pitch)],
+                          f"MS{st}/paired/{pitch}")
+        for det, dvals in station["det"].items():
+            for cfg, val in dvals.items():
+                check_metrics(per_det[st,int(det),cfg].result(),val,
+                              f"MS{st}/DET{det}/{cfg}")
+        for cfg, axes in station["angle"].items():
+            for axis, bins in axes.items():
+                for ib, saved in bins.items():
+                    check_metrics(angular[st,cfg,axis,int(ib)].result(),saved,
+                                  f"MS{st}/{cfg}/theta_{axis}[{ib}]")
+        if summary.get("partial_exposure") and summary.get("limit_per_station_per_chunk"):
+            if exposures[st] > summary["source_chunks"]*summary["limit_per_station_per_chunk"]:
+                raise ValueError("Pilot exposure greater than declared crossing limit")
+
+    if {p.name:sha(p) for p in physics_files}!=original_hashes:
+        raise ValueError("Frozen raw physical data changed during verification")
+
+    stage=out/"_repair_plot_staging"
+    if stage.exists():
+        raise FileExistsError(f"Prior pending plot staging exists; inspect first: {stage}")
+    stage.mkdir()
+    print(f"PASS reconstructed {sum(exposures.values()):,} original crossings "
+          f"and {nrows:,} raw geometry rows; rendering plots only.",flush=True)
+    figures=render_figures(summary,joint,stage)
+    for name in figures:
+        if not (stage/name).is_file():
+            raise FileNotFoundError(f"Expected plot missing: {name}")
+    if {p.name:sha(p) for p in physics_files}!=original_hashes:
+        raise ValueError("Frozen physics changed while plotting")
+    # Publication of figures is last. Never remove/replace the original
+    # summary or crossing data, even if figures from the crash already exist.
+    for name in figures:
+        os.replace(stage/name,out/name)
+    stage.rmdir()
+    provenance=summary[f"LUT{trials}"]
+    meta={
+        "schema":summary["schema"],
+        "complete_six_station":not summary["partial_exposure"],
+        "generated_parents":summary["generated_parent_slots"],
+        "sha256_outputs":{
+            **original_hashes,
+            **{name:sha(out/name) for name in figures}},
+        "source_csv_sha256":summary["native_source_csv"],
+        "garfield_lut_sha256":provenance,
+        "recovery":"plot-only recovery; no transport, Heed birth or Garfield calculations",
+        "recovered_original_crossings":sum(exposures.values()),
+        "recovered_raw_geometry_rows":nrows
+    }
+    tmp=out/"manifest.json.tmp"
+    if tmp.exists():
+        raise FileExistsError(f"Manifest staging already exists: {tmp}")
+    tmp.write_text(json.dumps(meta,indent=2)+"\n",encoding="utf-8")
+    os.replace(tmp,manifest)
+    print(f"PASS recovered immutable physics and all {len(figures)} plots: {out}")
+    return meta
+
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
