@@ -133,6 +133,7 @@ overwritten**. Inspect/backup before a restart.
 * `up_down_joint_p3_noFW.png` and `...FW75.png`: per-crossing
   upper versus lower electron-count joint distributions.
 * `paired_delta_A_p3.png`: within-crossing FW-minus-noFW hemisphere A.
+* `f_top_bottom_by_crossing_p3.png`: mean geometrical top/bottom sector fraction over valid crossings; NOT cathode charge.
 * `RMS_A_vs_theta_u_p3.png`, `RMS_A_vs_theta_w_p3.png`:
   RMS versus signed entrance-angle bin, with sparse bins suppressed.
 * Same figures for p4 if requested.
