@@ -173,6 +173,39 @@ class Paired:
                      "hist":self.delta.tolist()}}
 
 
+
+def facing_fraction_plot(summary,out,pitch):
+    """Mean fraction of endpoints in ±45° cathode-facing sectors, per crossing."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    fig,ax=plt.subplots(figsize=(9.2,5.7))
+    for fw,color,ls,label in (
+            (0.,"#2158a5","-","No field wire"),
+            (75.,"#c52b2a","--","Field wire 75 μm")):
+        cfg=tag(pitch,fw)
+        values=[summary["stations"][str(st)]["configs"][cfg][
+               "f_top_bottom_by_crossing"]["mean"] for st in range(6)]
+        ax.plot(range(6),values,color=color,ls=ls,marker="o",
+                markersize=5,lw=1.65,label=label)
+    ax.set_xticks(range(6),[f"MS{i}" for i in range(6)])
+    ax.set_ylim(0,1.)
+    ax.set_xlabel("Muon spectrometer station")
+    ax.set_ylabel("Mean fraction of anode endpoints in top/bottom ±45° sectors")
+    ax.tick_params(direction="in",top=True,right=True)
+    ax.legend(frameon=False)
+    ax.set_title("NA60+ Simulation · Work in progress\n"
+                 f"J/ψ, p={pitch:g} mm, LUT500 · per-crossing facing-sector fraction",
+                 fontsize=12)
+    fig.text(.5,.02,"One physical crossing has equal weight (when ≥1 anode endpoint). "
+             "Geometric proxy only; NOT charge on cathodes.",
+             ha="center",fontsize=8)
+    fig.tight_layout(rect=(0,.055,1,1))
+    name=f"f_top_bottom_by_crossing_p{int(pitch)}.png"
+    fig.savefig(out/name,dpi=165,facecolor="white")
+    plt.close(fig)
+    return name
+
 def up_down_scatter(crossings_by_pair, out, pitch, fw):
     """Two-dimensional joint event-count distribution; NO parent pooling."""
     import matplotlib
@@ -191,6 +224,7 @@ def up_down_scatter(crossings_by_pair, out, pitch, fw):
     max_pop=max(all_pop,default=1)
     lim=math.log10(max_count+1.)*1.035
     upper=max(1.,lim)
+    scatter_last=None
     for st,ax in enumerate(axes.flat):
         counter=crossings_by_pair[st,name]
         coords=list(counter)
@@ -199,7 +233,7 @@ def up_down_scatter(crossings_by_pair, out, pitch, fw):
             yy=np.log10(1.+np.asarray([p[1] for p in coords],dtype=float))
             population=np.asarray([counter[p] for p in coords])
             order=np.argsort(population)[::-1]
-            ax.scatter(xx[order],yy[order],c=population[order],
+            scatter_last=ax.scatter(xx[order],yy[order],c=population[order],
                        cmap="viridis",norm=LogNorm(vmin=1,vmax=max(2,max_pop)),
                        s=8,marker="s",edgecolors="none",alpha=.85,rasterized=True)
         ax.plot([0,upper],[0,upper],ls="--",color="black",lw=1.1)
@@ -216,10 +250,13 @@ def up_down_scatter(crossings_by_pair, out, pitch, fw):
                  f"J/ψ, p={pitch:g} mm · {'FW 75 μm' if fw else 'No FW'}"
                  " · per-crossing N(up) vs N(down) · LUT500",
                  fontsize=13,y=.99)
+    if scatter_last is not None:
+        fig.colorbar(scatter_last,ax=axes.ravel().tolist(),fraction=.015,pad=.02,
+                     label="Crossings per electron-count pair")
     fig.text(.5,.015,"Axes plotted in log10(N+1), labels are actual electron counts. "
              "One physical gas crossing per data point; colour encodes repeated count pairs.",
              ha="center",fontsize=8)
-    fig.tight_layout(rect=(0,.045,1,.90))
+    fig.subplots_adjust(left=.09,right=.88,top=.88,bottom=.13,wspace=.24,hspace=.25)
     filename=f"up_down_joint_p{int(pitch)}_{'FW75' if fw else 'noFW'}.png"
     fig.savefig(out/filename,dpi=165,facecolor="white")
     plt.close(fig)
@@ -491,6 +528,7 @@ def run(chunks,stations,max_crossings,pitches,out,plots=True):
             for key in ("hemisphere_A","top_bottom_A"):
                 figures.append(curves(summary,out,pitch,key))
             figures.append(curves(summary,out,pitch,"",paired=True))
+            figures.append(facing_fraction_plot(summary,out,pitch))
             for fw in (0.,75.):
                 figures.append(up_down_scatter(joint,out,pitch,fw))
             for axis in ("u","w"):
