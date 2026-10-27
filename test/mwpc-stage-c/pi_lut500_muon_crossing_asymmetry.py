@@ -249,7 +249,7 @@ def up_down_scatter(crossings_by_pair, out, pitch, fw):
     for ax in axes[:,0]:ax.set_ylabel("Lower-hemisphere anode electrons")
     fig.suptitle("NA60+ Simulation · Work in progress\n"
                  f"J/ψ, p={pitch:g} mm · {'FW 75 μm' if fw else 'No FW'}"
-                 " · per-crossing N(up) vs N(down) · LUT{summary['lut_trials_per_cell']}",
+                 f" · per-crossing N(up) vs N(down) · LUT{summary['lut_trials_per_cell']}",
                  fontsize=13,y=.99)
     if scatter_last is not None:
         fig.colorbar(scatter_last,ax=axes.ravel().tolist(),fraction=.015,pad=.02,
