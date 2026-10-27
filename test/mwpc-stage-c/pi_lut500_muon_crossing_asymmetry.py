@@ -207,7 +207,7 @@ def facing_fraction_plot(summary,out,pitch):
     plt.close(fig)
     return name
 
-def up_down_scatter(crossings_by_pair, out, pitch, fw):
+def up_down_scatter(crossings_by_pair, out, pitch, fw, summary):
     """Two-dimensional joint event-count distribution; NO parent pooling."""
     import matplotlib
     matplotlib.use("Agg")
@@ -533,7 +533,7 @@ def run(chunks,stations,max_crossings,pitches,out,plots=True,*,lut_trials=500):
             figures.append(curves(summary,out,pitch,"",paired=True))
             figures.append(facing_fraction_plot(summary,out,pitch))
             for fw in (0.,75.):
-                figures.append(up_down_scatter(joint,out,pitch,fw))
+                figures.append(up_down_scatter(joint,out,pitch,fw,summary))
             for axis in ("u","w"):
                 figures.append(conditional_angle_curves(summary,out,pitch,axis))
     manifest={
