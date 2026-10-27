@@ -172,6 +172,59 @@ class Paired:
                     {**Moments.stats(self.valid,self.sum,self.sumsq),
                      "hist":self.delta.tolist()}}
 
+
+def up_down_scatter(crossings_by_pair, out, pitch, fw):
+    """Two-dimensional joint event-count distribution; NO parent pooling."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LogNorm
+    name=tag(pitch,fw)
+    fig,axes=plt.subplots(2,3,figsize=(13,7.8),sharex=True,sharey=True)
+    all_counts=[]
+    all_pop=[]
+    for st in range(6):
+        for (u,d),n in crossings_by_pair[st,name].items():
+            all_counts.extend((u,d))
+            all_pop.append(n)
+    max_count=max(all_counts,default=1)
+    max_pop=max(all_pop,default=1)
+    lim=math.log10(max_count+1.)*1.035
+    upper=max(1.,lim)
+    for st,ax in enumerate(axes.flat):
+        counter=crossings_by_pair[st,name]
+        coords=list(counter)
+        if coords:
+            xx=np.log10(1.+np.asarray([p[0] for p in coords],dtype=float))
+            yy=np.log10(1.+np.asarray([p[1] for p in coords],dtype=float))
+            population=np.asarray([counter[p] for p in coords])
+            order=np.argsort(population)[::-1]
+            ax.scatter(xx[order],yy[order],c=population[order],
+                       cmap="viridis",norm=LogNorm(vmin=1,vmax=max(2,max_pop)),
+                       s=8,marker="s",edgecolors="none",alpha=.85,rasterized=True)
+        ax.plot([0,upper],[0,upper],ls="--",color="black",lw=1.1)
+        ax.set_xlim(0,upper);ax.set_ylim(0,upper)
+        ticks=[n for n in (0,1,3,10,30,100,300,1000,3000) if
+               math.log10(n+1)<=upper]
+        ax.set_xticks([math.log10(n+1) for n in ticks],labels=[str(n) for n in ticks])
+        ax.set_yticks([math.log10(n+1) for n in ticks],labels=[str(n) for n in ticks])
+        ax.tick_params(direction="in",top=True,right=True)
+        ax.set_title(f"MS{st} · {sum(counter.values()):,} crossings",fontsize=10)
+    for ax in axes[1]:ax.set_xlabel("Upper-hemisphere anode electrons")
+    for ax in axes[:,0]:ax.set_ylabel("Lower-hemisphere anode electrons")
+    fig.suptitle("NA60+ Simulation · Work in progress\n"
+                 f"J/ψ, p={pitch:g} mm · {'FW 75 μm' if fw else 'No FW'}"
+                 " · per-crossing N(up) vs N(down) · LUT500",
+                 fontsize=13,y=.99)
+    fig.text(.5,.015,"Axes plotted in log10(N+1), labels are actual electron counts. "
+             "One physical gas crossing per data point; colour encodes repeated count pairs.",
+             ha="center",fontsize=8)
+    fig.tight_layout(rect=(0,.045,1,.90))
+    filename=f"up_down_joint_p{int(pitch)}_{'FW75' if fw else 'noFW'}.png"
+    fig.savefig(out/filename,dpi=165,facecolor="white")
+    plt.close(fig)
+    return filename
+
 def curves(summary, out, pitch, key, *, paired=False):
     import matplotlib
     matplotlib.use("Agg")
@@ -263,6 +316,7 @@ def run(chunks,stations,max_crossings,pitches,out,plots=True):
     by_det=defaultdict(Moments)
     angle=defaultdict(Moments)
     paired=defaultdict(Paired)
+    joint=defaultdict(Counter)  # (station, cfg) -> {(up,down): crossings}
     exposures=Counter()
     provenance_native=[]
     out.mkdir(parents=True,exist_ok=True)
@@ -307,6 +361,7 @@ def run(chunks,stations,max_crossings,pitches,out,plots=True):
                         if collected>rawcollected:
                             raise AssertionError("Physical collected > anode collected")
                         stats[st,cfg].add(c,len(q),collected)
+                        joint[st,cfg][(c['up'],c['down'])]+=1
                         by_det[st,det,cfg].add(c,len(q),collected)
                         for axis,t in (("u",theta[0]),("w",theta[1])):
                             bi=min(len(ANGLES)-2,max(0,int(
@@ -369,6 +424,8 @@ def run(chunks,stations,max_crossings,pitches,out,plots=True):
                 row["angle"].setdefault(cfg,{}).setdefault(axis,{})[
                     str(bi)]=v.result()
         for cfg in configs:
+            if sum(joint[st,cfg].values()) != exposures[st]:
+                raise AssertionError('Crossing joint-count conservation failure')
             if sum(d[cfg]["n_anode_collected"] for d in row["det"].values()
                    if cfg in d) != row["configs"][cfg]["n_anode_collected"]:
                 raise AssertionError("DET/station finite-anode conservation error")
@@ -388,6 +445,8 @@ def run(chunks,stations,max_crossings,pitches,out,plots=True):
             for key in ("hemisphere_A","top_bottom_A"):
                 figures.append(curves(summary,out,pitch,key))
             figures.append(curves(summary,out,pitch,"",paired=True))
+            for fw in (0.,75.):
+                figures.append(up_down_scatter(joint,out,pitch,fw))
     manifest={
         "schema":SCHEMA,
         "complete_six_station":max_crossings==0 and stations==list(range(6)),
