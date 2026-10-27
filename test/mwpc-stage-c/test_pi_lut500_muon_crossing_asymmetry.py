@@ -108,6 +108,21 @@ def test_full_pipeline_without_physics():
             assert len(rows20)==4
             assert all(r["lut_trials_per_cell"]=="20" for r in rows20)
             assert (root/"report20"/"manifest.json").is_file()
+            # Both pitches at LUT20 use exactly the same original gas
+            # crossing/Heed source IDs. The pitch-dependent wire lattice
+            # is intentionally different; ensure counters are not pooled.
+            r34=m.run(1,[0,1],0,[3.,4.],root/"report20_34",
+                       plots=False,lut_trials=20)
+            ms0=r34["stations"]["0"]
+            assert set(ms0["configs"])=={
+                tag(3.,0.),tag(3.,75.),tag(4.,0.),tag(4.,75.)}
+            assert ms0["gas_crossings"]==1
+            assert all(ms0["configs"][name]["crossings"]==1
+                       for name in ms0["configs"])
+            with gzip.open(root/"report20_34"/"crossings.csv.gz","rt") as g34:
+                rows34=list(csv.DictReader(g34))
+            assert len(rows34)==8 # 2 crossings * 2 pitches * 2 FW choices
+            assert set(r["lut_trials_per_cell"] for r in rows34)=={"20"}
             try:
                 m.run(1,[0,1],0,[3.],root/"report",plots=False)
             except FileExistsError:
