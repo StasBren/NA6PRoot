@@ -8,8 +8,8 @@ REPO="$(cd "$HERE/../.." && pwd -P)"
 cd "$REPO"
 
 MODE="${1:-}"
-if [[ $# -ne 1 || ! "$MODE" =~ ^(check|pilot|full|pilot34|full34|status)$ ]];then
-  echo "Usage: bash $0 check|pilot|full|pilot34|full34|status" >&2
+if [[ $# -ne 1 || ! "$MODE" =~ ^(check|pilot|full|pilot34|full34|repair|repair34|repairfull|repairfull34|status)$ ]];then
+  echo "Usage: bash $0 check|pilot|full|pilot34|full34|repair|repair34|repairfull|repairfull34|status" >&2
   exit 2
 fi
 BASE="$REPO/test_runs/mwpc_stage_c/pi_lut20_p4_muon_crossing_asymmetry_v1"
@@ -46,6 +46,10 @@ case "$MODE" in
   full) OUTPUT="$BASE/full100k"; PITCHES=(4); CHUNKS=2; MAX=0;;
   pilot34) OUTPUT="$BASE/pilot34"; PITCHES=(3 4); CHUNKS=1; MAX=200;;
   full34) OUTPUT="$BASE/full34"; PITCHES=(3 4); CHUNKS=2; MAX=0;;
+  repair) OUTPUT="$BASE/pilot200"; PITCHES=(4); CHUNKS=1; MAX=200;;
+  repair34) OUTPUT="$BASE/pilot34"; PITCHES=(3 4); CHUNKS=1; MAX=200;;
+  repairfull) OUTPUT="$BASE/full100k"; PITCHES=(4); CHUNKS=2; MAX=0;;
+  repairfull34) OUTPUT="$BASE/full34"; PITCHES=(3 4); CHUNKS=2; MAX=0;;
 esac
 if [[ "$MODE" == "full" || "$MODE" == "full34" ]];then
   if [[ "$MODE" == "full34" ]];then PILOT="$BASE/pilot34/manifest.json"
@@ -54,6 +58,13 @@ if [[ "$MODE" == "full" || "$MODE" == "full34" ]];then
     echo "Run and inspect the matching pilot before full: $PILOT" >&2
     exit 2
   fi
+fi
+if [[ "$MODE" == repair* ]];then
+  echo "REPAIR PLOTS ONLY: reuse already completed & immutable physics in $OUTPUT"
+  nice -n 15 "$PY" "$SCRIPT" --pitches "${PITCHES[@]}" \
+    --lut-trials 20 --out "$OUTPUT" --repair-plots
+  echo "PASS recovery: $OUTPUT/manifest.json"
+  exit 0
 fi
 if [[ -e "$OUTPUT/summary.json" ||
       -e "$OUTPUT/manifest.json" ||
