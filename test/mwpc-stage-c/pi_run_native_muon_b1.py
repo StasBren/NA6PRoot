@@ -23,6 +23,7 @@ from pi_prepare_muon_avalanche_b1 import OUT, FIELDS, sha, make, REPO
 HERE=Path(__file__).resolve().parent
 CXX=REPO/"test/mwpc-avalanche/phaseB_native_muon_3p3_avalanche.cxx"
 EXE=REPO/"test/mwpc-avalanche/build/mwpc_phase_b_native_muon_3p3"
+BUILD_STAMP=EXE.with_name(EXE.name+".build_sha256.json")
 def run_dir(n, retry=0):
     # Failed runs remain byte-for-byte intact for forensics. A C++ gas
     # source/medium fix needs its OWN output directory, not overwrite the
@@ -78,12 +79,29 @@ def check_input(n):
         raise ValueError("Unexpected native muon selection")
     return selection,m,rows
 
+def stamp_build():
+    source_sha=source_check()
+    if not EXE.is_file():
+        raise FileNotFoundError("CMake compilation did not produce the Garfield B1 executable")
+    marker={"source_sha256":source_sha,"binary_sha256":sha(EXE),
+            "target":"mwpc_phase_b_native_muon_3p3","git_commit":commit()}
+    BUILD_STAMP.write_text(json.dumps(marker,indent=2)+"\n")
+    print("PASS: compiled B1 source and executable SHA256 pair stamped")
+
 def check_executable():
-    source_check()
-    if not EXE.is_file():raise FileNotFoundError("Build Garfield C++ target first: "+str(EXE))
-    if EXE.stat().st_mtime_ns < CXX.stat().st_mtime_ns:
-        raise RuntimeError("C++ source newer than executable; rebuild before running")
-    return sha(EXE)
+    source_sha=source_check()
+    if not EXE.is_file():
+        raise FileNotFoundError("Build Garfield C++ target first: "+str(EXE))
+    if not BUILD_STAMP.is_file():
+        raise RuntimeError("Missing completed B1 build SHA stamp; run 'build' mode")
+    m=json.loads(BUILD_STAMP.read_text())
+    binary=sha(EXE)
+    if (m.get("source_sha256")!=source_sha or
+        m.get("binary_sha256")!=binary or
+        m.get("target")!="mwpc_phase_b_native_muon_3p3"):
+        raise RuntimeError("B1 source/executable SHA256 mismatch; rebuild target")
+    # SHA-pinned build is robust against WSL/NTFS clock-skew warnings.
+    return binary
 
 def validate_native_csv_before_physics(selection):
     # Test the ACTUAL C++ CSV decoder on the frozen original Python output
@@ -190,6 +208,9 @@ def check_crossings(path,selected):
     return by_geom
 
 def run(mode):
+    if mode=="stamp-build":
+        stamp_build()
+        return
     if mode.startswith("prepare"):
         n=int(mode.replace("prepare","") or "2")
         if n not in (2,8):raise ValueError("Only prepare2 or prepare8 is allowed")
@@ -289,6 +310,6 @@ def run(mode):
 
 if __name__=="__main__":
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument("mode",choices=("prepare2","prepare8","check2","check8","smoke2","smoke2retry1","smoke2retry2","smoke8","status"))
+    p.add_argument("mode",choices=("stamp-build","prepare2","prepare8","check2","check8","smoke2","smoke2retry1","smoke2retry2","smoke8","status"))
     args=p.parse_args()
     run(args.mode)
