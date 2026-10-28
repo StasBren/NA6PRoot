@@ -202,9 +202,11 @@ struct HeedSourceVolume {
     constexpr double inwardCm=1.e-4; // 1 micron inside gas
     start={{inwardCm*direction[0], .1*c.a[1]+inwardCm*direction[1],
             inwardCm*direction[2]}};
-    Garfield::Medium* medium=nullptr;
-    if(!sensor.GetMedium(start[0],start[1],start[2],medium) ||
-       !medium || !medium->IsIonisable()) {
+    // Sensor.hh in the user's installed Garfield version declares
+    // Medium* GetMedium(double x, double y, double z), not a 4-argument
+    // bool-plus-output-pointer API.
+    Garfield::Medium* medium=sensor.GetMedium(start[0],start[1],start[2]);
+    if(!medium || !medium->IsIonisable()) {
       std::ostringstream details;
       details<<"Heed primary source is not ionisable at muon start: "
              <<"y="<<start[1]<<"cm (cathodes ±0.3cm), "
@@ -299,10 +301,14 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
     avalanche.EnableAvalancheSizeLimit(cap);
     BirthAccumulator births(rngSeed,p);gBirth=&births;
     avalanche.SetUserHandleIonisation(OnIonisation);
-    const double startEnergy=std::isfinite(e.energy)&&e.energy>.01?
-                              e.energy:.1;
+    // With TrackHeed::EnableDeltaElectronTransport(), GetElectron gives
+    // low-energy conduction electron POSITIONS and times. Its returned
+    // energy and direction are NOT physically meaningful (Garfield guide
+    // section 5.1.1). Give these thermalized seeds 0.1eV with isotropic
+    // initial direction, consistently across all four candidate fields.
+    constexpr double startEnergy=0.1;
     const bool ok=avalanche.AvalancheElectron(u,e.v,e.w,e.t,startEnergy,
-                                             e.dx,e.dy,e.dz);
+                                             0.,0.,0.);
     gBirth=nullptr;
     int ne=0,ni=0;
     avalanche.GetAvalancheSize(ne,ni);
@@ -389,8 +395,40 @@ int main(int argc,char**argv) {
                <<crossings.size()<<" muon starts (±3 mm)\n";
       return 0; // No Heed ionisation or Garfield avalanche physics.
     }
+    if(argc==3 && std::string(argv[1])=="--validate-heed") {
+      const auto crossings=ReadCrossings(argv[2]);
+      Garfield::MediumMagboltz gas;
+      gas.SetComposition("ar",70.,"co2",30.);
+      gas.SetTemperature(293.15);gas.SetPressure(760.);
+      int totalClusters=0,totalElectrons=0;
+      for(const auto& h:crossings) {
+        int clusters=0,discarded=0,failed=0;
+        const auto electrons=HeedPrimaries(gas,h,clusters,discarded,failed);
+        if(failed)
+          throw std::runtime_error("Heed GetElectron failed for native muon "+
+                                   std::to_string(h.event)+
+                                   "; failed="+std::to_string(failed));
+        totalClusters+=clusters;
+        totalElectrons+=static_cast<int>(electrons.size());
+        std::cout<<"Heed native crossing event="<<h.event
+                 <<" station="<<h.station
+                 <<" thetaU_deg="<<h.thetaU
+                 <<" thetaW_deg="<<h.thetaW
+                 <<" p_GeV="<<h.momentum
+                 <<" clusters="<<clusters
+                 <<" electrons="<<electrons.size()
+                 <<" discarded="<<discarded<<"\n";
+      }
+      if(totalClusters==0||totalElectrons==0)
+        throw std::runtime_error("Heed-only native muon preflight yielded no ionisation");
+      std::cout<<"PASS: true TrackHeed source generated "<<totalClusters
+               <<" clusters and "<<totalElectrons
+               <<" low-energy electrons from "<<crossings.size()
+               <<" physical Geant4 muon crossings; NO avalanches run\n";
+      return 0;
+    }
     if(argc!=4)throw std::runtime_error(
-      "Usage: mwpc_phase_b_native_muon_3p3 INPUT_NATIVE_CSV OUTPUT_PREFIX MAX_PRIMARY_ELECTRONS | --validate-input INPUT_NATIVE_CSV");
+      "Usage: mwpc_phase_b_native_muon_3p3 INPUT_NATIVE_CSV OUTPUT_PREFIX MAX_PRIMARY_ELECTRONS | --validate-input INPUT_NATIVE_CSV | --validate-heed INPUT_NATIVE_CSV");
     const std::string input=argv[1],prefix=argv[2];
     const int maxPrimary=std::stoi(argv[3]);
     if(maxPrimary<1||maxPrimary>1000)throw std::runtime_error("max primaries must be 1..1000");
