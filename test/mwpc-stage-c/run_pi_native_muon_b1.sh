@@ -45,7 +45,8 @@ if [[ "$MODE" == "build" ]];then
         -DGarfield_DIR="$HOME/na6p/install/garfieldpp/lib/cmake/Garfield"
   cmake --build "$REPO/test/mwpc-avalanche/build" \
         --target mwpc_phase_b_native_muon_3p3 -j2
-  echo "PASS target compiled; select original Geant4 muons next with 'prepare2'."
+  "$PY" "$DRIVER" stamp-build
+  echo "PASS target compiled with SHA-pinned source and executable."
   exit
 fi
 if [[ "$MODE" == "check2" || "$MODE" == "check8" ]];then
