@@ -69,19 +69,21 @@ std::string Asym(std::uint64_t a,std::uint64_t b) {
 struct BirthAccumulator {
   Counts counts;
   double pitch=0;
+  std::size_t reservoirLimit=100;
   std::uint64_t total=0;
   // Independent reservoir RNG; MUST NOT consume Garfield microscopic RNG.
   std::mt19937_64 sampleRng;
   std::vector<std::array<double,4>> sample;
-  BirthAccumulator(unsigned int seed,double p)
-    :pitch(p),sampleRng(std::uint64_t(seed)+0x9e3779b97f4a7c15ULL){}
+  BirthAccumulator(unsigned int seed,double p,std::size_t limit=100)
+    :pitch(p),reservoirLimit(limit),
+     sampleRng(std::uint64_t(seed)+0x9e3779b97f4a7c15ULL){}
   void Add(double u,double v,double w,double t) {
     counts.Add(u-std::round(u/pitch)*pitch,v);
     ++total;
     const std::array<double,4> birth{{u,v,w,t}};
-    constexpr std::size_t limit=100;
+    const std::size_t limit=reservoirLimit;
     if(sample.size()<limit)sample.push_back(birth);
-    else {
+    else if(limit>0) {
       std::uniform_int_distribution<std::uint64_t> choose(0,total-1);
       const auto j=choose(sampleRng);
       if(j<limit)sample[static_cast<std::size_t>(j)]=birth;
@@ -271,7 +273,8 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
                  std::ostream& hitOut,int clusters,int dropped,int heedFailed,
                  const std::vector<std::size_t>* onlyIndices=nullptr,
                  std::ostream* timingOut=nullptr,
-                 const bool exactLutCellStart=false) {
+                 const bool exactLutCellStart=false,
+                 const std::size_t birthReservoirLimit=100) {
   const double p=.1*geom.pitchMm;
   const double wireRadius=.0015; // 30 um diameter = 0.0015 cm radius
   // For the finite centered anode grid, translate the Geant4 physical
@@ -312,7 +315,7 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
     Garfield::AvalancheMicroscopic avalanche(&sensor);
     constexpr unsigned int cap=200000;
     avalanche.EnableAvalancheSizeLimit(cap);
-    BirthAccumulator births(rngSeed,p);gBirth=&births;
+    BirthAccumulator births(rngSeed,p,birthReservoirLimit);gBirth=&births;
     avalanche.SetUserHandleIonisation(OnIonisation);
     // With TrackHeed::EnableDeltaElectronTransport(), GetElectron gives
     // low-energy conduction electron POSITIONS and times. Its returned
@@ -464,7 +467,8 @@ std::vector<LutSeedRow> ReadLutExactStarts(const std::string& input) {
     throw std::runtime_error("Exact-start pilot input must contain 1..432 rows");
   return out;
 }
-void RunLutSidecar(const std::string& input,const std::string& prefix) {
+void RunLutSidecar(const std::string& input,const std::string& prefix,
+                   const std::size_t birthReservoirLimit=100) {
   const auto starts=ReadLutExactStarts(input);
   Garfield::MediumMagboltz gas;
   gas.SetComposition("ar",70.,"co2",30.);
@@ -520,7 +524,7 @@ void RunLutSidecar(const std::string& input,const std::string& prefix) {
     oneBirth<<std::setprecision(15);
     oneHit<<std::setprecision(15);
     RunGeometry(gas,*it,h,primaries,identity,oneSeed,oneBirth,oneHit,
-                0,0,0,nullptr,&timingOut,true);
+                0,0,0,nullptr,&timingOut,true,birthReservoirLimit);
     std::string record=oneSeed.str();
     if(record.empty()||record.back()!='\n')
       throw std::runtime_error("Missing single-electron avalanche result");
@@ -675,6 +679,13 @@ int main(int argc,char**argv) {
     }
     if(argc==4 && std::string(argv[1])=="--lut-sidecar"){
       RunLutSidecar(argv[2],argv[3]);
+      return 0;
+    }
+    if(argc==4 && std::string(argv[1])=="--lut-sidecar-compact5"){
+      // Pure OUTPUT reduction. Ionization and the full ion-sector census
+      // are identical to the full sidecar; reservoir RNG is independent
+      // of Garfield's microscopic electron collision RNG.
+      RunLutSidecar(argv[2],argv[3],5);
       return 0;
     }
     if(argc!=4)throw std::runtime_error(
