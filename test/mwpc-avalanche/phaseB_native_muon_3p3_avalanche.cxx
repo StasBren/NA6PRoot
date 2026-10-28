@@ -4,6 +4,7 @@
 // No old 2+4mm code, original ROOT files or frozen LUTs are modified.
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <fstream>
@@ -266,8 +267,10 @@ struct Response {
 void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
                  const Crossing& h,const std::vector<Primary>& primaries,
                  const std::string& crossingLabel,
-                 std::ofstream& seedOut,std::ofstream& birthOut,
-                 std::ofstream& hitOut,int clusters,int dropped,int heedFailed) {
+                 std::ostream& seedOut,std::ostream& birthOut,
+                 std::ostream& hitOut,int clusters,int dropped,int heedFailed,
+                 const std::vector<std::size_t>* onlyIndices=nullptr,
+                 std::ostream* timingOut=nullptr) {
   const double p=.1*geom.pitchMm;
   const double wireRadius=.0015; // 30 um diameter = 0.0015 cm radius
   // For the finite centered anode grid, translate the Geant4 physical
@@ -288,7 +291,11 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
   sensor.AddComponent(&field);
   sensor.SetArea(-(half+.5)*p,-.3,-5.,(half+.5)*p,.3,5.);
   Response tot;
-  for(std::size_t i=0;i<primaries.size();++i) {
+  const std::size_t nToRun=onlyIndices?onlyIndices->size():primaries.size();
+  for(std::size_t iPos=0;iPos<nToRun;++iPos) {
+    const std::size_t i=onlyIndices?(*onlyIndices)[iPos]:iPos;
+    if(i>=primaries.size())
+      throw std::runtime_error("Invalid indexed Heed seed for timing benchmark");
     const auto& e=primaries[i];
     const double u=e.u+phaseCm;
     if(std::abs(u)>4.2*p||std::abs(e.w)>4.8)
@@ -308,6 +315,7 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
     // section 5.1.1). Give these thermalized seeds 0.1eV with isotropic
     // initial direction, consistently across all four candidate fields.
     constexpr double startEnergy=0.1;
+    const auto seedClockStart=std::chrono::steady_clock::now();
     const bool ok=avalanche.AvalancheElectron(u,e.v,e.w,e.t,startEnergy,
                                              0.,0.,0.);
     gBirth=nullptr;
@@ -330,6 +338,20 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
     const bool zero=collected==0;
     if(ni>0 && births.total==0)
       throw std::runtime_error("Garfield reports avalanche ions but ionization callback recorded none");
+    const double seedWallSeconds=
+        std::chrono::duration<double>(std::chrono::steady_clock::now()-
+                                      seedClockStart).count();
+    if(timingOut) {
+      // Timed block includes avalanche, callback, electron endpoints and
+      // angular classification, but NOT per-seed CSV writes or Heed.
+      (*timingOut)<<crossingLabel<<","<<h.station<<","
+          <<h.thetaU<<","<<h.thetaW<<","<<geom.label<<","
+          <<i<<","<<(10.*u)<<","<<(10.*e.v)<<","
+          <<rngSeed<<","<<std::setprecision(12)<<seedWallSeconds<<","
+          <<ne<<","<<ni<<","<<births.total<<","<<collected<<","
+          <<(ok?1:0)<<","<<(capped?1:0)<<"\n";
+      timingOut->flush(); // retain completed samples if a later seed fails
+    }
     tot.ions.Merge(births.counts);
     tot.electrons.Merge(eCounts);
     tot.births+=births.total;
@@ -370,7 +392,9 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
   if(!primaries.empty())hitOut<<double(tot.eCollected)/primaries.size();
   hitOut<<"\n";
   std::cout<<crossingLabel<<" "<<geom.label
+           <<(onlyIndices?" BENCH_PARTIAL_NO_PHYSICS":" PHYSICS")
            <<" Heed_e="<<primaries.size()
+           <<" sampled_seeds="<<nToRun
            <<" ionBirth="<<tot.births
            <<" collected_e="<<tot.eCollected
            <<" capped="<<tot.capped<<"\n";
@@ -426,6 +450,75 @@ int main(int argc,char**argv) {
                <<" clusters and "<<totalElectrons
                <<" low-energy electrons from "<<crossings.size()
                <<" physical Geant4 muon crossings; NO avalanches run\n";
+      return 0;
+    }
+    if(argc==5 && std::string(argv[1])=="--benchmark") {
+      const auto crossings=ReadCrossings(argv[2]);
+      const std::string csvPath=argv[3];
+      const int k=std::stoi(argv[4]);
+      if(k<1 || k>8)throw std::runtime_error("Benchmark limits: 1..8 primaries per crossing/geometry");
+      // Identical gas and microscopic configuration to production B1.
+      Garfield::MediumMagboltz gas;
+      gas.SetComposition("ar",70.,"co2",30.);
+      gas.SetTemperature(293.15);gas.SetPressure(760.);
+      gas.SetMaxElectronEnergy(200.);
+      const auto initStart=std::chrono::steady_clock::now();
+      gas.Initialise(false);
+      const double initSeconds=std::chrono::duration<double>(
+        std::chrono::steady_clock::now()-initStart).count();
+      std::ofstream timing(csvPath);
+      if(!timing)throw std::runtime_error("Cannot open timing CSV "+csvPath);
+      timing<<"crossing_id,station,theta_u_deg,theta_w_deg,configuration,"
+               "primary_index,u_seed_mm,v_seed_mm,garfield_seed,wall_seconds,"
+               "avalanche_electrons,avalanche_ions,ion_births,collected_e,"
+               "success,capped\n";
+      timing.flush();
+      int totalSeeds=0;
+      double totalHeedSeconds=0.;
+      for(const auto& h:crossings){
+        const auto heedStart=std::chrono::steady_clock::now();
+        int nCl=0,discarded=0,failed=0;
+        const auto primaries=HeedPrimaries(gas,h,nCl,discarded,failed);
+        totalHeedSeconds+=std::chrono::duration<double>(
+          std::chrono::steady_clock::now()-heedStart).count();
+        if(failed)throw std::runtime_error("Heed benchmark GetElectron failure");
+        if(primaries.empty()) {
+          std::cerr<<"BENCH WARNING: no Heed primaries for event "<<h.event<<"\n";
+          continue;
+        }
+        const std::size_t n=primaries.size();
+        const std::size_t take=std::min(n,static_cast<std::size_t>(k));
+        std::vector<std::size_t> indices;
+        // Uniform spread over the TRUE ordered Heed primaries, rather
+        // than the first k from the earliest cluster/track segment.
+        for(std::size_t j=0;j<take;++j)
+          indices.push_back(((2*j+1)*n)/(2*take));
+        const std::string id=h.source+"|"+std::to_string(h.chunk)+"|"+
+           std::to_string(h.event)+"|"+std::to_string(h.hit)+"|"+
+           std::to_string(h.track)+"|"+std::to_string(h.station)+"|"+
+           std::to_string(h.det);
+        std::ostringstream discardSeed,discardBirth,discardHit;
+        for(const auto& geom:GEOMS) {
+          RunGeometry(gas,geom,h,primaries,id,
+                      discardSeed,discardBirth,discardHit,
+                      nCl,discarded,failed,&indices,&timing);
+          // Nothing from discard* is used for physics! Only per-seed
+          // timing and census results are recorded in BENCHMARK CSV.
+          discardSeed.str("");discardSeed.clear();
+          discardBirth.str("");discardBirth.clear();
+          discardHit.str("");discardHit.clear();
+          totalSeeds+=static_cast<int>(indices.size());
+        }
+      }
+      timing.flush();
+      std::cout<<"PASS: BENCHMARK_ONLY timed "<<totalSeeds
+               <<" microscopic avalanches across four geometries\n"
+               <<"BENCH_GAS_INIT_SECONDS="<<initSeconds<<"\n"
+               <<"BENCH_HEED_TOTAL_SECONDS="<<totalHeedSeconds<<"\n"
+               <<"BENCH_SEEDS="<<totalSeeds<<"\n"
+               <<"BENCH_CSV="<<csvPath<<"\n"
+               <<"WARNING: benchmark uses only selected seed electrons;"
+               " partial crossing totals MUST NOT be treated as A_ion(mu)\n";
       return 0;
     }
     if(argc!=4)throw std::runtime_error(
