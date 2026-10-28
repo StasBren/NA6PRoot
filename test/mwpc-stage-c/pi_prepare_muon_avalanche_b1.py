@@ -45,6 +45,11 @@ def validate(row):
     if not .05<length<100 or abs(length-vals["path_length_mm"])>max(.02,length*.005):
         return None
     if max(abs(vals["v_in_mm"]),abs(vals["v_out_mm"]))>3.05:return None
+    # 9-wire periodic avalanche model is not reliable next to finite
+    # chamber edges. Require 4 pitches of clearance on either side.
+    half_width=153.6 if int(row["station"])==0 else 256.0
+    if max(abs(vals["u_in_mm"]),abs(vals["u_out_mm"]))>=half_width-16.0:
+        return None
     p=math.sqrt(sum(vals[f"p{a}_in_GeV"]**2 for a in "uvw"))
     if p<.11 or p>100000:return None
     du=[(vals[f"{a}_out_mm"]-vals[f"{a}_in_mm"])/length for a in "uvw"]
@@ -82,8 +87,11 @@ def make(max_events=8,chunk=1,output=None):
                 candidates[key]=(score,rec)
     # One per signed station-angle stratum; select balanced stations first.
     ordered=[]
-    for st in range(6):
-        for side in (1,-1):
+    # First sweep covers all six stations and alternates signed angle.
+    # Second sweep selects opposite-sign partners in those stations.
+    for mirror in (False,True):
+        for st in range(6):
+            side=(1 if st%2==0 else -1)*(-1 if mirror else 1)
             if (st,side) in candidates:
                 ordered.append(((st,side),candidates[st,side][1]))
     selected=ordered[:max_events]
@@ -100,7 +108,7 @@ def make(max_events=8,chunk=1,output=None):
         writer.writeheader();writer.writerows(output_rows)
     manifest={
         "schema":"PI_TRUE_GEANT4_MUON_B1_INPUT_V1",
-        "status":"complete","selection":"one deterministic hash-ranked real crossing per station/signed theta_u stratum; NOT angle-PDF representative",
+        "status":"complete","selection":"deterministic per-station signed-angle stratified crossing; alternating signs across MS0..MS5 then mirrored signs; excluding physical u-edge 16mm; NOT angle-PDF representative",
         "channel":"Jpsi","source":SOURCE["Jpsi"],"chunk":chunk,"n_crossings":len(output_rows),
         "original_native_csv":str(path),"original_native_sha256":meta["csv_sha256"],
         "original_root_sha256":meta["immutable_input"]["input_root_sha256"],
