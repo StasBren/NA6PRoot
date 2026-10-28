@@ -25,6 +25,7 @@ from pi_run_native_muon_b1 import (
     OUT, EXE, CXX, GEOMS, check_input, check_executable,
     validate_native_csv_before_physics, commit, sha,
 )
+from pi_garfield_runtime_env import garfield_runtime_env
 
 def percent(values, pct):
     values=sorted(values)
@@ -130,6 +131,7 @@ def main():
                 "logical_cpu_count":os.cpu_count()},
         "units":"wall seconds per full microscopic single-primary-electron avalanche",
         "avalanche_cap":200000,
+        "heed_database":garfield_runtime_env()["HEED_DATABASE"],
     }
     (output/"run_config.json").write_text(json.dumps(manifest,indent=2)+"\n")
     args=[str(EXE),"--benchmark",str(selection),str(csvout),str(a.seeds)]
@@ -137,7 +139,8 @@ def main():
     ru0=resource.getrusage(resource.RUSAGE_CHILDREN)
     with log.open("w") as stream:
         result=subprocess.run(args,cwd=output,stdout=stream,
-                              stderr=subprocess.STDOUT,check=False)
+                              stderr=subprocess.STDOUT,check=False,
+                              env=garfield_runtime_env())
     manifest["total_wall_seconds"]=time.perf_counter()-before
     ru1=resource.getrusage(resource.RUSAGE_CHILDREN)
     manifest["child_user_cpu_seconds"]=max(0.,ru1.ru_utime-ru0.ru_utime)
