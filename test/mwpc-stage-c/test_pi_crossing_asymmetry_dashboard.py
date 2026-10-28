@@ -98,6 +98,47 @@ def run_test():
             assert "SHA" in str(e)
         else:
             raise AssertionError("Physics checksum corruption went unnoticed")
+    # Real legacy full3 outputs were created before the explicit
+    # lut_trials_per_cell field existed. The versioned LUT500 schema
+    # must provide the trial count WITHOUT weakening checksum checks.
+    with tempfile.TemporaryDirectory(prefix="crossing_dash_legacy500_") as tmp:
+        legacy=Path(tmp)/"old_full3"
+        geom=fixture(legacy)
+        summary_path=legacy/"summary.json"
+        manifest_path=legacy/"manifest.json"
+        s=json.loads(summary_path.read_text())
+        s["schema"]="PI_JPSI_NATIVE_MUON_GAS_CROSSING_ASYM_P3_P4_LUT500_V1"
+        s.pop("lut_trials_per_cell",None)
+        s["pitches_mm"]=[3.]
+        s["LUT500"]={key:value for key,value in s.pop("LUT20").items()
+                      if key.startswith("p3p0_")}
+        for st in s["stations"].values():
+            st["configs"]={key:value for key,value in st["configs"].items()
+                           if key.startswith("p3p0_")}
+            st["det"]={did:{key:value for key,value in det.items()
+                            if key.startswith("p3p0_")}
+                        for did,det in st["det"].items()}
+        summary_path.write_text(json.dumps(s)+"\n")
+        meta=json.loads(manifest_path.read_text())
+        meta["schema"]=s["schema"]
+        meta["garfield_lut_sha256"]=s["LUT500"]
+        meta["sha256_outputs"]["summary.json"]=digest(summary_path)
+        manifest_path.write_text(json.dumps(meta)+"\n")
+        payload,_=assemble(legacy,geometry=geom)
+        assert payload["lut_trials_per_cell"]==500
+        assert payload["inferred_legacy_lut_trials"] is True
+        assert payload["pitches_mm"]==[3.]
+        html=render(legacy,geometry=geom).read_text()
+        assert "LUT500" in html and "Muon gas crossings" in html
+        assert "ONE physical muon gas crossing" in html
+        s["lut_trials_per_cell"]=20  # schema says 500: must fail closed
+        summary_path.write_text(json.dumps(s)+"\n")
+        try:
+            assemble(legacy,geometry=geom)
+        except ValueError as e:
+            assert "lut_trials_per_cell" in str(e)
+        else:
+            raise AssertionError("Contradictory schema and trial count accepted")
     print("PASS: six-station crossing-only dashboard; hist and DET "
           "conservation, SHA protection, no parent pooling, no physics overwrite")
 
