@@ -121,11 +121,18 @@ std::vector<Crossing> ReadCrossings(const std::string& file) {
    "theta_u_in_deg,theta_w_in_deg,path_length_mm,edep_eV,"
    "pu_in_GeV,pv_in_GeV,pw_in_GeV,momentum_GeV,heed_seed";
   std::string header;
-  if(!std::getline(in,header)||header!=expected)
-    throw std::runtime_error("Wrong real Geant4 muon input column schema");
+  if(!std::getline(in,header))
+    throw std::runtime_error("Empty native Geant4 muon CSV header");
+  // Python's csv.DictWriter uses CRLF by default, even on Linux.
+  // std::getline removes LF but retains CR. Accept CRLF and LF.
+  if(!header.empty() && header.back()=='\r')header.pop_back();
+  if(header!=expected)
+    throw std::runtime_error("Wrong real Geant4 muon input column schema; got ["+
+                             header+"], expected ["+expected+"]");
   std::vector<Crossing> out;
   std::string line;
   while(std::getline(in,line)){
+    if(!line.empty() && line.back()=='\r')line.pop_back();
     if(line.empty())continue;
     const auto f=Split(line);
     if(f.size()!=23)throw std::runtime_error("Malformed native crossing CSV row");
@@ -340,8 +347,14 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
 
 int main(int argc,char**argv) {
   try{
+    if(argc==3 && std::string(argv[1])=="--validate-input") {
+      const auto crossings=ReadCrossings(argv[2]);
+      std::cout<<"PASS: parsed "<<crossings.size()
+               <<" original Geant4 muon crossings (CSV CRLF/LF supported)\n";
+      return 0; // No Garfield gas, RNG or avalanche work.
+    }
     if(argc!=4)throw std::runtime_error(
-      "Usage: mwpc_phase_b_native_muon_3p3 INPUT_NATIVE_CSV OUTPUT_PREFIX MAX_PRIMARY_ELECTRONS");
+      "Usage: mwpc_phase_b_native_muon_3p3 INPUT_NATIVE_CSV OUTPUT_PREFIX MAX_PRIMARY_ELECTRONS | --validate-input INPUT_NATIVE_CSV");
     const std::string input=argv[1],prefix=argv[2];
     const int maxPrimary=std::stoi(argv[3]);
     if(maxPrimary<1||maxPrimary>1000)throw std::runtime_error("max primaries must be 1..1000");
