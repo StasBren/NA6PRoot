@@ -84,7 +84,7 @@ int main(int argc, char** argv) {
 
   if (pitchCm <= 0. || wireDiameterCm <= 0. ||
       fieldWireDiameterCm < 0. ||
-      fieldWireDiameterCm + wireDiameterCm >= 2. * pitchCm ||
+      fieldWireDiameterCm + wireDiameterCm >= pitchCm ||
       gapMinusCm <= 0. || gapPlusCm <= 0. || events <= 0 ||
       baseSeed < -1 || avalancheLimit < 1 || progressEvery < 0) {
     std::cerr << "Invalid input parameters.\n";
