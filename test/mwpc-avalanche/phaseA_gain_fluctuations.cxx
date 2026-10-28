@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <numeric>
 #include <string>
 #include <vector>
@@ -11,6 +12,8 @@
 #include "Garfield/AvalancheMicroscopic.hh"
 #include "Garfield/ComponentAnalyticField.hh"
 #include "Garfield/MediumMagboltz.hh"
+#include "Garfield/Random.hh"
+#include "Garfield/RandomEngineRoot.hh"
 #include "Garfield/Sensor.hh"
 
 namespace {
@@ -61,9 +64,15 @@ int main(int argc, char** argv) {
       0.1 * ReadArg(argc, argv, "--gap-minus-mm", 2.0);
   const double gapPlusCm =
       0.1 * ReadArg(argc, argv, "--gap-plus-mm", 4.0);
+  // A zero diameter retains all earlier anode-only calculations.
+  // Grounded field wires are centered between adjacent anodes.
+  const double fieldWireDiameterCm =
+      1.e-4 * ReadArg(argc, argv, "--field-wire-diam-um", 0.0);
   const double hv = ReadArg(argc, argv, "--hv", 1800.0);
   const double bTesla = ReadArg(argc, argv, "--b", 0.0);
   const int events = ReadIntArg(argc, argv, "--events", 1000);
+  const int baseSeed = ReadIntArg(argc, argv, "--base-seed", -1);
+  const int avalancheLimit = ReadIntArg(argc, argv, "--avalanche-limit", 200000);
   const int progressEvery =
       ReadIntArg(argc, argv, "--progress-every", 100);
   const double x0Cm =
@@ -74,8 +83,10 @@ int main(int argc, char** argv) {
       ReadStringArg(argc, argv, "--output", "gain_fluctuations.csv");
 
   if (pitchCm <= 0. || wireDiameterCm <= 0. ||
+      fieldWireDiameterCm < 0. ||
+      fieldWireDiameterCm + wireDiameterCm >= 2. * pitchCm ||
       gapMinusCm <= 0. || gapPlusCm <= 0. || events <= 0 ||
-      progressEvery < 0) {
+      baseSeed < -1 || avalancheLimit < 1 || progressEvery < 0) {
     std::cerr << "Invalid input parameters.\n";
     return 2;
   }
@@ -98,6 +109,12 @@ int main(int argc, char** argv) {
   for (int i = -halfNumberOfWires; i <= halfNumberOfWires; ++i) {
     field.AddWire(i * pitchCm, 0., wireDiameterCm, hv, "anode");
   }
+  if (fieldWireDiameterCm > 0.) {
+    for (int i = -halfNumberOfWires; i < halfNumberOfWires; ++i) {
+      field.AddWire((i + 0.5) * pitchCm, 0.,
+                    fieldWireDiameterCm, 0., "field_wire");
+    }
+  }
   field.AddPlaneY(-gapMinusCm, 0., "cathode_minus");
   field.AddPlaneY(+gapPlusCm, 0., "cathode_plus");
 
@@ -112,7 +129,6 @@ int main(int argc, char** argv) {
                   xExtent, +gapPlusCm, 5.0);
 
   const double wireRadius = 0.5 * wireDiameterCm;
-  constexpr unsigned int avalancheLimit = 200000;
 
   std::ofstream out(outputName);
   out << "event,avalanche_electrons,avalanche_ions,collected_on_wire,"
@@ -135,6 +151,10 @@ int main(int argc, char** argv) {
             << 10. * y0Cm << ") mm\n"
             << "wire pitch          : " << 10. * pitchCm << " mm\n"
             << "wire diameter       : " << 1.e4 * wireDiameterCm << " um\n"
+            << "grounded field wire : " << 1.e4 * fieldWireDiameterCm
+            << " um (0 means disabled)\n"
+            << "random seed         : " << baseSeed << " (-1 means legacy RNG)\n"
+            << "avalanche size limit: " << avalancheLimit << "\n"
             << "cathode gaps        : " << 10. * gapMinusCm << " + "
             << 10. * gapPlusCm << " mm\n"
             << "anode voltage       : " << hv << " V\n"
@@ -143,12 +163,20 @@ int main(int argc, char** argv) {
             << "-----------------------------------------------\n";
 
   for (int event = 0; event < events; ++event) {
+    // Reproducible independent event seeds for new four-geometry comparisons;
+    // no change to legacy RNG when --base-seed is omitted.
+    std::unique_ptr<Garfield::RandomEngineRoot> randomEngine;
+    if (baseSeed >= 0) {
+      randomEngine = std::make_unique<Garfield::RandomEngineRoot>(
+          static_cast<unsigned int>(baseSeed + event));
+      Garfield::Random::SetEngine(*randomEngine);
+    }
     // Construct a fresh AvalancheMicroscopic object for every event so that
     // all endpoint containers and avalanche counters are guaranteed to refer
     // only to this event. The gas/field/sensor objects are shared.
     Garfield::AvalancheMicroscopic avalanche;
     avalanche.SetSensor(&sensor);
-    avalanche.EnableAvalancheSizeLimit(avalancheLimit);
+    avalanche.EnableAvalancheSizeLimit(static_cast<unsigned int>(avalancheLimit));
 
     const bool ok =
         avalanche.AvalancheElectron(x0Cm, y0Cm, 0., 0., 0.1);
