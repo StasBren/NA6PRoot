@@ -67,60 +67,62 @@ do not treat the mean as an uncensored gas gain. The location (0,+1 mm)
 is deliberately fixed for this initial controlled comparison; it
 does not imply the full range of Heed electron starting positions.
 
-## 3. One-time Google Drive upload setup on WSL
+## 3. Google Drive publication — EXISTING rclone configuration
 
-The ChatGPT-connected Google Drive account **does not transfer OAuth
-credentials to the local WSL shell**. WSL must have its own `rclone`
-installation and explicitly authorized Google Drive remote.
+**Previously configured and tested 24 October 2026.**
+The user already has a working WSL rclone OAuth remote `na60drive:`
+whose **root folder is NA60plus_MWPC_Research**, ID
+`1Svbp3E230YmVk53D0M1AHwTGo6cBxy38`.
+Its custom OAuth client was validated, and quick-results reports were
+successfully uploaded. Do **NOT** rerun `rclone config`, create a new
+`gdrive` remote, or upload the entire ~252 GiB dataset again.
+
+Existing repository helpers:
+- `run_pi_drive_archive.sh` (large archive; DO NOT use for this study).
+- `run_pi_drive_results_only.sh` (selected result folders).
+- `run_pi_drive_quick_reports.sh` (small reports, previously tested).
+
+New destination folder was created under that exact project root:
+[avalanche_3p3_runs](https://drive.google.com/drive/folders/1Xbh45V86BhVu-WLYSM5qtosqPEG363M7).
+
+Check connection, **no upload**:
 
 ```bash
-sudo apt-get update
-sudo apt-get install rclone
-rclone config
-rclone listremotes
+rclone lsf na60drive: --max-depth 1
+rclone lsf na60drive:avalanche_3p3_runs/ --max-depth 1
 ```
 
-During `rclone config`, create a Google Drive remote, e.g. `gdrive`,
-using the user-approved OAuth flow. Choose appropriate Drive access
-(not appfolder-only / drive.file-only for pre-existing folders).
-Never commit OAuth tokens or the rclone configuration to GitHub.
+### Dry run, existing `na60drive` remote
 
-The destination folder **already exists and was verified through the
-connected Google Drive**:
-[NA60plus_MWPC_Research / avalanche_3p3_runs](https://drive.google.com/drive/folders/1Xbh45V86BhVu-WLYSM5qtosqPEG363M7).
+```bash
+python3 test/mwpc-stage-c/pi_publish_run_to_drive.py \
+  --source test_runs/mwpc_stage_c/avalanche_3p3_gain_v1/smoke5 \
+  --run-id avalanche_3p3_smoke5_20261028
+```
 
-The publisher explicitly sets the remote root to this folder by ID,
-so it does not depend on navigating the Shared Drive root correctly.
-
-### Dry run (no Google Drive write)
+### Explicit upload after reviewing dry-run
 
 ```bash
 python3 test/mwpc-stage-c/pi_publish_run_to_drive.py \
   --source test_runs/mwpc_stage_c/avalanche_3p3_gain_v1/smoke5 \
   --run-id avalanche_3p3_smoke5_20261028 \
-  --remote gdrive
+  --upload
 ```
 
-### Explicit upload after verifying the dry-run plan
-
-```bash
-python3 test/mwpc-stage-c/pi_publish_run_to_drive.py \
-  --source test_runs/mwpc_stage_c/avalanche_3p3_gain_v1/smoke5 \
-  --run-id avalanche_3p3_smoke5_20261028 \
-  --remote gdrive --upload
-```
+The default is now `--remote na60drive`; an explicit `--remote` override
+is only needed if the user's local remote name actually changes.
+The script writes to
+`na60drive:avalanche_3p3_runs/avalanche_3p3_smoke5_20261028/`
+relative to the **already configured project root**, without overriding
+the remote's `root_folder_id`.
 
 `rclone copy --immutable` never deletes remote files or modifies differing
 existing files; a post-upload `rclone check --one-way` confirms readback.
-It copies an **immutable local publication bundle** of only small
-summaries, manifests, plots and bounded CSV/logs; raw `crossings.csv.gz`,
-large ZIP/HTML, etc are intentionally excluded. It stages under
-`test_runs/mwpc_stage_c/drive_publications_v1/`; the same unchanged
-bundle can be reused from dry-run to final upload, but changed sources
-and colliding run IDs are refused.
-
-The newly created Drive folder can then be read by ChatGPT directly,
-without attaching a ZIP to the conversation.
+Transfers are intentionally throttled (`--transfers 1 --tpslimit 2`).
+The immutable local publication bundle contains only small summaries,
+manifests, plots and bounded CSV/logs; raw `crossings.csv.gz`, large ZIP
+and HTML are excluded by design. The same unchanged bundle can be reused
+from dry-run to actual upload.
 
 ## 4. Next scientific steps after the gain smoke
 
