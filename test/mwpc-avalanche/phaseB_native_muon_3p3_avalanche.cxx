@@ -72,10 +72,17 @@ struct BirthAccumulator {
   void Add(double u,double v,double w,double t) {
     counts.Add(u-std::round(u/pitch)*pitch,v);
     ++total;
-    if(sample.size()<1500)sample.push_back({u,v,w,t});
+    if(sample.size()<100)sample.push_back({u,v,w,t}); // first births only, NOT unbiased spatial sample
   }
 };
 BirthAccumulator* gBirth=nullptr;
+// Garfield stores a process-wide RNG pointer. Keep the current engine alive
+// across every field/sensor allocation, not just inside a function scope.
+std::unique_ptr<Garfield::RandomEngineRoot> gEngine;
+void SeedGarfield(unsigned int n){
+  gEngine=std::make_unique<Garfield::RandomEngineRoot>(n);
+  Garfield::Random::SetEngine(*gEngine);
+}
 void OnIonisation(const double x,const double y,const double z,
                   const double t,const int,const int,Garfield::Medium*) {
   if(gBirth)gBirth->Add(x,y,z,t);
@@ -172,8 +179,7 @@ std::vector<Primary> HeedPrimaries(Garfield::MediumMagboltz& gas,
   heed.SetMomentum(c.momentum*1.e9);
   heed.EnableDeltaElectronTransport();
 
-  Garfield::RandomEngineRoot hedrng(c.heedSeed);
-  Garfield::Random::SetEngine(hedrng);
+  SeedGarfield(c.heedSeed);
   const std::array<double,3> d{{du/c.length,dv/c.length,dw/c.length}};
   // One micrometre inside the entrance (avoids a track exactly on gas edge).
   constexpr double inwardCm=1.e-4;
@@ -236,8 +242,7 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
     const std::uint64_t raw=std::uint64_t(h.heedSeed)+
                             std::uint64_t(i+1)*104729u;
     const unsigned int rngSeed=1+unsigned(raw%2'000'000'000ULL);
-    Garfield::RandomEngineRoot engine(rngSeed);
-    Garfield::Random::SetEngine(engine);
+    SeedGarfield(rngSeed);
     Garfield::AvalancheMicroscopic avalanche(&sensor);
     constexpr unsigned int cap=200000;
     avalanche.EnableAvalancheSizeLimit(cap);
