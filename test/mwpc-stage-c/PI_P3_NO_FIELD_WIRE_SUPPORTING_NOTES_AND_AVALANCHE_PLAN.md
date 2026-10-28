@@ -3,6 +3,9 @@
 
 **Status:** internal working note; NOT a validated detector-design recommendation or a calibrated gas-gain prediction.
 
+**PI PRIORITY UPDATE (28 Oct 2026):** the *main* Stage B1 measurement is now the complete **native Geant4 muon gas-crossing → true TrackHeed clusters → every primary electron's microscopic avalanche → ion birth spatial asymmetry per whole muon crossing**, preserving physical muon incidence angles, positions and momentum. The old single-electron angular angle-scan suggested below is only a microscopic unit/symmetry check and **does not satisfy the P.I. objective**. See [PI_MUON_DRIVEN_AVALANCHE_B1_PLAN.md](PI_MUON_DRIVEN_AVALANCHE_B1_PLAN.md). The original `full34` uses a Heed-calibrated marked-Poisson cluster sampler along real Geant4 chords, *not* per-track direct `TrackHeed`; the existing `phaseA_heed_avalanche.cxx` runs direct Heed on fixed normally incident tracks, and must be updated to take the native muon ensemble.
+
+
 ## Scope lock for the NEW avalanche campaign (28 Oct 2026)
 
 **Do not transfer previous 2+4 mm Stage A/B numerical results into the new 3+3 mm geometry.** The user's local inventory confirmed legacy files including `gain_fluctuations.csv`, `gain_fluctuations_5000.csv`, `heed_avalanche_seed_summary.csv`, `heed_avalanche_track_summary.csv`, `stageB_real_avalanche_event_summary.csv`, `stageB_real_avalanche_analysis_summary.csv`, and `stageB_avalanche_angle_scan_summary_by_angle.csv`. These validate *workflow and output-column interpretation* but are **not measurements of the new four-geometry campaign**. For example, the old Stage B integrated-charge fraction changes markedly with observation window, and its asymmetric gap necessarily changes cathode weighting fields; these values must not be quoted for ±3 mm.
