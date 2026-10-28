@@ -204,3 +204,38 @@ These results establish that our **new geometries run** and suggest a large *loc
 **Metadata warning**: the historical immutable smoke5 `run_config.json` incorrectly retains status=`incomplete`, even though `summary.json`/`manifest.json` say complete, all four result CSVs contain five entries, and rclone reported 12 matching cloud files. The new writer has been fixed so later runs finalize `run_config.json` and SHA-pin it; *do not mutate the historical run*.
 
 Next: run the 100-seed fixed-position pilot in the same four geometries, then extend to multiple physically relevant primary-electron locations. Only after this should the work proceed to avalanche ion-birth `A_hemi`/`A_TB` and the actual cathode induced-charge asymmetry `A_Q(T)`.
+
+## 11. Completed 100-seed symmetric 3+3 gain pilot (28 October 2026)
+
+Original immutable cloud run (all four CSV, logs, run_config, SHA-validated manifest):
+https://drive.google.com/drive/folders/1TQvDjcowzlSdN1GBw50-sLWIziGsvVny
+
+Same four geometries and common parameters as smoke5: Ar/CO₂ 70:30,
++1800 V, 30 μm anodes, symmetric ±3 mm cathodes, B=0 T,
+one seed per avalanche, source at (u,v)=(0,+1) mm, 100
+independent-event RNG seeds per geometry. `run_config.status=complete`;
+all four logs report **zero avalanche-size-limit-like events** (cap=200,000).
+Means include failed/zero-collection seeds.
+
+| Single-seed observable (100 per geometry) | p3 noFW | p3 FW75 | p4 noFW | p4 FW75 |
+| --- | ---: | ---: | ---: | ---: |
+| Mean collected gain | **554.45** | 6,418.18 | 1,648.90 | 5,039.70 |
+| RMS (population) | 585.72 | 6,513.07 | 1,740.67 | 5,884.51 |
+| Median collected gain | 411.5 | 4,499.5 | 1,238.0 | 3,666.0 |
+| Zero collected seeds | 18/100 | 15/100 | 10/100 | 18/100 |
+| Maximum of sample | 2,962 | 28,716 | 12,912 | 35,796 |
+| Size-limit-like events | 0/100 | 0/100 | 0/100 | 0/100 |
+
+**Observation, not extrapolation:** At this exact seed point, the FW75/noFW
+mean-gain ratio is 11.58 for p3 and 3.06 for p4. Broad distributions with
+RMS comparable to means require larger ensembles and spatial sampling
+before characterizing the chamber. Matching seed integers across
+geometries are *not* a guarantee of physically identical microscopic
+avalanche paths (RNG consumption and fields differ).
+
+**Limits:** These are per-single-seed electron collections, not Heed primary
+cluster-averaged or J/ψ hit-averaged gas gains; there are no ion-birth
+angular asymmetries or induced cathode charges in these outputs. The
+provisional **p3 noFW** reference remains unchanged pending downstream
+avalanche asymmetry and signal evaluation. The earlier 2+4 mm
+results must never be substituted for this ±3 mm campaign.
