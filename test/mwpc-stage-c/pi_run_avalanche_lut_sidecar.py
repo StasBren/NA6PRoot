@@ -139,7 +139,7 @@ def validate_outputs(run_dir, chosen, *, reservoir_limit=100):
         orig=keys[key]
         if (r["original_lut_sha256"]!=orig["original_lut_sha256"] or
             r["configuration"]!=orig["geometry"] or
-            r["original_random_seed"]!=orig["random_seed"] or
+            int(r["original_random_seed"])!=int(orig["random_seed"]) or
             r["old_collected"]!=orig["old_collected"] or
             r["old_field_wire_collected"]!=orig["old_field_wire_collected"]):
             raise ValueError("LUT identities and endpoint flags no longer paired")
