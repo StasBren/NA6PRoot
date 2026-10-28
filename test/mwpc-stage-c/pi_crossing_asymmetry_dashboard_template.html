@@ -15,7 +15,7 @@ main{display:grid;grid-template-columns:minmax(260px,0.7fr) minmax(500px,1.4fr);
 .panel{background:white;border:1px solid var(--line);padding:16px;min-width:0}
 .panel.wide{grid-column:1/-1}.panel h2{font-size:18px;margin:0 0 7px}
 .small{font-size:12px;color:var(--muted)}
-.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:12px 0}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:12px 0}
 .metric{background:var(--shade);border-top:2px solid #4a5260;padding:9px}
 .metric b{display:block;font:700 18px monospace}.metric small{font-size:11px;color:var(--muted)}
 svg{display:block;width:100%;height:auto;background:white!important}
@@ -71,10 +71,12 @@ This is anode primary-electron endpoint asymmetry, <b>not</b> induced cathode ch
 <div class="metric"><b id="nno">—</b><small>Valid A · no FW</small></div>
 <div class="metric"><b id="nfw">—</b><small>Valid A · FW75</small></div>
 <div class="metric"><b id="nundef">—</b><small>Undefined A · no FW / FW75</small></div>
+<div class="metric"><b id="ne0">—</b><small>Classified anode electrons · no FW</small></div>
+<div class="metric"><b id="ne1">—</b><small>Classified anode electrons · FW75</small></div>
 </div>
 <svg id="hist" viewBox="0 0 950 510" role="img" aria-label="Histogram of physical muon-crossing asymmetry"></svg>
 <div class="legend"><span><i class="line"></i>No field wire</span><span><i class="line red"></i>Grounded field wire 75 μm</span></div>
-<p id="moments" class="small"></p><p id="scope" class="small"></p>
+<p id="moments" class="small"></p><p id="electronBreakdown" class="small"></p><p id="scope" class="small"></p>
 </section>
 <section class="panel wide">
 <h2 id="tabletitle">Physical DET breakdown</h2>
@@ -168,6 +170,9 @@ function chart(){
  $("nno").textContent=count(r0.valid);
  $("nfw").textContent=count(r1.valid);
  $("nundef").textContent=count(r0.undefined)+" / "+count(r1.undefined);
+ $("ne0").textContent=count(a[config(pitch,0)].n_upper+a[config(pitch,0)].n_lower);
+ $("ne1").textContent=count(a[config(pitch,75)].n_upper+a[config(pitch,75)].n_lower);
+ $("electronBreakdown").textContent="No FW: Nup="+count(a[config(pitch,0)].n_upper)+", Ndown="+count(a[config(pitch,0)].n_lower)+"; FW75: Nup="+count(a[config(pitch,75)].n_upper)+", Ndown="+count(a[config(pitch,75)].n_lower)+". Counts are of collected primary-electron endpoints classified above/below the anode; exact azimuthal boundaries excluded.";
  $("moments").textContent="No FW: mean="+fmt(r0.mean)+", RMS="+fmt(r0.rms)+
     "; FW75: mean="+fmt(r1.mean)+", RMS="+fmt(r1.rms)+
     "; ΔRMS="+fmt(r0.rms===null||r1.rms===null?null:r1.rms-r0.rms)+".";
