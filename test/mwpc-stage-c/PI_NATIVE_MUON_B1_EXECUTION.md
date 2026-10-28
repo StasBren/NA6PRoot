@@ -90,7 +90,7 @@ The non-overwriting output directory is:
 Important files:
 - `native_muon_b1_crossing.csv`: **one original physical muon crossing × one geometry**; four rows per muon, signed angles, Heed multiplicity, full-hit A_hemi/A_TB, gain, zeros/failures/caps.
 - `native_muon_b1_seed.csv`: each Heed electron and its own avalanche bookkeeping, angle counts and gain.
-- `native_muon_b1_ion_birth_sample.csv`: a **bounded diagnostic first-100 birth positions per seed**, deliberately *not* an unbiased spatial-ion distribution. Asymmetry calculations use **all births**, not this subset.
+- `native_muon_b1_ion_birth_sample.csv`: a **bounded, unbiased reservoir of up to 100 real ion-birth positions per seed**, using an **independent RNG** that does not perturb Garfield. Each sampled birth carries `seed_ion_births_total` and `reservoir_weight` to allow weighted spatial plots across unequal avalanche sizes. Physics asymmetries use **every ionization birth**, not the sample.
 - `native_muon_crossings_input.csv`, `physics.log`, `run_config.json`, `summary.json`, `manifest.json`: inputs, human-readable physics trace, true source hashes and immutable SHA-pinned outputs.
 
 An interrupted/failed run remains on disk for diagnosis and is NEVER
@@ -129,7 +129,7 @@ bash test/mwpc-stage-c/run_pi_native_muon_b1.sh smoke8
 ```
 
 Output `run_smoke8_chunk0001/` is separate and retains 2-crossing samples;
-**the first two of the eight MAY overlap with the smoke2 sample**, so do not
+**the first two of the eight repeat the smoke2 source crossing IDs**, so do not
 treat them as an independent replicate. Eight crossings are not enough for a
 physics RMS(A) versus entrance-angle result; they test the full processing
 chain. After both modes are verified, add representative native-muon samples
