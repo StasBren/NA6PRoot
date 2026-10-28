@@ -149,12 +149,10 @@ def main():
     manifest["status"]="complete"
     manifest["timing_by_geometry"]=summary
     manifest["n_timed_avalanches"]=len(data)
-    manifest["sha256_outputs"]={
-        x.name:sha(x) for x in sorted(output.iterdir()) if x.is_file() and x.name!="manifest.json"
-    }
+    # Stable files FIRST, hash them SECOND, and hash list in manifest LAST.
+    # Never self-reference the manifest, or put stale hashes in summary.
+    (output/"run_config.json").write_text(json.dumps(manifest,indent=2)+"\n")
     (output/"summary.json").write_text(json.dumps(manifest,indent=2)+"\n")
-    # Update all final hashes after source summary/run config are stable
-    (output/"run_config.json").write_text(json.dumps({k:v for k,v in manifest.items() if k!="sha256_outputs"},indent=2)+"\n")
     manifest["sha256_outputs"]={x.name:sha(x) for x in sorted(output.iterdir())
                               if x.is_file() and x.name!="manifest.json"}
     (output/"manifest.json").write_text(json.dumps(manifest,indent=2)+"\n")
