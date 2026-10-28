@@ -105,8 +105,10 @@ def check_crossings(path,selected):
         st=int(row["station"]);det=int(row["det_id"])
         if st!=int(original_row["station"]) or det!=int(original_row["det_id"]):
             raise ValueError("Muon station/detID mismatch")
-        if abs(float(row["theta_u_in_deg"])-float(original_row["theta_u_in_deg"]))>1.e-7:
-            raise ValueError("Original muon incidence direction changed")
+        for coordinate in ("theta_u_in_deg","theta_w_in_deg","path_mm"):
+            original_coordinate = "path_length_mm" if coordinate=="path_mm" else coordinate
+            if abs(float(row[coordinate])-float(original_row[original_coordinate]))>1.e-6:
+                raise ValueError("Original muon angle or gas path length changed: "+coordinate)
         if abs(float(row["momentum_GeV"])-float(original_row["momentum_GeV"]))>1.e-6:
             raise ValueError("Original muon momentum changed")
         nprim=int(row["heed_primaries"])
