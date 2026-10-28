@@ -38,6 +38,7 @@ def summarize(rows, original):
     count=defaultdict(set)
     per_muon=defaultdict(dict)
     primary_map={}
+    heed_counts={}
     for row in original:
         id_="|".join(str(row[k]) for k in (
             "source","chunk","event","hit_index","track_id","station","det_id"))
@@ -47,6 +48,12 @@ def summarize(rows, original):
         if geom not in GEOMS or id_ not in primary_map:
             raise ValueError("Unexpected B1 timing configuration or muon crossing")
         index=int(row["primary_index"])
+        n_heed=int(row["n_true_heed_primaries"])
+        if n_heed<1 or index>=n_heed or index<0:
+            raise ValueError("Timed primary electron outside Heed array")
+        if id_ in heed_counts and heed_counts[id_]!=n_heed:
+            raise ValueError("Heed primary count differs across geometry timing rows")
+        heed_counts[id_]=n_heed
         key=id_,geom
         if index in count[key]:
             raise ValueError("Duplicate actual Heed electron index in timing results")
@@ -63,10 +70,16 @@ def summarize(rows, original):
     n_per={k:len(v) for k,v in count.items()}
     if len(n_per)!=len(original)*4:
         raise ValueError("Missing genuine muon/geometry benchmark pair")
+    if len(heed_counts)!=len(original):
+        raise ValueError("Missing genuine Heed primary multiplicity on native crossings")
     expected={geom:{str(k):v for k,v in per_muon[geom].items()} for geom in GEOMS}
     summary={}
     for geom in GEOMS:
         samples=by[geom]
+        full_muon_estimate={
+            id_:heed_counts[id_]*sec/len(count[id_,geom])
+            for id_,sec in per_muon[geom].items()
+        }
         s={
             "n_seed_benchmarks":len(samples),
             "mean_seconds_per_seed":statistics.mean(samples),
@@ -77,6 +90,9 @@ def summarize(rows, original):
             "std_seconds_per_seed":statistics.pstdev(samples),
             "sampled_muon_ids":sorted(per_muon[geom]),
             "seed_seconds_per_muon":expected[geom],
+            "true_heed_primary_count_by_muon":dict(heed_counts),
+            "rough_full_native_muon_2event_time_seconds":sum(full_muon_estimate.values()),
+            "rough_full_native_muon_seconds_by_id":full_muon_estimate,
         }
         summary[geom]=s
     return summary
@@ -136,7 +152,7 @@ def main():
         reader=csv.DictReader(f)
         data=list(reader)
         expected_columns=("crossing_id","station","theta_u_deg","theta_w_deg",
-            "configuration","primary_index","u_seed_mm","v_seed_mm",
+            "configuration","primary_index","n_true_heed_primaries","u_seed_mm","v_seed_mm",
             "garfield_seed","wall_seconds","avalanche_electrons",
             "avalanche_ions","ion_births","collected_e","success","capped")
         if tuple(reader.fieldnames or ())!=expected_columns:
@@ -148,6 +164,8 @@ def main():
         manifest["warning"]="At least one avalanche returned unsuccessful: inspect individual timing rows"
     manifest["status"]="complete"
     manifest["timing_by_geometry"]=summary
+    manifest["rough_full_two_muon_avalanche_seconds_all_four_geometries"]=sum(
+        d["rough_full_native_muon_2event_time_seconds"] for d in summary.values())
     manifest["n_timed_avalanches"]=len(data)
     # Stable files FIRST, hash them SECOND, and hash list in manifest LAST.
     # Never self-reference the manifest, or put stale hashes in summary.
@@ -165,6 +183,9 @@ def main():
               f" median={s['median_seconds_per_seed']:.3f}s"
               f" p90={s['p90_seconds_per_seed']:.3f}s"
               f" max={s['max_seconds_per_seed']:.3f}s")
+    print("  estimated full 2 native muons × 4 geometries (excluding gas init + Heed):",
+          f'{manifest["rough_full_two_muon_avalanche_seconds_all_four_geometries"]:.2f}s',
+          "ROUGH, 3 spaced seeds per muon per geometry")
     print("  output:",output)
     print("IMPORTANT: k seed avalanches do NOT yield a physical per-muon A_ion; this is a timing diagnostic")
 
