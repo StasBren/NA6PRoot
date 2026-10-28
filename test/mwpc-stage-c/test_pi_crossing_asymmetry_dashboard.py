@@ -73,12 +73,16 @@ def run_test():
         assert payload["stations"]["0"]["configs"][tag(3.,0.)][
             "hemisphere_A"]["valid"]==1
         assert checks["summary.json"]==frozen["summary.json"]
+        assert payload["stations"]["0"]["configs"][tag(3.,0.)]["n_upper"]==6
+        assert payload["stations"]["0"]["configs"][tag(3.,0.)]["n_lower"]==4
         path=render(root,geometry=geom)
         page=path.read_text()
         assert "ONE physical muon gas crossing" in page
         assert "parent-event dashboard" in page
         assert "__PAYLOAD__" not in page
         assert "LUT20" in page and "NA60+ Simulation" in page
+        assert "Classified anode electrons" in page
+        assert "electronBreakdown" in page
         assert (root/"crossing_dashboard.provenance.json").is_file()
         assert render(root,geometry=geom)==path # idempotent
         assert frozen=={f:digest(root/f) for f in frozen}
