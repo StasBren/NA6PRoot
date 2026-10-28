@@ -346,7 +346,7 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
       // angular classification, but NOT per-seed CSV writes or Heed.
       (*timingOut)<<crossingLabel<<","<<h.station<<","
           <<h.thetaU<<","<<h.thetaW<<","<<geom.label<<","
-          <<i<<","<<(10.*u)<<","<<(10.*e.v)<<","
+          <<i<<","<<primaries.size()<<","<<(10.*u)<<","<<(10.*e.v)<<","
           <<rngSeed<<","<<std::setprecision(12)<<seedWallSeconds<<","
           <<ne<<","<<ni<<","<<births.total<<","<<collected<<","
           <<(ok?1:0)<<","<<(capped?1:0)<<"\n";
@@ -469,7 +469,7 @@ int main(int argc,char**argv) {
       std::ofstream timing(csvPath);
       if(!timing)throw std::runtime_error("Cannot open timing CSV "+csvPath);
       timing<<"crossing_id,station,theta_u_deg,theta_w_deg,configuration,"
-               "primary_index,u_seed_mm,v_seed_mm,garfield_seed,wall_seconds,"
+               "primary_index,n_true_heed_primaries,u_seed_mm,v_seed_mm,garfield_seed,wall_seconds,"
                "avalanche_electrons,avalanche_ions,ion_births,collected_e,"
                "success,capped\n";
       timing.flush();
