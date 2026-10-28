@@ -24,10 +24,13 @@ DRIVER="$HERE/pi_run_native_muon_b1.py"
     "$HERE/test_pi_garfield_runtime_env.py" \
     "$HERE/pi_audit_avalanche_lut_reuse.py" \
     "$HERE/pi_run_avalanche_lut_sidecar.py" \
-    "$HERE/test_pi_avalanche_lut_sidecar.py"
+    "$HERE/test_pi_avalanche_lut_sidecar.py" \
+    "$HERE/pi_run_lut500_overnight.py" \
+    "$HERE/test_pi_lut500_overnight.py"
 "$PY" "$HERE/test_pi_native_muon_b1.py"
 "$PY" "$HERE/test_pi_garfield_runtime_env.py"
 "$PY" "$HERE/test_pi_avalanche_lut_sidecar.py"
+"$PY" "$HERE/test_pi_lut500_overnight.py"
 
 if [[ "$MODE" == "status" ]];then
   "$PY" "$DRIVER" status
