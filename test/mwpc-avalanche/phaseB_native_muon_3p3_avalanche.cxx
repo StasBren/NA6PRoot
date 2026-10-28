@@ -234,7 +234,7 @@ std::vector<Primary> HeedPrimaries(Garfield::MediumMagboltz& gas,
   // Use the actual Geant4 muon momentum and the verified start location.
   const auto& d=volume.direction;
   const auto& start=volume.start;
-  heed.NewTrack(start[0],start[1],start[2],0.,d[0],d[1],d[2]);
+  if(!heed.NewTrack(start[0],start[1],start[2],0.,d[0],d[1],d[2]))\n    throw std::runtime_error("TrackHeed::NewTrack returned false for verified native muon");
 
   std::vector<Primary> primaries;
   double xc=0,yc=0,zc=0,tc=0,ec=0,extra=0;
