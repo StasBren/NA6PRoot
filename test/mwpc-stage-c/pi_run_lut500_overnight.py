@@ -433,13 +433,60 @@ def main():
                     raise RuntimeError("Smoke input missing geometry "+geom)
                 subset.append(candidate)
         stats,_=run_chunk(target,0,subset,env)
-        print("PASS compact5 OVERNIGHT preflight 8 frozen LUT500 starts",
-              "ion births:",stats["total_ion_births"],"caps:",stats["n_cap"],
-              "failed:",stats["n_fail"],flush=True)
+        # Crucial physics-equivalence preflight: the compact output samples
+        # only 5 instead of 100 ion birth positions. It MUST reproduce
+        # every FULL microscopic avalanche's seed, gain and ion census.
+        # Reservoir sampling has its own RNG and must not alter Garfield.
+        reference=target/"reference_full100"
+        reference.mkdir()
+        input_csv=target/"chunks"/"chunk_0000"/"original_exact_starts.csv"
+        shutil.copy2(input_csv,reference/"original_exact_starts.csv")
+        with (reference/"physics.log").open("w") as log:
+            status=subprocess.run([str(EXE),"--lut-sidecar",
+                    str(reference/"original_exact_starts.csv"),
+                    str(reference/"lut_avalanche")],
+                    cwd=reference,stdout=log,stderr=subprocess.STDOUT,
+                    check=False,env=env).returncode
+        if status:
+            raise RuntimeError("Compact-output equivalence full100 reference failed: "
+                               +str(reference/"physics.log"))
+        ref_stats=validate_outputs(reference,subset,reservoir_limit=100)
+        def trial_rows(file):
+            with file.open(newline="") as f:
+                rd=csv.DictReader(f)
+                if tuple(rd.fieldnames or ())!=COLUMNS:
+                    raise ValueError("Wrong reference trial schema")
+                return list(rd)
+        compact_rows=trial_rows(target/"chunks"/"chunk_0000"/"lut_avalanche_trials.csv")
+        full_rows=trial_rows(reference/"lut_avalanche_trials.csv")
+        if compact_rows!=full_rows:
+            raise RuntimeError("CRITICAL: compact5 changed microscopic avalanche results! "
+                               "Long run BLOCKED.")
+        verified={
+            "schema":"PI_OVERNIGHT_COMPACT_ION_SAMPLING_EQUIVALENCE_V1",
+            "status":"complete","n_trials":len(subset),
+            "full100_trials_sha256":sha(reference/"lut_avalanche_trials.csv"),
+            "compact5_trials_sha256":sha(target/"chunks"/"chunk_0000"/"lut_avalanche_trials.csv"),
+            "full_ion_births":stats["total_ion_births"],
+            "reference_ion_births":ref_stats["total_ion_births"],
+            "physics_identical":True,
+        }
+        (target/"smoke_verified.json").write_text(canonical(verified))
+        print("PASS compact5 smoke AND exact 100-vs-5 ion reservoir "
+              "microscopic physics identity:",stats["n_trials"],
+              "original LUT500 starts; full ion births:",
+              stats["total_ion_births"],flush=True)
         return
-    smoke=ROOT.parent/"smoke8_compact5_v1"/"chunks"/"chunk_0000"/"complete.json"
+    smoke_root=ROOT.parent/"smoke8_compact5_v1"
+    smoke=smoke_root/"smoke_verified.json"
     if not smoke.is_file():
-        raise RuntimeError("First run pi_run_lut500_overnight.py smoke; no 8h computation started")
+        raise RuntimeError("First PASS full100-vs-compact5 smoke; no long job started")
+    sm=json.loads(smoke.read_text())
+    if (sm.get("physics_identical") is not True or
+        sm.get("status")!="complete" or
+        sm.get("compact5_trials_sha256")!=sha(smoke_root/"chunks"/"chunk_0000"/"lut_avalanche_trials.csv") or
+        sm.get("full100_trials_sha256")!=sha(smoke_root/"reference_full100"/"lut_avalanche_trials.csv")):
+        raise RuntimeError("Full100-vs-compact5 physics preflight provenance changed")
     if shutil.disk_usage(ROOT.parent).free<1_000_000_000:
         raise RuntimeError("Less than 1GB available for immutable checkpoint outputs")
     if ROOT.exists() and not a.resume:
