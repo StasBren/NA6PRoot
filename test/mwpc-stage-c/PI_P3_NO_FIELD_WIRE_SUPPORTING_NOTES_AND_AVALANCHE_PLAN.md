@@ -184,3 +184,23 @@ using positive-ion and electron charge transport and each cathode's weighting fi
 - Garfield++ User Guide and ROOT/Garfield maintainers' clarification of \`GetAvalancheSize\` vs electron endpoint-count and the role of attachment: https://garfieldpp.web.cern.ch/doxygen/UserGuide.pdf and https://root-forum.cern.ch/t/difference-between-getavalanchesize-and-getnumberofelectronendpoints/50834
 
 All tables here use the existing full-cell Garfield pilot numbers from repository documentation or the exact full34 ZIP provided earlier. **No new Garfield avalanche physics run was carried out in producing these notes.**
+
+## 10. First symmetric 3+3 mm avalanche smoke5 (28 October 2026)
+
+Google Drive frozen run:
+https://drive.google.com/drive/folders/1-UCTer9rh2tuiZBkL_OWQxldFeUBPNHe
+
+All four source geometry logs confirm **cathode gaps 3+3 mm**, anode 30 μm, +1800 V, Ar/CO₂ (70:30), B=0 T, and grounded midpoint FW diameter 0 or 75 μm. The smoke sampled just **five single-electron avalanches per geometry**, starting at (u,v)=(0,+1 mm), with base seed 280103. All four logs report **zero size-limit-like events** (limit 200,000).
+
+| 3+3 mm single-seed smoke | 3 mm noFW | 3 mm FW75 | 4 mm noFW | 4 mm FW75 |
+| --- | ---: | ---: | ---: | ---: |
+| Effective collected gain mean | 600.2 | 8,958.4 | 1,429.6 | 8,098.6 |
+| Population RMS | 495.7 | 10,201.6 | 505.3 | 8,107.7 |
+| Zero collected avalanches | 1/5 | 1/5 | 0/5 | 1/5 |
+| Size-limit-like | 0/5 | 0/5 | 0/5 | 0/5 |
+
+These results establish that our **new geometries run** and suggest a large *local* FW-induced change in gain near the chosen anode. However, five highly fluctuating avalanches do **not** estimate the representative gas gain or precision FW effect. In particular, the p3 FW75 sample contains avalanches with 23,724 and 18,877 collected electrons, while p3 noFW peaked at 1,371. Do not interpret mean ratios as precise physics and do not change the baseline selection based on this smoke test.
+
+**Metadata warning**: the historical immutable smoke5 `run_config.json` incorrectly retains status=`incomplete`, even though `summary.json`/`manifest.json` say complete, all four result CSVs contain five entries, and rclone reported 12 matching cloud files. The new writer has been fixed so later runs finalize `run_config.json` and SHA-pin it; *do not mutate the historical run*.
+
+Next: run the 100-seed fixed-position pilot in the same four geometries, then extend to multiple physically relevant primary-electron locations. Only after this should the work proceed to avalanche ion-birth `A_hemi`/`A_TB` and the actual cathode induced-charge asymmetry `A_Q(T)`.
