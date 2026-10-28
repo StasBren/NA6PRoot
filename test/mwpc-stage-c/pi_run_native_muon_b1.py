@@ -116,6 +116,15 @@ def validate_native_csv_before_physics(selection):
         raise RuntimeError("B1 C++ missing HEED gas-medium preflight marker:\n"+
                            res.stdout)
     print(res.stdout.strip())
+    # Execute actual TrackHeed cluster and conduction-electron creation on
+    # the same frozen muon input, but perform NO microscopic avalanches.
+    # This catches medium, NewTrack and gas-boundary problems earlier.
+    heed=subprocess.run([str(EXE),"--validate-heed",str(selection)],
+                        capture_output=True,text=True,check=False)
+    if heed.returncode!=0 or "PASS: true TrackHeed source generated" not in heed.stdout:
+        raise RuntimeError("True TrackHeed preflight FAILED; no B1 avalanche started:\n"+
+                           "\n".join((heed.stdout+"\n"+heed.stderr).splitlines()[-45:]))
+    print(heed.stdout.strip())
 
 def check_crossings(path,selected):
     with path.open(newline="") as f:
