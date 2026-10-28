@@ -1,5 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NA60+ · ROOT-style LUT500 event asymmetry</title>
+<title>NA60+ · ROOT-style parent-event asymmetry (LUT20/LUT500)</title>
 <style>
 :root{color-scheme:light;--blue:#2754aa;--red:#bf2745}
 *{box-sizing:border-box}body{margin:0;background:#ebedf1;color:#161616;font:14px/1.45 Arial,Helvetica,sans-serif}
@@ -27,9 +27,9 @@ footer{margin:12px max(20px,3vw) 30px;color:#606a75;font-size:12px}
 @media(max-width:1050px){main{grid-template-columns:1fr}.panel.full{grid-column:1/-1}}
 @media(max-width:640px){.stats{grid-template-columns:1fr 1fr}#map{height:300px}#hist{height:320px}}
 </style></head><body>
-<header><div class="tag">NA60+ · MS0–MS5 · ROOT-STYLE HISTOGRAMS · p = 3 mm · Garfield LUT500</div>
+<header><div class="tag">NA60+ · MS0–MS5 · ROOT-STYLE HISTOGRAMS · <span id="headerGeometry">p = 3 mm · Garfield LUT500</span></div>
 <h1>Event-by-event asymmetry A</h1>
-<p>J/ψ parent events · native Geant4 gas crossings · Heed primaries · Garfield++ LUT500 · B = 0</p>
+<p>J/ψ parent events · native Geant4 gas crossings · Heed primaries · <span id="subtitleGeometry">Garfield++ LUT500</span> · B = 0</p>
 <p class="small">Independent of the older <a id="backTo2M" href="../pi_full_jpsi_2m_dashboard_v1/pages/index.html">2M J/ψ dashboard (LUT20, six geometries)</a>. Do not combine its LUT20 and this LUT500 statistics.</p>
 </header>
 <div class="note">A = (N<sub>up</sub> − N<sub>down</sub>)/(N<sub>up</sub> + N<sub>down</sub>) for finite anode-surface φ<sub>hit</sub>.
@@ -72,6 +72,10 @@ let D=PAYLOAD.datasets?PAYLOAD.datasets[0].data:PAYLOAD;
 let C0=D.configs[0].key,C1=D.configs[1].key;
 let E=D.asymmetry.hist_edges;
 const geomText=()=>D.pitch_mm+" mm · LUT"+(D.lut_trials_per_cell||500);
+function setGeometryLabel(){
+ $("headerGeometry").textContent="p = "+D.pitch_mm+" mm · Garfield LUT"+(D.lut_trials_per_cell||500);
+ $("subtitleGeometry").textContent="Garfield++ LUT"+(D.lut_trials_per_cell||500);
+}
 const $=id=>document.getElementById(id);
 const NS="http://www.w3.org/2000/svg";
 function el(tag,attrs,parent,label){
@@ -299,13 +303,13 @@ if(PAYLOAD.datasets){
    const opt=document.createElement("option");opt.value=st;
    opt.textContent="MS"+st;$("station").appendChild(opt);
   }
-  $("station").value=String(station);setDetOptions();refresh();
+  $("station").value=String(station);setDetOptions();setGeometryLabel();refresh();
  });
 }else{
  const opt=document.createElement("option");opt.value="0";
  opt.textContent=geomText();$("geometry").appendChild(opt);
 }
-$("station").value=String(station);setDetOptions();refresh();
+$("station").value=String(station);setDetOptions();setGeometryLabel();refresh();
 $("station").addEventListener("change",e=>{station=Number(e.target.value);det=-1;setDetOptions();refresh();});
 $("det").addEventListener("change",e=>{det=Number(e.target.value);refresh();});
 $("ymode").addEventListener("change",drawHist);
