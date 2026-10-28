@@ -20,6 +20,7 @@
 
 #include "Garfield/AvalancheMicroscopic.hh"
 #include "Garfield/ComponentAnalyticField.hh"
+#include "Garfield/ComponentConstant.hh"
 #include "Garfield/MediumMagboltz.hh"
 #include "Garfield/Random.hh"
 #include "Garfield/RandomEngineRoot.hh"
@@ -175,39 +176,63 @@ double EntrancePhase(double uMm,int station,double pitch) {
   const double nearest=std::round((uMm-phase)/pitch)*pitch+phase;
   return uMm-nearest;
 }
+// The primary-ionisation source is an independent, gas-filled box.
+ // Do NOT model it using two identical-potential ComponentAnalyticField
+ // planes: Garfield's CellCheck rejects a cell with no field solution,
+ // then TrackHeed cannot find an ionisable medium at the start position.
+struct HeedSourceVolume {
+  Garfield::ComponentConstant field;
+  Garfield::Sensor sensor;
+  std::array<double,3> start{}, direction{};
+  explicit HeedSourceVolume(Garfield::MediumMagboltz& gas,
+                            const Crossing& c) {
+    const double du=c.b[0]-c.a[0],dv=c.b[1]-c.a[1],dw=c.b[2]-c.a[2];
+    const double maxU=std::max(1.,std::abs(du)*.1+.2);
+    const double maxW=std::max(1.,std::abs(dw)*.1+.2);
+    // The component AND the sensor require their own active bounds.
+    field.SetArea(-maxU,-.3,-maxW,maxU,+.3,+maxW);
+    field.SetMedium(&gas);
+    field.SetElectricField(0.,1.,0.);
+    sensor.AddComponent(&field);
+    sensor.SetArea(-maxU,-.3,-maxW,maxU,+.3,+maxW);
+    direction={{c.p[0]/c.momentum,c.p[1]/c.momentum,
+                c.p[2]/c.momentum}};
+    // Define gas in local u around zero so we can use the original
+    // muon entry with only a *translation*, never a random angle.
+    constexpr double inwardCm=1.e-4; // 1 micron inside gas
+    start={{inwardCm*direction[0], .1*c.a[1]+inwardCm*direction[1],
+            inwardCm*direction[2]}};
+    Garfield::Medium* medium=nullptr;
+    if(!sensor.GetMedium(start[0],start[1],start[2],medium) ||
+       !medium || !medium->IsIonisable()) {
+      std::ostringstream details;
+      details<<"Heed primary source is not ionisable at muon start: "
+             <<"y="<<start[1]<<"cm (cathodes ±0.3cm), "
+             <<"native v_in="<<c.a[1]<<"mm, direction v="<<direction[1];
+      throw std::runtime_error(details.str());
+    }
+  }
+};
 std::vector<Primary> HeedPrimaries(Garfield::MediumMagboltz& gas,
                                   const Crossing& c,int& nClusters,
                                   int& nDiscarded,int& nFailed){
   // A geometry-independent HEED PRIMARY source is generated ONCE per
-  // original crossing. Physical gap ±3mm; no wire biases and no FW
-  // variation in ionisation itself.
-  Garfield::ComponentAnalyticField field;
-  field.SetMedium(&gas);
-  field.AddPlaneY(-.3,0.,"minus");
-  field.AddPlaneY(+.3,0.,"plus");
-  Garfield::Sensor sensor;
-  sensor.AddComponent(&field);
-  const double du=c.b[0]-c.a[0],dv=c.b[1]-c.a[1],dw=c.b[2]-c.a[2];
-  const double maxU=std::max(1.,std::abs(du)*.1+.2);
-  const double maxW=std::max(1.,std::abs(dw)*.1+.2);
-  sensor.SetArea(-maxU,-.3,-maxW,maxU,+.3,+maxW);
+  // original crossing, inside a valid ionisable gas volume. This weak
+  // placeholder uniform field defines medium lookup ONLY; it is NOT
+  // used for Garfield avalanche transport, which uses each chamber's
+  // actual 1800V analytic wire field.
+  HeedSourceVolume volume(gas,c);
   Garfield::TrackHeed heed;
-  heed.SetSensor(&sensor);
+  heed.SetSensor(&volume.sensor);
   heed.SetParticle(c.pdg==13?"mu-":"mu+");
   heed.SetMomentum(c.momentum*1.e9);
   heed.EnableDeltaElectronTransport();
 
   SeedGarfield(c.heedSeed);
-  // Use the actual incoming muon momentum vector, not a regenerated or
-  // assumed normal-incidence direction. The selection checks that this
-  // agrees with the native Geant4 gas chord within cos(theta)>0.999.
-  const std::array<double,3> d{{c.p[0]/c.momentum,
-                                c.p[1]/c.momentum,
-                                c.p[2]/c.momentum}};
-  // One micrometre inside the entrance (avoids a track exactly on gas edge).
-  constexpr double inwardCm=1.e-4;
-  heed.NewTrack(inwardCm*d[0],.1*c.a[1]+inwardCm*d[1],
-                inwardCm*d[2],0.,d[0],d[1],d[2]);
+  // Use the actual Geant4 muon momentum and the verified start location.
+  const auto& d=volume.direction;
+  const auto& start=volume.start;
+  heed.NewTrack(start[0],start[1],start[2],0.,d[0],d[1],d[2]);
 
   std::vector<Primary> primaries;
   double xc=0,yc=0,zc=0,tc=0,ec=0,extra=0;
@@ -349,9 +374,20 @@ int main(int argc,char**argv) {
   try{
     if(argc==3 && std::string(argv[1])=="--validate-input") {
       const auto crossings=ReadCrossings(argv[2]);
+      // The former --validate-input checked only CSV syntax. Also check
+      // that the ACTUAL Heed source volume has a valid ionisable medium
+      // at every selected original muon's start position.
+      Garfield::MediumMagboltz preflightGas;
+      preflightGas.SetComposition("ar",70.,"co2",30.);
+      preflightGas.SetTemperature(293.15);preflightGas.SetPressure(760.);
+      for(const auto& h:crossings){
+        HeedSourceVolume preflightVolume(preflightGas,h);
+      }
       std::cout<<"PASS: parsed "<<crossings.size()
-               <<" original Geant4 muon crossings (CSV CRLF/LF supported)\n";
-      return 0; // No Garfield gas, RNG or avalanche work.
+               <<" original Geant4 muon crossings (CSV CRLF/LF supported)\n"
+               <<"PASS: Heed gas source medium is ionisable at all "
+               <<crossings.size()<<" muon starts (±3 mm)\n";
+      return 0; // No Heed ionisation or Garfield avalanche physics.
     }
     if(argc!=4)throw std::runtime_error(
       "Usage: mwpc_phase_b_native_muon_3p3 INPUT_NATIVE_CSV OUTPUT_PREFIX MAX_PRIMARY_ELECTRONS | --validate-input INPUT_NATIVE_CSV");
