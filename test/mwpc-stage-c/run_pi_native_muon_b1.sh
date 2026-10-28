@@ -26,7 +26,7 @@ if [[ "$MODE" == "status" ]];then
   exit
 fi
 if [[ "$MODE" == "prepare2" || "$MODE" == "prepare8" ]];then
-  "$PY" "$DRIVER" prepare
+  "$PY" "$DRIVER" "$MODE"
   exit
 fi
 
