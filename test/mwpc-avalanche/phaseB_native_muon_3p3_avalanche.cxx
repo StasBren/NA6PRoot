@@ -666,6 +666,13 @@ int main(int argc,char**argv) {
                " partial crossing totals MUST NOT be treated as A_ion(mu)\n";
       return 0;
     }
+    if(argc==3 && std::string(argv[1])=="--validate-lut-input") {
+      const auto exact=ReadLutExactStarts(argv[2]);
+      std::cout<<"PASS parsed "<<exact.size()
+               <<" ORIGINAL frozen LUT20/500 exact-start rows in C++; "
+               "no Heed/avalanches run\n";
+      return 0;
+    }
     if(argc==4 && std::string(argv[1])=="--lut-sidecar"){
       RunLutSidecar(argv[2],argv[3]);
       return 0;
