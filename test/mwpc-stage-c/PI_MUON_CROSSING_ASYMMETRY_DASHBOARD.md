@@ -65,6 +65,21 @@ This command only renders a dashboard from **existing 989,695
 muon gas crossings** (2×50k generated J/ψ input). It will not
 repeat the nearly million crossing folds.
 
+### Compatibility with earlier LUT500 crossing summaries
+
+Some pre-LUT20-versioned `full3/summary.json` files have the correct
+crossing-level `LUT500` schema, but no explicit
+`lut_trials_per_cell` field. The dashboard renderer now infers
+500 **only** from the exact versioned schema, requires the matching
+`LUT500` provenance and validates the original manifest SHA256 of
+both the summary and raw CSV. It does not edit the old physics files.
+
+To retry a previously failed dashboard publication, simply update the
+branch and rerun the same `lut500-p3` command. If another metadata
+mismatch remains, the validator reports exactly which field differs;
+do not delete or recompute the physical fold merely to satisfy a
+dashboard metadata check.
+
 ### B. Recompute p=3 mm LUT500 with the correct statistical unit
 
 ```bash
