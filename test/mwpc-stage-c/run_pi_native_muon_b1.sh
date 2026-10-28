@@ -19,8 +19,11 @@ DRIVER="$HERE/pi_run_native_muon_b1.py"
     "$HERE/pi_prepare_muon_avalanche_b1.py" \
     "$DRIVER" \
     "$HERE/test_pi_native_muon_b1.py" \
-    "$HERE/pi_benchmark_native_muon_b1.py"
+    "$HERE/pi_benchmark_native_muon_b1.py" \
+    "$HERE/pi_garfield_runtime_env.py" \
+    "$HERE/test_pi_garfield_runtime_env.py"
 "$PY" "$HERE/test_pi_native_muon_b1.py"
+"$PY" "$HERE/test_pi_garfield_runtime_env.py"
 
 if [[ "$MODE" == "status" ]];then
   "$PY" "$DRIVER" status
