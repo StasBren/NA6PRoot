@@ -2,6 +2,24 @@
 **Supporting notes for discussion with A. Milov | 28 October 2026 | NA60+ Simulation — Work in progress**
 
 **Status:** internal working note; NOT a validated detector-design recommendation or a calibrated gas-gain prediction.
+
+## Scope lock for the NEW avalanche campaign (28 Oct 2026)
+
+**Do not transfer previous 2+4 mm Stage A/B numerical results into the new 3+3 mm geometry.** The user's local inventory confirmed legacy files including `gain_fluctuations.csv`, `gain_fluctuations_5000.csv`, `heed_avalanche_seed_summary.csv`, `heed_avalanche_track_summary.csv`, `stageB_real_avalanche_event_summary.csv`, `stageB_real_avalanche_analysis_summary.csv`, and `stageB_avalanche_angle_scan_summary_by_angle.csv`. These validate *workflow and output-column interpretation* but are **not measurements of the new four-geometry campaign**. For example, the old Stage B integrated-charge fraction changes markedly with observation window, and its asymmetric gap necessarily changes cathode weighting fields; these values must not be quoted for ±3 mm.
+
+All NEW avalanche gain/ion birth/induced charge runs shall fix **cathode planes at v=−3 and +3 mm**, and compare the following exactly four configurations under otherwise matched gas/HV/wire diameter/B/seed conditions:
+
+| Configuration | Anode pitch | Grounded midpoint field wire | Purpose |
+|:--|--:|:--:|:--|
+| **P3_NOFW** | **3.0 mm** | no | **primary reference baseline** |
+| P3_FW75 | 3.0 mm | 75 μm | assess FW effect at baseline pitch |
+| P4_NOFW | 4.0 mm | no | pitch effect without field wire |
+| P4_FW75 | 4.0 mm | 75 μm | pitch–field wire interaction |
+
+**Code audit:** `phaseA_gain_fluctuations.cxx`, `phaseA_heed_avalanche.cxx` and `phaseB_avalanche_angle_scan.cxx` already expose pitch and both cathode-gap options, but their current `ComponentAnalyticField` construction adds **anode wires only** and does not include any grounded midpoint field-wire option. Therefore setting `--gap-minus-mm 3 --gap-plus-mm 3` is sufficient to start a **no-FW 3+3** methodological smoke; it is NOT sufficient to simulate P3_FW75/P4_FW75. Extend the field builder with a consistent grounded wire diameter/position, assert actual geometry and wire labels, and add no-FW/FW75 regression checks **before** doing the four-way quantitative gain/charge comparison. Changes must preserve old 2+4 standalone defaults and legacy result filenames.
+
+**Definitions fixed for subsequent runs:** record **both** the full hemisphere and cathode-facing ±45° sectors for each of (i) primary-electron anode arrival position, (ii) avalanche ionization-birth angles, (iii) avalanche electron endpoint position. Separately compute `A_Q(T)` from upper/lower cathode weighting fields and positive-ion drift. Geometrical sector A is **not** a measured cathode-charge asymmetry. Report zero-response/censored avalanches and finite observation windows.
+
 **Selected working configuration:** anode pitch **3.0 mm**, **no field wires**, anode diameter **30 μm**, cathode planes at **v = ±3 mm**, anode potential **+1800 V**, **Ar/CO₂ (70:30)**, T=293.15 K, P=760 Torr, **B=0 T**. Compare with a midpoint **grounded 75 μm field wire**. The current working selection is conditional on the **full-upper/lower-hemisphere electron endpoint asymmetry**, which is *not* an induced-cathode-charge observable.
 
 ## 1. Research objective and definitions
