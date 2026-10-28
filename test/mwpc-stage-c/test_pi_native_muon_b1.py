@@ -51,6 +51,15 @@ def run():
     assert validate(bad) is None, "Muon near finite u-edge was accepted"
     with tempfile.TemporaryDirectory() as d:
         path=Path(d)/"crossing.csv"
+        # Python csv.DictWriter with newline='' writes CRLF on Linux.
+        # C++ ReadCrossings historically failed at exact header comparison
+        # because std::getline strips LF but not CR.
+        raw=Path(d)/"native_input.csv"
+        with raw.open("w",newline="") as f:
+            writer=csv.DictWriter(f,fieldnames=FIELDS)
+            writer.writeheader()
+            writer.writerow(r)
+        assert raw.read_bytes().split(b"\n")[0].endswith(b"\r")
         good=[row(r,k) for k in GEOMS]
         def write(rows):
             with path.open("w",newline="") as f:
