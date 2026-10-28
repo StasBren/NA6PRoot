@@ -23,8 +23,8 @@ from pi_prepare_muon_avalanche_b1 import OUT, FIELDS, sha, make, REPO
 HERE=Path(__file__).resolve().parent
 CXX=REPO/"test/mwpc-avalanche/phaseB_native_muon_3p3_avalanche.cxx"
 EXE=REPO/"test/mwpc-avalanche/build/mwpc_phase_b_native_muon_3p3"
-RUN=OUT/"run_smoke8_chunk0001"
-INPUT=OUT/"smoke8_chunk0001"
+def run_dir(n):return OUT/f"run_smoke{n}_chunk0001"
+def input_dir(n):return OUT/f"smoke{n}_chunk0001"
 GEOMS=("p3_noFW","p3_FW75","p4_noFW","p4_FW75")
 PREFIX="native_muon_b1"
 CROSSING_COLUMNS=("source|chunk|event|hit_index|track_id|station|det_id",
@@ -47,21 +47,22 @@ def source_check():
         if needed not in s:raise RuntimeError("Native-muon B1 C++ source incomplete: "+needed)
     return sha(CXX)
 
-def check_input():
-    selection=INPUT/"native_muon_crossings_input.csv"
-    meta=INPUT/"input_manifest.json"
+def check_input(n):
+    base=input_dir(n)
+    selection=base/"native_muon_crossings_input.csv"
+    meta=base/"input_manifest.json"
     if not selection.is_file() or not meta.is_file():
         raise FileNotFoundError("First run 'prepare' for 8 original native Geant4 muons")
     m=json.loads(meta.read_text())
     if m.get("schema")!="PI_TRUE_GEANT4_MUON_B1_INPUT_V1" or m.get("status")!="complete":
         raise ValueError("Wrong/incomplete Geant4 selection provenance")
-    if sha(selection)!=m.get("input_sha256") or m.get("n_crossings")!=8:
+    if sha(selection)!=m.get("input_sha256") or m.get("n_crossings")!=n:
         raise ValueError("Native Geant4 muon input changed or wrong n")
     with selection.open(newline="") as f:
         reader=csv.DictReader(f)
         if tuple(reader.fieldnames or ())!=FIELDS:raise ValueError("Native CSV changed schema")
         rows=list(reader)
-    if len(rows)!=8 or any(abs(int(r["pdg"]))!=13 for r in rows):
+    if len(rows)!=n or any(abs(int(r["pdg"]))!=13 for r in rows):
         raise ValueError("Unexpected native muon selection")
     return selection,m,rows
 
@@ -161,37 +162,44 @@ def check_crossings(path,selected):
     return by_geom
 
 def run(mode):
-    if mode=="prepare":
+    if mode.startswith("prepare"):
+        n=int(mode.replace("prepare","") or "2")
+        if n not in (2,8):raise ValueError("Only prepare2 or prepare8 is allowed")
         source_check()
-        make(max_events=8,chunk=1)
+        make(max_events=n,chunk=1)
         return
     if mode=="status":
-        for d in (INPUT,RUN):
-            print(d, "exists" if d.exists() else "missing")
-        if (RUN/"manifest.json").is_file():
-            m=json.loads((RUN/"manifest.json").read_text())
-            print("Completed:",m["status"],"crossings:",m["n_true_geant4_crossings"])
+        for n in (2,8):
+            for d in (input_dir(n),run_dir(n)):
+                print(d, "exists" if d.exists() else "missing")
+            if (run_dir(n)/"manifest.json").is_file():
+                m=json.loads((run_dir(n)/"manifest.json").read_text())
+                print("Completed:",m["status"],"crossings:",m["n_true_geant4_crossings"])
         return
-    if mode=="check":
+    if mode.startswith("check"):
+        n=int(mode.replace("check","") or "2")
         print("Source SHA:",source_check())
         print("Binary SHA:",check_executable())
-        print("Input SHA:",check_input()[1]["input_sha256"])
-        print("PASS static B1 executable and 8 immutable real native muon inputs")
+        print("Input SHA:",check_input(n)[1]["input_sha256"])
+        print(f"PASS static B1 executable and {n} immutable real native muon inputs")
         return
-    if mode!="smoke":raise ValueError("Use prepare|check|smoke|status")
+    if not mode.startswith("smoke"):raise ValueError("Use prepare2|prepare8|check2|check8|smoke2|smoke8|status")
+    n=int(mode.replace("smoke","") or "2")
+    if n not in (2,8):raise ValueError("Only 2 or 8 crossings per pilot")
     binary_sha=check_executable()
-    selection,meta,selected=check_input()
-    if RUN.exists():raise FileExistsError(
-        "Preserving prior B1 output (including interrupted): "+str(RUN))
-    RUN.mkdir(parents=True)
-    shutil.copy2(selection,RUN/"native_muon_crossings_input.csv")
-    shutil.copy2(INPUT/"input_manifest.json",RUN/"input_manifest_provenance.json")
-    out_prefix=str(RUN/PREFIX)
-    args=[str(EXE),str(RUN/"native_muon_crossings_input.csv"),out_prefix,"500"]
+    selection,meta,selected=check_input(n)
+    run_dir_=run_dir(n)
+    if run_dir_.exists():raise FileExistsError(
+        "Preserving prior B1 output (including interrupted): "+str(run_dir_))
+    run_dir_.mkdir(parents=True)
+    shutil.copy2(selection,run_dir_/"native_muon_crossings_input.csv")
+    shutil.copy2(input_dir(n)/"input_manifest.json",run_dir_/"input_manifest_provenance.json")
+    out_prefix=str(run_dir_/PREFIX)
+    args=[str(EXE),str(run_dir_/"native_muon_crossings_input.csv"),out_prefix,"500"]
     audit={
         "schema":"PI_MUON_DRIVEN_TRUE_HEED_AVALANCHE_B1_SMOKE_V1",
         "status":"incomplete","timestamp_utc":datetime.now(timezone.utc).isoformat(),
-        "channel":"Jpsi","n_true_geant4_crossings":8,"n_geometries":4,
+        "channel":"Jpsi","n_true_geant4_crossings":n,"n_geometries":4,
         "geometry":[{"pitch_mm":3.0,"field_wire_um":0.0},
                     {"pitch_mm":3.0,"field_wire_um":75.0},
                     {"pitch_mm":4.0,"field_wire_um":0.0},
@@ -200,44 +208,46 @@ def run(mode):
         "gas":"Ar/CO2 70:30; 293.15 K; 760 Torr",
         "anode_diameter_um":30.,"anode_voltage_V":1800.,"B_T":0.,
         "analysis_unit":"one true GEANT4 MUON gas crossing; shared true TrackHeed primaries across all four geometries",
-        "sample_kind":"signed-angle, station-stratified 8-crossing SMOKE (not physical angle PDF)",
+        "sample_kind":"signed-angle, station-stratified small SMOKE (not physical angle PDF)",
         "input_selector_manifest":meta,
         "git_commit":commit(),
         "b1_CXX_sha256":sha(CXX),"b1_binary_sha256":binary_sha,
-        "input_csv_sha256":sha(RUN/"native_muon_crossings_input.csv")
+        "input_csv_sha256":sha(run_dir_/"native_muon_crossings_input.csv")
     }
-    (RUN/"run_config.json").write_text(json.dumps(audit,indent=2)+"\n")
-    print("Running true Geant4→TrackHeed→AvalancheMicroscopic smoke, 8 real muon crossings × four geometries.",flush=True)
-    with (RUN/"physics.log").open("w") as logfile:
+    (run_dir_/"run_config.json").write_text(json.dumps(audit,indent=2)+"\n")
+    print(f"Running true Geant4→TrackHeed→AvalancheMicroscopic smoke, {n} native muons × four geometries.",flush=True)
+    with (run_dir_/"physics.log").open("w") as logfile:
         result=subprocess.run(args,stdout=logfile,stderr=subprocess.STDOUT,
-                              cwd=RUN,check=False)
+                              cwd=run_dir_,check=False)
     if result.returncode:
-        raise RuntimeError(f"B1 failed with code {result.returncode}; inspect: {RUN/'physics.log'}")
+        raise RuntimeError(f"B1 failed with code {result.returncode}; inspect: {run_dir_/'physics.log'}")
     if "PASS: muon-driven B1 all crossing/geometry rows written" not in (
-        RUN/"physics.log").read_text():
+        run_dir_/"physics.log").read_text():
         raise RuntimeError("B1 did not write completion marker")
-    outputs=[RUN/(PREFIX+x) for x in ("_crossing.csv","_seed.csv","_ion_birth_sample.csv")]
+    outputs=[run_dir_/(PREFIX+x) for x in ("_crossing.csv","_seed.csv","_ion_birth_sample.csv")]
     if not all(p.is_file() for p in outputs):
         raise RuntimeError("Incomplete B1 original per-crossing and per-primary output")
     stats=check_crossings(outputs[0],selected)
+    if all(d["n_avalanche_ion_births"]==0 for d in stats.values()):
+        raise RuntimeError("No avalanche ionization recorded for any geometry: inspect callback, gas field and seed locations")
     audit["status"]="complete"
     audit["stats"]=stats
-    (RUN/"run_config.json").write_text(json.dumps(audit,indent=2)+"\n")
-    (RUN/"summary.json").write_text(json.dumps(audit,indent=2)+"\n")
-    audit["sha256_outputs"]={p.name:sha(p) for p in sorted(RUN.iterdir())
+    (run_dir_/"run_config.json").write_text(json.dumps(audit,indent=2)+"\n")
+    (run_dir_/"summary.json").write_text(json.dumps(audit,indent=2)+"\n")
+    audit["sha256_outputs"]={p.name:sha(p) for p in sorted(run_dir_.iterdir())
                               if p.is_file() and p.name!="manifest.json"}
-    (RUN/"manifest.json").write_text(json.dumps(audit,indent=2)+"\n")
-    print("PASS B1 completed SHA-manifested 8 ORIGINAL muon gas crossings in four candidate 3+3 geometries")
+    (run_dir_/"manifest.json").write_text(json.dumps(audit,indent=2)+"\n")
+    print(f"PASS B1 completed SHA-manifested {n} ORIGINAL muon gas crossings in four candidate 3+3 geometries")
     for name,d in stats.items():
         print(name, "Heed primaries",d["n_heed_primaries"],
               "ion births",d["n_avalanche_ion_births"],
               "gain",d["G_eff_total_collected_over_total_Heed_primary"],
               "caps",d["n_capped_seeds"])
-    print("Run directory:",RUN)
+    print("Run directory:",run_dir_)
     print("WARNING: this is a smoke only; its angle strata DO NOT reproduce true muon incidence PDF.")
 
 if __name__=="__main__":
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument("mode",choices=("prepare","check","smoke","status"))
+    p.add_argument("mode",choices=("prepare2","prepare8","check2","check8","smoke2","smoke8","status"))
     args=p.parse_args()
     run(args.mode)
