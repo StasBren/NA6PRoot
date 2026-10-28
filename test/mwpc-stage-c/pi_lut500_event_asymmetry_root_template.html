@@ -58,7 +58,7 @@ for DETs we use that single physical chamber. No avalanche, charge induction, el
 </div>
 <svg id="hist" viewBox="0 0 900 520"></svg>
 <div class="legend"><span><i class="line" style="background:var(--blue)"></i>No field wire</span><span><i class="line fw"></i>Grounded field wire 75 μm</span></div>
-<p id="moments" class="small"></p><p id="empty" class="small" hidden><b>No valid asymmetries in this region.</b></p>
+<p id="moments" class="small"></p><p id="electronBreakdown" class="small"></p><p id="empty" class="small" hidden><b>No valid asymmetries in this region.</b></p>
 </section>
 <section class="panel full"><h2 id="tabletitle">Physical DET comparison</h2>
 <p>One statistical unit is one parent event in a chosen DET. Chamber histograms are not simply additive to a station A histogram.</p>
@@ -106,6 +106,7 @@ function drawHist(){
  $("nundef").textContent=cnt(a.undefined_A)+" / "+cnt(b.undefined_A);
  $("ne0").textContent=cnt(a.total_up+a.total_down);
  $("ne1").textContent=cnt(b.total_up+b.total_down);
+ $("electronBreakdown").textContent="Classified anode endpoints (excluding exact φ boundaries): no FW Nup="+cnt(a.total_up)+", Ndown="+cnt(a.total_down)+"; FW75 Nup="+cnt(b.total_up)+", Ndown="+cnt(b.total_down)+". These are electron counts, not avalanche gain or induced cathode charge.";
  $("empty").hidden=!!(a.valid_A+b.valid_A);
  $("scope").textContent=cnt(D.parents_generated_in_input_chunks)+" source-parent slots in "+D.number_of_source_chunks+
    " chunk(s). Selected "+geomText()+". "+(D.partial_exposure?"PILOT subset of gas crossings; not a complete generated-parent exposure.":"Complete selected native Geant4 input chunks.");
