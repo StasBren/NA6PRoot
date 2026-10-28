@@ -13,7 +13,7 @@ main{padding:0 max(20px,3vw) 26px;display:grid;grid-template-columns:minmax(340p
 .panel{background:white;border:1px solid #c6cbd1;padding:16px;min-width:0}
 .panel.full{grid-column:1/-1}.note{background:#fff8df;border-left:4px solid #c18b13;padding:12px 15px;margin:12px max(20px,3vw)}
 svg{display:block;width:100%;background:#fff!important;border:1px solid #aaa}#map{height:460px;background:#fff!important}#hist{height:420px;background:#fff!important}
-.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:12px 0}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:12px 0}
 .stat{background:#f0f2f5;border-top:2px solid #222;padding:8px;min-width:0}.stat b{font:700 17px monospace;display:block}
 .stat small{font-size:11px;color:#5f6874}.legend{display:flex;gap:19px;flex-wrap:wrap;margin:10px 0}
 .line{display:inline-block;width:24px;height:3px;vertical-align:middle;margin-right:6px}
@@ -37,6 +37,7 @@ A is <b>undefined</b> when no classified electron arrives; it is not set to zero
 For stations we pool each parent's electrons over its chambers <b>before</b> evaluating A;
 for DETs we use that single physical chamber. No avalanche, charge induction, electronics or thresholds.</div>
 <div class="toolbar">
+<label>Geometry / Garfield LUT<select id="geometry"></select></label>
 <label>Station<select id="station"></select></label>
 <label>Region<select id="det"></select></label>
 <label>Histogram Y<select id="ymode"><option value="prob">Probability / bin</option><option value="count">Event counts</option></select></label>
@@ -51,7 +52,9 @@ for DETs we use that single physical chamber. No avalanche, charge induction, el
 <div class="stat"><b id="ncross">—</b><small>Parents with crossing</small></div>
 <div class="stat"><b id="nno">—</b><small>Valid A, no FW</small></div>
 <div class="stat"><b id="nfw">—</b><small>Valid A, FW75</small></div>
-<div class="stat"><b id="nundef">—</b><small>Undefined A, no FW</small></div>
+<div class="stat"><b id="nundef">—</b><small>Undefined A, no FW / FW75</small></div>
+<div class="stat"><b id="ne0">—</b><small>Collected, classified electrons · no FW</small></div>
+<div class="stat"><b id="ne1">—</b><small>Collected, classified electrons · FW75</small></div>
 </div>
 <svg id="hist" viewBox="0 0 900 520"></svg>
 <div class="legend"><span><i class="line" style="background:var(--blue)"></i>No field wire</span><span><i class="line fw"></i>Grounded field wire 75 μm</span></div>
@@ -64,9 +67,11 @@ for DETs we use that single physical chamber. No avalanche, charge induction, el
 <footer id="provenance"></footer>
 <script>
 "use strict";
-const D=__PAYLOAD__;
-const C0=D.configs[0].key,C1=D.configs[1].key;
-const E=D.asymmetry.hist_edges;
+const PAYLOAD=__PAYLOAD__;
+let D=PAYLOAD.datasets?PAYLOAD.datasets[0].data:PAYLOAD;
+let C0=D.configs[0].key,C1=D.configs[1].key;
+let E=D.asymmetry.hist_edges;
+const geomText=()=>D.pitch_mm+" mm · LUT"+(D.lut_trials_per_cell||500);
 const $=id=>document.getElementById(id);
 const NS="http://www.w3.org/2000/svg";
 function el(tag,attrs,parent,label){
@@ -94,10 +99,12 @@ function drawHist(){
  const a=s.configurations[C0],b=s.configurations[C1];
  $("ncross").textContent=cnt(a.parents_with_gas_crossing);
  $("nno").textContent=cnt(a.valid_A);$("nfw").textContent=cnt(b.valid_A);
- $("nundef").textContent=cnt(a.undefined_A);
+ $("nundef").textContent=cnt(a.undefined_A)+" / "+cnt(b.undefined_A);
+ $("ne0").textContent=cnt(a.total_up+a.total_down);
+ $("ne1").textContent=cnt(b.total_up+b.total_down);
  $("empty").hidden=!!(a.valid_A+b.valid_A);
  $("scope").textContent=cnt(D.parents_generated_in_input_chunks)+" source-parent slots in "+D.number_of_source_chunks+
-   " chunk(s). "+(D.partial_exposure?"PILOT subset of gas crossings; not a complete generated-parent exposure.":"Complete selected native Geant4 input chunks.");
+   " chunk(s). Selected "+geomText()+". "+(D.partial_exposure?"PILOT subset of gas crossings; not a complete generated-parent exposure.":"Complete selected native Geant4 input chunks.");
  $("moments").textContent="No FW: Mean="+num(a.mean_A,4)+", RMS="+num(a.rms_A,4)+"; FW75: Mean="+
    num(b.mean_A,4)+", RMS="+num(b.rms_A,4)+", undefined="+cnt(b.undefined_A)+
    "; paired parent ΔA (FW−noFW)="+num(s.paired.mean_delta_FW_minus_noFW,4)+
@@ -145,7 +152,7 @@ function drawHist(){
  el("text",{x:L+14,y:T+25,fill:"#111","font-size":15,
      "font-weight":"bold"},r,"NA60+ Simulation");
  el("text",{x:L+14,y:T+44,fill:"#333","font-size":12},r,
-     "LUT500 • p = 3 mm • work in progress");
+     "p = "+D.pitch_mm+" mm · LUT"+(D.lut_trials_per_cell||500)+" · work in progress");
 }
 function colour(v,min,max){
  if(v===null||v===undefined||!Number.isFinite(v))return "#fff";
@@ -256,7 +263,7 @@ function table(){
    tr.addEventListener("click",()=>{det=Number(id);$("det").value=id;refresh();});
    tbody.appendChild(tr);
  }
- $("tabletitle").textContent="MS"+station+" · parent-event asymmetry by physical DET";
+ $("tabletitle").textContent="MS"+station+" · parent-event asymmetry by physical DET · "+geomText();
 }
 function setDetOptions(){
  const select=$("det");select.replaceChildren();
@@ -277,13 +284,34 @@ for(const s of D.computed_stations){
 if(window.location.pathname.includes("/pilot200/")){
  $("backTo2M").setAttribute("href","../../pi_full_jpsi_2m_dashboard_v1/pages/index.html");
 }
+if(PAYLOAD.datasets){
+ for(let i=0;i<PAYLOAD.datasets.length;i++){
+  const opt=document.createElement("option");
+  opt.value=String(i);opt.textContent=PAYLOAD.datasets[i].label;
+  $("geometry").appendChild(opt);
+ }
+ $("geometry").addEventListener("change",e=>{
+  D=PAYLOAD.datasets[Number(e.target.value)].data;
+  C0=D.configs[0].key;C1=D.configs[1].key;E=D.asymmetry.hist_edges;
+  station=D.computed_stations[0];det=-1;
+  $("station").replaceChildren();
+  for(const st of D.computed_stations){
+   const opt=document.createElement("option");opt.value=st;
+   opt.textContent="MS"+st;$("station").appendChild(opt);
+  }
+  $("station").value=String(station);setDetOptions();refresh();
+ });
+}else{
+ const opt=document.createElement("option");opt.value="0";
+ opt.textContent=geomText();$("geometry").appendChild(opt);
+}
 $("station").value=String(station);setDetOptions();refresh();
 $("station").addEventListener("change",e=>{station=Number(e.target.value);det=-1;setDetOptions();refresh();});
 $("det").addEventListener("change",e=>{det=Number(e.target.value);refresh();});
 $("ymode").addEventListener("change",drawHist);
 $("mapmode").addEventListener("change",drawMap);
 $("provenance").textContent=D.schema+" · "+D.computed_stations.length+"/6 computed MS stations · "+
- "900 spatial LUT cells × 500 independent Garfield trajectories per geometry · "+
+ "pitch="+D.pitch_mm+" mm, LUT"+(D.lut_trials_per_cell||500)+" microscopic trajectories/cell · "+
  D.number_of_source_chunks+" source chunk(s) · partial="+D.partial_exposure+
  " · No avalanche/electronics. Independent of older 2M LUT20 dashboard.";
 </script></body></html>
