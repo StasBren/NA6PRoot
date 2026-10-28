@@ -43,6 +43,13 @@ if [[ "$MODE" == "build" ]];then
   cmake -S "$REPO/test/mwpc-avalanche" \
         -B "$REPO/test/mwpc-avalanche/build" \
         -DGarfield_DIR="$HOME/na6p/install/garfieldpp/lib/cmake/Garfield"
+  # The WSL filesystem has shown clock skew. Force a FULL compilation of
+  # ONLY the new B1 C++ target; never trust Makefile source/object mtimes.
+  # No historic simulation data or other CMake targets are removed.
+  B1_BUILD="$REPO/test/mwpc-avalanche/build"
+  rm -f "$B1_BUILD/mwpc_phase_b_native_muon_3p3"
+  rm -f "$B1_BUILD/CMakeFiles/mwpc_phase_b_native_muon_3p3.dir/phaseB_native_muon_3p3_avalanche.cxx.o"
+  rm -f "$B1_BUILD/mwpc_phase_b_native_muon_3p3.build_sha256.json"
   cmake --build "$REPO/test/mwpc-avalanche/build" \
         --target mwpc_phase_b_native_muon_3p3 -j2
   "$PY" "$DRIVER" stamp-build
