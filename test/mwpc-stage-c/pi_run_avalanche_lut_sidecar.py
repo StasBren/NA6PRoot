@@ -190,8 +190,18 @@ def validate_outputs(run_dir, chosen):
 def run(mode):
     index_manifest,rows=load_index()
     print("PASS 8 original frozen LUT20/500 SHA checks; 432 exact-start indexed electrons")
-    if mode=="check":return
     exe_sha=check_executable()
+    # Parse the ACTUAL SHA-verified input in the current C++ executable
+    # before allocating a new immutable physics output directory.
+    cpp=subprocess.run([str(EXE),"--validate-lut-input",
+                        str(INDEX/"lut_exact_start_index.csv")],
+                       capture_output=True,text=True,check=False,
+                       env=garfield_runtime_env())
+    if cpp.returncode or "PASS parsed 432 ORIGINAL frozen LUT20/500" not in cpp.stdout:
+        raise RuntimeError("B1 C++ exact-start schema preflight failed:\n"+
+                           cpp.stdout+"\n"+cpp.stderr)
+    print(cpp.stdout.strip())
+    if mode=="check":return
     selected=choose_rows(rows,mode)
     run_dir=ROOT/f"run_{mode}_independent_full_start_avalanche_v1"
     if run_dir.exists():
