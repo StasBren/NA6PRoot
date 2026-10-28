@@ -311,3 +311,25 @@ bash test/mwpc-stage-c/run_pi_native_muon_b1.sh check2
 If successful, separately run the already-created immutable
 `smoke2retry2` mode, which remains unused after the previous
 compiler failure. Both previous failed run folders remain unchanged.
+
+
+## 29 Oct 2026: benchmark --seeds 1 fails on HEED_DATABASE (runtime fix)
+
+The exact user invocation `python3 test/mwpc-stage-c/pi_benchmark_native_muon_b1.py --seeds 1` succeeded in reading its two native Geant4 muons and checking their sensor medium, but **failed before any Garfield avalanche** when C++ `TrackHeed::Initialise` could not find `HEED_DATABASE`, `GARFIELD_INSTALL` or `GARFIELD_HOME`. This is a **process environment** issue, not a detector/physics result. Direct Python does not automatically run `setupGarfield.sh`, even though the project's Bash runner tries to source it.
+
+Garfield++ officially expects `HEED_DATABASE` to point at the installed `share/Heed/database` directory (normally `~/na6p/install/garfieldpp/share/Heed/database`), with `setupGarfield.sh` under `share/Garfield`. The source tree can also provide `Heed/heed++/database`.
+
+New `pi_garfield_runtime_env.py` locates a **populated** database from a valid explicitly set `HEED_DATABASE`, `GARFIELD_INSTALL`, `GARFIELD_HOME`, the known project install prefix and known Garfield source prefix. It never silently accepts an empty or missing database. Python preflight `--validate-input`, true `--validate-heed`, full B1 smoke, and `--benchmark` now all pass this exact validated environment to their C++ children, even when invoked directly from Python. The benchmark's manifest records the selected Heed database path. New standalone regression `test_pi_garfield_runtime_env.py` tested success/failure cases using temporary fake databases; this regression was executed in the ChatGPT container. It is not a Garfield++ simulation.
+
+No C++ source, gas, avalanche physics, frozen Heed/Geant4 input or LUT20/500 was changed by the environment fix. **No rebuild is necessary** if the existing C++ executable was successfully built and SHA-stamped; the last reported build did pass. The failed benchmark aborted in its preflight **before creating** `benchmark_true_Heed_k1_chunk0001_v1`, so the same `--seeds 1` command may be rerun without overwriting run outputs:
+
+```bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git pull --ff-only
+python3 test/mwpc-stage-c/test_pi_garfield_runtime_env.py
+python3 test/mwpc-stage-c/pi_benchmark_native_muon_b1.py --seeds 1
+```
+
+Before running, the script now prints `PASS Garfield/Heed database: ...`. If the real installation is nonstandard and the utility fails closed, inspect with `find "$HOME/na6p" -type d -path '*/share/Heed/database' -print`, or explicitly set `HEED_DATABASE` to the actual directory. Do not install a new Garfield++ or alter old run directories.
+
+If the benchmark finishes, read per-seed wall times/caps and the rough 2-muon extrapolation; then decide whether extending the old exact-start LUT20/500 with an avalanche sidecar is computationally justified. Results remain unverified until WSL completes `--seeds 1`.
