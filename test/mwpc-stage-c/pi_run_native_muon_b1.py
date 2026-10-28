@@ -23,7 +23,11 @@ from pi_prepare_muon_avalanche_b1 import OUT, FIELDS, sha, make, REPO
 HERE=Path(__file__).resolve().parent
 CXX=REPO/"test/mwpc-avalanche/phaseB_native_muon_3p3_avalanche.cxx"
 EXE=REPO/"test/mwpc-avalanche/build/mwpc_phase_b_native_muon_3p3"
-def run_dir(n):return OUT/f"run_smoke{n}_chunk0001"
+def run_dir(n, retry=False):
+    # A FAILED run is kept byte-for-byte for forensics. The first retry
+    # after fixing C++ CSV CRLF handling has a distinct immutable run ID.
+    name=f"run_smoke{n}_crlf_fix1_chunk0001" if retry else f"run_smoke{n}_chunk0001"
+    return OUT/name
 def input_dir(n):return OUT/f"smoke{n}_chunk0001"
 GEOMS=("p3_noFW","p3_FW75","p4_noFW","p4_FW75")
 PREFIX="native_muon_b1"
@@ -72,6 +76,18 @@ def check_executable():
     if EXE.stat().st_mtime_ns < CXX.stat().st_mtime_ns:
         raise RuntimeError("C++ source newer than executable; rebuild before running")
     return sha(EXE)
+
+def validate_native_csv_before_physics(selection):
+    # Test the ACTUAL C++ CSV decoder on the frozen original Python output
+    # before starting any Heed or Garfield physics work.
+    res=subprocess.run([str(EXE),"--validate-input",str(selection)],
+                       capture_output=True,text=True,check=False)
+    if res.returncode!=0:
+        raise RuntimeError("C++ pre-physics input validation failed:\n"+
+                           res.stdout+"\n"+res.stderr)
+    if "PASS: parsed" not in res.stdout:
+        raise RuntimeError("B1 C++ missing validated-input completion marker")
+    print(res.stdout.strip())
 
 def check_crossings(path,selected):
     with path.open(newline="") as f:
@@ -174,6 +190,9 @@ def run(mode):
         for n in (2,8):
             for d in (input_dir(n),run_dir(n)):
                 print(d, "exists" if d.exists() else "missing")
+            if n==2:
+                print(run_dir(n, retry=True),
+                      "exists" if run_dir(n, retry=True).exists() else "missing")
             if (run_dir(n)/"manifest.json").is_file():
                 m=json.loads((run_dir(n)/"manifest.json").read_text())
                 print("Completed:",m["status"],"crossings:",m["n_true_geant4_crossings"])
@@ -182,15 +201,19 @@ def run(mode):
         n=int(mode.replace("check","") or "2")
         print("Source SHA:",source_check())
         print("Binary SHA:",check_executable())
-        print("Input SHA:",check_input(n)[1]["input_sha256"])
+        selection, input_meta, _ = check_input(n)
+        print("Input SHA:",input_meta["input_sha256"])
+        validate_native_csv_before_physics(selection)
         print(f"PASS static B1 executable and {n} immutable real native muon inputs")
         return
-    if not mode.startswith("smoke"):raise ValueError("Use prepare2|prepare8|check2|check8|smoke2|smoke8|status")
-    n=int(mode.replace("smoke","") or "2")
-    if n not in (2,8):raise ValueError("Only 2 or 8 crossings per pilot")
+    if mode not in ("smoke2","smoke8","smoke2retry1"):
+        raise ValueError("Use prepare2|prepare8|check2|check8|smoke2|smoke2retry1|smoke8|status")
+    retry = mode=="smoke2retry1"
+    n = 2 if retry else int(mode.replace("smoke",""))
     binary_sha=check_executable()
     selection,meta,selected=check_input(n)
-    run_dir_=run_dir(n)
+    validate_native_csv_before_physics(selection)
+    run_dir_=run_dir(n, retry=retry)
     if run_dir_.exists():raise FileExistsError(
         "Preserving prior B1 output (including interrupted): "+str(run_dir_))
     run_dir_.mkdir(parents=True)
@@ -255,6 +278,6 @@ def run(mode):
 
 if __name__=="__main__":
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument("mode",choices=("prepare2","prepare8","check2","check8","smoke2","smoke8","status"))
+    p.add_argument("mode",choices=("prepare2","prepare8","check2","check8","smoke2","smoke2retry1","smoke8","status"))
     args=p.parse_args()
     run(args.mode)
