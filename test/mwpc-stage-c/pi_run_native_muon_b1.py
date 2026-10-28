@@ -23,10 +23,18 @@ from pi_prepare_muon_avalanche_b1 import OUT, FIELDS, sha, make, REPO
 HERE=Path(__file__).resolve().parent
 CXX=REPO/"test/mwpc-avalanche/phaseB_native_muon_3p3_avalanche.cxx"
 EXE=REPO/"test/mwpc-avalanche/build/mwpc_phase_b_native_muon_3p3"
-def run_dir(n, retry=False):
-    # A FAILED run is kept byte-for-byte for forensics. The first retry
-    # after fixing C++ CSV CRLF handling has a distinct immutable run ID.
-    name=f"run_smoke{n}_crlf_fix1_chunk0001" if retry else f"run_smoke{n}_chunk0001"
+def run_dir(n, retry=0):
+    # Failed runs remain byte-for-byte intact for forensics. A C++ gas
+    # source/medium fix needs its OWN output directory, not overwrite the
+    # earlier original/CRLF failure records.
+    if retry==0:
+        name=f"run_smoke{n}_chunk0001"
+    elif retry==1:
+        name=f"run_smoke{n}_crlf_fix1_chunk0001"
+    elif retry==2:
+        name=f"run_smoke{n}_gas_medium_fix2_chunk0001"
+    else:
+        raise ValueError("Unrecognized immutable B1 retry identifier")
     return OUT/name
 def input_dir(n):return OUT/f"smoke{n}_chunk0001"
 GEOMS=("p3_noFW","p3_FW75","p4_noFW","p4_FW75")
@@ -85,8 +93,10 @@ def validate_native_csv_before_physics(selection):
     if res.returncode!=0:
         raise RuntimeError("C++ pre-physics input validation failed:\n"+
                            res.stdout+"\n"+res.stderr)
-    if "PASS: parsed" not in res.stdout:
-        raise RuntimeError("B1 C++ missing validated-input completion marker")
+    if ("PASS: parsed" not in res.stdout or
+        "PASS: Heed gas source medium is ionisable" not in res.stdout):
+        raise RuntimeError("B1 C++ missing HEED gas-medium preflight marker:\n"+
+                           res.stdout)
     print(res.stdout.strip())
 
 def check_crossings(path,selected):
@@ -191,8 +201,9 @@ def run(mode):
             for d in (input_dir(n),run_dir(n)):
                 print(d, "exists" if d.exists() else "missing")
             if n==2:
-                print(run_dir(n, retry=True),
-                      "exists" if run_dir(n, retry=True).exists() else "missing")
+                for retry in (1,2):
+                    d=run_dir(n,retry=retry)
+                    print(d,"exists" if d.exists() else "missing")
             if (run_dir(n)/"manifest.json").is_file():
                 m=json.loads((run_dir(n)/"manifest.json").read_text())
                 print("Completed:",m["status"],"crossings:",m["n_true_geant4_crossings"])
@@ -206,9 +217,9 @@ def run(mode):
         validate_native_csv_before_physics(selection)
         print(f"PASS static B1 executable and {n} immutable real native muon inputs")
         return
-    if mode not in ("smoke2","smoke8","smoke2retry1"):
-        raise ValueError("Use prepare2|prepare8|check2|check8|smoke2|smoke2retry1|smoke8|status")
-    retry = mode=="smoke2retry1"
+    if mode not in ("smoke2","smoke8","smoke2retry1","smoke2retry2"):
+        raise ValueError("Use prepare2|prepare8|check2|check8|smoke2|smoke2retry1|smoke2retry2|smoke8|status")
+    retry = 2 if mode=="smoke2retry2" else (1 if mode=="smoke2retry1" else 0)
     n = 2 if retry else int(mode.replace("smoke",""))
     binary_sha=check_executable()
     selection,meta,selected=check_input(n)
@@ -278,6 +289,6 @@ def run(mode):
 
 if __name__=="__main__":
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument("mode",choices=("prepare2","prepare8","check2","check8","smoke2","smoke2retry1","smoke8","status"))
+    p.add_argument("mode",choices=("prepare2","prepare8","check2","check8","smoke2","smoke2retry1","smoke2retry2","smoke8","status"))
     args=p.parse_args()
     run(args.mode)
