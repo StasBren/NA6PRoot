@@ -80,6 +80,7 @@ def run():
             trial.update(lut_trials="500",original_geometry="p3_noFW",
                 original_lut_sha256="a"*64,box_id="465",sample="250",
                 original_random_seed="9023",crossing_id=identity,
+                old_collected="1",old_field_wire_collected="0",
                 configuration="p3_noFW",seed_u_mm=original["u_start_mm"],
                 seed_v_mm=original["v_start_mm"],seed_w_mm="0",
                 ion_births="1",garfield_ni="1",ion_up="1",ion_down="0",
