@@ -141,10 +141,14 @@ def run(mode):
         stats["csv_sha256"]=sha(out);stats["log_sha256"]=sha(log)
         report["geometries"][name]=stats
         (dest/"run_config.json").write_text(json.dumps(report,indent=2)+"\n")
+    # Seal the persisted run configuration as COMPLETE before publishing
+    # the scientific summary. Earlier smoke5 has a frozen stale
+    # run_config.json status=incomplete; preserve that historical source.
     report["status"]="complete"
+    (dest/"run_config.json").write_text(json.dumps(report,indent=2)+"\n")
     (dest/"summary.json").write_text(json.dumps(report,indent=2)+"\n")
     report["sha256_outputs"]={p.name:sha(p) for p in sorted(dest.iterdir())
-                              if p.is_file() and p.name not in ("manifest.json","run_config.json")}
+                              if p.is_file() and p.name != "manifest.json"}
     (dest/"manifest.json").write_text(json.dumps(report,indent=2)+"\n")
     print("PASS: "+str(dest))
     for name,s in report["geometries"].items():
