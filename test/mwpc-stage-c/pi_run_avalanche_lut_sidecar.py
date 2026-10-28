@@ -112,7 +112,9 @@ def choose_rows(rows, mode):
             chosen.append(row)
     return chosen
 
-def validate_outputs(run_dir, chosen):
+def validate_outputs(run_dir, chosen, *, reservoir_limit=100):
+    if not isinstance(reservoir_limit,int) or reservoir_limit<0 or reservoir_limit>100:
+        raise ValueError("Invalid ion birth reservoir sample limit")
     keys={(int(r["lut_trials"]),r["geometry"],int(r["box_id"]),
            int(r["sample"])):r for r in chosen}
     files=[run_dir/("lut_avalanche"+suffix) for suffix in (
@@ -174,7 +176,7 @@ def validate_outputs(run_dir, chosen):
             raise ValueError("Reservoir full-ion denominator mismatch")
         grouped[k]+=1
     for key,n in totals.items():
-        if grouped[key]!=min(n,100):
+        if grouped[key]!=min(n,reservoir_limit):
             raise ValueError("Ion-birth reservoir is incomplete/biased")
     return {
         "n_trials":len(trials),"n_timed":len(times),
