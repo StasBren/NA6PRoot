@@ -8,6 +8,7 @@ from pathlib import Path
 
 from pi_prepare_muon_avalanche_b1 import validate, FIELDS
 from pi_run_native_muon_b1 import GEOMS, CROSSING_COLUMNS, check_crossings
+from pi_benchmark_native_muon_b1 import summarize, percent
 
 def crossing():
     r={k:"0" for k in FIELDS}
@@ -81,6 +82,30 @@ def run():
         try:check_crossings(path,[r])
         except ValueError:pass
         else:raise AssertionError("Failed to reject non-matching Heed primaries")
-    print("PASS real muon momentum/chord, finite-edge rejection, B1 four-way shared-Heed and angular count conservation tests")
+    # Tiny synthetic BENCHMARK_ONLY regression; four geometry samples with
+    # identical real Heed primary counts and known wall-clock arithmetic.
+    timed=[]
+    for geom in GEOMS:
+        for j in (0,2):
+            timed.append({"crossing_id":"|".join(
+                r[k] for k in ("source","chunk","event","hit_index","track_id","station","det_id")),
+                "configuration":geom,
+                "primary_index":str(j),
+                "n_true_heed_primaries":"5",
+                "wall_seconds":"0.2" if j==0 else "0.4",
+                "avalanche_electrons":"30","avalanche_ions":"20",
+                "ion_births":"20","collected_e":"20"})
+    stats=summarize(timed,[r])
+    assert len(stats)==4
+    assert all(abs(d["mean_seconds_per_seed"]-0.3)<1e-10 for d in stats.values())
+    assert all(abs(d["rough_full_native_muon_2event_time_seconds"]-1.5)<1e-10
+               for d in stats.values())
+    assert percent([1.,2.,3.],.5)==2.
+    repeated=[dict(x) for x in timed]
+    repeated[0]["primary_index"]=repeated[1]["primary_index"]
+    try:summarize(repeated,[r])
+    except ValueError:pass
+    else:raise AssertionError("Timing benchmark duplicate primary was not rejected")
+    print("PASS real muon momentum/chord, finite-edge rejection, B1 accounting and 4-geometry timing benchmark regression tests")
 
 if __name__=="__main__":run()
