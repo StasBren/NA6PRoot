@@ -169,10 +169,16 @@ def assemble(input_dir, verify_raw=True, geometry=None):
             "gas_crossings":exposure,
             "configs":{cfg:{
                 "crossings":int(complete[cfg]["crossings"]),
+                "n_anode_collected":int(complete[cfg]["n_anode_collected"]),
+                "n_upper":int(complete[cfg]["n_upper"]),
+                "n_lower":int(complete[cfg]["n_lower"]),
                 **{obs:complete[cfg][obs] for obs in EXPECTED_STATS},
             } for cfg in sorted(configs)},
             "det":{det:{cfg:{
                 "crossings":int(values[cfg]["crossings"]),
+                "n_anode_collected":int(values[cfg]["n_anode_collected"]),
+                "n_upper":int(values[cfg]["n_upper"]),
+                "n_lower":int(values[cfg]["n_lower"]),
                 **{obs:values[cfg][obs] for obs in EXPECTED_STATS}
             } for cfg in sorted(configs)} for det, values in det_data.items()},
             "layout":sorted(layout[st].values(), key=lambda c:c["id"]),
