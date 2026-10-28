@@ -13,6 +13,9 @@ def test_parent_vs_crossing():
     with tempfile.TemporaryDirectory(prefix="parent_geometry_fixture_") as tmp:
         csvfile=Path(tmp)/"tiny.csv.gz"
         old={"configs":[{"key":tag(3.,0.)},{"key":tag(3.,75.)}],
+             "asymmetry":{"definition":"A=(N_up-N_down)/(N_up+N_down)",
+                          "hist_edges":[-1+2*i/41 for i in range(42)],
+                          "statistical_unit":"one J/psi parent per station or DET"},
              "stations":{}}
         summary={"stations":{}}
         for st in range(6):
