@@ -92,3 +92,9 @@ target_compile_features(mwpc_phase_b_opposite_cathode_stereo PRIVATE cxx_std_17)
 add_executable(mwpc_phase_b_avalanche_angle_scan phaseB_avalanche_angle_scan.cxx)
 target_link_libraries(mwpc_phase_b_avalanche_angle_scan PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_phase_b_avalanche_angle_scan PRIVATE cxx_std_17)
+
+# PI muon-driven B1: original immutable Geant4 gas chords + true TrackHeed
+# clusters and every seed's microscopic ionization. New ±3mm 4-geometry code.
+add_executable(mwpc_phase_b_native_muon_3p3 phaseB_native_muon_3p3_avalanche.cxx)
+target_link_libraries(mwpc_phase_b_native_muon_3p3 PRIVATE Garfield::Garfield)
+target_compile_features(mwpc_phase_b_native_muon_3p3 PRIVATE cxx_std_17)
