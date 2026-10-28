@@ -283,10 +283,11 @@ Code review additionally found and fixed:
 - `check2` first validates genuine C++ CSV parsing and the gas-medium
   pointer, then runs the Heed-only check. A successful Python synthetic
   test is no longer mistaken for successful Heed physics.
-- `build` writes a **source SHA256 / executable SHA256** stamp only
-  after CMake completes; `check2` verifies it. This handles noisy WSL
-  file modification timestamps / clock-skew warnings without accepting
-  an old executable by accident.
+- `build` deletes **only the dedicated new B1 object, binary and
+  old build stamp**, then recompiles that target regardless of WSL clock
+  skew. It writes a **source SHA256 / executable SHA256** stamp only after
+  CMake completes; `check2` verifies it. It never removes old Geant4
+  ROOT datasets, stage-A pilots or failed physics runs.
 
 **Validation status:** the header signature is supported by the actual
 compiler diagnostics and the Garfield++ manual. The changed files have
