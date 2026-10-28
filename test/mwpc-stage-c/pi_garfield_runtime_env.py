@@ -40,6 +40,10 @@ def garfield_runtime_env(*, environ=None, home=None):
         add(source / 'share' / 'Heed' / 'database', source)
         add(source / 'Heed' / 'heed++' / 'database', source)
     add(pref / 'share' / 'Heed' / 'database', pref)
+    # Also accept the local Garfield source database when a WSL install
+    # has binaries but has not installed the Heed data into share/.
+    source_default = user_home / 'na6p' / 'src' / 'garfieldpp'
+    add(source_default / 'Heed' / 'heed++' / 'database', pref)
 
     for path, install in candidates:
         if not path.is_dir():
