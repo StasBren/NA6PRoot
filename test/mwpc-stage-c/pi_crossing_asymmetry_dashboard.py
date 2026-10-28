@@ -189,7 +189,7 @@ def render(input_dir, out=None, replace=False, verify_raw=True, geometry=None,
     safe = json.dumps(payload,ensure_ascii=False,separators=(",",":"),
                       allow_nan=False).replace("</","<\\/")
     html = html.replace("__PAYLOAD__",safe)
-    if "parent event" not in html or "physical muon gas crossing" not in html:
+    if "parent-event dashboard" not in html or "physical muon gas crossing" not in html:
         raise ValueError("Missing crossing-level semantics in dashboard")
     if out.exists() and not replace:
         if out.read_text(encoding="utf-8") == html:
