@@ -80,3 +80,35 @@ tail -n 35 "$HOME/na6p/lut500_overnight_20261029.log"
 Google Drive folder: https://drive.google.com/drive/folders/1Xbh45V86BhVu-WLYSM5qtosqPEG363M7
 
 This C++ overnight mode has NOT been compiled or physically run on the user's WSL at document creation. Do not claim it was.
+
+
+## 29 Oct 2026: smoke failed in Python-only CSV identity check; RECOVER, DO NOT DELETE
+
+User confirmed successful `build` and full 84,000 frozen source-position extraction, but compact5 smoke raised:
+
+`ValueError: LUT identities and endpoint flags no longer paired`
+
+Root cause is isolated in `pi_run_avalanche_lut_sidecar.py::validate_outputs`: overnight Python generated original `random_seed` as an `int`, while the same integer from C++ output is necessarily a `str` loaded with `csv.DictReader`. Previous check compared `"123" != 123` and falsely rejected the row. Fixed to `int(...) != int(...)` and added a regression test for both equal-different-types and unequal numerical seeds.
+
+The C++ process itself had already returned success; the error happened only AFTER it completed, in Python output validation. The new explicit `recover-smoke` command **does not repeat or modify any original eight Garfield trial CSVs**. It requires the exact original selected source keys, all raw CSV output identities and full ion birth count conservation, and C++ PASS log, then creates a SHA-stamped `complete.json`. Next it proceeds with the originally intended full100-vs-compact5 SAME-input Garfield physical equivalence comparison; only upon success writes `smoke_verified.json`. The original incomplete smoke directory is deliberately preserved, without `rm`, `mv`, `sync`, `--force`, or manual CSV edits.
+
+**Continue from the observed error**:
+
+```bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git pull --ff-only
+python3 test/mwpc-stage-c/test_pi_avalanche_lut_sidecar.py
+python3 test/mwpc-stage-c/test_pi_lut500_overnight.py
+python3 test/mwpc-stage-c/pi_run_lut500_overnight.py recover-smoke
+```
+
+**Require** `PASS recovered 8 ORIGINAL ... without rerun` and `PASS compact5 smoke AND exact 100-vs-5 ... physics identity`. If anything fails, STOP and preserve diagnostic files; no night run.
+
+Only then:
+
+```bash
+nohup nice -n 15 python3 -u test/mwpc-stage-c/pi_run_lut500_overnight.py overnight --hours 8.75 --upload > "$HOME/na6p/lut500_overnight_20261029.log" 2>&1 < /dev/null &
+echo "Night PID: $!"
+```
+
+This Python-only recovery patch DOES NOT change C++ source/binary; recompilation is NOT needed after the previous successful B1 build. New overnight physics on 84k starts remains unrun/unverified until user logs and Drive publication arrive.
