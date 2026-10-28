@@ -270,13 +270,18 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
                  std::ostream& seedOut,std::ostream& birthOut,
                  std::ostream& hitOut,int clusters,int dropped,int heedFailed,
                  const std::vector<std::size_t>* onlyIndices=nullptr,
-                 std::ostream* timingOut=nullptr) {
+                 std::ostream* timingOut=nullptr,
+                 const bool exactLutCellStart=false) {
   const double p=.1*geom.pitchMm;
   const double wireRadius=.0015; // 30 um diameter = 0.0015 cm radius
   // For the finite centered anode grid, translate the Geant4 physical
   // entrance u to a central periodic 9-anode patch without changing the
   // electron's offset from its nearest actual wire.
-  const double phaseCm=.1*EntrancePhase(h.a[0],h.station,geom.pitchMm);
+  // The native-muon path uses the physical station/anode phase, while
+  // frozen LUT20/500 starts are ALREADY in a nearest-anode local cell
+  // (-pitch/2,+pitch/2). Never add a station parity offset to LUT starts.
+  const double phaseCm=exactLutCellStart?0.:
+      .1*EntrancePhase(h.a[0],h.station,geom.pitchMm);
   const double fw=geom.fwUm*1.e-4;
   Garfield::ComponentAnalyticField field;
   field.SetMedium(&gas);
@@ -401,6 +406,141 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
 }
 } // namespace
 
+struct LutSeedRow {
+  int trials=0,box=0,iu=0,iv=0,sample=0,originalSeed=0;
+  std::string label,sha,originalCollected,originalFWCollected;
+  std::string originalWire,originalPhi,originalTime,originalEnergy;
+  double u=0,v=0,w=0;
+};
+std::vector<LutSeedRow> ReadLutExactStarts(const std::string& input) {
+  std::ifstream in(input);
+  if(!in)throw std::runtime_error("Cannot open original LUT exact-start subset: "+input);
+  const std::string headerExpected=
+    "lut_trials,geometry,original_lut_sha256,box_id,iu,iv,sample,"
+    "random_seed,u_start_mm,v_start_mm,w_start_mm,"
+    "old_drift_ok,old_collected,old_field_wire_collected,"
+    "old_wire_index,old_phi_hit_deg,old_drift_time_ns,old_last_step_energy_eV";
+  std::string header;
+  if(!std::getline(in,header))throw std::runtime_error("Empty LUT exact-start index");
+  if(!header.empty()&&header.back()=='\r')header.pop_back();
+  if(header!=headerExpected)
+    throw std::runtime_error("Wrong frozen exact-start CSV index header: "+header);
+  std::vector<LutSeedRow> out;
+  std::string line;
+  while(std::getline(in,line)) {
+    if(!line.empty()&&line.back()=='\r')line.pop_back();
+    if(line.empty())continue;
+    const auto f=Split(line);
+    if(f.size()!=18)throw std::runtime_error("LUT exact-start CSV row: expected 18 columns");
+    LutSeedRow q;
+    q.trials=Integer(f[0]);q.label=f[1];q.sha=f[2];
+    q.box=Integer(f[3]);q.iu=Integer(f[4]);q.iv=Integer(f[5]);
+    q.sample=Integer(f[6]);q.originalSeed=Integer(f[7]);
+    q.u=Numeric(f[8]);q.v=Numeric(f[9]);q.w=Numeric(f[10]);
+    q.originalCollected=f[12];q.originalFWCollected=f[13];
+    q.originalWire=f[14];q.originalPhi=f[15];q.originalTime=f[16];
+    q.originalEnergy=f[17];
+    const auto it=std::find_if(GEOMS.begin(),GEOMS.end(),
+      [&](const Geometry& g){return g.label==q.label;});
+    if(it==GEOMS.end())throw std::runtime_error("Unknown LUT geometry: "+q.label);
+    const auto pitch=it->pitchMm;
+    const int nu=static_cast<int>(std::lround(pitch/.1));
+    if((q.trials!=20&&q.trials!=500)||q.sha.size()!=64||
+       !std::all_of(q.sha.begin(),q.sha.end(),[](char x){
+           return (x>='0'&&x<='9')||(x>='a'&&x<='f');})||
+       q.iu<0||q.iu>=nu||q.iv<0||q.iv>=30||
+       q.sample<0||q.sample>=q.trials||q.box!=q.iu*30+q.iv||
+       q.originalSeed<0||std::abs(q.w)>1.e-8||
+       q.u<-.5*pitch+q.iu*.1-1.e-6||
+       q.u>-.5*pitch+(q.iu+1)*.1+1.e-6||
+       q.v< -3.+q.iv*.2-1.e-6||
+       q.v> -3.+(q.iv+1)*.2+1.e-6||
+       (q.originalCollected!="0"&&q.originalCollected!="1")||
+       (q.originalFWCollected!="0"&&q.originalFWCollected!="1"))
+      throw std::runtime_error("Invalid exact saved LUT start/physics identity");
+    out.push_back(q);
+  }
+  if(out.empty()||out.size()>432)
+    throw std::runtime_error("Exact-start pilot input must contain 1..432 rows");
+  return out;
+}
+void RunLutSidecar(const std::string& input,const std::string& prefix) {
+  const auto starts=ReadLutExactStarts(input);
+  Garfield::MediumMagboltz gas;
+  gas.SetComposition("ar",70.,"co2",30.);
+  gas.SetTemperature(293.15);gas.SetPressure(760.);
+  gas.SetMaxElectronEnergy(200.);
+  gas.Initialise(false);
+  std::ofstream trialOut(prefix+"_trials.csv"),
+                birthsOut(prefix+"_birth_reservoir.csv"),
+                timingOut(prefix+"_timing.csv");
+  if(!trialOut||!birthsOut||!timingOut)
+    throw std::runtime_error("Cannot create new LUT avalanche sidecar outputs");
+  trialOut << "lut_trials,original_geometry,original_lut_sha256,box_id,"
+              "iu,iv,sample,original_random_seed,original_u_start_mm,"
+              "original_v_start_mm,original_w_start_mm,old_collected,"
+              "old_field_wire_collected,old_wire_index,old_phi_hit_deg,"
+              "old_drift_time_ns,old_last_step_energy_eV,"
+              "crossing_id,configuration,primary_index,garfield_seed,"
+              "seed_u_mm,seed_v_mm,seed_w_mm,seed_energy_eV,"
+              "garfield_ne,garfield_ni,ion_births,collected_e,"
+              "attached,other,successful,capped,ion_up,ion_down,"
+              "ion_top,ion_bottom,A_ion_hemi,A_ion_TB\n";
+  birthsOut << "crossing_id,configuration,primary_index,u_mm,v_mm,w_mm,"
+               "t_ns,seed_ion_births_total,reservoir_weight\n";
+  timingOut << "crossing_id,station,theta_u_deg,theta_w_deg,configuration,"
+               "primary_index,n_true_heed_primaries,u_seed_mm,v_seed_mm,"
+               "garfield_seed,wall_seconds,avalanche_electrons,"
+               "avalanche_ions,ion_births,collected_e,success,capped\n";
+  for(std::size_t i=0;i<starts.size();++i){
+    const auto& q=starts[i];
+    const auto it=std::find_if(GEOMS.begin(),GEOMS.end(),
+       [&](const Geometry& g){return g.label==q.label;});
+    // Pseudo-Crossing holds the *RNG namespace* for one original LUT
+    // electron. It is NOT a Geant4 track and must never be used as one.
+    Crossing h;
+    h.source="original-LUT-exact-start-NOT-muon";
+    h.station=0;h.det=0;h.thetaU=0;h.thetaW=0;
+    h.length=0;h.momentum=0;
+    const std::uint64_t raw=static_cast<std::uint64_t>(q.originalSeed)+
+         1000003ULL*static_cast<unsigned>(q.trials)+
+         1009ULL*static_cast<unsigned>(q.box)+
+         1048583ULL*static_cast<unsigned>(it-GEOMS.begin());
+    h.heedSeed=static_cast<unsigned>(1+raw%1900000000ULL);
+    const std::string identity="LUT"+std::to_string(q.trials)+"|"+
+         q.label+"|"+std::to_string(q.box)+"|"+std::to_string(q.sample);
+    Primary electron;
+    electron.u=.1*q.u;electron.v=.1*q.v;electron.w=.1*q.w;
+    electron.t=0.;
+    std::vector<Primary> primaries{electron};
+    std::ostringstream oneSeed,oneBirth,oneHit;
+    RunGeometry(gas,*it,h,primaries,identity,oneSeed,oneBirth,oneHit,
+                0,0,0,nullptr,&timingOut,true);
+    std::string record=oneSeed.str();
+    if(record.empty()||record.back()!='\n')
+      throw std::runtime_error("Missing single-electron avalanche result");
+    record.pop_back();
+    if(record.find('\n')!=std::string::npos)
+      throw std::runtime_error("More than one seed row in exact-start sidecar");
+    trialOut << q.trials << "," << q.label << "," << q.sha << ","
+             << q.box << "," << q.iu << "," << q.iv << "," << q.sample << ","
+             << q.originalSeed << "," << std::setprecision(12)
+             << q.u << "," << q.v << "," << q.w << ","
+             << q.originalCollected << "," << q.originalFWCollected << ","
+             << q.originalWire << "," << q.originalPhi << ","
+             << q.originalTime << "," << q.originalEnergy << ","
+             << record << "\n";
+    birthsOut << oneBirth.str();
+    trialOut.flush();birthsOut.flush();
+    if((i+1)%16==0||i+1==starts.size()) {
+      std::cout<<"LUT avalanche sidecar "<<i+1<<"/"<<starts.size()
+               <<" original exact starts; NO Geant4-muon aggregate\n"<<std::flush;
+    }
+  }
+  std::cout<<"PASS: independent full-start microscopic avalanche sidecar "
+           <<starts.size()<<" frozen LUT trials; NOT a continuation "
+           "of old drift endpoints, NOT a real-muon measurement\n";
+}
 int main(int argc,char**argv) {
   try{
     if(argc==3 && std::string(argv[1])=="--validate-input") {
@@ -521,8 +661,12 @@ int main(int argc,char**argv) {
                " partial crossing totals MUST NOT be treated as A_ion(mu)\n";
       return 0;
     }
+    if(argc==4 && std::string(argv[1])=="--lut-sidecar"){
+      RunLutSidecar(argv[2],argv[3]);
+      return 0;
+    }
     if(argc!=4)throw std::runtime_error(
-      "Usage: mwpc_phase_b_native_muon_3p3 INPUT_NATIVE_CSV OUTPUT_PREFIX MAX_PRIMARY_ELECTRONS | --validate-input INPUT_NATIVE_CSV | --validate-heed INPUT_NATIVE_CSV");
+      "Usage: mwpc_phase_b_native_muon_3p3 INPUT_NATIVE_CSV OUTPUT_PREFIX MAX_PRIMARY_ELECTRONS | --validate-input INPUT_NATIVE_CSV | --validate-heed INPUT_NATIVE_CSV | --lut-sidecar FROZEN_EXACT_START_INDEX_CSV OUTPUT_PREFIX");
     const std::string input=argv[1],prefix=argv[2];
     const int maxPrimary=std::stoi(argv[3]);
     if(maxPrimary<1||maxPrimary>1000)throw std::runtime_error("max primaries must be 1..1000");
