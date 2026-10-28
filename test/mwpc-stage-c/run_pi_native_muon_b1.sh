@@ -9,8 +9,8 @@ HERE="$(cd "$(dirname "$0")" && pwd -P)"
 REPO="$(cd "$HERE/../.." && pwd -P)"
 cd "$REPO"
 MODE="${1:-}"
-if [[ $# -ne 1 || ! "$MODE" =~ ^(build|prepare2|prepare8|check2|check8|smoke2|smoke2retry1|smoke2retry2|smoke8|status)$ ]];then
-  echo "Usage: bash $0 build|prepare2|prepare8|check2|check8|smoke2|smoke2retry1|smoke2retry2|smoke8|status" >&2
+if [[ $# -ne 1 || ! "$MODE" =~ ^(build|prepare2|prepare8|check2|check8|benchmark3|smoke2|smoke2retry1|smoke2retry2|smoke8|status)$ ]];then
+  echo "Usage: bash $0 build|prepare2|prepare8|check2|check8|benchmark3|smoke2|smoke2retry1|smoke2retry2|smoke8|status" >&2
   exit 2
 fi
 PY=python3
@@ -18,7 +18,8 @@ DRIVER="$HERE/pi_run_native_muon_b1.py"
 "$PY" -m py_compile \
     "$HERE/pi_prepare_muon_avalanche_b1.py" \
     "$DRIVER" \
-    "$HERE/test_pi_native_muon_b1.py"
+    "$HERE/test_pi_native_muon_b1.py" \
+    "$HERE/pi_benchmark_native_muon_b1.py"
 "$PY" "$HERE/test_pi_native_muon_b1.py"
 
 if [[ "$MODE" == "status" ]];then
@@ -54,6 +55,13 @@ if [[ "$MODE" == "build" ]];then
         --target mwpc_phase_b_native_muon_3p3 -j2
   "$PY" "$DRIVER" stamp-build
   echo "PASS target compiled with SHA-pinned source and executable."
+  exit
+fi
+if [[ "$MODE" == "benchmark3" ]];then
+  # Runs C++ parsing, ionisable-medium and REAL Heed-only preflights
+  # before a bounded (2 native muons × 4 geometries × 3 seeds)
+  # microscopic timing run. NEVER emits a physical whole-muon A_ion.
+  nice -n 15 "$PY" "$HERE/pi_benchmark_native_muon_b1.py" --seeds 3
   exit
 fi
 if [[ "$MODE" == "check2" || "$MODE" == "check8" ]];then
