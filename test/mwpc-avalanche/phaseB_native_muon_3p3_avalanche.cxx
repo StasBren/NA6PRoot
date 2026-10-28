@@ -219,6 +219,9 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
                  std::ofstream& hitOut,int clusters,int dropped,int heedFailed) {
   const double p=.1*geom.pitchMm;
   const double wireRadius=.0015; // 30 um diameter = 0.0015 cm radius
+  // For the finite centered anode grid, translate the Geant4 physical
+  // entrance u to a central periodic 9-anode patch without changing the
+  // electron's offset from its nearest actual wire.
   const double phaseCm=.1*EntrancePhase(h.a[0],h.station,geom.pitchMm);
   const double fw=geom.fwUm*1.e-4;
   Garfield::ComponentAnalyticField field;
@@ -247,6 +250,7 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
     constexpr unsigned int cap=200000;
     avalanche.EnableAvalancheSizeLimit(cap);
     BirthAccumulator births;births.pitch=p;gBirth=&births;
+    avalanche.SetUserHandleIonisation(OnIonisation);
     const double startEnergy=std::isfinite(e.energy)&&e.energy>.01?
                               e.energy:.1;
     const bool ok=avalanche.AvalancheElectron(u,e.v,e.w,e.t,startEnergy,
