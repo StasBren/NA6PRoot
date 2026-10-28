@@ -80,6 +80,16 @@ def main():
         assert report["total_ion_births"]==3
         assert abs(report["mean_seed_wall_seconds"]-.09)<1.e-10
 
+        # Old electron may not have been collected during old DRIFT while
+        # the new, independently seeded full-start avalanche does collect.
+        # This must remain ALLOWED: no double survival/attachment gating.
+        origin["old_collected"]="0"
+        trial["old_collected"]="0"
+        write()
+        assert validate_outputs(root,[origin])["n_trials"]==1
+        origin["old_collected"]="1"
+        trial["old_collected"]="1"
+
         trial["seed_u_mm"]="0.7"
         write()
         try:validate_outputs(root,[origin])
