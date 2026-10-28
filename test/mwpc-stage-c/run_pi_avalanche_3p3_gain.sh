@@ -13,7 +13,8 @@ if [[ $# -ne 1 || ! "$MODE" =~ ^(build|check|smoke5|pilot100|status)$ ]];then
 fi
 PY=python3
 SCRIPT="$HERE/pi_avalanche_3p3_gain_campaign.py"
-"$PY" -m py_compile "$SCRIPT"
+"$PY" -m py_compile "$SCRIPT" "$HERE/pi_publish_run_to_drive.py" "$HERE/test_pi_avalanche_3p3_gain_campaign.py"
+"$PY" "$HERE/test_pi_avalanche_3p3_gain_campaign.py"
 if [[ "$MODE" == status ]];then
   "$PY" "$SCRIPT" status
   exit
