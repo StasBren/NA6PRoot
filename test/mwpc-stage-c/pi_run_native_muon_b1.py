@@ -19,6 +19,7 @@ from pathlib import Path
 from collections import Counter
 
 from pi_prepare_muon_avalanche_b1 import OUT, FIELDS, sha, make, REPO
+from pi_garfield_runtime_env import garfield_runtime_env
 
 HERE=Path(__file__).resolve().parent
 CXX=REPO/"test/mwpc-avalanche/phaseB_native_muon_3p3_avalanche.cxx"
@@ -104,10 +105,12 @@ def check_executable():
     return binary
 
 def validate_native_csv_before_physics(selection):
+    runtime_env=garfield_runtime_env()
+    print("PASS Garfield/Heed database:", runtime_env["HEED_DATABASE"],flush=True)
     # Test the ACTUAL C++ CSV decoder on the frozen original Python output
     # before starting any Heed or Garfield physics work.
     res=subprocess.run([str(EXE),"--validate-input",str(selection)],
-                       capture_output=True,text=True,check=False)
+                       capture_output=True,text=True,check=False,env=runtime_env)
     if res.returncode!=0:
         raise RuntimeError("C++ pre-physics input validation failed:\n"+
                            res.stdout+"\n"+res.stderr)
@@ -120,7 +123,7 @@ def validate_native_csv_before_physics(selection):
     # the same frozen muon input, but perform NO microscopic avalanches.
     # This catches medium, NewTrack and gas-boundary problems earlier.
     heed=subprocess.run([str(EXE),"--validate-heed",str(selection)],
-                        capture_output=True,text=True,check=False)
+                        capture_output=True,text=True,check=False,env=runtime_env)
     if heed.returncode!=0 or "PASS: true TrackHeed source generated" not in heed.stdout:
         raise RuntimeError("True TrackHeed preflight FAILED; no B1 avalanche started:\n"+
                            "\n".join((heed.stdout+"\n"+heed.stderr).splitlines()[-45:]))
@@ -284,7 +287,7 @@ def run(mode):
     print(f"Running true Geant4→TrackHeed→AvalancheMicroscopic smoke, {n} native muons × four geometries.",flush=True)
     with (run_dir_/"physics.log").open("w") as logfile:
         result=subprocess.run(args,stdout=logfile,stderr=subprocess.STDOUT,
-                              cwd=run_dir_,check=False)
+                              cwd=run_dir_,check=False,env=garfield_runtime_env())
     if result.returncode:
         logfile=run_dir_/"physics.log"
         tail="\n".join(logfile.read_text(errors="replace").splitlines()[-50:])
