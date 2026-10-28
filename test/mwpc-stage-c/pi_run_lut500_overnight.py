@@ -249,6 +249,50 @@ def run_chunk(run_dir,i,selected,env):
     return stats,True
 
 
+def recover_existing_smoke_chunk(target, selected):
+    """Explicit forensic salvage of 8 completed Garfield trials after Python
+    only validation failed. Never run Garfield again or change raw data.
+    Requires unique exact source identity, complete output, and C++ PASS.
+    """
+    chunk=target/"chunks"/"chunk_0000"
+    if not chunk.is_dir() or (chunk/"complete.json").exists():
+        raise RuntimeError("Expected existing, unsealed smoke chunk; no files modified")
+    original=chunk/"original_exact_starts.csv"
+    with original.open(newline="") as f:
+        rd=csv.DictReader(f)
+        if tuple(rd.fieldnames or ())!=EXPORT_FIELDS:
+            raise ValueError("Failed smoke source schema mismatch")
+        saved=list(rd)
+    if len(saved)!=len(selected):
+        raise ValueError("Recovered smoke has wrong number of original starts")
+    for source,expected in zip(saved,selected):
+        for key in EXPORT_FIELDS:
+            if source[key]!=str(expected[key]):
+                raise ValueError("Recovered smoke source start changed: "+key)
+    log=chunk/"physics.log"
+    if "PASS: independent full-start microscopic avalanche sidecar" not in log.read_text(errors="replace"):
+        raise RuntimeError("Original Garfield C++ did not report complete sidecar run")
+    stats=validate_outputs(chunk,selected,reservoir_limit=RESERVOIR)
+    if stats["n_cap"] or stats["n_fail"]:
+        raise RuntimeError("Refusing to seal capped or failed smoke")
+    outputs=[original,log]+[chunk/("lut_avalanche_"+suffix+".csv")
+                            for suffix in ("trials","birth_reservoir","timing")]
+    state={
+        "schema":"PI_LUT500_COMPACT5_SINGLE_CHUNK_V1",
+        "status":"complete","chunk":0,"n_original_starts":len(selected),
+        "selected_sha256":sha(original),
+        "source_compiled_sha256":sha(EXE),
+        "chunk_wall_seconds":None,
+        "recovery_note":"Forensic seal after Python int-vs-string identity comparison bug; EXACT original raw Garfield outputs preserved",
+        "stats":{k:v for k,v in stats.items() if k!="files_sha256"},
+        "outputs_sha256":{p.name:sha(p) for p in outputs},
+    }
+    (chunk/"complete.json").write_text(canonical(state))
+    print("PASS recovered 8 ORIGINAL microscopic Garfield avalanche rows "
+          "without rerun/overwrite; SHA-protected smoke checkpoint",flush=True)
+    return stats
+
+
 def aggregate(run_dir,plan,n_completed,elapsed):
     """Publishable, per-geometry full responses + per-cell moments.
 
@@ -398,7 +442,7 @@ def aggregate(run_dir,plan,n_completed,elapsed):
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument("mode",choices=("smoke","overnight"))
+    p.add_argument("mode",choices=("smoke","recover-smoke","overnight"))
     p.add_argument("--hours",type=float,default=8.75,
                    help="Wall-time budget incl setup/aggregation, default 8.75h")
     p.add_argument("--resume",action="store_true",
@@ -416,11 +460,17 @@ def main():
     print("PASS existing 8 original LUT20/500 immutable source SHA checks",flush=True)
     starts=generate_selected(meta)
     # Small isolated first test of the compact 5-ion reservoir format.
-    if a.mode=="smoke":
+    if a.mode in ("smoke","recover-smoke"):
         target=ROOT.parent/"smoke8_compact5_v1"
-        if target.exists():
-            raise FileExistsError("Preserving old smoke, never overwrite: "+str(target))
-        target.mkdir(parents=True)
+        if a.mode=="smoke":
+            if target.exists():
+                raise FileExistsError(
+                    "Preserving prior smoke; if Python validation failed AFTER "
+                    "Garfield completed, use 'recover-smoke' to verify it "
+                    "without repeating the physics: "+str(target))
+            target.mkdir(parents=True)
+        elif not target.is_dir():
+            raise FileNotFoundError("No failed smoke folder to recover: "+str(target))
         subset=[]
         # TWO distinct real LUT500 starts per geometry, all four fields.
         # No Heed is run in this Garfield-only frozen-grid test.
@@ -432,12 +482,19 @@ def main():
                 if candidate is None:
                     raise RuntimeError("Smoke input missing geometry "+geom)
                 subset.append(candidate)
-        stats,_=run_chunk(target,0,subset,env)
+        if a.mode=="recover-smoke":
+            stats=recover_existing_smoke_chunk(target,subset)
+        else:
+            stats,_=run_chunk(target,0,subset,env)
         # Crucial physics-equivalence preflight: the compact output samples
         # only 5 instead of 100 ion birth positions. It MUST reproduce
         # every FULL microscopic avalanche's seed, gain and ion census.
         # Reservoir sampling has its own RNG and must not alter Garfield.
         reference=target/"reference_full100"
+        if reference.exists():
+            raise FileExistsError(
+                "Reference run already exists; preserving original reference files: "
+                +str(reference))
         reference.mkdir()
         input_csv=target/"chunks"/"chunk_0000"/"original_exact_starts.csv"
         shutil.copy2(input_csv,reference/"original_exact_starts.csv")
