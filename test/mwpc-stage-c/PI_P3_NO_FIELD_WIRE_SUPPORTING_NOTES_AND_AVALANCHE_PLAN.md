@@ -239,3 +239,104 @@ angular asymmetries or induced cathode charges in these outputs. The
 provisional **p3 noFW** reference remains unchanged pending downstream
 avalanche asymmetry and signal evaluation. The earlier 2+4 mm
 results must never be substituted for this ±3 mm campaign.
+
+## 12. Literature interpretation of FW gain and Stage B1 protocol
+
+**Question raised 28 October 2026:** At a fixed +1800 V, the p3 noFW to
+p3 FW75 gain changed from 554.45 to 6418.18 (11.58×), and at p4 from
+1648.9 to 5039.7 (3.06×), using 100 microscopic single-electron
+avalanches per geometry with one seed at (u,v)=(0,+1 mm).
+
+**External support, not a numerical calibration:**
+- H. J. Hilke, “Time projection chambers,” *Rep. Prog. Phys.* **73**
+  (2010) 116201, section 3.2.1.1, reports that chamber operation
+  **without field wires requires higher anode voltage for the same gain**.
+  It also notes a substantial dependence of induced pad charge on
+  field wires (ALEPH comparison: ~20% with field wires vs ~35% without,
+  under different geometry/gas); see
+  https://lhcb.web.cern.ch/lhcb_page/lhcb_documents/presentations/TalksNotDirectlyRelatedLHCb/Postcript/Hilke.pdf
+- “High-voltage switching multiwire proportional chamber,”
+  *Prog. Theor. Exp. Phys.* (2017) 023C01, uses alternating anode and
+  potential wires and Garfield++, with a ±3 mm cathode gap. Gain can
+  be strongly controlled by potential-wire bias; this paper studies
+  **potential-wire voltage variation**, NOT a quantitative p3
+  noFW-versus-FW75 factor:
+  https://academic.oup.com/ptep/article/2017/2/023C01/2996387
+- Gerald Eigen, “Gaseous Tracking Detectors” (2025), section 4.1,
+  explains the near-anode field, how anode capacitance/charge
+  controls gain, and how changes of geometry can amplify gain changes:
+  https://link.springer.com/chapter/10.1007/978-3-031-67336-8_4
+
+**Interpretation:** a large increase in gain at fixed HV is physically
+plausible; **11.6× is not a universal or literature-certified FW
+multiplier**. At p3 the *conditional positive-response* mean changed
+from 676.16 (noFW) to 7550.8 (FW75), ~11.17×, so the 11.6×
+difference is not simply the fraction of zero-response seeds
+(18% vs 15%). Absolute gain depends on field geometry, gas
+transport, Penning model and gain calculation conventions.
+
+**Required electric-field audit before treating this as an intrinsic
+detector result:** for all four geometries with identical +1800 V,
+sample Garfield |E| and radial component at 20, 30, 50, 100,
+and 200 µm from the central physical anode along top, bottom and
+side directions; verify cathodes at v=±3 mm, FW at grounded midpoint
+and near-wire field convergence on increasing the number of analytic
+wires. Add a small HV scan to separate *fixed-voltage effects*
+from geometry dependence *at equal effective gain*. Neither
+gain nor cathode induced charge should be judged only at +1800 V
+if the chosen configurations have dissimilar multiplication.
+
+### Stage B1: primary single-seed ion-birth angular asymmetry
+
+First implement **only the ion-birth and avalanche-electron endpoint
+observables** by deriving a separate, non-overwriting program from
+`test/mwpc-avalanche/phaseB_avalanche_angle_scan.cxx`.
+Keep the historical 2+4 mm code/outputs immutable; switch the
+four new configurations to ±3 mm and grounded midpoint FW75
+where appropriate.
+
+- For each independent initial electron seed, call
+  `AvalancheMicroscopic::SetUserHandleIonisation` with the
+  existing `RecordIonisation(x,y,z,t,type,level,Medium*)` callback,
+  then `AvalancheElectron`. The callback records each
+  simulated ionising collision (including ionisations initiated by
+  Penning transfer if enabled). Count these as new avalanche
+  positive-ion **births**, not as drifted ions or a cathode current.
+  Compare callback counts with Garfield bookkeeping and flag
+  discrepancies rather than silently equating conventions.
+- For each birth, find the associated physical anode center
+  `u_a` and calculate
+  `phi=atan2(v-v_a,u-u_a)`; histogram full [-180,180) azimuth
+  AND radius `r` from the anode. Track births far from the
+  multiplication region separately rather than silently assuming
+  all are close to the anode.
+- Record `N_ion_up` at 0<phi<180,
+  `N_ion_down` at −180<phi<0, and exact boundaries;
+  separately `N_ion_top` for 45<=phi<135 and
+  `N_ion_bottom` for −135<=phi<−45, plus side counts.
+  Compute **two distinct ion-birth asymmetries** per seed:
+  `A_ion_hemi=(N_up-N_down)/(N_up+N_down)` and
+  `A_ion_TB=(N_top-N_bottom)/(N_top+N_bottom)`.
+  Zero denominators are **undefined/null**, not assigned 0.
+- Retain ALL requested seeds, including zero-gain, attachment,
+  no-anode endpoint, time-window/cap failure, with explicit
+  statuses and the original seeded geometry/initial position.
+  Distinguish equal-seed averaging from pooled-ion counting
+  (different weighting by stochastic gain).
+- Begin with the already validated source (u,v)=(0,+1mm),
+  then mirror (0,−1mm) to test top/bottom symmetry
+  and add ±u off-axis starts and a near-anode radial/angle
+  scan. The full six-station Geant4+Heed muon-crossing
+  weighting is a **later step**; a single fixed top-side
+  birth point does not give an unbiased detector A.
+- Use a no-ion-drift B1 mode first for efficient counting.
+  The **B3** induced cathode charge requires ion transport
+  and the cathode weighting potentials; do NOT infer
+  Q_upper/Q_lower directly from ion-birth sector counts.
+  Later calculate `A_Q(T)` for several observation windows
+  and, for controlled comparisons, both fixed 1800 V and
+  gain-matched voltages.
+
+**Status:** only the protocol and original legacy callback were
+reviewed here. This is NOT a claim that the new four-geometry
+B1 implementation has compiled or produced data.
