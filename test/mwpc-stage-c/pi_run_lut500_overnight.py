@@ -208,8 +208,8 @@ def run_chunk(run_dir,i,selected,env):
             if sha(chunk/name)!=digest:
                 raise RuntimeError("Prior completed physics chunk output altered: "+name)
         stats=validate_outputs(chunk,selected,reservoir_limit=RESERVOIR)
-        if stats["n_cap"] or stats["n_fail"]:
-            raise RuntimeError("Prior chunk has failed or capped microscopic avalanche")
+        # A size-capped tail is retained as CENSORED data with an explicit
+        # warning, rather than abandoning an otherwise complete night.
         return stats,False
 
     chunk.mkdir(parents=True)
@@ -230,8 +230,10 @@ def run_chunk(run_dir,i,selected,env):
           +"\n".join((chunk/"physics.log").read_text(errors="replace").splitlines()[-15:]))
     stats=validate_outputs(chunk,selected,reservoir_limit=RESERVOIR)
     if stats["n_cap"] or stats["n_fail"]:
-        raise RuntimeError("LUT500 overnight physics has failures/caps; forensic chunk kept: "
-                           +str(chunk))
+        print("WARNING: chunk",i,"contains",stats["n_cap"],
+              "capped and",stats["n_fail"],
+              "unsuccessful avalanches (retained as censored/diagnostic)",
+              flush=True)
     paths=[chunk/"original_exact_starts.csv",chunk/"physics.log"]
     paths += [chunk/("lut_avalanche_"+suffix+".csv")
              for suffix in ("trials","birth_reservoir","timing")]
@@ -255,7 +257,8 @@ def aggregate(run_dir,plan,n_completed,elapsed):
     birth coordinates per avalanche are stored.
     """
     geoms={g:{"n":0,"ion":0,"zero":0,"time":0.0,
-              "up":0,"down":0,"top":0,"bottom":0} for g in GEOM_NAMES}
+              "up":0,"down":0,"top":0,"bottom":0,
+              "capped":0,"failed":0} for g in GEOM_NAMES}
     cells=defaultdict(lambda:{"births":[],"up":0,"down":0,"top":0,
                               "bottom":0,"zero":0,"time":0.0})
     record_path={}
@@ -291,6 +294,8 @@ def aggregate(run_dir,plan,n_completed,elapsed):
                     s["top"]+=int(row["ion_top"]);s["bottom"]+=int(row["ion_bottom"])
                     s["zero"]+=int(ion==0)
                     g=geoms[geom];g["n"]+=1;g["ion"]+=ion;g["zero"]+=int(ion==0)
+                    g["capped"]+=int(row["capped"])
+                    g["failed"]+=int(row["successful"])!=1
                     g["up"]+=int(row["ion_up"]);g["down"]+=int(row["ion_down"])
                     g["top"]+=int(row["ion_top"]);g["bottom"]+=int(row["ion_bottom"])
             with (base/"lut_avalanche_timing.csv").open(newline="") as f:
@@ -348,6 +353,8 @@ def aggregate(run_dir,plan,n_completed,elapsed):
         "n_completed_chunks":n_completed,"n_planned_chunks":plan["n_chunks"],
         "elapsed_seconds_this_invocation":elapsed,
         "full_ion_births":sum(x["ion"] for x in geoms.values()),
+        "total_capped":sum(x["capped"] for x in geoms.values()),
+        "total_failed":sum(x["failed"] for x in geoms.values()),
         "birth_reservoir_limit_per_avalanche":RESERVOIR,
         "geometries":{},
         "note":"NO native Geant4 muon physics and NO induced cathode signals. Every trial is an independent full-start microscopic Garfield avalanche from the exact frozen LUT500 initial electron position; old collected is never used as survival gate.",
@@ -355,11 +362,13 @@ def aggregate(run_dir,plan,n_completed,elapsed):
         "source_executable_sha256":plan["compiled_executable_sha256"],
         "old_lut500_csv_sha256":plan["original_lut500_csv_sha256"],
     }
+    if summary["total_capped"] or summary["total_failed"]:
+        summary["physics_warning"]="Capped trials are right-censored in gain; failed trials are diagnostics. Do not infer unbiased gain tails from them."
     for geom,g in geoms.items():
         hemi=g["up"]+g["down"]
         tb=g["top"]+g["bottom"]
         summary["geometries"][geom]={
-            "n":g["n"],"zero":g["zero"],
+            "n":g["n"],"zero":g["zero"],"capped":g["capped"],"failed":g["failed"],
             "p_zero":(g["zero"]/g["n"] if g["n"] else None),
             "total_ion_births":g["ion"],
             "mean_ion_births_per_start":g["ion"]/g["n"] if g["n"] else None,
@@ -392,6 +401,8 @@ def main():
     p.add_argument("mode",choices=("smoke","overnight"))
     p.add_argument("--hours",type=float,default=8.75,
                    help="Wall-time budget incl setup/aggregation, default 8.75h")
+    p.add_argument("--resume",action="store_true",
+                   help="Explicitly continue a previously interrupted or time-budget-partial overnight directory")
     p.add_argument("--upload",action="store_true",
                    help="After final validation publish immutable full per-geometry CSV to existing na60drive: (rclone)")
     a=p.parse_args()
@@ -410,7 +421,17 @@ def main():
         if target.exists():
             raise FileExistsError("Preserving old smoke, never overwrite: "+str(target))
         target.mkdir(parents=True)
-        subset=[starts[i*4200+((i*401)%4200)] for i in range(8)]
+        subset=[]
+        # TWO distinct real LUT500 starts per geometry, all four fields.
+        # No Heed is run in this Garfield-only frozen-grid test.
+        for pass_id in (0,1):
+            segment=starts[pass_id*4200:(pass_id+1)*4200]
+            for geom in GEOM_NAMES:
+                candidate=next((x for x in segment if x["geometry"]==geom),
+                               None)
+                if candidate is None:
+                    raise RuntimeError("Smoke input missing geometry "+geom)
+                subset.append(candidate)
         stats,_=run_chunk(target,0,subset,env)
         print("PASS compact5 OVERNIGHT preflight 8 frozen LUT500 starts",
               "ion births:",stats["total_ion_births"],"caps:",stats["n_cap"],
@@ -421,6 +442,14 @@ def main():
         raise RuntimeError("First run pi_run_lut500_overnight.py smoke; no 8h computation started")
     if shutil.disk_usage(ROOT.parent).free<1_000_000_000:
         raise RuntimeError("Less than 1GB available for immutable checkpoint outputs")
+    if ROOT.exists() and not a.resume:
+        raise FileExistsError(
+            "Overnight output directory already exists; preserving old chunks. "
+            "Pass --resume only after reviewing its current manifest: "+str(ROOT))
+    if (ROOT/"manifest.json").is_file():
+        current=json.loads((ROOT/"manifest.json").read_text())
+        if current.get("status")=="complete":
+            raise FileExistsError("Overnight 84k run already complete; never recalculate: "+str(ROOT))
     ROOT.mkdir(parents=True,exist_ok=True)
     plan=ensure_plan(ROOT,meta,ixsha,starts,binary)
     all_chunks=batches(starts)
