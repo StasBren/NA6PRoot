@@ -42,7 +42,18 @@ def prepare(source,run_id):
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{2,95}",run_id) or ".." in run_id:
         raise ValueError("Run ID must be a unique, safe identifier (letters/numbers/_.-)")
     dest=BUNDLE_ROOT/run_id
-    if dest.exists():raise FileExistsError("Preserving existing publication bundle: "+str(dest))
+    if dest.exists():
+        frozen=dest/"publication_manifest.json"
+        if not frozen.is_file():
+            raise FileExistsError("Incomplete old bundle; inspect before retry: "+str(dest))
+        m=json.loads(frozen.read_text())
+        if m.get("source_local_path")!=str(source) or m.get("run_id")!=run_id:
+            raise FileExistsError("Run ID already points to a different source: "+str(dest))
+        for name,item in m.get("source_sha256_files",{}).items():
+            if sha(source/name)!=item["sha256"] or sha(dest/name)!=item["sha256"]:
+                raise ValueError("Source or immutable stage changed since dry run: "+name)
+        print("PASS: reusing unchanged prepared bundle:",dest)
+        return dest
     if source==dest or BUNDLE_ROOT in source.parents:
         raise ValueError("Refusing to recursively publish an existing publication bundle")
     files=[]
