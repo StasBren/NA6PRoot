@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Safely publish immutable summaries/figures to NA60+ Google Drive with rclone.
 
-This script runs on the user's WSL host. It uses a separately configured
-rclone Drive remote; ChatGPT's Drive connector does NOT authenticate rclone.
+This script runs on the user's WSL host using its EXISTING 'na60drive:'
+rclone OAuth remote (set up and upload-tested on 24 Oct 2026).
 Default is dry-run; pass --upload for actual transfer. Never uses 'sync',
 never deletes remote files and never overwrites a different existing file.
 
-Remote root is anchored to the exact already-created avalanche_3p3_runs
-folder ID (so path lookup does not depend on My Drive/shared-drive roots).
+Existing remote root is the NA60plus_MWPC_Research project folder;
+target is its already-created avalanche_3p3_runs subfolder.
 """
 from __future__ import annotations
 import argparse
@@ -23,6 +23,8 @@ HERE=Path(__file__).resolve().parent
 REPO=HERE.parents[1]
 BUNDLE_ROOT=REPO/"test_runs/mwpc_stage_c/drive_publications_v1"
 DRIVE_FOLDER_ID="1Xbh45V86BhVu-WLYSM5qtosqPEG363M7"
+DRIVE_SUBFOLDER="avalanche_3p3_runs"
+EXPECTED_REMOTE="na60drive"
 ALLOWED_EXT={".png",".jpg",".jpeg",".svg",".pdf",".csv",".md",".txt",".log"}
 ALLOWED_NAMES={"summary.json","manifest.json","run_config.json",
                "readme.md","README.md","provenance.json"}
@@ -118,10 +120,14 @@ def publish(bundle,remote,upload=False):
     for filename,props in m["source_sha256_files"].items():
         if sha(bundle/filename)!=props["sha256"]:
             raise ValueError("Publication bundle changed since preparation: "+filename)
-    dest=f"{remote}:{run_id}"
+    # The pre-existing na60drive: root is NA60plus_MWPC_Research,
+    # so this path resolves under the confirmed project subfolder.
+    dest=f"{remote}:{DRIVE_SUBFOLDER}/{run_id}"
+    subprocess.run([binary,"lsf",f"{remote}:{DRIVE_SUBFOLDER}",
+                    "--max-depth","1"],check=True,stdout=subprocess.DEVNULL)
     args=[binary,"copy",str(bundle),dest,
-          "--drive-root-folder-id",DRIVE_FOLDER_ID,
-          "--immutable","--checksum","--stats-one-line"]
+          "--immutable","--checksum","--tpslimit","2",
+          "--transfers","1","--checkers","2","--stats-one-line"]
     if not upload:
         args.append("--dry-run")
     print("rclone mode:", "UPLOAD" if upload else "DRY RUN")
@@ -131,8 +137,8 @@ def publish(bundle,remote,upload=False):
     if upload:
         # This is an independent read of files after writing to Google Drive,
         # not an assertion that the user's UI already shows them.
-        check=[binary,"check",str(bundle),dest,"--drive-root-folder-id",DRIVE_FOLDER_ID,
-               "--one-way"]
+        check=[binary,"check",str(bundle),dest,"--one-way",
+               "--tpslimit","2","--checkers","2"]
         subprocess.run(check,check=True)
         print("PASS: uploaded immutable run and rclone readback check completed")
     else:
@@ -141,8 +147,8 @@ def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--source",type=Path,required=True)
     ap.add_argument("--run-id",required=True)
-    ap.add_argument("--remote",required=True,
-                    help="Name from 'rclone listremotes', e.g. gdrive (NOT credentials)")
+    ap.add_argument("--remote",default=EXPECTED_REMOTE,
+                    help="Existing rclone remote name, default na60drive (24 Oct setup)")
     ap.add_argument("--upload",action="store_true",
                     help="Without this, only copy to local staging and rclone dry-run")
     a=ap.parse_args()
