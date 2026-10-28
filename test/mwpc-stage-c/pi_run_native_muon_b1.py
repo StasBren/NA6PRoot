@@ -222,7 +222,12 @@ def run(mode):
         result=subprocess.run(args,stdout=logfile,stderr=subprocess.STDOUT,
                               cwd=run_dir_,check=False)
     if result.returncode:
-        raise RuntimeError(f"B1 failed with code {result.returncode}; inspect: {run_dir_/'physics.log'}")
+        logfile=run_dir_/"physics.log"
+        tail="\n".join(logfile.read_text(errors="replace").splitlines()[-50:])
+        raise RuntimeError(
+            f"B1 failed with code {result.returncode}; original log: {logfile}\n"
+            f"--- LAST 50 PHYSICS LOG LINES ---\n{tail}\n"
+            "--- END LOG, PRESERVED WITHOUT OVERWRITE ---")
     if "PASS: muon-driven B1 all crossing/geometry rows written" not in (
         run_dir_/"physics.log").read_text():
         raise RuntimeError("B1 did not write completion marker")
