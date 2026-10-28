@@ -135,7 +135,7 @@ std::vector<Crossing> ReadCrossings(const std::string& file) {
     if(std::abs(h.pdg)!=13 || h.station<0 || h.station>5 ||
        h.momentum<=.11 || std::abs(h.momentum-p)>1.e-5*p ||
        h.length<=.05 || std::abs(h.length-chord)>.005*chord+.02 ||
-       dot/(chord*p)<.9 || h.heedSeed<1 ||
+       dot/(chord*p)<.999 || h.heedSeed<1 ||
        std::max(std::abs(h.a[1]),std::abs(h.b[1]))>3.05)
       throw std::runtime_error("Unphysical native muon or direction mismatch");
     out.push_back(h);
@@ -180,7 +180,12 @@ std::vector<Primary> HeedPrimaries(Garfield::MediumMagboltz& gas,
   heed.EnableDeltaElectronTransport();
 
   SeedGarfield(c.heedSeed);
-  const std::array<double,3> d{{du/c.length,dv/c.length,dw/c.length}};
+  // Use the actual incoming muon momentum vector, not a regenerated or
+  // assumed normal-incidence direction. The selection checks that this
+  // agrees with the native Geant4 gas chord within cos(theta)>0.999.
+  const std::array<double,3> d{{c.p[0]/c.momentum,
+                                c.p[1]/c.momentum,
+                                c.p[2]/c.momentum}};
   // One micrometre inside the entrance (avoids a track exactly on gas edge).
   constexpr double inwardCm=1.e-4;
   heed.NewTrack(inwardCm*d[0],.1*c.a[1]+inwardCm*d[1],
@@ -273,6 +278,8 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
     }
     const bool capped=ne>=int(cap)||nEnd>=cap;
     const bool zero=collected==0;
+    if(ni>0 && births.total==0)
+      throw std::runtime_error("Garfield reports avalanche ions but ionization callback recorded none");
     tot.ions.Merge(births.counts);
     tot.electrons.Merge(eCounts);
     tot.births+=births.total;
