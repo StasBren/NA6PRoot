@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NA60+ | Per-muon crossing asymmetry</title>
+<style>
+:root{--ink:#171b22;--muted:#4a5260;--blue:#2158a5;--red:#c52b2a;--line:#c7cdd6;--shade:#eef1f5}
+*{box-sizing:border-box}body{margin:0;background:#f0f2f6;color:var(--ink);font:14px/1.46 Arial,Helvetica,sans-serif}
+header{background:white;border-top:5px solid var(--blue);padding:20px max(16px,3vw)}
+header h1{margin:4px 0;font-size:27px}header p{margin:4px 0;color:var(--muted)}
+.eyebrow{font:bold 11px monospace;color:#214e8a;letter-spacing:.8px}
+.notice{background:#fff9e8;border-left:4px solid #aa7b20;padding:12px 16px;margin:18px max(16px,3vw);max-width:1250px}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px 20px;margin:17px max(16px,3vw)}
+.toolbar label{font-weight:bold;font-size:12px;display:flex;flex-direction:column;gap:6px}
+select{background:white;color:#171b22;border:1px solid #808a9b;border-radius:2px;padding:8px;min-width:125px;font-size:13px}
+main{display:grid;grid-template-columns:minmax(260px,0.7fr) minmax(500px,1.4fr);gap:14px;margin:0 max(16px,3vw) 20px}
+.panel{background:white;border:1px solid var(--line);padding:16px;min-width:0}
+.panel.wide{grid-column:1/-1}.panel h2{font-size:18px;margin:0 0 7px}
+.small{font-size:12px;color:var(--muted)}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:12px 0}
+.metric{background:var(--shade);border-top:2px solid #4a5260;padding:9px}
+.metric b{display:block;font:700 18px monospace}.metric small{font-size:11px;color:var(--muted)}
+svg{display:block;width:100%;height:auto;background:white!important}
+#map{border:1px solid #ddd;min-height:280px}
+#hist{border:1px solid #ddd}
+.legend{display:flex;gap:20px;flex-wrap:wrap;margin:9px 0}
+.line{display:inline-block;width:29px;margin-right:7px;vertical-align:middle;border-top:3px solid var(--blue)}
+.line.red{border-top:3px dashed var(--red)}
+.tablewrap{overflow:auto;max-height:480px}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{text-align:right;padding:9px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{position:sticky;top:0;background:#f0f2f6;border-bottom:2px solid var(--ink)}
+tbody tr{cursor:pointer}tbody tr:hover{background:#f1f5ff}tbody tr.selected{background:#dbe9ff}
+footer{padding:4px max(16px,3vw) 28px;color:var(--muted);font-size:12px}
+@media(max-width:1050px){main{grid-template-columns:1fr}.panel.wide{grid-column:auto}}
+@media(max-width:640px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}header h1{font-size:22px}}
+</style></head><body>
+<header>
+<div class="eyebrow">NA60+ SIMULATION · WORK IN PROGRESS · MS0–MS5</div>
+<h1>Muon gas-crossing asymmetry</h1>
+<p>J/ψ → μ⁺μ⁻ · native Geant4 intersections · stable Heed births · Garfield LUT endpoint azimuth · B = 0 T</p>
+<p class="small" id="exposure"></p>
+</header>
+<div class="notice"><b>Statistical unit: ONE physical muon gas crossing in ONE chamber.</b>
+The two muons of a J/ψ and multiple chamber intersections are <b>not pooled</b> before computing A.
+Each valid crossing contributes one entry to P(A), regardless of its electron count.
+The old parent-event dashboard uses a different definition and is not replaced here.
+This is anode primary-electron endpoint asymmetry, <b>not</b> induced cathode charge.
+</div>
+<div class="toolbar">
+<label>Station<select id="station"></select></label>
+<label>Anode pitch<select id="pitch"></select></label>
+<label>Physical region<select id="det"></select></label>
+<label>Observable<select id="observable">
+<option value="hemisphere_A">Anode hemisphere A</option>
+<option value="top_bottom_A">Cathode-facing sectors A</option>
+</select></label>
+<label>Y axis<select id="ymode"><option value="fraction">Fraction of valid crossings / bin</option><option value="counts">Number of valid crossings / bin</option></select></label>
+<label>Chamber map<select id="mapmode"><option value="rms">RMS(A) with FW</option><option value="delta">Δ RMS (FW − no FW)</option><option value="valid">Valid crossings with FW</option></select></label>
+</div>
+<main>
+<section class="panel">
+<h2>Physical chambers</h2>
+<p class="small">Click a detector to inspect its crossing-level distribution. Grey chambers have no selected crossing.</p>
+<svg id="map" viewBox="0 0 700 460" role="img" aria-label="Physical chambers in selected MS station"></svg>
+<p class="small" id="mapinfo"></p>
+</section>
+<section class="panel">
+<h2 id="charttitle">Crossing distribution P(A)</h2>
+<div class="stats">
+<div class="metric"><b id="ncross">—</b><small>Muon gas crossings</small></div>
+<div class="metric"><b id="nno">—</b><small>Valid A · no FW</small></div>
+<div class="metric"><b id="nfw">—</b><small>Valid A · FW75</small></div>
+<div class="metric"><b id="nundef">—</b><small>Undefined A · no FW / FW75</small></div>
+</div>
+<svg id="hist" viewBox="0 0 950 510" role="img" aria-label="Histogram of physical muon-crossing asymmetry"></svg>
+<div class="legend"><span><i class="line"></i>No field wire</span><span><i class="line red"></i>Grounded field wire 75 μm</span></div>
+<p id="moments" class="small"></p><p id="scope" class="small"></p>
+</section>
+<section class="panel wide">
+<h2 id="tabletitle">Physical DET breakdown</h2>
+<p class="small">Station totals are sums of crossing counts across physical DETs. Histograms count crossings, not parent-event asymmetries.</p>
+<div class="tablewrap"><table><thead><tr><th>DET</th><th>N crossing</th><th>Valid no FW</th><th>Valid FW</th><th>Mean A, no FW</th><th>RMS, no FW</th><th>Mean A, FW</th><th>RMS, FW</th><th>Δ RMS</th></tr></thead><tbody id="detbody"></tbody></table></div>
+</section>
+</main><footer id="provenance"></footer>
+<script>"use strict";
+const D=__PAYLOAD__;
+const NS="http://www.w3.org/2000/svg", $=id=>document.getElementById(id);
+const BLUE="#2158a5",RED="#c52b2a";
+const count=n=>Number(n||0).toLocaleString("en-US");
+const fmt=(v,d=4)=>v===null||v===undefined?"—":Number(v).toFixed(d);
+const zeroToOne=v=>Math.max(0,Math.min(1,v));
+const config=(p,fw)=>"p"+Number(p).toFixed(1).replace(".","p")+
+ (fw?"_field75p0um":"_anode_only");
+const nBins=41, edges=Array.from({length:42},(_,i)=>-1+2*i/41);
+let station=Number(D.stations_selected[0]),pitch=Number(D.pitches_mm[0]),det=-1;
+const stationObj=()=>D.stations[String(station)];
+const chosen=()=>det<0?stationObj().configs:stationObj().det[String(det)];
+const metric=obj=>obj[$("observable").value];
+function make(tag,attrs,into,txt){
+ const n=document.createElementNS(NS,tag);
+ Object.entries(attrs||{}).forEach(([k,v])=>n.setAttribute(k,v));
+ if(txt!==undefined)n.textContent=String(txt);
+ into.appendChild(n);return n;
+}
+function clear(n){n.replaceChildren();}
+function option(select,value,label){
+ const o=document.createElement("option");o.value=value;o.textContent=label;select.appendChild(o);
+}
+function updateOptions(){
+ const dsel=$("det");clear(dsel);
+ option(dsel,-1,"Entire MS"+station);
+ for(const c of stationObj().layout.slice().sort((a,b)=>a.id-b.id))
+   option(dsel,c.id,"DET "+c.id+" · layer "+c.layer);
+ if(det>=0&&!stationObj().det[String(det)])det=-1;
+ dsel.value=String(det);
+}
+function chart(){
+ const a=chosen(),r0=metric(a[config(pitch,0)]),r1=metric(a[config(pitch,75)]);
+ const hist=$("hist");clear(hist);
+ make("rect",{x:0,y:0,width:950,height:510,fill:"#fff"},hist);
+ const L=112,R=905,T=42,B=416,W=R-L,H=B-T;
+ make("rect",{x:L,y:T,width:W,height:H,fill:"#fff",stroke:"#292929","stroke-width":1.2},hist);
+ const isCount=$("ymode").value==="counts";
+ const y0=r0.hist.map((v)=>isCount?v:v/Math.max(r0.valid,1));
+ const y1=r1.hist.map((v)=>isCount?v:v/Math.max(r1.valid,1));
+ const yMax=Math.max(.001,...y0,...y1)*1.16;
+ const xx=i=>L+i*W/nBins;
+ const yy=v=>B-v/yMax*H;
+ for(let i=0;i<=4;i++){
+   const v=yMax*i/4,y=yy(v);
+   make("line",{x1:L-7,y1:y,x2:R,y2:y,stroke:i===0?"#222":"#e0e0e0",
+                "stroke-width":i===0?1:.7},hist);
+   make("text",{x:L-12,y:y+5,"text-anchor":"end","font-size":14,fill:"#171717"},
+       hist,isCount?count(Math.round(v)):v.toFixed(3));
+   make("line",{x1:R,y1:y,x2:R+6,y2:y,stroke:"#222"},hist);
+ }
+ for(let i=0;i<=8;i++){
+   const val=-1+i*.25,x=L+i*W/8;
+   make("line",{x1:x,y1:B,x2:x,y2:B+7,stroke:"#222"},hist);
+   make("line",{x1:x,y1:T,x2:x,y2:T-6,stroke:"#222"},hist);
+   make("text",{x,y:B+24,"text-anchor":"middle","font-size":14,fill:"#171717"},
+        hist,val.toFixed(2));
+ }
+ function step(ys,color,dash){
+   let d="M "+xx(0)+" "+yy(ys[0]);
+   for(let i=0;i<nBins;i++)d+=" L "+xx(i+1)+" "+yy(ys[i])+
+     (i<nBins-1?" L "+xx(i+1)+" "+yy(ys[i+1]):"");
+   make("path",{d,fill:"none",stroke:color,"stroke-width":2.5,
+                ...(dash?{"stroke-dasharray":"10 7"}:{})},hist);
+ }
+ step(y0,BLUE,false);step(y1,RED,true);
+ make("text",{x:(L+R)/2,y:477,"text-anchor":"middle","font-size":17,fill:"#111"},
+     hist,$("observable").value==="hemisphere_A"?
+       "Electron-count hemisphere asymmetry A (dimensionless)":
+       "Top–bottom sector electron-count asymmetry A (dimensionless)");
+ make("text",{x:30,y:(T+B)/2,transform:"rotate(-90 30 "+((T+B)/2)+")",
+    "text-anchor":"middle","font-size":15,fill:"#111"},hist,
+    isCount?"Muon gas crossings / "+(2/41).toFixed(3):
+            "Fraction of valid muon gas crossings / "+(2/41).toFixed(3));
+ make("text",{x:L+12,y:T+23,"font-size":16,"font-weight":"bold",fill:"#111"},
+      hist,"NA60+ Simulation");
+ make("text",{x:L+12,y:T+43,"font-size":13,fill:"#111"},hist,
+     "Work in progress · J/ψ · MS"+station+" · p="+pitch+" mm · LUT"+
+      D.lut_trials_per_cell+" · B=0 T");
+ $("charttitle").textContent="MS"+station+" / "+(det<0?"entire station":"DET "+det)+
+      " / P(A) · muon gas crossings";
+ $("ncross").textContent=count(a[config(pitch,0)].crossings);
+ $("nno").textContent=count(r0.valid);
+ $("nfw").textContent=count(r1.valid);
+ $("nundef").textContent=count(r0.undefined)+" / "+count(r1.undefined);
+ $("moments").textContent="No FW: mean="+fmt(r0.mean)+", RMS="+fmt(r0.rms)+
+    "; FW75: mean="+fmt(r1.mean)+", RMS="+fmt(r1.rms)+
+    "; ΔRMS="+fmt(r0.rms===null||r1.rms===null?null:r1.rms-r0.rms)+".";
+ $("scope").textContent=$("observable").value==="hemisphere_A"?
+     "A=(Nup−Ndown)/(Nup+Ndown), upper/lower half-circumferences of anode; boundary hits excluded.":
+     "A=(Ntop−Nbottom)/(Ntop+Nbottom), top [45°,135°), bottom [−135°,−45°). Side hits excluded from sector denominator.";
+}
+function map(){
+ const svg=$("map");clear(svg);make("rect",{x:0,y:0,width:700,height:460,fill:"#fff"},svg);
+ const cs=stationObj().layout;
+ if(!cs.length){$("mapinfo").textContent="No chamber layout";return;}
+ const xmin=Math.min(...cs.map(x=>x.x-x.hx)),xmax=Math.max(...cs.map(x=>x.x+x.hx));
+ const ymin=Math.min(...cs.map(x=>x.y-x.hy)),ymax=Math.max(...cs.map(x=>x.y+x.hy));
+ const sc=Math.min(650/(xmax-xmin||1),405/(ymax-ymin||1));
+ const originX=350-(xmin+xmax)*sc/2,originY=226+(ymin+ymax)*sc/2;
+ const xx=x=>originX+x*sc,yy=y=>originY-y*sc;
+ const mode=$("mapmode").value,obs=$("observable").value;
+ const numbers=cs.map(c=>{
+   const v=stationObj().det[String(c.id)];if(!v)return null;
+   const a=v[config(pitch,0)][obs],b=v[config(pitch,75)][obs];
+   return mode==="valid"?b.valid:mode==="delta"?
+      (a.rms===null||b.rms===null?null:b.rms-a.rms):b.rms;
+ }).filter(v=>v!==null);
+ const scale=Math.max(.00001,...numbers.map(Math.abs));
+ function shade(v){
+   if(v===null)return "#e6e6e6";
+   if(mode==="delta"){
+     const k=zeroToOne(Math.abs(v)/scale);
+     return v>=0?"rgb("+(235-Math.round(k*40))+","+
+        (240-Math.round(k*135))+","+(240-Math.round(k*165))+")":
+       "rgb("+(240-Math.round(k*170))+","+(240-Math.round(k*65))+","+
+       (245-Math.round(k*20))+")";
+   }
+   const t=zeroToOne(v/Math.max(...numbers,.00001));
+   return "rgb("+(235-Math.round(t*170))+","+(242-Math.round(t*110))+
+      ","+(249-Math.round(t*30))+")";
+ }
+ for(const c of cs){
+   const region=stationObj().det[String(c.id)];
+   const a=region&&region[config(pitch,0)]&&region[config(pitch,0)][obs];
+   const b=region&&region[config(pitch,75)]&&region[config(pitch,75)][obs];
+   const val=!b?null:mode==="valid"?b.valid:mode==="delta"?
+      (!a||a.rms===null||b.rms===null?null:b.rms-a.rms):b.rms;
+   const x=xx(c.x-c.hx),y=yy(c.y+c.hy);
+   const rect=make("rect",{x,y,width:Math.max(1,2*c.hx*sc),height:Math.max(1,2*c.hy*sc),
+      fill:shade(val),stroke:det===c.id?"#d5222c":"#232323",
+      "stroke-width":det===c.id?3:1.1,"vector-effect":"non-scaling-stroke"},svg);
+   const tip=document.createElementNS(NS,"title");
+   tip.textContent="DET "+c.id+" · "+(val===null?"no crossings":mode+"="+fmt(val,4));
+   rect.appendChild(tip);
+   rect.style.cursor="pointer";
+   rect.addEventListener("click",()=>{det=c.id;$("det").value=String(det);refresh();});
+ }
+ $("mapinfo").textContent="Physical detector coordinates (cm); "+(mode==="delta"?
+    "red: positive FW−noFW RMS, blue: negative":mode==="valid"?
+    "darker blue: more valid crossings":"darker blue: larger FW RMS")+
+    ". Select a chamber or choose entire station.";
+}
+function table(){
+ const body=$("detbody");clear(body);
+ const obs=$("observable").value;
+ for(const [id,cc] of Object.entries(stationObj().det).sort((a,b)=>Number(a[0])-Number(b[0]))){
+   const a=cc[config(pitch,0)],b=cc[config(pitch,75)];
+   if(!a||!b)continue;
+   const x=a[obs],y=b[obs],tr=document.createElement("tr");
+   if(Number(id)===det)tr.className="selected";
+   [id,count(a.crossings),count(x.valid),count(y.valid),fmt(x.mean),
+    fmt(x.rms),fmt(y.mean),fmt(y.rms),
+    fmt(x.rms===null||y.rms===null?null:y.rms-x.rms)].forEach(value=>{
+      const td=document.createElement("td");td.textContent=value;tr.appendChild(td);});
+   tr.addEventListener("click",()=>{det=Number(id);$("det").value=id;refresh();});
+   body.appendChild(tr);
+ }
+ $("tabletitle").textContent="MS"+station+" · physical DET · "+(obs==="hemisphere_A"?"hemisphere":"facing-sector")+" A";
+}
+function refresh(){chart();map();table();}
+for(const st of D.stations_selected) option($("station"),st,"MS"+st);
+for(const p of D.pitches_mm)option($("pitch"),p,p+" mm");
+$("station").value=String(station);$("pitch").value=String(pitch);
+updateOptions();refresh();
+$("station").addEventListener("change",e=>{station=Number(e.target.value);det=-1;updateOptions();refresh();});
+$("pitch").addEventListener("change",e=>{pitch=Number(e.target.value);refresh();});
+$("det").addEventListener("change",e=>{det=Number(e.target.value);refresh();});
+$("observable").addEventListener("change",refresh);
+$("ymode").addEventListener("change",chart);
+$("mapmode").addEventListener("change",map);
+$("exposure").textContent=count(D.generated_parent_slots)+" generated J/ψ parent slots (input); "+
+  count(D.all_crossings)+" physical muon gas crossings (observations) · "+
+  D.source_chunks+" source chunk(s) · "+(D.partial_exposure?"PILOT, incomplete exposure":"complete crossing exposure")+
+  " · "+D.lut_trials_per_cell+" Garfield microscopic trials / LUT cell";
+$("provenance").textContent=D.schema+" · parent IDs preserved in raw crossings.csv.gz · "+
+  "all displayed P(A) distributions normalize over defined individual muon crossings · "+
+  "no avalanche, induced charge or electronics. ATLAS-style plotting conventions; not an ATLAS result.";
+</script></body></html>
