@@ -9,8 +9,8 @@ HERE="$(cd "$(dirname "$0")" && pwd -P)"
 REPO="$(cd "$HERE/../.." && pwd -P)"
 cd "$REPO"
 MODE="${1:-}"
-if [[ $# -ne 1 || ! "$MODE" =~ ^(build|prepare2|prepare8|check2|check8|smoke2|smoke2retry1|smoke8|status)$ ]];then
-  echo "Usage: bash $0 build|prepare2|prepare8|check2|check8|smoke2|smoke2retry1|smoke8|status" >&2
+if [[ $# -ne 1 || ! "$MODE" =~ ^(build|prepare2|prepare8|check2|check8|smoke2|smoke2retry1|smoke2retry2|smoke8|status)$ ]];then
+  echo "Usage: bash $0 build|prepare2|prepare8|check2|check8|smoke2|smoke2retry1|smoke2retry2|smoke8|status" >&2
   exit 2
 fi
 PY=python3
@@ -52,7 +52,7 @@ if [[ "$MODE" == "check2" || "$MODE" == "check8" ]];then
   "$PY" "$DRIVER" "$MODE"
   exit
 fi
-if [[ "$MODE" == "smoke2retry1" ]];then
+if [[ "$MODE" == "smoke2retry1" || "$MODE" == "smoke2retry2" ]];then
   "$PY" "$DRIVER" check2
 else
   "$PY" "$DRIVER" "check${MODE#smoke}"
