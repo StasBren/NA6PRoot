@@ -185,3 +185,67 @@ python3 test/mwpc-stage-c/pi_publish_run_to_drive.py \
 
 Do not execute the old `smoke2` mode against its existing directory,
 and do not delete, mutate or re-upload the incomplete old run.
+
+
+## 28 Oct 2026: second smoke2 failure — non-ionisable Heed source (FIXED IN SOURCE)
+
+The second attempt `run_smoke2_crlf_fix1_chunk0001/physics.log` recorded:
+
+```text
+ComponentAnalyticField::CellCheck:
+    All potentials in the cell are the same.
+    There is no point in going on.
+B1 FAILURE: No ionisable medium at initial position in
+Garfield::TrackHeed::NewTrack(...)
+```
+
+**Root cause**: The deliberately geometry-independent Heed primary
+ionisation source was represented by a `ComponentAnalyticField` with
+two identical-potential planes (0 V / 0 V), no anode wires. Garfield's
+analytic cell check correctly rejected this degenerate electrostatic
+model, leaving `TrackHeed` without an ionisable gas medium. This
+happened **before any ionisation/avalanche physics**, and is NOT a
+negative result about the actual ±3 mm MWPC geometry or field wires.
+
+**Fix**: the Heed source now uses `ComponentConstant` with an explicitly
+bounded gas volume (`SetArea` + `SetMedium`), a weak 1 V/cm
+bookkeeping field, and sensor bounds. This *source* field does not
+replace or alter any of the FOUR proper 1800 V wire fields used by
+`AvalancheMicroscopic`. The initial muon position/direction still
+comes from its real frozen Geant4 chord/momentum, and the SAME Heed
+electrons are reused across all four geometries.
+
+`check2` now runs a real C++ `--validate-input` mode that not only
+parses the frozen CSV but verifies `Sensor::GetMedium` and
+`IsIonisable` at **each actual muon start**, without running
+TrackHeed ionisation or any avalanches. Required new output:
+
+```text
+PASS: parsed 2 original Geant4 muon crossings (CSV CRLF/LF supported)
+PASS: Heed gas source medium is ionisable at all 2 muon starts (±3 mm)
+```
+
+**Third attempt: NEW immutable output**, preserving BOTH prior failed
+runs verbatim:
+
+```bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git pull --ff-only
+bash test/mwpc-stage-c/run_pi_native_muon_b1.sh build
+bash test/mwpc-stage-c/run_pi_native_muon_b1.sh check2
+bash test/mwpc-stage-c/run_pi_native_muon_b1.sh smoke2retry2
+```
+
+Only after `smoke2retry2` ends with a fully validated manifest and
+a physical output should it be published:
+
+```bash
+python3 test/mwpc-stage-c/pi_publish_run_to_drive.py \
+  --source test_runs/mwpc_stage_c/pi_muon_avalanche_b1_v1/run_smoke2_gas_medium_fix2_chunk0001 \
+  --run-id muon_B1_true_Heed_smoke2_gas_medium_fix2_20261028 \
+  --upload
+```
+
+This is an implementation validation; neither smoke with 2 physical
+crossings nor the fixed-point pilot100 constitutes a measured
+muon-angle-dependent detector asymmetry.
