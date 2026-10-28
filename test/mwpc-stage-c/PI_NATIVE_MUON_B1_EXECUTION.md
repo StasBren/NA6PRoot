@@ -249,3 +249,64 @@ python3 test/mwpc-stage-c/pi_publish_run_to_drive.py \
 This is an implementation validation; neither smoke with 2 physical
 crossings nor the fixed-point pilot100 constitutes a measured
 muon-angle-dependent detector asymmetry.
+
+
+## 28 Oct 2026: C++ compilation failed — installed Sensor::GetMedium API (SOURCE PATCHED)
+
+The local user's installed Garfield++ header explicitly declares:
+
+```cpp
+Garfield::Medium* Garfield::Sensor::GetMedium(double x, double y, double z);
+```
+
+The third attempt did not compile because the previous code incorrectly
+used the *different* 4-argument API pattern `GetMedium(x,y,z,medium)`.
+The subsequent `check2` correctly refused to use a stale executable,
+and **no third B1 simulation was started**.
+
+The constructor now calls exactly the installed 3-argument,
+pointer-returning method and checks `medium && medium->IsIonisable()`.
+Code review additionally found and fixed:
+- `TrackHeed::NewTrack` is checked for returned false.
+- The exact Garfield++ User Guide (section 5.1.1) states that when
+  `EnableDeltaElectronTransport()` is enabled, `GetElectron`
+  provides low-energy **conduction-electron positions**, but the
+  returned kinetic energy and directions are not meaningful. The
+  previous code incorrectly fed these numbers to `AvalancheElectron`.
+  The corrected code seeds thermalized electrons at **0.1 eV** with
+  zero initial direction (isotropic sampling), identically for all
+  four detector configurations. This is a stated modelling approximation.
+- A dedicated `--validate-heed` mode now runs **REAL TrackHeed**
+  on the unchanged original two Geant4 muons, prints cluster and
+  low-energy electron counts, and fails if all ionization is absent.
+  **No avalanches are executed by that preflight.**
+- `check2` first validates genuine C++ CSV parsing and the gas-medium
+  pointer, then runs the Heed-only check. A successful Python synthetic
+  test is no longer mistaken for successful Heed physics.
+- `build` writes a **source SHA256 / executable SHA256** stamp only
+  after CMake completes; `check2` verifies it. This handles noisy WSL
+  file modification timestamps / clock-skew warnings without accepting
+  an old executable by accident.
+
+**Validation status:** the header signature is supported by the actual
+compiler diagnostics and the Garfield++ manual. The changed files have
+been reviewed through connected GitHub. **The current ChatGPT container
+does not contain the user's installed Garfield++ libraries or headers**;
+Google Drive is storage and does not execute compiled C++.
+No successful compile or TrackHeed smoke has yet been observed for this
+latest revision; this is an explicit unverified boundary, not a claim
+of completed physical testing.
+
+Safest immediate sequence: first compile, then Heed-only preflight.
+Do not start full avalanches until BOTH pass:
+
+```bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git pull --ff-only
+bash test/mwpc-stage-c/run_pi_native_muon_b1.sh build
+bash test/mwpc-stage-c/run_pi_native_muon_b1.sh check2
+```
+
+If successful, separately run the already-created immutable
+`smoke2retry2` mode, which remains unused after the previous
+compiler failure. Both previous failed run folders remain unchanged.
