@@ -55,7 +55,7 @@ def validate(row):
     du=[(vals[f"{a}_out_mm"]-vals[f"{a}_in_mm"])/length for a in "uvw"]
     pdir=[vals[f"p{a}_in_GeV"]/p for a in "uvw"]
     dot=sum(a*b for a,b in zip(du,pdir))
-    if dot<.90:return None # crossing chord must follow actual momentum direction
+    if dot<.999:return None # near-straight native gas chord must match incoming muon direction
     if max(abs(vals["theta_u_in_deg"]),abs(vals["theta_w_in_deg"]))>180:return None
     return p,vals
 def make(max_events=8,chunk=1,output=None):
