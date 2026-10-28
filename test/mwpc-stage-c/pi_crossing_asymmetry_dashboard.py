@@ -93,8 +93,8 @@ def assemble(input_dir, verify_raw=True, geometry=None):
         if not isinstance(lut,dict):
             problems.append(f"missing or malformed LUT{trials} provenance")
     if problems:
-        raise ValueError("Invalid six-station J/psi muon-crossing source:\\n  - "+
-                         "\\n  - ".join(problems))
+        raise ValueError("Invalid six-station J/psi muon-crossing source:\n  - "+
+                         "\n  - ".join(problems))
     if manifest.get("schema") != summary["schema"]:
         raise ValueError("Wrong manifest for crossing-level physics")
     hashes = manifest.get("sha256_outputs", {})
