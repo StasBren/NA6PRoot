@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 import pi_run_lut500_overnight as nightly
-from pi_run_avalanche_lut_sidecar import COLUMNS,BIRTH_COLUMNS,TIME_COLUMNS
+from pi_run_avalanche_lut_sidecar import COLUMNS,BIRTH_COLUMNS,TIME_COLUMNS,validate_outputs
 
 from pi_run_lut500_overnight import (
     CONFIGS,GEOM_NAMES,PER_CELL,CHUNK_SIZE,RESERVOIR,
@@ -94,6 +94,17 @@ def run():
             nightly.write_csv(chunk/"lut_avalanche_timing.csv",TIME_COLUMNS,[timer])
             nightly.write_csv(chunk/"lut_avalanche_birth_reservoir.csv",BIRTH_COLUMNS,[birth])
             (chunk/"physics.log").write_text("PASS: independent full-start microscopic avalanche sidecar 1 frozen LUT trials\n")
+            # The fake C++ CSV must preserve the old collection labels
+            # identically. A one-bit change is a genuine provenance
+            # violation and MUST fail, unlike a string-vs-int RNG seed.
+            assert validate_outputs(chunk,[original],reservoir_limit=5)["n_trials"]==1
+            trial["old_collected"]="0"
+            nightly.write_csv(chunk/"lut_avalanche_trials.csv",COLUMNS,[trial])
+            try:validate_outputs(chunk,[original],reservoir_limit=5)
+            except ValueError:pass
+            else:raise AssertionError("Tampered original collection flag accepted")
+            trial["old_collected"]="1"
+            nightly.write_csv(chunk/"lut_avalanche_trials.csv",COLUMNS,[trial])
             rawfiles=[p for p in chunk.iterdir() if p.is_file()]
             orig_hash={p.name:nightly.sha(p) for p in rawfiles}
             result=nightly.recover_existing_smoke_chunk(smoke,[original])
