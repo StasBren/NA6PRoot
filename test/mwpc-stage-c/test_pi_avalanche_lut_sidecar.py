@@ -80,6 +80,20 @@ def main():
         assert report["total_ion_births"]==3
         assert abs(report["mean_seed_wall_seconds"]-.09)<1.e-10
 
+        # Overnight runner constructs the original RNG seed as a Python int,
+        # while DictReader always loads the sidecar seed as a string.
+        # Their NUMERIC identity, not their Python representation, matters.
+        origin["random_seed"]=9023
+        write()
+        assert validate_outputs(root,[origin])["n_trials"]==1
+        trial["original_random_seed"]="9024"
+        write()
+        try:validate_outputs(root,[origin])
+        except ValueError:pass
+        else:raise AssertionError("Numerically different original RNG seeds accepted")
+        trial["original_random_seed"]="9023"
+        origin["random_seed"]="9023"
+
         # Old electron may not have been collected during old DRIFT while
         # the new, independently seeded full-start avalanche does collect.
         # This must remain ALLOWED: no double survival/attachment gating.
