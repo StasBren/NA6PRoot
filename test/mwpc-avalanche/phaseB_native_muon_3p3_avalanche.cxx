@@ -514,6 +514,11 @@ void RunLutSidecar(const std::string& input,const std::string& prefix) {
     electron.t=0.;
     std::vector<Primary> primaries{electron};
     std::ostringstream oneSeed,oneBirth,oneHit;
+    // Save FULL exact original-start precision; default iostream(6) would
+    // shift the stored position by micrometres and fail SHA-paired checks.
+    oneSeed<<std::setprecision(15);
+    oneBirth<<std::setprecision(15);
+    oneHit<<std::setprecision(15);
     RunGeometry(gas,*it,h,primaries,identity,oneSeed,oneBirth,oneHit,
                 0,0,0,nullptr,&timingOut,true);
     std::string record=oneSeed.str();
