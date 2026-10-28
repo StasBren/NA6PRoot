@@ -288,7 +288,8 @@ def recover_existing_smoke_chunk(target, selected):
         "outputs_sha256":{p.name:sha(p) for p in outputs},
     }
     (chunk/"complete.json").write_text(canonical(state))
-    print("PASS recovered 8 ORIGINAL microscopic Garfield avalanche rows "
+    print("PASS recovered",len(selected),
+          "ORIGINAL microscopic Garfield avalanche rows "
           "without rerun/overwrite; SHA-protected smoke checkpoint",flush=True)
     return stats
 
