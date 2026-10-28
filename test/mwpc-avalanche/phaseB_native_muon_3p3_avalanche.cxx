@@ -12,6 +12,7 @@
 #include <limits>
 #include <memory>
 #include <numeric>
+#include <random>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -67,12 +68,22 @@ struct BirthAccumulator {
   Counts counts;
   double pitch=0;
   std::uint64_t total=0;
-  // For visualization alone, keep first few genuine ion birth locations.
+  // Independent reservoir RNG; MUST NOT consume Garfield microscopic RNG.
+  std::mt19937_64 sampleRng;
   std::vector<std::array<double,4>> sample;
+  BirthAccumulator(unsigned int seed,double p)
+    :pitch(p),sampleRng(std::uint64_t(seed)+0x9e3779b97f4a7c15ULL){}
   void Add(double u,double v,double w,double t) {
     counts.Add(u-std::round(u/pitch)*pitch,v);
     ++total;
-    if(sample.size()<100)sample.push_back({u,v,w,t}); // first births only, NOT unbiased spatial sample
+    const std::array<double,4> birth{{u,v,w,t}};
+    constexpr std::size_t limit=100;
+    if(sample.size()<limit)sample.push_back(birth);
+    else {
+      std::uniform_int_distribution<std::uint64_t> choose(0,total-1);
+      const auto j=choose(sampleRng);
+      if(j<limit)sample[static_cast<std::size_t>(j)]=birth;
+    }
   }
 };
 BirthAccumulator* gBirth=nullptr;
@@ -254,7 +265,7 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
     Garfield::AvalancheMicroscopic avalanche(&sensor);
     constexpr unsigned int cap=200000;
     avalanche.EnableAvalancheSizeLimit(cap);
-    BirthAccumulator births;births.pitch=p;gBirth=&births;
+    BirthAccumulator births(rngSeed,p);gBirth=&births;
     avalanche.SetUserHandleIonisation(OnIonisation);
     const double startEnergy=std::isfinite(e.energy)&&e.energy>.01?
                               e.energy:.1;
@@ -294,12 +305,15 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
            <<births.counts.top<<","<<births.counts.bottom<<","
            <<Asym(births.counts.up,births.counts.down)<<","
            <<Asym(births.counts.top,births.counts.bottom)<<"\n";
-    // The full, unsampled birth counts are used for asymmetry. Coordinates
-    // are bounded diagnostics only and never used as an estimate of N_ion.
+    // The full birth census is used for A; this bounded independent-RNG
+    // reservoir gives unbiased spatial draws WITHIN each seed avalanche.
+    // Weight by N_birth / sample_size for pooling different-sized avalanches.
+    const double reservoirWeight=births.sample.empty()?0.:
+        double(births.total)/births.sample.size();
     for(const auto& v:births.sample)
       birthOut<<crossingLabel<<","<<geom.label<<","<<i<<","
               <<(10.*v[0])<<","<<(10.*v[1])<<","<<(10.*v[2])<<","
-              <<v[3]<<"\n";
+              <<v[3]<<","<<births.total<<","<<reservoirWeight<<"\n";
   }
   hitOut<<crossingLabel<<","<<geom.label<<","<<h.station<<","<<h.det<<","
         <<h.thetaU<<","<<h.thetaW<<","<<h.length<<","<<h.momentum<<","
@@ -354,7 +368,8 @@ int main(int argc,char**argv) {
              "garfield_ne,garfield_ni,ion_births,collected_e,"
              "attached,other,successful,capped,"
              "ion_up,ion_down,ion_top,ion_bottom,A_ion_hemi,A_ion_TB\n";
-    birthOut<<"crossing_id,configuration,primary_index,u_mm,v_mm,w_mm,t_ns\n";
+    birthOut<<"crossing_id,configuration,primary_index,u_mm,v_mm,w_mm,t_ns,"
+               "seed_ion_births_total,reservoir_weight\n";
     for(const auto& h:crossings){
       const std::string id=h.source+"|"+std::to_string(h.chunk)+"|"+
          std::to_string(h.event)+"|"+std::to_string(h.hit)+"|"+
