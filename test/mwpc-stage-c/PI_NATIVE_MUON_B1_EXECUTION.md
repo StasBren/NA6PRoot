@@ -139,3 +139,49 @@ finite detector U/W boundaries and true-cathode B3 signal.
 **Status:** the code and scripts have been committed to GitHub but this
 document does not claim successful Garfield build, physics output, or a
 new B1 scientific measurement.
+
+
+## 28 Oct 2026: initial smoke2 failure — CSV newline format (FIXED IN SOURCE)
+
+The first native B1 build and source selection PASSED. The original
+`run_smoke2_chunk0001/physics.log` recorded:
+
+```
+B1 FAILURE: Wrong real Geant4 muon input column schema
+```
+
+**Root cause:** Python `csv.DictWriter` produces `CRLF` line endings
+(`\\r\\n`) even on WSL/Linux. The original C++ `std::getline` strips
+the `\\n` but retains `\\r`, so an exact string header comparison fails.
+The underlying 2 selected real Geant4 crossings and immutable selection
+CSV are valid, and no Garfield avalanche physics had begun.
+
+**Fix:** C++ `ReadCrossings` now explicitly strips terminal CR from
+both header and each row; the wrong-header exception now prints actual
+and expected headings. C++ `--validate-input` checks the original file
+**without initializing Garfield gas or performing any physical simulation**.
+The Python `check2` mode invokes this C++ test before every B1 smoke.
+
+**Preserve the original failed run unchanged**. The corrected physics
+attempt writes to `run_smoke2_crlf_fix1_chunk0001/`:
+
+```bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git pull --ff-only
+bash test/mwpc-stage-c/run_pi_native_muon_b1.sh build
+bash test/mwpc-stage-c/run_pi_native_muon_b1.sh check2
+bash test/mwpc-stage-c/run_pi_native_muon_b1.sh smoke2retry1
+```
+
+If successful, upload this NEW directory via the existing `na60drive:`
+project-root remote:
+
+```bash
+python3 test/mwpc-stage-c/pi_publish_run_to_drive.py \
+  --source test_runs/mwpc_stage_c/pi_muon_avalanche_b1_v1/run_smoke2_crlf_fix1_chunk0001 \
+  --run-id muon_B1_true_Heed_smoke2_crlf_fix1_20261028 \
+  --upload
+```
+
+Do not execute the old `smoke2` mode against its existing directory,
+and do not delete, mutate or re-upload the incomplete old run.
