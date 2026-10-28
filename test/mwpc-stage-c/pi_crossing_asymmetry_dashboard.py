@@ -63,16 +63,38 @@ def assemble(input_dir, verify_raw=True, geometry=None):
     manifest_file = inp / "manifest.json"
     summary = json.loads(summary_file.read_text(encoding="utf-8"))
     manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
-    trials = summary.get("lut_trials_per_cell")
+    # Older frozen p=3 LUT500 crossing results predate the addition of an
+    # explicit lut_trials_per_cell field. Their versioned schema and LUT500
+    # provenance remain authoritative. Never guess from a directory name.
+    schema = summary.get("schema")
+    versions = {
+        "PI_JPSI_NATIVE_MUON_GAS_CROSSING_ASYM_P3_P4_LUT20_V1":20,
+        "PI_JPSI_NATIVE_MUON_GAS_CROSSING_ASYM_P3_P4_LUT500_V1":500,
+    }
+    trials = versions.get(schema)
+    declared = summary.get("lut_trials_per_cell")
     pitches = summary.get("pitches_mm")
     stations = summary.get("stations_selected")
-    if (trials not in (20, 500) or not isinstance(pitches, list) or
-            not pitches or pitches != sorted(set(pitches)) or
-            any(p not in (3., 4.) for p in pitches) or
-            stations != list(range(6)) or summary.get("source") != "jpsi40-bore" or
-            summary.get("schema") !=
-            "PI_JPSI_NATIVE_MUON_GAS_CROSSING_ASYM_P3_P4_LUT"+str(trials)+"_V1"):
-        raise ValueError("Not a validated six-station J/psi crossing-level source")
+    problems = []
+    if trials is None:
+        problems.append(f"unrecognized crossing-level schema={schema!r}")
+    if declared is not None and declared != trials:
+        problems.append(f"lut_trials_per_cell={declared!r} disagrees with schema LUT{trials}")
+    if not isinstance(pitches, list) or not pitches or pitches != sorted(set(pitches)):
+        problems.append(f"invalid pitches_mm={pitches!r}")
+    elif any(p not in (3.,4.) for p in pitches):
+        problems.append(f"unsupported pitches_mm={pitches!r}")
+    if stations != list(range(6)):
+        problems.append(f"stations_selected={stations!r}, expected [0,1,2,3,4,5]")
+    if summary.get("source") != "jpsi40-bore":
+        problems.append(f"source={summary.get('source')!r}, expected 'jpsi40-bore'")
+    if trials is not None:
+        lut=summary.get("LUT"+str(trials))
+        if not isinstance(lut,dict):
+            problems.append(f"missing or malformed LUT{trials} provenance")
+    if problems:
+        raise ValueError("Invalid six-station J/psi muon-crossing source:\\n  - "+
+                         "\\n  - ".join(problems))
     if manifest.get("schema") != summary["schema"]:
         raise ValueError("Wrong manifest for crossing-level physics")
     hashes = manifest.get("sha256_outputs", {})
@@ -160,6 +182,7 @@ def assemble(input_dir, verify_raw=True, geometry=None):
         "schema":summary["schema"],
         "source":summary["source"],
         "lut_trials_per_cell":trials,
+        "inferred_legacy_lut_trials":declared is None,
         "source_chunks":summary["source_chunks"],
         "generated_parent_slots":summary["generated_parent_slots"],
         "partial_exposure":summary["partial_exposure"],
