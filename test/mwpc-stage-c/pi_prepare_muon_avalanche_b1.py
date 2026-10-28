@@ -82,9 +82,8 @@ def make(max_events=8,chunk=1,output=None):
                 candidates[key]=(score,rec)
     # One per signed station-angle stratum; select balanced stations first.
     ordered=[]
-    for i in range(2):
-        for st in range(6):
-            side=1 if i==0 else -1
+    for st in range(6):
+        for side in (1,-1):
             if (st,side) in candidates:
                 ordered.append(((st,side),candidates[st,side][1]))
     selected=ordered[:max_events]
