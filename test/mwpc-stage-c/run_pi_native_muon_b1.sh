@@ -9,8 +9,8 @@ HERE="$(cd "$(dirname "$0")" && pwd -P)"
 REPO="$(cd "$HERE/../.." && pwd -P)"
 cd "$REPO"
 MODE="${1:-}"
-if [[ $# -ne 1 || ! "$MODE" =~ ^(build|prepare|check|smoke|status)$ ]];then
-  echo "Usage: bash $0 build|prepare|check|smoke|status" >&2
+if [[ $# -ne 1 || ! "$MODE" =~ ^(build|prepare2|prepare8|check2|check8|smoke2|smoke8|status)$ ]];then
+  echo "Usage: bash $0 build|prepare2|prepare8|check2|check8|smoke2|smoke8|status" >&2
   exit 2
 fi
 PY=python3
@@ -25,7 +25,7 @@ if [[ "$MODE" == "status" ]];then
   "$PY" "$DRIVER" status
   exit
 fi
-if [[ "$MODE" == "prepare" ]];then
+if [[ "$MODE" == "prepare2" || "$MODE" == "prepare8" ]];then
   "$PY" "$DRIVER" prepare
   exit
 fi
@@ -45,9 +45,12 @@ if [[ "$MODE" == "build" ]];then
         -DGarfield_DIR="$HOME/na6p/install/garfieldpp/lib/cmake/Garfield"
   cmake --build "$REPO/test/mwpc-avalanche/build" \
         --target mwpc_phase_b_native_muon_3p3 -j2
-  echo "PASS target compiled; select original Geant4 muons next with 'prepare'."
+  echo "PASS target compiled; select original Geant4 muons next with 'prepare2'."
   exit
 fi
-"$PY" "$DRIVER" check
-if [[ "$MODE" == "check" ]];then exit;fi
-nice -n 15 "$PY" "$DRIVER" smoke
+if [[ "$MODE" == "check2" || "$MODE" == "check8" ]];then
+  "$PY" "$DRIVER" "$MODE"
+  exit
+fi
+"$PY" "$DRIVER" "check${MODE#smoke}"
+nice -n 15 "$PY" "$DRIVER" "$MODE"
