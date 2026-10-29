@@ -43,6 +43,11 @@ struct Crossing {
 struct Primary {
   double u=0,v=0,w=0,t=0,energy=0;
   double dx=0,dy=0,dz=0;
+  int clusterIndex=-1; // Original accepted TrackHeed cluster per muon.
+};
+struct HeedCluster {
+  double u=0,v=0,w=0,t=0;
+  int nOriginal=0,nKept=0;
 };
 struct Counts {
   std::uint64_t up=0,down=0,boundary=0,top=0,bottom=0,side=0;
@@ -220,7 +225,8 @@ struct HeedSourceVolume {
 };
 std::vector<Primary> HeedPrimaries(Garfield::MediumMagboltz& gas,
                                   const Crossing& c,int& nClusters,
-                                  int& nDiscarded,int& nFailed){
+                                  int& nDiscarded,int& nFailed,
+                                  std::vector<HeedCluster>* clusterArchive=nullptr){
   // A geometry-independent HEED PRIMARY source is generated ONCE per
   // original crossing, inside a valid ionisable gas volume. This weak
   // placeholder uniform field defines medium lookup ONLY; it is NOT
@@ -250,14 +256,18 @@ std::vector<Primary> HeedPrimaries(Garfield::MediumMagboltz& gas,
     const double along=10.*(xc*d[0]+(yc-.1*c.a[1])*d[1]+zc*d[2]);
     if(along<-.005||along>c.length+.005){++nDiscarded;continue;}
     ++nClusters;
+    HeedCluster record{xc,yc,zc,tc,nc,0};
     for(int i=0;i<nc;++i){
       Primary x;
       if(!heed.GetElectron(i,x.u,x.v,x.w,x.t,x.energy,x.dx,x.dy,x.dz)){
         ++nFailed;continue;
       }
       if(x.v<=-.3||x.v>=.3){++nDiscarded;continue;}
+      x.clusterIndex=nClusters-1;
       primaries.push_back(x);
+      ++record.nKept;
     }
+    if(clusterArchive)clusterArchive->push_back(record);
   }
   return primaries;
 }
@@ -688,10 +698,13 @@ int main(int argc,char**argv) {
       RunLutSidecar(argv[2],argv[3],5);
       return 0;
     }
+    const bool cacheMuonPhysics=(argc==4 &&
+                               std::string(argv[1])=="--muon-cache-physics");
     if(argc!=4)throw std::runtime_error(
-      "Usage: mwpc_phase_b_native_muon_3p3 INPUT_NATIVE_CSV OUTPUT_PREFIX MAX_PRIMARY_ELECTRONS | --validate-input INPUT_NATIVE_CSV | --validate-heed INPUT_NATIVE_CSV | --lut-sidecar FROZEN_EXACT_START_INDEX_CSV OUTPUT_PREFIX");
-    const std::string input=argv[1],prefix=argv[2];
-    const int maxPrimary=std::stoi(argv[3]);
+      "Usage: mwpc_phase_b_native_muon_3p3 INPUT_NATIVE_CSV OUTPUT_PREFIX MAX_PRIMARY_ELECTRONS | --muon-cache-physics REAL_MUON_INPUT_CSV PREFIX | --validate-input INPUT_NATIVE_CSV | --validate-heed INPUT_NATIVE_CSV | --lut-sidecar FROZEN_EXACT_START_INDEX_CSV OUTPUT_PREFIX");
+    const std::string input=argv[cacheMuonPhysics?2:1],
+                      prefix=argv[cacheMuonPhysics?3:2];
+    const int maxPrimary=cacheMuonPhysics?1000:std::stoi(argv[3]);
     if(maxPrimary<1||maxPrimary>1000)throw std::runtime_error("max primaries must be 1..1000");
     const auto crossings=ReadCrossings(input);
     Garfield::MediumMagboltz gas;
@@ -701,6 +714,19 @@ int main(int argc,char**argv) {
     std::ofstream hitOut(prefix+"_crossing.csv");
     std::ofstream seedOut(prefix+"_seed.csv");
     std::ofstream birthOut(prefix+"_ion_birth_sample.csv");
+    std::ofstream primaryOut,clusterOut;
+    if(cacheMuonPhysics){
+      primaryOut.open(prefix+"_heed_primaries.csv");
+      clusterOut.open(prefix+"_heed_clusters.csv");
+      if(!primaryOut||!clusterOut)
+        throw std::runtime_error("Cannot create real Heed primary/cluster cache");
+      primaryOut<<std::setprecision(17);
+      clusterOut<<std::setprecision(17);
+      primaryOut<<"crossing_id,primary_index,cluster_index,u_rel_cm,v_abs_cm,"
+                   "w_rel_cm,t_ns,raw_heed_energy_eV,raw_dx,raw_dy,raw_dz\n";
+      clusterOut<<"crossing_id,cluster_index,u_rel_cm,v_abs_cm,w_rel_cm,"
+                   "t_ns,n_original,n_accepted\n";
+    }
     if(!hitOut||!seedOut||!birthOut)
       throw std::runtime_error("Cannot open new B1 output CSVs");
     hitOut<<"source|chunk|event|hit_index|track_id|station|det_id,configuration,"
@@ -724,17 +750,45 @@ int main(int argc,char**argv) {
          std::to_string(h.track)+"|"+std::to_string(h.station)+"|"+
          std::to_string(h.det);
       int nCl=0,discarded=0,failed=0;
-      const auto electrons=HeedPrimaries(gas,h,nCl,discarded,failed);
+      std::vector<HeedCluster> clusters;
+      const auto electrons=HeedPrimaries(gas,h,nCl,discarded,failed,
+                                       cacheMuonPhysics?&clusters:nullptr);
+      if(failed)
+        throw std::runtime_error("TrackHeed GetElectron failed in native muon cache: "+id);
       if(static_cast<int>(electrons.size())>maxPrimary)
         throw std::runtime_error("Heed primary budget exceeded, preserve partial outputs and use a different pilot: "+id);
-      // One TRUE Heed electron list used verbatim across all four candidates.
+      if(cacheMuonPhysics){
+        if(clusters.size()!=static_cast<std::size_t>(nCl))
+          throw std::runtime_error("TrackHeed accepted cluster bookkeeping changed");
+        for(std::size_t j=0;j<clusters.size();++j){
+          const auto& cl=clusters[j];
+          clusterOut<<id<<","<<j<<","<<cl.u<<","<<cl.v<<","
+                    <<cl.w<<","<<cl.t<<","<<cl.nOriginal<<","
+                    <<cl.nKept<<"\n";
+        }
+        for(std::size_t j=0;j<electrons.size();++j){
+          const auto& e=electrons[j];
+          primaryOut<<id<<","<<j<<","<<e.clusterIndex<<","
+                    <<e.u<<","<<e.v<<","<<e.w<<","<<e.t<<","
+                    <<e.energy<<","<<e.dx<<","<<e.dy<<","<<e.dz<<"\n";
+        }
+        primaryOut.flush();
+        clusterOut.flush();
+      }
+      // One TRUE Geant4→TrackHeed primary electron list is shared verbatim
+      // across all four candidate Garfield fields. Sampling only changes
+      // the saved ion POSITION reservoir, not the complete birth census.
       for(const auto& geom:GEOMS)
         RunGeometry(gas,geom,h,electrons,id,seedOut,birthOut,
-                    hitOut,nCl,discarded,failed);
+                    hitOut,nCl,discarded,failed,nullptr,nullptr,false,
+                    cacheMuonPhysics?5:100);
       std::cout<<"PASS genuine native muon "<<id<<" shared Heed primaries="
                <<electrons.size()<<"\n";
     }
     std::cout<<"PASS: muon-driven B1 all crossing/geometry rows written\n";
+    if(cacheMuonPhysics)
+      std::cout<<"PASS: immutable same-Heed primary/cluster cache and full "
+                 "Garfield microscopic reference emitted; four candidate geometries\n";
     return 0;
   }catch(const std::exception& e){
     std::cerr<<"B1 FAILURE: "<<e.what()<<"\n";
