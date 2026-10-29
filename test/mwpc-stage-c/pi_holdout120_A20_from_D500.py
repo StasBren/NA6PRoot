@@ -150,7 +150,15 @@ def prepare():
         for r in reader:
             data=validate(r)
             if data is None:continue
-            moment,_=data
+            moment,values=data
+            # 9-anode local Garfield patch requires |u_seed|<4.2*p and
+            # |w_seed|<4.8 cm. Only choose Geant4 chords whose native
+            # start/end segment is INSIDE the supported patch, leaving
+            # margin for a few Heed delta-electron displacements. This is
+            # a stated model-domain restriction, not a physics efficiency.
+            if (abs(values["u_out_mm"]-values["u_in_mm"])>8. or
+                abs(values["w_out_mm"]-values["w_in_mm"])>40.):
+                continue
             st=int(r["station"])
             sign=-1 if float(r["theta_u_in_deg"])<0 else 1
             key=(st,sign)
@@ -180,7 +188,7 @@ def prepare():
         "source_channel":"Jpsi","source_chunk":SOURCE_CHUNK,
         "source_id":source,"n_muons":120,"n_independent_physical_tracks":120,
         "per_station_signed_angle_stratum":10,
-        "selection":"SHA-ranked 48 best per signed-angle×station stratum, 10 balanced passes; no duplicate physical Geant4 track, physical incidence-angle PDF NOT represented",
+        "selection":"SHA-ranked 48 best per signed-angle×station stratum, 10 balanced passes; 9-anode valid domain |delta_u|<=8mm, |delta_w|<=40mm with margin; no duplicate physical Geant4 track, physical incidence-angle PDF NOT represented",
         "sha256_input":sha(outfile),
         "frozen_source_csv":str(path),
         "frozen_source_sha256":provenance["csv_sha256"],
