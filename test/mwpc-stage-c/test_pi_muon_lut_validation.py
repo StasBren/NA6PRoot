@@ -14,7 +14,7 @@ from pathlib import Path
 from pi_run_muon_lut_validation import (
     GEOMS,N_U,PRIMARY_FIELDS,CLUSTER_FIELDS,SEED_FIELDS,LUT_FIELDS,
     spatial_cell,entry_phase_mm,round_away,stable_seed,percent,
-    asym,summarize_samples,read_csv,
+    asym,summarize_samples,read_csv,field_wire_blocked_zero_start,
 )
 
 
@@ -59,6 +59,38 @@ def main():
         try:read_csv(p,CLUSTER_FIELDS)
         except ValueError:pass
         else:raise AssertionError("Different Heed cluster/electron schema accepted")
+    # A real Heed conduction electron embedded in the field-wire metal
+    # is a PHYSICAL zero-ion outcome, despite Garfield successful=0.
+    # Field-wire AddWire diameter=75um -> metal radius=0.0375mm.
+    # Existing original reference must remain unchanged; classifier only.
+    wire={k:"0" for k in SEED_FIELDS}
+    wire.update(configuration="p4_FW75",successful="0",capped="0",
+                garfield_ne="1",garfield_ni="0",ion_births="0",
+                seed_u_mm="-2.00535685975886",
+                seed_v_mm="-0.00391288042673045")
+    assert field_wire_blocked_zero_start(wire)
+    for x,y in [(-2.00920622158948,.0229186340901303),
+                (-2.00612397367103,.0239032733895584)]:
+        wire.update(seed_u_mm=str(x),seed_v_mm=str(y))
+        assert field_wire_blocked_zero_start(wire)
+    wire.update(seed_u_mm="-2.06",seed_v_mm="0")
+    assert not field_wire_blocked_zero_start(wire)
+    wire.update(seed_u_mm="-2.005",seed_v_mm="0")
+    for geom in ("p4_noFW","p3_noFW"):
+        wire["configuration"]=geom
+        assert not field_wire_blocked_zero_start(wire)
+    wire["configuration"]="p4_FW75"
+    for k,v in (("ion_births","1"),("capped","1"),("garfield_ne","2"),
+                ("garfield_ni","1"),("successful","1")):
+        old=wire[k];wire[k]=v
+        assert not field_wire_blocked_zero_start(wire)
+        wire[k]=old
+    wire["configuration"]="p3_FW75"
+    wire.update(seed_u_mm="-1.505",seed_v_mm="0")
+    assert field_wire_blocked_zero_start(wire)
+    wire["configuration"]="p4_FW75"
+    wire.update(seed_u_mm="-2.005",seed_v_mm=".0375")
+    assert not field_wire_blocked_zero_start(wire)
     print("PASS 20 native muon×4 geometry LUT-grid phase, spatial lookup, "
           "strict shared-Heed identity schema, deterministic independent "
           "replicates, and undefined asymmetries (OFFLINE only)")
