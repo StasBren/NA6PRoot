@@ -102,6 +102,39 @@ def payload_rows():
         if validate(r) is None:raise ValueError("Geant4 original hit now invalid")
     return rows,m
 
+def choose_holdout_from_pool(pool,per_stratum=10):
+    """Pick original distinct GEANT4 physical muons, balanced across
+    all 12 station/signed-angle strata, preserving original SHA ranking.
+
+    PURE selection helper; unit tested without Geant4/Garfield.
+    """
+    expected={(st,side) for st in range(6) for side in (-1,1)}
+    if not expected.issubset(pool):
+        raise ValueError("Missing signed-angle/station Geant4 strata")
+    selected=[];tracks=set();counts=Counter()
+    for k in range(per_stratum):
+        for mirror in (False,True):
+            for st in range(6):
+                sign=(1 if st%2==0 else -1)*(-1 if mirror else 1)
+                stratum=(st,sign)
+                candidate=None
+                for _,_,rec in pool[stratum]:
+                    physical=(str(rec["source"]),str(rec["chunk"]),
+                              str(rec["event"]),str(rec["track_id"]))
+                    if physical not in tracks:
+                        candidate=(physical,rec)
+                        break
+                if candidate is None:
+                    raise ValueError("No independent original Geant4 track for "+str(stratum))
+                physical,rec=candidate
+                tracks.add(physical);selected.append(rec)
+                counts[stratum]+=1
+    if len(selected)!=len(expected)*per_stratum or len(tracks)!=len(selected) or any(
+            counts[stratum]!=per_stratum for stratum in expected):
+        raise AssertionError("Unbalanced/duplicated physical muons")
+    return selected,counts
+
+
 def prepare():
     if ROOT.exists():
         raise FileExistsError("Preserve prior holdout directory; use status, not overwrite: "+str(ROOT))
@@ -134,31 +167,10 @@ def prepare():
             q.append((score,tuple(map(str,srcid)),rec))
             q.sort(key=lambda v:(v[0],v[1]))
             if len(q)>48:q.pop()
+    selected,by_stratum=choose_holdout_from_pool(pool,per_stratum=10)
     expected={(st,side) for st in range(6) for side in (-1,1)}
-    if set(pool)!=expected:raise ValueError("Original Geant4 chunk2 missing signed-angle/station strata")
-    selected=[];tracks=set();by_stratum=Counter()
-    # Interleave stations and signed angles in ten complete balanced passes.
-    # Scan candidate pools for the best unused PHYSICAL muon each pass.
-    for k in range(10):
-        for mirror in (False,True):
-            for st in range(6):
-                sign=(1 if st%2==0 else -1)*(-1 if mirror else 1)
-                stratum=(st,sign)
-                candidate=None
-                for _,_,rec in pool[stratum]:
-                    physical=(str(rec["source"]),str(rec["chunk"]),
-                              str(rec["event"]),str(rec["track_id"]))
-                    if physical not in tracks:
-                        candidate=(physical,rec)
-                        break
-                if candidate is None:
-                    raise ValueError(f"Unable to find distinct Geant4 track for {stratum}")
-                physical,rec=candidate
-                tracks.add(physical);selected.append(rec)
-                by_stratum[stratum]+=1
-    if len(selected)!=120 or len(tracks)!=120 or any(
-            by_stratum[(st,side)]!=10 for st,side in expected):
-        raise AssertionError("Unable to construct balanced independent 120-muon holdout")
+    if len(selected)!=N_MUONS:
+        raise AssertionError("Not all 120 independent physical Geant4 muons selected")
     INPUT.mkdir(parents=True)
     outfile=INPUT/"native_muon_crossings_input.csv"
     write_csv(outfile,FIELDS,selected)
