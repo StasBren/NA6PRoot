@@ -134,6 +134,12 @@ def input_verified():
     rows=read_csv(f,FIELDS)
     if len(rows)!=N_MUONS or len({id_of(x) for x in rows})!=N_MUONS:
         raise ValueError("Not twenty distinct native muon gas crossings")
+    phys={(
+        str(x["source"]),str(x["chunk"]),str(x["event"]),str(x["track_id"]))
+        for x in rows
+    }
+    if len(phys)!=N_MUONS or meta.get("n_distinct_physical_muon_tracks")!=N_MUONS:
+        raise ValueError("Selected 20 Geant4 crossings are not 20 distinct muon tracks")
     return f,meta,rows
 
 def run_reference():
