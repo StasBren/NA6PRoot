@@ -96,6 +96,11 @@ def payload_rows():
                    for r in rows}
     if len(unique_tracks)!=120:
         raise ValueError("One physical Geant4 track selected more than once")
+    # A generated J/psi parent can give two correlated muons; select
+    # at most one muon per parent event for truly independent bootstrap.
+    parent_events={(r["source"],r["chunk"],r["event"]) for r in rows}
+    if len(parent_events)!=120 or m.get("n_distinct_parent_events")!=120:
+        raise ValueError("Holdout has correlated muons from same Geant4 parent event")
     for r in rows:
         if r["source"]!=SOURCE["Jpsi"] or str(r["chunk"])!=str(SOURCE_CHUNK):
             raise ValueError("Non-holdout Geant4 source in fixed holdout input")
@@ -111,7 +116,7 @@ def choose_holdout_from_pool(pool,per_stratum=10):
     expected={(st,side) for st in range(6) for side in (-1,1)}
     if not expected.issubset(pool):
         raise ValueError("Missing signed-angle/station Geant4 strata")
-    selected=[];tracks=set();counts=Counter()
+    selected=[];tracks=set();parents=set();counts=Counter()
     for k in range(per_stratum):
         for mirror in (False,True):
             for st in range(6):
@@ -121,15 +126,18 @@ def choose_holdout_from_pool(pool,per_stratum=10):
                 for _,_,rec in pool[stratum]:
                     physical=(str(rec["source"]),str(rec["chunk"]),
                               str(rec["event"]),str(rec["track_id"]))
-                    if physical not in tracks:
-                        candidate=(physical,rec)
+                    parent=(str(rec["source"]),str(rec["chunk"]),str(rec["event"]))
+                    if physical not in tracks and parent not in parents:
+                        candidate=(physical,parent,rec)
                         break
                 if candidate is None:
                     raise ValueError("No independent original Geant4 track for "+str(stratum))
-                physical,rec=candidate
-                tracks.add(physical);selected.append(rec)
+                physical,parent,rec=candidate
+                tracks.add(physical);parents.add(parent)
+                selected.append(rec)
                 counts[stratum]+=1
-    if len(selected)!=len(expected)*per_stratum or len(tracks)!=len(selected) or any(
+    if (len(selected)!=len(expected)*per_stratum or
+        len(tracks)!=len(selected) or len(parents)!=len(selected) or any(
             counts[stratum]!=per_stratum for stratum in expected):
         raise AssertionError("Unbalanced/duplicated physical muons")
     return selected,counts
@@ -187,8 +195,9 @@ def prepare():
         "status":"complete","created_utc":time_now(),
         "source_channel":"Jpsi","source_chunk":SOURCE_CHUNK,
         "source_id":source,"n_muons":120,"n_independent_physical_tracks":120,
+        "n_distinct_parent_events":120,
         "per_station_signed_angle_stratum":10,
-        "selection":"SHA-ranked 48 best per signed-angle×station stratum, 10 balanced passes; 9-anode valid domain |delta_u|<=8mm, |delta_w|<=40mm with margin; no duplicate physical Geant4 track, physical incidence-angle PDF NOT represented",
+        "selection":"SHA-ranked 48 best per signed-angle×station stratum, 10 balanced passes; 9-anode valid domain |delta_u|<=8mm, |delta_w|<=40mm with margin; no duplicate Geant4 muon OR generated Jpsi parent event; physical incidence-angle PDF NOT represented",
         "sha256_input":sha(outfile),
         "frozen_source_csv":str(path),
         "frozen_source_sha256":provenance["csv_sha256"],
