@@ -92,23 +92,46 @@ def make(max_events=8,chunk=1,output=None):
             # Stable sort on score alone: tie-breaking by input order is
             # exactly what the old if(score<best) smoke selector did.
             pool.sort(key=lambda x:x[0])
-            if len(pool)>2:pool.pop()
+            if len(pool)>(8 if max_events>=20 else 2):pool.pop()
     # Sweep all 12 strata before using any second-crossing candidate.
-    # This keeps B1's first 2/8 selected physical crossings unchanged.
+    # For >=20, require distinct PHYSICAL muon tracks, not just different
+    # gas-hit rows in multiple stations of the same Geant4 trajectory.
     ordered=[]
-    for rank in (0,1):
-        for mirror in (False,True):
-            for st in range(6):
-                side=(1 if st%2==0 else -1)*(-1 if mirror else 1)
-                if (st,side) in candidates and len(candidates[st,side])>rank:
-                    ordered.append(((st,side),candidates[st,side][rank][1]))
+    if max_events>=20:
+        used_tracks=set()
+        for rank in (0,1):
+            for mirror in (False,True):
+                for st in range(6):
+                    side=(1 if st%2==0 else -1)*(-1 if mirror else 1)
+                    for score,rec in candidates.get((st,side),()):
+                        muon_id=(str(rec["source"]),str(rec["chunk"]),
+                                 str(rec["event"]),str(rec["track_id"]))
+                        if muon_id not in used_tracks:
+                            used_tracks.add(muon_id)
+                            ordered.append(((st,side),rec))
+                            break
+    else:
+        # EXACT prior first-ranked B1 smoke2/8 selection, including ties.
+        for rank in (0,1):
+            for mirror in (False,True):
+                for st in range(6):
+                    side=(1 if st%2==0 else -1)*(-1 if mirror else 1)
+                    if (st,side) in candidates and len(candidates[st,side])>rank:
+                        ordered.append(((st,side),candidates[st,side][rank][1]))
     selected=ordered[:max_events]
     if len(selected)<max_events:raise ValueError("Insufficient signed-angle x station samples")
-    seen=set();output_rows=[]
+    seen=set();seen_tracks=set();output_rows=[]
     for key,rec in selected:
         ident=(rec["chunk"],rec["event"],rec["hit_index"],rec["track_id"],rec["station"],rec["det_id"])
         if ident in seen:raise ValueError("Duplicated physical gas crossing")
-        seen.add(ident);output_rows.append(rec)
+        seen.add(ident)
+        if max_events>=20:
+            physical=(str(rec["source"]),str(rec["chunk"]),
+                      str(rec["event"]),str(rec["track_id"]))
+            if physical in seen_tracks:
+                raise ValueError("Muon track selected twice at different station crossings")
+            seen_tracks.add(physical)
+        output_rows.append(rec)
     output.mkdir(parents=True)
     filename=output/"native_muon_crossings_input.csv"
     with filename.open("w",newline="") as f:
@@ -116,7 +139,7 @@ def make(max_events=8,chunk=1,output=None):
         writer.writeheader();writer.writerows(output_rows)
     manifest={
         "schema":"PI_TRUE_GEANT4_MUON_B1_INPUT_V1",
-        "status":"complete","selection":"deterministic hash-ranked top 2 per station/signed-angle stratum; cycle 1 covers all 12 strata before cycle 2; alternating signs across MS0..MS5 then mirrored signs; physical u-edge 16mm excluded; NOT incidence-angle PDF representative",
+        "status":"complete","selection":"deterministic hash-ranked 2 per signed-angle/station stratum; for >=20 greedy globally distinct physical Geant4 muon tracks from top 8 candidate pool per stratum; cycle 1 covers all 12 strata before cycle 2; physical u-edge 16mm excluded; NOT incidence-angle PDF representative",
         "channel":"Jpsi","source":SOURCE["Jpsi"],"chunk":chunk,"n_crossings":len(output_rows),
         "original_native_csv":str(path),"original_native_sha256":meta["csv_sha256"],
         "original_root_sha256":meta["immutable_input"]["input_root_sha256"],
@@ -126,6 +149,10 @@ def make(max_events=8,chunk=1,output=None):
         "selected_ids":[[x[k] for k in ("chunk","event","hit_index","track_id","station","det_id")]
                         for x in output_rows],
         "selected_momenta_GeV":[float(x["momentum_GeV"]) for x in output_rows],
+        "n_distinct_physical_muon_tracks":len({
+            (str(x["source"]),str(x["chunk"]),str(x["event"]),str(x["track_id"]))
+            for x in output_rows
+        }),
         "code_sha256":sha(__file__),"input_sha256":sha(filename),
         "primary_ionization":"TRUE TrackHeed per physical native Geant4 crossing; not marked Poisson fold",
         "geometry":"symmetric 3+3mm, four p3/p4 FW variants downstream",
