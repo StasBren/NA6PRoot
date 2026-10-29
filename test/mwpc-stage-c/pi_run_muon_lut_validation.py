@@ -371,12 +371,6 @@ def compare(replicates):
             byidx={int(r["primary_index"]):r for r in refseed}
             for i,cluster,box,du,v in positions:
                 row=byidx[i]
-                if abs(float(row["seed_u_mm"])-
-                        (du+round_away((10*float(primaries[x][i]["u_rel_cm"])+
-                            entry_phase_mm(float(crossing["u_in_mm"]),
-                              int(crossing["station"]),pitch))/pitch)*pitch))>1.e-3:
-                    # More safely, compare periodic equivalence below.
-                    pass
                 # The FULL reference seed might be outside the nearest local
                 # cell, so only its periodic relative wire phase is invariant.
                 recorded=float(row["seed_u_mm"])
