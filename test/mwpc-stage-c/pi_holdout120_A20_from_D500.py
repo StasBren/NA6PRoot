@@ -43,7 +43,7 @@ from pi_garfield_runtime_env import garfield_runtime_env
 from pi_run_muon_lut_validation import (
     N_U,PRIMARY_FIELDS,CLUSTER_FIELDS,SEED_FIELDS,
     load_lut,spatial_cell,stable_seed,summarize_samples,asym,
-    validate_reference,read_csv,write_json,id_of,percent,
+    validate_reference,read_csv,write_json,id_of,percent,round_away,
 )
 from pi_publish_run_to_drive import prepare as drive_prepare,publish,EXPECTED_REMOTE
 from pi_audit_avalanche_lut_reuse import BASE
@@ -249,6 +249,13 @@ def run(hours, max_chunks):
         or cfg.get("cpp_source_sha256")!=sha(CXX)
         or cfg.get("cpp_executable_sha256")!=binary):
         raise ValueError("Rebuild/source/input changed since original holdout Garfield start")
+    # A subsequent safe rerun must only REVERIFY the previously sealed
+    # calculation. Never attempt a second aggregate or overwrite it.
+    if (REF/"manifest.json").is_file():
+        verify_full()
+        print("PASS existing full 120-muon Garfield reference already SHA-sealed; "
+              "nothing recomputed or overwritten",flush=True)
+        return
     start=time.monotonic()
     done=0
     for i,subset in enumerate(groups(rows)):
@@ -409,7 +416,7 @@ def evaluate(replicates):
                 full=full_seeds[id_,geom][idx]
                 # C++ true-muon phase and Python LUT phase identity.
                 true_u=float(full["seed_u_mm"])
-                local_true=true_u-math.floor(true_u/nearest_u+0.5)*nearest_u
+                local_true=true_u-round_away(true_u/nearest_u)*nearest_u
                 if abs(local_true-local_u)>1.e-3 and abs(
                     abs(local_true-local_u)-nearest_u)>1.e-3:
                     raise ValueError("Real Garfield electron and LUT spatial phase differ")
