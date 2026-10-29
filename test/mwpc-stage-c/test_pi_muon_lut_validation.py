@@ -31,8 +31,8 @@ def main():
     assert spatial_cell("p3_FW75",1,0.,0.,0.)==(15*30+15,0.,0.)
     assert spatial_cell("p3_noFW",0,0.,0.,0.)==(15,-1.5,0.)
     assert spatial_cell("p4_FW75",1,0.,0.,0.)==(15,-2.,0.)
-    assert spatial_cell("p3_noFW",1,0.,-.01,.01)[0]==14*30+15
-    assert spatial_cell("p3_noFW",1,0.,+.01,-.01)[0]==16*30+14
+    assert spatial_cell("p3_noFW",1,0.,-.015,.01)[0]==13*30+15
+    assert spatial_cell("p3_noFW",1,0.,+.015,-.01)[0]==16*30+14
     assert spatial_cell("p4_noFW",0,0.,+.015,+.01)[0]==21*30+15
     assert stable_seed("muon","p3",0)==stable_seed("muon","p3",0)
     assert stable_seed("muon","p3",0)!=stable_seed("muon","p4",0)
