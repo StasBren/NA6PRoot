@@ -629,17 +629,37 @@ def status():
 
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("mode",choices=("prepare","preflight","run","finish","compare","publish","status"))
+    ap.add_argument("mode",choices=("prepare","preflight","run","finish","compare","publish","pipeline","status"))
     ap.add_argument("--hours",type=float,default=7.75)
     ap.add_argument("--max-chunks",type=int,default=12)
     ap.add_argument("--replicates",type=int,default=REPLICATES)
+    ap.add_argument("--upload",action="store_true",
+                    help="Only pipeline: upload two immutable Drive archives after all 12 physical checkpoints pass")
     a=ap.parse_args()
+    if a.upload and a.mode!="pipeline":
+        ap.error("--upload is only valid with pipeline mode")
     if a.mode=="prepare":prepare()
     elif a.mode=="preflight":preflight()
     elif a.mode=="run":run(a.hours,a.max_chunks)
     elif a.mode=="finish":finish()
     elif a.mode=="compare":evaluate(a.replicates)
     elif a.mode=="publish":publish_all()
+    elif a.mode=="pipeline":
+        run(a.hours,a.max_chunks)
+        if not (REF/"manifest.json").is_file():
+            print("SAFE STOP pipeline partial: full Garfield not yet complete; "
+                  "NO LUT validation or publication performed. Resume same command.",flush=True)
+            return
+        if not (COMP/"manifest.json").is_file():
+            evaluate(a.replicates)
+        else:
+            print("PASS existing SHA-sealed holdout comparison; "
+                  "will verify before optional publication",flush=True)
+        if a.upload:
+            publish_all()
+        else:
+            print("PASS pipeline local Garfield and A20@D500 comparison complete; "
+                  "no upload requested (use --upload to publish)",flush=True)
     elif a.mode=="status":status()
 
 if __name__=="__main__":
