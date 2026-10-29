@@ -208,7 +208,12 @@ def field_wire_blocked_zero_start(row):
     if (int(row["successful"])!=0 or int(row["capped"])!=0
         or int(row["garfield_ne"])!=1 or int(row["garfield_ni"])!=0
         or int(row["ion_births"])!=0 or int(row["collected_e"])!=0
-        or int(row["attached"])!=0 or int(row["other"])!=0
+        or int(row["attached"])!=0
+        # The original C++ endpoint classifier counts a non-collected,
+        # non-attached initial electron as 'other'. A no-transport
+        # metal start may therefore have other=1 (or zero if no
+        # endpoint was made), even with zero microscopic ion births.
+        or int(row["other"]) not in (0,1)
         or any(int(row[k])!=0 for k in
                ("ion_up","ion_down","ion_top","ion_bottom"))):
         return False
@@ -290,7 +295,13 @@ def validate_reference(ref,selected):
                 raise RuntimeError(
                     "UNEXPLAINED unsuccessful Garfield seed (NOT accepted): "
                     f"{x} {geom} primary={idx}, "
-                    f"u={row['seed_u_mm']}mm v={row['seed_v_mm']}mm")
+                    f"u={row['seed_u_mm']}mm v={row['seed_v_mm']}mm "
+                    f"successful={row['successful']} capped={row['capped']} "
+                    f"ne={row['garfield_ne']} ni={row['garfield_ni']} "
+                    f"births={row['ion_births']} collected={row['collected_e']} "
+                    f"attached={row['attached']} other={row['other']} "
+                    f"ion_sectors=({row['ion_up']},{row['ion_down']},"
+                    f"{row['ion_top']},{row['ion_bottom']})")
         ion=int(row["ion_births"])
         a,b=int(row["ion_up"]),int(row["ion_down"])
         top,bot=int(row["ion_top"]),int(row["ion_bottom"])
@@ -317,7 +328,7 @@ def validate_reference(ref,selected):
         "n_geometrically_verified_field_wire_zero_starts":
             sum(physical_wire_blocked.values()),
         "field_wire_zero_starts_by_geometry":dict(physical_wire_blocked),
-        "note_on_unsuccessful":"Garfield successful=0 is accepted ONLY when initial Heed position is strictly within 75um diameter field-wire metal, all sector/ion counts zero, garfield_ne=1, ni=0, not capped. Original raw unsuccessful status and metadata are preserved.",
+        "note_on_unsuccessful":"Garfield successful=0 is accepted ONLY when original Heed position is strictly within 75um diameter field-wire metal, no ion births/collection/attachment, garfield_ne=1, ni=0, not capped, and 0 or 1 uncollected/unattached electron endpoint ('other'). Raw original Garfield unsuccessful status and physics files are preserved.",
         "by_geometry":stats,
     }
 
