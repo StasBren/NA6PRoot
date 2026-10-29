@@ -138,7 +138,7 @@ def choose_holdout_from_pool(pool,per_stratum=10):
                 counts[stratum]+=1
     if (len(selected)!=len(expected)*per_stratum or
         len(tracks)!=len(selected) or len(parents)!=len(selected) or any(
-            counts[stratum]!=per_stratum for stratum in expected):
+            counts[stratum]!=per_stratum for stratum in expected)):
         raise AssertionError("Unbalanced/duplicated physical muons")
     return selected,counts
 
