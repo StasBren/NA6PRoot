@@ -729,6 +729,14 @@ int main(int argc,char**argv) {
     }
     if(!hitOut||!seedOut||!birthOut)
       throw std::runtime_error("Cannot open new B1 output CSVs");
+    if(cacheMuonPhysics){
+      // The muon-vs-LUT benchmark checks the ORIGINAL Geant4 direction
+      // and EXACT Heed seed phases at 1e-6 precision. The original B1
+      // output's default iostream(6) would round those quantities.
+      hitOut<<std::setprecision(15);
+      seedOut<<std::setprecision(15);
+      birthOut<<std::setprecision(15);
+    }
     hitOut<<"source|chunk|event|hit_index|track_id|station|det_id,configuration,"
              "station,det_id,theta_u_in_deg,theta_w_in_deg,path_mm,momentum_GeV,"
              "heed_clusters,heed_primaries,heed_discarded,heed_failed,"
