@@ -35,6 +35,56 @@ Does the original A20@D500 single-electron empirical-response model predict the 
 - Per geometry: out-of-sample mean gain ratio and **1,500 paired bootstrap resamples across DISTINCT Geant4 J/psi parent events**, full-muon gain SD versus A20 total SD (between-fixed-muon-Heed variance + within-conditional-avalanche variance), 90% coverage, asymmetry bias and bootstrap intervals.
 - Gaussian/statistical significance is not assumed from 200 A20 replications. All such replicates share only 20 original avalanche outcomes per cell and do NOT reduce the A20 finite-training uncertainty. Additional 120 independent full-Garfield muons check real validation variability, not A20 training adequacy at the few-percent level.
 
+## Reproducible runtime benchmark (BOTH simulation methods)
+
+The 120-muon holdout additionally benchmarks **time**, with physically
+comparable primary-electron populations and explicit accounting for setup.
+
+- **Native full microscopic Garfield++/TrackHeed**: every 10-muon C++
+  subprocess is timed with `time.perf_counter()` (monotonic wall) and
+  `resource.RUSAGE_CHILDREN` (user/system CPU). Each immutable
+  `chunks/chunk_XX/complete.json` includes measured elapsed seconds,
+  CPU seconds, original Heed primaries, and full microscopic
+  primary-electron×geometry avalanche count. Includes shared Heed
+  generation, gas initialization, 4 physical Garfield fields and raw
+  disk output; excludes Python provenance validation, selection and Drive.
+  The reference `summary.json` and
+  `full_garfield_chunk_timing.csv` combine all genuinely timed
+  checkpoints.
+- **Fast A20@D500 LUT**: separately measure cold loading + SHA checking
+  the archived 84k original avalanche rows, and the warm conditional
+  lookup + RNG + ion-count/angular-sector/Heed-cluster aggregation over
+  **96,000 fixed-Heed muon×geometry replicas** (120×4×200).
+  `benchmark_A20D500_replay_by_geometry.csv` reports total warm wall
+  time, number of stored-electron draws, time per electron and time per
+  muon×geometry replica. The detailed benchmark is also written into
+  the comparison `summary.json` and hashed `manifest.json`.
+- Compare ONE complete physical muon/4-geometry stochastic response:
+  `speedup = sum_native_full_wall_120muons_4fields /
+  (sum_warm_LUT_wall_120muons_4fields_200rep / 200)`.
+  This speedup deliberately describes **native full Garfield+shared
+  Heed+gas init+CSV I/O versus LUT response with Heed already cached**.
+  Therefore it is NOT an end-to-end speedup for identical Geant4/Heed
+  pipelines. To measure such a speedup later, Heed costs must be included
+  in BOTH paths; for now the benchmark reports the scopes separately.
+  Do not confuse wall time, user CPU, and total processing including
+  preflight/validation/Drive.
+- If original physical checkpoint(s) were generated BEFORE timing
+  instrumentation, their `physics_timing` is missing. They remain
+  immutable; the final benchmark explicitly reports
+  `n_chunks_without_timing` and sets any complete-run speedup
+  to unavailable rather than fabricating wall times.
+- No new Garfield C++ rebuild is required by this Python benchmark;
+  the original physics model and all old measured physics files stay
+  SHA protected.
+
+These metrics allow later profiling before trying safe optimizations
+(preload LUT once, vectorize lookup and aggregation, compile sampling C++,
+reduce CSV overhead, batch common Heed source and gas initialization).
+Optimizations must preserve common Heed primary identities, zero-birth
+distribution and angular counts, and must be revalidated against the
+unaltered full-Garfield reference.
+
 ## Exact WSL execution
 
 First update and run only safe/offline checks:
