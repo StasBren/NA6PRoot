@@ -69,6 +69,13 @@ def main():
                 seed_u_mm="-2.00535685975886",
                 seed_v_mm="-0.00391288042673045")
     assert field_wire_blocked_zero_start(wire)
+    # Exact C++ 'other' endpoint semantics: a failed initial electron
+    # inside metal can produce one non-collected/non-attached endpoint.
+    wire["other"]="1"
+    assert field_wire_blocked_zero_start(wire)
+    wire["other"]="2"
+    assert not field_wire_blocked_zero_start(wire)
+    wire["other"]="1"
     for x,y in [(-2.00920622158948,.0229186340901303),
                 (-2.00612397367103,.0239032733895584)]:
         wire.update(seed_u_mm=str(x),seed_v_mm=str(y))
@@ -81,7 +88,8 @@ def main():
         assert not field_wire_blocked_zero_start(wire)
     wire["configuration"]="p4_FW75"
     for k,v in (("ion_births","1"),("capped","1"),("garfield_ne","2"),
-                ("garfield_ni","1"),("successful","1")):
+                ("garfield_ni","1"),("successful","1"),
+                ("collected_e","1"),("attached","1")):
         old=wire[k];wire[k]=v
         assert not field_wire_blocked_zero_start(wire)
         wire[k]=old
