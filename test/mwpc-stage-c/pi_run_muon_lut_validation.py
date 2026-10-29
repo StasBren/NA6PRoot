@@ -353,6 +353,9 @@ def compare(replicates):
     primaries=defaultdict(list)
     for p in read_csv(REFERENCE/"muon_reference_heed_primaries.csv",PRIMARY_FIELDS):
         primaries[p["crossing_id"]].append(p)
+    clusters=defaultdict(list)
+    for cl in read_csv(REFERENCE/"muon_reference_heed_clusters.csv",CLUSTER_FIELDS):
+        clusters[cl["crossing_id"]].append(cl)
     refhits={(r[CROSSING_KEY],r["configuration"]):r
          for r in read_csv(REFERENCE/"muon_reference_crossing.csv",CROSSING_COLUMNS)}
     ref_seeds=defaultdict(list)
@@ -360,6 +363,7 @@ def compare(replicates):
         ref_seeds[(r["crossing_id"],r["configuration"])].append(r)
     report=[]
     ensemble=[]
+    cluster_report=[]
     for crossing in selected:
         x=id_of(crossing)
         for geom in GEOMS:
@@ -387,15 +391,26 @@ def compare(replicates):
                     raise ValueError("REFERENCE Garfield and LUT sampling have different v coordinate")
             seed_rng=random.Random(stable_seed("NA60-MUON-LUT500-V1",x,geom))
             gain_values=[];a_hemi_values=[];a_tb_values=[];zero_counts=[]
+            # Sum reference births by ORIGINAL TrackHeed cluster ID.
+            # This is NOT a spatial bin or a fabricated Poisson cluster.
+            ref_cluster_ions=Counter()
+            for i,cluster,box,du,v in positions:
+                ref_cluster_ions[cluster]+=int(byidx[i]["ion_births"])
+            lut_cluster_rep=defaultdict(list)
             for rep in range(replicates):
                 counts=[0,0,0,0,0]
                 zero=0
+                current_cluster_ions=Counter()
                 for i,cluster,box,du,v in positions:
                     source=lut[geom][box]
                     n,up,down,top,bot=source[seed_rng.randrange(len(source))]
                     counts[0]+=n;counts[1]+=up;counts[2]+=down
                     counts[3]+=top;counts[4]+=bot
                     zero+=int(n==0)
+                    current_cluster_ions[cluster]+=n
+                for cl in clusters[x]:
+                    lut_cluster_rep[int(cl["cluster_index"])].append(
+                        current_cluster_ions[int(cl["cluster_index"])])
                 n,up,down,top,bot=counts
                 gain_values.append(n);zero_counts.append(zero)
                 a_hemi_values.append(asym(up,down))
@@ -407,6 +422,34 @@ def compare(replicates):
                     "ion_up":up,"ion_down":down,"ion_top":top,"ion_bottom":bot,
                     "A_ion_hemi":a_hemi_values[-1] if a_hemi_values[-1] is not None else "",
                     "A_ion_TB":a_tb_values[-1] if a_tb_values[-1] is not None else "",
+                })
+            # Record the response of each REAL Heed cluster, including
+            # clusters whose retained electron count is zero.
+            if sum(ref_cluster_ions.values())!=sum(int(r["ion_births"]) for r in refseed):
+                raise ValueError("Sum of real Heed cluster ion births does not match all primaries")
+            for cl in clusters[x]:
+                idx=int(cl["cluster_index"])
+                vals=lut_cluster_rep[idx]
+                if len(vals)!=replicates:
+                    raise ValueError("Missing LUT replicas of original Heed cluster")
+                q=summarize_samples(vals)
+                ref_ion=ref_cluster_ions[idx]
+                cluster_report.append({
+                    "crossing_id":x,"configuration":geom,
+                    "cluster_index":idx,
+                    "cluster_u_rel_cm":cl["u_rel_cm"],
+                    "cluster_v_abs_cm":cl["v_abs_cm"],
+                    "cluster_w_rel_cm":cl["w_rel_cm"],
+                    "cluster_t_ns":cl["t_ns"],
+                    "n_original_Heed_e":cl["n_original"],
+                    "n_accepted_Heed_e":cl["n_accepted"],
+                    "full_cluster_ion_births":ref_ion,
+                    "lut_mean_cluster_ion_births":q["mean"],
+                    "lut_sd_cluster_ion_births":q["sd"],
+                    "lut_p05_cluster_ion_births":q["p05"],
+                    "lut_p50_cluster_ion_births":q["p50"],
+                    "lut_p95_cluster_ion_births":q["p95"],
+                    "full_within_lut_90pct":int(q["p05"]<=ref_ion<=q["p95"]),
                 })
             r=refhits[(x,geom)]
             full_ion=int(r["ion_births"])
@@ -450,8 +493,14 @@ def compare(replicates):
         rs=[r for r in report if r["configuration"]==geom]
         ref_mean=statistics.mean(r["full_ion_births"] for r in rs)
         lut_mean=statistics.mean(r["lut_mean_ion_births"] for r in rs)
+        cls=[r for r in cluster_report if r["configuration"]==geom
+             and int(r["n_accepted_Heed_e"])>0]
         bygeom[geom]={
             "n_independent_real_Geant4_muons":len(rs),
+            "n_Heed_clusters_with_accepted_electrons":len(cls),
+            "fraction_full_cluster_reference_within_5_95pct_LUT_interval":
+                statistics.mean(r["full_within_lut_90pct"] for r in cls)
+                if cls else None,
             "n_true_Heed_primary_electrons":sum(int(r["n_Heed_primaries"]) for r in rs),
             "full_reference_mean_ion_births_per_muon":ref_mean,
             "lut_mean_ion_births_per_muon":lut_mean,
@@ -469,12 +518,18 @@ def compare(replicates):
     with (COMPARISON/"muon_lut_replicas.csv").open("w",newline="") as f:
         wr=csv.DictWriter(f,fieldnames=tuple(ensemble[0]))
         wr.writeheader();wr.writerows(ensemble)
+    if not cluster_report:
+        raise ValueError("No real Heed clusters were accounted for")
+    with (COMPARISON/"heed_cluster_comparison.csv").open("w",newline="") as f:
+        wr=csv.DictWriter(f,fieldnames=tuple(cluster_report[0]))
+        wr.writeheader();wr.writerows(cluster_report)
     info={
         "schema":"NA60_GEANT4_HEED_TO_GARFIELD_VS_EMPIRICAL_LUT500_MUON_V1",
         "status":"complete",
         "n_true_geant4_muon_crossings":len(selected),
         "n_candidate_geometry":4,"n_lut_replicates_per_muon_geometry":replicates,
         "n_synthetic_lut_muon_replicas":len(ensemble),
+        "n_real_Heed_cluster_by_geometry_comparisons":len(cluster_report),
         "reference_manifest_sha256":ref_hash,
         "overnight_lut_manifest_sha256":lut_hash,
         "original_lut500_overnight_avalanches":84000,
@@ -489,7 +544,8 @@ def compare(replicates):
     outputs={p.name:sha(p) for p in sorted(COMPARISON.iterdir()) if p.is_file()}
     write_json(COMPARISON/"manifest.json",{**info,"outputs_sha256":outputs})
     print("PASS 20 real Geant4×Heed muons, 4 fields, 200 independent LUT "
-          "muon-response replicas each; same exact Heed primary input.",flush=True)
+          "muon-response replicas each; same exact Heed primary input. "
+          "TrackHeed cluster-level response also conserved and compared.",flush=True)
     for geom,v in bygeom.items():print(geom,json.dumps(v,sort_keys=True),flush=True)
 
 def publish_all():
