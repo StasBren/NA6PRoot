@@ -24,6 +24,7 @@ import hashlib
 import json
 import math
 import random
+import resource
 import shutil
 import statistics
 import subprocess
@@ -304,12 +305,22 @@ def run(hours, max_chunks):
         prefix=c/"muon_reference"
         print(f"REAL FULL Garfield chunk {i+1}/12 started, "
               f"10 unseen physical muons, 4 geometries",flush=True)
+        # Benchmark SAME physical process that generates the reference:
+        # includes C++ startup, gas init, shared TrackHeed generation, all
+        # four fields' microscopic Garfield avalanches, and raw CSV writes.
+        # Does NOT include preflight, Python SHA/validation, or uploading.
+        child_before=resource.getrusage(resource.RUSAGE_CHILDREN)
+        physics_start=time.perf_counter()
         with (c/"physics.log").open("w") as out:
             cp=subprocess.run(
                 [str(EXE),"--muon-cache-physics",
                  str(c/"native_muon_crossings_input.csv"),str(prefix)],
                 stdout=out,stderr=subprocess.STDOUT,
                 cwd=c,check=False,env=garfield_runtime_env())
+        physics_wall=time.perf_counter()-physics_start
+        child_after=resource.getrusage(resource.RUSAGE_CHILDREN)
+        physics_cpu_user=child_after.ru_utime-child_before.ru_utime
+        physics_cpu_system=child_after.ru_stime-child_before.ru_stime
         if cp.returncode or "PASS: immutable same-Heed primary/cluster cache" not in (
                 c/"physics.log").read_text(errors="replace"):
             raise RuntimeError(f"True Garfield chunk FAILED. Raw files preserved: {c}; tail:\n"+
@@ -319,18 +330,36 @@ def run(hours, max_chunks):
             raise ValueError("Full Garfield chunk incomplete/not physical")
         raw=[c/"native_muon_crossings_input.csv",c/"physics.log"]+[
             c/name for name in FIELDS_TO_MERGE]
+        total_avalanches=stat["n_full_avalanche_trials"]
+        measured={
+            "definition":"Native compiled --muon-cache-physics wall clock: ten genuine Geant4 muons, shared TrackHeed clusters once/muon, four full Garfield geometries, gas init/startup and raw outputs; excludes Python checks/uploads",
+            "wall_seconds":physics_wall,
+            "cpu_user_seconds":physics_cpu_user,
+            "cpu_system_seconds":physics_cpu_system,
+            "cpu_total_seconds":physics_cpu_user+physics_cpu_system,
+            "n_physical_muons":len(subset),
+            "n_fields":len(GEOMS),
+            "n_primary_Garfield_avalanches":total_avalanches,
+            "wall_seconds_per_muon_four_fields":physics_wall/len(subset),
+            "wall_seconds_per_full_Garfield_primary_including_shared_overhead":
+                physics_wall/total_avalanches,
+        }
         write_json(c/"complete.json",{
             "schema":"PI_10_REAL_GEANT4_MUON_GARFIELD_SHA_CHECKPOINT_V1",
             "status":"complete","chunk":i,"n_muons":len(subset),
             "cpp_executable_sha256":binary,
             "input_sha256":sha(raw[0]),
             "stats":stat,
+            "physics_timing":measured,
             "outputs_sha256":{p.name:sha(p) for p in raw},
         })
         done+=1
         print(f"PASS CHECKPOINT {done}/12: "
               f"native Heed clusters={stat['n_heed_clusters']}, "
               f"full Garfield primary×geometry={stat['n_full_avalanche_trials']}; "
+              f"native physics wall={physics_wall:.3f}s, "
+              f"CPU={physics_cpu_user+physics_cpu_system:.3f}s, "
+              f"ms/primary+shared-overhead={1000*measured['wall_seconds_per_full_Garfield_primary_including_shared_overhead']:.3f}; "
               "zero cap/fail, SHA sealed",flush=True)
     finish()
 
@@ -363,6 +392,33 @@ def finish():
     if (stat["n_native_muons"]!=120 or
         stat["n_full_avalanche_trials"]!=4*stat["n_heed_primaries"]):
         raise ValueError("Aggregated full Garfield/Heed sample count mismatch")
+    timed=[(i,read_seal(chunk_dir(i),i,subset,binary).get("physics_timing"))
+           for i,subset in enumerate(groups(rows))]
+    valid=[(i,t) for i,t in timed if t is not None]
+    full_timing={
+        "metric":"wall/cpu time of native full C++ Garfield+one TrackHeed per real muon, all four geometries, INCLUDING shared gas init/file IO; NOT separately measured Garfield-only compute",
+        "n_chunks_total":N_CHUNKS,
+        "n_chunks_instrumented":len(valid),
+        "n_chunks_without_timing":N_CHUNKS-len(valid),
+        "measured_muons":sum(t["n_physical_muons"] for _,t in valid),
+        "measured_primary_geom_avalanches":sum(t["n_primary_Garfield_avalanches"] for _,t in valid),
+        "physics_wall_seconds_sum":sum(t["wall_seconds"] for _,t in valid),
+        "physics_cpu_user_seconds_sum":sum(t["cpu_user_seconds"] for _,t in valid),
+        "physics_cpu_system_seconds_sum":sum(t["cpu_system_seconds"] for _,t in valid),
+    }
+    if full_timing["measured_muons"]:
+        full_timing["measured_wall_seconds_per_muon_all_four_geometries"]=(
+            full_timing["physics_wall_seconds_sum"]/full_timing["measured_muons"])
+        full_timing["measured_wall_seconds_per_primary_geom_avalanche_with_overhead"]=(
+            full_timing["physics_wall_seconds_sum"]/full_timing["measured_primary_geom_avalanches"])
+    write_csv(REF/"full_garfield_chunk_timing.csv",
+              ("chunk","n_muons","n_avalanche_trials","wall_seconds",
+               "cpu_user_seconds","cpu_system_seconds"),
+              [{"chunk":i,"n_muons":t["n_physical_muons"],
+                "n_avalanche_trials":t["n_primary_Garfield_avalanches"],
+                "wall_seconds":t["wall_seconds"],
+                "cpu_user_seconds":t["cpu_user_seconds"],
+                "cpu_system_seconds":t["cpu_system_seconds"]} for i,t in valid])
     summary={
         "schema":"PI_INDEPENDENT_GEANT4_HEED_GARFIELD_HOLDOUT120_V1",
         "status":"complete","n_physically_distinct_muons":120,
@@ -371,6 +427,7 @@ def finish():
         "cpp_source_sha256":sha(CXX),"cpp_executable_sha256":binary,
         "original_geant_input_sha256":meta["sha256_input"],
         "n_completed_chunks":12,
+        "full_garfield_TrackHeed_timing":full_timing,
         "A20D500_definition":"20 NEW full avalanche realizations/cell from 500 ORIGINAL DRIFT starts/cell; 4200 cells, 84000 microscopic avalanche trials",
         "stat":stat,"gas":"Ar/CO2 70/30, 293.15K 760 Torr",
         "geometry":"3mm/4mm anode spacing; noFW/FW75; anode +1800V; cathodes ±3mm; B=0",
