@@ -191,6 +191,40 @@ def run_reference():
     for geom,stat in checks["by_geometry"].items():
         print("  ",geom,stat,flush=True)
 
+def field_wire_blocked_zero_start(row):
+    """Strictly identify a real TrackHeed electron born INSIDE a 75 um
+    diameter grounded field wire, where microscopic transport cannot start.
+
+    Original C++ AddWire((i+0.5)*pitch_cm,0,fw_diameter_cm,0) uses a
+    WIRE DIAMETER (75 um), NOT radius. The 9-anode patch has eight field
+    wires, centers k+1/2 for integer k=-4..3. Input seed positions are mm.
+
+    No generic Garfield failure is permitted: this recognizes only the
+    geometrically proven 0-ion, 1-electron, no-transport case.
+    """
+    geom=row["configuration"]
+    if geom not in ("p3_FW75","p4_FW75"):
+        return False
+    if (int(row["successful"])!=0 or int(row["capped"])!=0
+        or int(row["garfield_ne"])!=1 or int(row["garfield_ni"])!=0
+        or int(row["ion_births"])!=0 or int(row["collected_e"])!=0
+        or int(row["attached"])!=0 or int(row["other"])!=0
+        or any(int(row[k])!=0 for k in
+               ("ion_up","ion_down","ion_top","ion_bottom"))):
+        return False
+    x=float(row["seed_u_mm"])
+    y=float(row["seed_v_mm"])
+    if not (math.isfinite(x) and math.isfinite(y)):
+        return False
+    pitch=3.0 if geom.startswith("p3_") else 4.0
+    k=round_away(x/pitch-.5)
+    if k < -4 or k > 3:
+        return False
+    center=(k+.5)*pitch
+    # A strictly interior point (1 nanometre radial margin).
+    return math.hypot(x-center,y)<.0375-1e-6
+
+
 def validate_reference(ref,selected):
     src={id_of(x):x for x in selected}
     primary=read_csv(ref/"muon_reference_heed_primaries.csv",PRIMARY_FIELDS)
@@ -234,14 +268,29 @@ def validate_reference(ref,selected):
             int(r["heed_clusters"])!=ncluster[x]):
             raise ValueError("Heed cluster/primary cache is not the full reference input")
     seen=set();sums=defaultdict(lambda:Counter())
+    physical_wire_blocked=Counter()
     for row in seeds:
         x=row["crossing_id"];geom=row["configuration"]
         idx=int(row["primary_index"]);key=(x,geom,idx)
         if x not in src or geom not in GEOMS or key in seen or (x,idx) not in pn:
             raise ValueError("Unknown/duplicate native full Garfield primary seed")
         seen.add(key)
-        if int(row["capped"]) or int(row["successful"])!=1:
-            raise RuntimeError("Capped/failed full Garfield microscopic muon reference")
+        if int(row["capped"]):
+            raise RuntimeError(
+                "CAPPED full Garfield microscopic reference (NOT accepted): "
+                f"{x} {geom} primary={idx}")
+        if int(row["successful"])!=1:
+            if field_wire_blocked_zero_start(row):
+                # Preserve original unsuccessful C++ flag and REAL zero
+                # ion births. This is a geometry-domain outcome (electron
+                # initially INSIDE grounded wire), NOT an avalanche failure
+                # which could be silently used as valid gain.
+                physical_wire_blocked[geom]+=1
+            else:
+                raise RuntimeError(
+                    "UNEXPLAINED unsuccessful Garfield seed (NOT accepted): "
+                    f"{x} {geom} primary={idx}, "
+                    f"u={row['seed_u_mm']}mm v={row['seed_v_mm']}mm")
         ion=int(row["ion_births"])
         a,b=int(row["ion_up"]),int(row["ion_down"])
         top,bot=int(row["ion_top"]),int(row["ion_bottom"])
@@ -265,6 +314,10 @@ def validate_reference(ref,selected):
         "n_heed_clusters":sum(ncluster.values()),
         "n_heed_primaries":sum(nprimary.values()),
         "n_full_avalanche_trials":len(seeds),
+        "n_geometrically_verified_field_wire_zero_starts":
+            sum(physical_wire_blocked.values()),
+        "field_wire_zero_starts_by_geometry":dict(physical_wire_blocked),
+        "note_on_unsuccessful":"Garfield successful=0 is accepted ONLY when initial Heed position is strictly within 75um diameter field-wire metal, all sector/ion counts zero, garfield_ne=1, ni=0, not capped. Original raw unsuccessful status and metadata are preserved.",
         "by_geometry":stats,
     }
 
