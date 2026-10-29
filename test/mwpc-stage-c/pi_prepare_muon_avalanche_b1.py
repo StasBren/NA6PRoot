@@ -88,8 +88,10 @@ def make(max_events=8,chunk=1,output=None):
             rec["momentum_GeV"]=f"{p:.12g}"
             rec["heed_seed"]=seed("real-Heed-once-v1",*keyid)
             pool=candidates.setdefault(key,[])
-            pool.append((score,tuple(map(str,keyid)),rec))
-            pool.sort(key=lambda x:(x[0],x[1]))
+            pool.append((score,rec))
+            # Stable sort on score alone: tie-breaking by input order is
+            # exactly what the old if(score<best) smoke selector did.
+            pool.sort(key=lambda x:x[0])
             if len(pool)>2:pool.pop()
     # Sweep all 12 strata before using any second-crossing candidate.
     # This keeps B1's first 2/8 selected physical crossings unchanged.
@@ -99,7 +101,7 @@ def make(max_events=8,chunk=1,output=None):
             for st in range(6):
                 side=(1 if st%2==0 else -1)*(-1 if mirror else 1)
                 if (st,side) in candidates and len(candidates[st,side])>rank:
-                    ordered.append(((st,side),candidates[st,side][rank][2]))
+                    ordered.append(((st,side),candidates[st,side][rank][1]))
     selected=ordered[:max_events]
     if len(selected)<max_events:raise ValueError("Insufficient signed-angle x station samples")
     seen=set();output_rows=[]
