@@ -47,7 +47,7 @@ Local immutable outputs:
 
 Inside the full reference: original native Geant4 selection and SHA input manifest, real Heed cluster and electron CSVs, one Garfield full avalanche per cached electron/geometry, real muon-level angular sum, ion birth samples, trace and SHA manifests.
 
-Inside the LUT comparison: muon_comparison.csv (80 original muon/geometry rows), muon_lut_replicas.csv (16000 resampled muon/geometry replicas), source SHA and method+limitations, summary and SHA manifest.
+Inside the LUT comparison: muon_comparison.csv (80 original muon/geometry rows), muon_lut_replicas.csv (16000 resampled muon/geometry replicas), heed_cluster_comparison.csv (one true Heed cluster per original muon and geometry, with exact accepted electron multiplicity, position/time, full-Garfield total ion births and empirical-LUT 5/50/95 percentiles), source SHA and method+limitations, summary and SHA manifest. The total ion census of the ORIGINAL primary electrons is summed by original cluster ID first and checked against the real-muon full reference; no synthetic cluster placements.
 
 All old source LUT500/Geant4 and completed B1 runs stay immutable, and incomplete new run directories are retained rather than overwritten. Do not claim physical reference success or LUT agreement until the actual user WSL calculation and Google Drive readback have passed.
 
