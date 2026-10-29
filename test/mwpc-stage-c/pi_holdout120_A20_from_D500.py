@@ -257,6 +257,97 @@ def read_seal(c,i,subset,binary):
             raise ValueError(f"Full Garfield original file changed: {c/name}")
     return obj
 
+def recover_completed_chunk07():
+    """Forensic SHA seal of the already FINISHED original 10-muon full
+    Garfield run. Absolutely NO microscopic physics is rerun.
+
+    This one-time recovery intentionally permits ONLY the observed 11
+    zero-ion, no-transport original Heed seeds strictly embedded INSIDE
+    the 75 um p4_FW75 field-wire metal. Other failures/caps still abort.
+    Original real Garfield CSVs/physics.log are NEVER modified.
+    """
+    i=7
+    rows,meta=payload_rows()
+    binary=check_executable()
+    if (REF/"manifest.json").exists():
+        raise RuntimeError("Already completed full reference; recovery not allowed")
+    if not (REF/"run_config.json").is_file():
+        raise RuntimeError("Missing unchanged original full-Garfield run config")
+    cfg=json.loads((REF/"run_config.json").read_text())
+    if (cfg.get("input_sha256")!=meta["sha256_input"]
+        or cfg.get("cpp_source_sha256")!=sha(CXX)
+        or cfg.get("cpp_executable_sha256")!=binary):
+        raise ValueError("Original source/binary/Geant4 SHA changed since first run")
+    parts=groups(rows)
+    for earlier in range(i):
+        read_seal(chunk_dir(earlier),earlier,parts[earlier],binary)
+    c=chunk_dir(i)
+    if not c.is_dir() or (c/"complete.json").exists():
+        raise RuntimeError("Original full-Garfield chunk_07 absent or already sealed; refuse recovery")
+    inp=c/"native_muon_crossings_input.csv"
+    original=read_csv(inp,FIELDS)
+    subset=parts[i]
+    if ([id_of(x) for x in original]!=[id_of(x) for x in subset]
+        or sha(inp)!=sha_bytes_for_subset(FIELDS,subset)):
+        raise ValueError("Original Geant4 10-muon chunk source did not match")
+    raw=[inp,c/"physics.log"]+[c/name for name in FIELDS_TO_MERGE]
+    if not all(p.is_file() and p.stat().st_size>0 for p in raw):
+        raise RuntimeError("Original Garfield run did not produce all original outputs")
+    physics_log=(c/"physics.log").read_text(errors="replace")
+    if ("PASS: muon-driven B1 all crossing/geometry rows written" not in physics_log
+        or "PASS: immutable same-Heed primary/cluster cache" not in physics_log):
+        raise RuntimeError("Original C++ full-Garfield completion marker absent; DO NOT RECOVER")
+    stat=validate_reference(c,subset)
+    affected=stat["field_wire_zero_starts_by_geometry"]
+    if (stat["n_native_muons"]!=10 or
+        stat["n_full_avalanche_trials"]!=4*stat["n_heed_primaries"] or
+        stat["n_geometrically_verified_field_wire_zero_starts"]!=11 or
+        affected!={"p4_FW75":11}):
+        raise RuntimeError("This is NOT the observed original 11 in-metal starts; refuse recovery")
+    if any(g["n_capped_seeds"] for g in stat["by_geometry"].values()):
+        raise RuntimeError("Unexpected microscopic avalanche cap")
+    # No monotonic process timer survives the original validation abort.
+    # Do NOT fabricate runtime from timestamps or previous 7 chunks.
+    record={
+        "schema":"PI_10_REAL_GEANT4_MUON_GARFIELD_SHA_CHECKPOINT_V1",
+        "status":"complete","chunk":i,"n_muons":len(subset),
+        "cpp_executable_sha256":binary,"input_sha256":sha(inp),
+        "stats":stat,
+        "recovery":{
+            "type":"read_only_forensic_validation_after_Python_abort",
+            "reason":"Original C++ full Garfield completed, but strict former Python validator rejected eleven physically nontransportable zero-ion Heed starts strictly inside p4_FW75 75um field-wire metal",
+            "raw_cpp_successful_flags_untouched":True,
+            "physics_rerun":False,
+            "original_result_files_untouched":True,
+            "original_native_physics_wall_seconds":"NOT MEASURED: Python aborted before completing timing checkpoint",
+        },
+        "outputs_sha256":{p.name:sha(p) for p in raw},
+    }
+    # CRITICAL: write only newly missing complete.json, never raw physics.
+    seal=c/"complete.json"
+    if seal.exists():
+        raise FileExistsError("Concurrent checkpoint appeared; refuse recovery")
+    write_json(seal,record)
+    read_seal(c,i,subset,binary)
+    print("PASS RECOVERED original chunk_07 without running Garfield: "
+          f"{stat['n_full_avalanche_trials']} full primary×geometry trials; "
+          "11 proven in-metal nontransporting field-wire starts; "
+          "all physical CSVs and physics.log untouched and SHA-sealed; "
+          "timing of this original aborted checkpoint UNKNOWN. "
+          "Resuming 8/12 remaining chunks is now safe.",flush=True)
+
+
+def sha_bytes_for_subset(fields,rows):
+    """Exact existing UTF-8 CSV writer canonical representation, in memory.
+    Recovery never writes/replaces the original source CSV.
+    """
+    import io
+    b=io.StringIO(newline="")
+    writer=csv.DictWriter(b,fieldnames=fields)
+    writer.writeheader();writer.writerows(rows)
+    return hashlib.sha256(b.getvalue().encode("utf-8")).hexdigest()
+
+
 def run(hours, max_chunks):
     if hours<=0 or max_chunks<1 or max_chunks>N_CHUNKS:
         raise ValueError("Use --hours >0 and --max-chunks 1..12")
@@ -797,7 +888,7 @@ def status():
 
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("mode",choices=("prepare","preflight","run","finish","compare","publish","pipeline","status"))
+    ap.add_argument("mode",choices=("prepare","preflight","recover07","run","finish","compare","publish","pipeline","status"))
     ap.add_argument("--hours",type=float,default=7.75)
     ap.add_argument("--max-chunks",type=int,default=12)
     ap.add_argument("--replicates",type=int,default=REPLICATES)
@@ -808,6 +899,7 @@ def main():
         ap.error("--upload is only valid with pipeline mode")
     if a.mode=="prepare":prepare()
     elif a.mode=="preflight":preflight()
+    elif a.mode=="recover07":recover_completed_chunk07()
     elif a.mode=="run":run(a.hours,a.max_chunks)
     elif a.mode=="finish":finish()
     elif a.mode=="compare":evaluate(a.replicates)
