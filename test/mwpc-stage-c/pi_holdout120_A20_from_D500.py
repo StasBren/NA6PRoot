@@ -153,7 +153,8 @@ def prepare():
     pool=defaultdict(list);counts=Counter()
     with path.open(newline="") as f:
         reader=csv.DictReader(f)
-        if not set(FIELDS)-{"source","chunk","momentum_GeV","heed_seed"}<=set(reader.fieldnames or ()):
+        required=set(FIELDS)-{"source","chunk","momentum_GeV","heed_seed"}
+        if not required.issubset(set(reader.fieldnames or ())):
             raise ValueError("Frozen Geant4 chunk2 missing original native input fields")
         for r in reader:
             data=validate(r)
