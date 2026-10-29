@@ -685,6 +685,12 @@ def evaluate(replicates):
     exact_speedup=(full_seconds/replay_equivalent_one_full_muon_set_seconds
         if full_timed_chunks==N_CHUNKS and
            replay_equivalent_one_full_muon_set_seconds>0 else None)
+    # Cold-start LUT reloading/CSV decoding/SHA verification is paid ONCE
+    # for a fresh process even if only ONE stochastic pass is requested.
+    one_cold_LUT_pass_seconds=(lut_load_verify_seconds+
+                               replay_equivalent_one_full_muon_set_seconds)
+    cold_speedup=(full_seconds/one_cold_LUT_pass_seconds
+        if full_timed_chunks==N_CHUNKS and one_cold_LUT_pass_seconds>0 else None)
     measured_timing={
         "schema":"PI_TRUE_MUON_A20_FROM_D500_BENCHMARK_V1",
         "measurement_clock":"time.perf_counter monotonic wall, single-process sequential WSL runs; full Garfield child CPU additionally via resource.RUSAGE_CHILDREN",
@@ -697,12 +703,16 @@ def evaluate(replicates):
         "warm_LUT_sampling_and_muon_cluster_aggregation_wall_seconds":lut_sampling_seconds,
         "warm_LUT_wall_seconds_for_ONE_simulated_120muon_x_fourfield_pass":
             replay_equivalent_one_full_muon_set_seconds,
+        "cold_load_plus_one_LUT_pass_wall_seconds":
+            one_cold_LUT_pass_seconds,
         "warm_LUT_primary_draws":total_lut_draws,
         "warm_LUT_muon_field_replicas":total_lut_replicas,
         "full_Garfield_native_physics_wall_seconds_sum":full_seconds,
         "full_Garfield_native_n_instrumented_chunks":full_timed_chunks,
         "full_Garfield_vs_warm_cached_Heed_LUT_speedup":
             exact_speedup,
+        "full_Garfield_vs_cold_loaded_cached_Heed_LUT_speedup":
+            cold_speedup,
         "not_comparable":"The indicated speedup, if available, compares complete native shared-Heed+full-Garfield physics and I/O to preloaded-LUT response CONDITIONAL ON ALREADY SAVED HEED. It is NOT an equal end-to-end Geant4/Heed runtime or CPU-architectural comparison. 200 LUT draws do not increase the original A20 training statistics.",
         "per_geometry":replay_timing,
     }
@@ -748,7 +758,8 @@ def evaluate(replicates):
           f"{total_lut_draws} electronic draws; "
           f"cold LUT84k load+SHA {lut_load_verify_seconds:.3f}s; "
           f"native full Garfield+Heed measured chunks {full_timed_chunks}/{N_CHUNKS}; "
-          f"speedup {exact_speedup if exact_speedup is not None else 'NOT AVAILABLE'}",
+          f"warm speedup {exact_speedup if exact_speedup is not None else 'NOT AVAILABLE'}, "
+          f"cold speedup {cold_speedup if cold_speedup is not None else 'NOT AVAILABLE'}",
           flush=True)
     for geom,s in bygeom.items():
         print(geom,json.dumps(s,sort_keys=True),flush=True)
