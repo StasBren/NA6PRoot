@@ -466,8 +466,13 @@ def verify_full():
 
 def evaluate(replicates):
     if not 20<=replicates<=1000:raise ValueError("Replicates 20..1000")
+    comparator_start=time.perf_counter()
+    verification_start=time.perf_counter()
     rows,ref_stat,refsha=verify_full()
+    ref_verification_seconds=time.perf_counter()-verification_start
+    lut_start=time.perf_counter()
     lut,lutsha=load_lut() # verifies ALL frozen 84k microavalanches per cell and hashes
+    lut_load_verify_seconds=time.perf_counter()-lut_start
     if COMP.exists():raise FileExistsError("Preserve earlier comparison: "+str(COMP))
     COMP.mkdir(parents=True)
     primary=defaultdict(list)
@@ -485,6 +490,11 @@ def evaluate(replicates):
     full_hits={(r[KEY],r["configuration"]):r for r in
                read_csv(REF/"muon_reference_crossing.csv",CROSSING_COLUMNS)}
     muons=[];cluster_rows=[];replica_rows=[]
+    # Replay-only measurement: SAME original cached Heed electrons, same
+    # 20 physical avalanches/cell. Separate warm LUT draws from full
+    # startup/SHA parsing and statistical report/CSV publication overhead.
+    replay_timing={geom:{"wall_seconds":0.,"n_primary_draws":0,
+                         "n_muon_replicas":0} for geom in GEOMS}
     # Hold-out physical response. Re-read common, exact Heed source from
     # full reference, NO second Heed call.
     for j,mu in enumerate(rows):
@@ -515,6 +525,10 @@ def evaluate(replicates):
                 full_cluster[cl]+=int(full_seeds[id_,geom][idx]["ion_births"])
             rng=random.Random(stable_seed("HOLDOUT120-AVALANCHELUT20-FROM-DRIFT500-V1",id_,geom))
             ions=[];zeros=[];ah=[];at=[];cluster_draws=defaultdict(list)
+            # Warm conditional LUT replay timer includes RNG, 20-trial
+            # table lookup, births+angles aggregation, cluster accounting,
+            # per-replica Python row bookkeeping. No CSV/plots/bootstrapping.
+            replay_start=time.perf_counter()
             for rep in range(replicates):
                 totals=[0,0,0,0,0];nz=0;bycl=Counter()
                 for idx,cl,box in phase_inputs:
@@ -535,6 +549,10 @@ def evaluate(replicates):
                     "A_hemi":ah[-1] if ah[-1] is not None else "",
                     "A_TB":at[-1] if at[-1] is not None else "",
                 })
+            replay_elapsed=time.perf_counter()-replay_start
+            replay_timing[geom]["wall_seconds"]+=replay_elapsed
+            replay_timing[geom]["n_primary_draws"]+=len(p)*replicates
+            replay_timing[geom]["n_muon_replicas"]+=replicates
             r=full_hits[id_,geom]
             fion=int(r["ion_births"])
             fzero=sum(int(int(e["ion_births"])==0) for e in full_seeds[id_,geom].values())
@@ -590,6 +608,7 @@ def evaluate(replicates):
                   f"all 4 geometries x {replicates} conditionally resampled",flush=True)
     if len(muons)!=480 or len(replica_rows)!=480*replicates:
         raise ValueError("Incomplete independent muon comparison")
+    replay_complete_at=time.perf_counter()
     bygeom={};boots=random.Random(20261029)
     for geom in GEOMS:
         g=[r for r in muons if r["configuration"]==geom]
@@ -645,6 +664,60 @@ def evaluate(replicates):
     write_csv(COMP/"muon_comparison.csv",tuple(muons[0]),muons)
     write_csv(COMP/"heed_cluster_comparison.csv",tuple(cluster_rows[0]),cluster_rows)
     write_csv(COMP/"muon_A20D500_replicas.csv",tuple(replica_rows[0]),replica_rows)
+    for geom,times in replay_timing.items():
+        times["wall_seconds_per_muon_one_LUT_realization"]=(
+            times["wall_seconds"]/times["n_muon_replicas"])
+        times["wall_seconds_per_primary_LUT_draw"]=(
+            times["wall_seconds"]/times["n_primary_draws"])
+        times["muon_replicates_per_second"]=(
+            times["n_muon_replicas"]/times["wall_seconds"]
+            if times["wall_seconds"]>0 else None)
+    full_timing=json.loads((REF/"summary.json").read_text()).get(
+        "full_garfield_TrackHeed_timing",{})
+    total_lut_draws=sum(x["n_primary_draws"] for x in replay_timing.values())
+    total_lut_replicas=sum(x["n_muon_replicas"] for x in replay_timing.values())
+    lut_sampling_seconds=sum(x["wall_seconds"] for x in replay_timing.values())
+    replay_equivalent_one_full_muon_set_seconds=lut_sampling_seconds/replicates
+    full_seconds=full_timing.get("physics_wall_seconds_sum")
+    full_timed_chunks=full_timing.get("n_chunks_instrumented",0)
+    # A speed-up is only valid for a COMPLETE measurement of all the
+    # same 120 muons. Else mark it UNAVAILABLE; no estimates from mtimes.
+    exact_speedup=(full_seconds/replay_equivalent_one_full_muon_set_seconds
+        if full_timed_chunks==N_CHUNKS and
+           replay_equivalent_one_full_muon_set_seconds>0 else None)
+    measured_timing={
+        "schema":"PI_TRUE_MUON_A20_FROM_D500_BENCHMARK_V1",
+        "measurement_clock":"time.perf_counter monotonic wall, single-process sequential WSL runs; full Garfield child CPU additionally via resource.RUSAGE_CHILDREN",
+        "full_garfield_scope":"120 original Geant4 muons x four fields, one genuine TrackHeed source per muon; native C++ gas initialization, all full AvalancheMicroscopic calls and raw CSV writes INCLUDED; user preflight and Python original SHA validation EXCLUDED",
+        "LUT_scope":"EXACT same cached Heed electrons; 200 independent conditional A20@D500 replicas per muon/field; 20 stored complete full avalanches per spatial cell; no new TrackHeed, native Garfield, ion drift or cathode induced signals",
+        "wall_seconds_original_reference_sha_validation":ref_verification_seconds,
+        "wall_seconds_LUT84k_load_and_sha_validation":lut_load_verify_seconds,
+        "wall_seconds_from_start_to_end_of_all_replay_phase_including_bookkeeping":
+            replay_complete_at-(comparator_start+ref_verification_seconds+lut_load_verify_seconds),
+        "warm_LUT_sampling_and_muon_cluster_aggregation_wall_seconds":lut_sampling_seconds,
+        "warm_LUT_wall_seconds_for_ONE_simulated_120muon_x_fourfield_pass":
+            replay_equivalent_one_full_muon_set_seconds,
+        "warm_LUT_primary_draws":total_lut_draws,
+        "warm_LUT_muon_field_replicas":total_lut_replicas,
+        "full_Garfield_native_physics_wall_seconds_sum":full_seconds,
+        "full_Garfield_native_n_instrumented_chunks":full_timed_chunks,
+        "full_Garfield_vs_warm_cached_Heed_LUT_speedup":
+            exact_speedup,
+        "not_comparable":"The indicated speedup, if available, compares complete native shared-Heed+full-Garfield physics and I/O to preloaded-LUT response CONDITIONAL ON ALREADY SAVED HEED. It is NOT an equal end-to-end Geant4/Heed runtime or CPU-architectural comparison. 200 LUT draws do not increase the original A20 training statistics.",
+        "per_geometry":replay_timing,
+    }
+    write_csv(COMP/"benchmark_A20D500_replay_by_geometry.csv",
+              ("geometry","muon_replicas","primary_draws","warm_sampling_wall_seconds",
+               "wall_seconds_per_muon_one_LUT_realization",
+               "wall_seconds_per_primary_LUT_draw"),
+              [{"geometry":geom,"muon_replicas":t["n_muon_replicas"],
+                "primary_draws":t["n_primary_draws"],
+                "warm_sampling_wall_seconds":t["wall_seconds"],
+                "wall_seconds_per_muon_one_LUT_realization":
+                    t["wall_seconds_per_muon_one_LUT_realization"],
+                "wall_seconds_per_primary_LUT_draw":
+                    t["wall_seconds_per_primary_LUT_draw"]}
+               for geom,t in replay_timing.items()])
     info={
         "schema":"PI_GEANT4_CHUNK2_HOLDOUT120_A20_FROM_D500_COMPARISON_V1",
         "status":"complete",
@@ -655,6 +728,7 @@ def evaluate(replicates):
         "full_Garfield_manifest_sha256":refsha,
         "A20D500_overnight_original_manifest_sha256":lutsha,
         "by_geometry":bygeom,
+        "timing_benchmark":measured_timing,
         "method":"Holdout 120 NEW independent Geant4 muons from source Jpsi chunk2; one exact original TrackHeed cluster/electron source per muon; same exact primaries go through full Garfield and through 200 conditionally independent 20-microscopic-avalanche empirical cell draws, four fields. 20 avalanche trials/cell were drawn from ORIGINAL 500 drift starts/cell, not 500 avalanche trials/cell.",
         "limits":"One microscopic Garfield realization per muon; bootstrap paired across 120 real independent source tracks. 200 LUT replicas reuse the same 20 empirical avalanches per spatial box, so they do NOT remove finite A20 training uncertainty. Stratified station/signed-angle pilot not the true flux angle PDF; cell bin is 0.1mm x 0.2mm (NO continuous interpolation); B=0; no strip weighting field/induced electronics or ion drift. Strong local/tail asymmetry conclusions need targeted higher statistics.",
         "git_commit":commit(),
@@ -668,6 +742,14 @@ def evaluate(replicates):
           "four full Garfield fields versus A20@D500 "
           f"{replicates}× conditional replicates each (total {len(replica_rows)}); "
           "statistical summary and immutable SHA manifest",flush=True)
+    print("TIMING A20@D500 warm cached-Heed sampling "
+          f"{lut_sampling_seconds:.4f}s/{total_lut_replicas} "
+          "muon×geometry replicas; "
+          f"{total_lut_draws} electronic draws; "
+          f"cold LUT84k load+SHA {lut_load_verify_seconds:.3f}s; "
+          f"native full Garfield+Heed measured chunks {full_timed_chunks}/{N_CHUNKS}; "
+          f"speedup {exact_speedup if exact_speedup is not None else 'NOT AVAILABLE'}",
+          flush=True)
     for geom,s in bygeom.items():
         print(geom,json.dumps(s,sort_keys=True),flush=True)
 
