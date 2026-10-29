@@ -52,6 +52,14 @@ def run():
         (r["source"],r["chunk"],r["event"],r["track_id"])
         for r in selection
     })==120
+    # Two genuinely different muon track IDs from SAME J/psi event
+    # are kinematically correlated. Reject second track as independent
+    # bootstrap observation; the holdout is parent-event independent.
+    pool=fake_pool()
+    pool[0,-1][0][2]["event"]=pool[0,1][0][2]["event"]
+    pool[0,-1][0][2]["track_id"]="24"
+    selection,_=h.choose_holdout_from_pool(pool,10)
+    assert len({(r["source"],r["chunk"],r["event"]) for r in selection})==120
     pool=fake_pool()
     pool[0,1]=pool[0,1][:4]
     try:h.choose_holdout_from_pool(pool,10)
