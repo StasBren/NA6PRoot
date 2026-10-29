@@ -55,7 +55,14 @@ cascade. Original raw CSV statuses must remain unchanged; no claim is
 made that Garfield's return value is a successful transport.
 
 The Python physical validator now accepts ONLY this strict geometrically
-confirmed case. It continues to reject:
+confirmed case, including a C++ electron endpoint recorded as `other=1`:
+C++ classifies any non-collected and non-attached endpoint as `other`,
+so an electron born inside the metal can have one such endpoint even when
+no avalanche is transported. Both `other=0` and `other=1` are permitted
+only under the exact same strict inside-wire and zero-ion conditions;
+`other>1` remains forbidden. This fixes the earlier false rejection by
+the initial recovery validator that mistakenly demanded `other=0`.
+It continues to reject:
 - any nonzero avalanche ions, endpoints, collection/attachment or
   angular-sector counts in a supposed in-wire no-transport seed,
 - any cap; every failed/no-transport seed outside field-wire metal;
