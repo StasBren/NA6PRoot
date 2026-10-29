@@ -79,21 +79,27 @@ def make(max_events=8,chunk=1,output=None):
             # Deterministic hash-ranked candidate = uniform within every stratum.
             keyid=(SOURCE["Jpsi"],chunk,row["event"],row["hit_index"],row["track_id"],st,row["det_id"])
             score=seed("muon-aval-b1-selection-v1",*keyid)
-            if key not in candidates or score<candidates[key][0]:
-                rec={k:row[k] for k in FIELDS if k not in ("source","chunk","momentum_GeV","heed_seed")}
-                rec["source"]=SOURCE["Jpsi"];rec["chunk"]=chunk
-                rec["momentum_GeV"]=f"{p:.12g}"
-                rec["heed_seed"]=seed("real-Heed-once-v1",*keyid)
-                candidates[key]=(score,rec)
-    # One per signed station-angle stratum; select balanced stations first.
+            # Keep the top two independent ORIGINAL Geant4 crossings per
+            # signed-angle/station stratum. The previous 2/8 B1 smoke picks
+            # remain byte-for-byte identical: the first ranked candidate in
+            # each stratum is untouched.
+            rec={k:row[k] for k in FIELDS if k not in ("source","chunk","momentum_GeV","heed_seed")}
+            rec["source"]=SOURCE["Jpsi"];rec["chunk"]=chunk
+            rec["momentum_GeV"]=f"{p:.12g}"
+            rec["heed_seed"]=seed("real-Heed-once-v1",*keyid)
+            pool=candidates.setdefault(key,[])
+            pool.append((score,tuple(map(str,keyid)),rec))
+            pool.sort(key=lambda x:(x[0],x[1]))
+            if len(pool)>2:pool.pop()
+    # Sweep all 12 strata before using any second-crossing candidate.
+    # This keeps B1's first 2/8 selected physical crossings unchanged.
     ordered=[]
-    # First sweep covers all six stations and alternates signed angle.
-    # Second sweep selects opposite-sign partners in those stations.
-    for mirror in (False,True):
-        for st in range(6):
-            side=(1 if st%2==0 else -1)*(-1 if mirror else 1)
-            if (st,side) in candidates:
-                ordered.append(((st,side),candidates[st,side][1]))
+    for rank in (0,1):
+        for mirror in (False,True):
+            for st in range(6):
+                side=(1 if st%2==0 else -1)*(-1 if mirror else 1)
+                if (st,side) in candidates and len(candidates[st,side])>rank:
+                    ordered.append(((st,side),candidates[st,side][rank][2]))
     selected=ordered[:max_events]
     if len(selected)<max_events:raise ValueError("Insufficient signed-angle x station samples")
     seen=set();output_rows=[]
@@ -108,7 +114,7 @@ def make(max_events=8,chunk=1,output=None):
         writer.writeheader();writer.writerows(output_rows)
     manifest={
         "schema":"PI_TRUE_GEANT4_MUON_B1_INPUT_V1",
-        "status":"complete","selection":"deterministic per-station signed-angle stratified crossing; alternating signs across MS0..MS5 then mirrored signs; excluding physical u-edge 16mm; NOT angle-PDF representative",
+        "status":"complete","selection":"deterministic hash-ranked top 2 per station/signed-angle stratum; cycle 1 covers all 12 strata before cycle 2; alternating signs across MS0..MS5 then mirrored signs; physical u-edge 16mm excluded; NOT incidence-angle PDF representative",
         "channel":"Jpsi","source":SOURCE["Jpsi"],"chunk":chunk,"n_crossings":len(output_rows),
         "original_native_csv":str(path),"original_native_sha256":meta["csv_sha256"],
         "original_root_sha256":meta["immutable_input"]["input_root_sha256"],
