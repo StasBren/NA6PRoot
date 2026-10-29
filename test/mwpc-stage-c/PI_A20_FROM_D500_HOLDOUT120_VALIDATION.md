@@ -35,6 +35,69 @@ Does the original A20@D500 single-electron empirical-response model predict the 
 - Per geometry: out-of-sample mean gain ratio and **1,500 paired bootstrap resamples across DISTINCT Geant4 J/psi parent events**, full-muon gain SD versus A20 total SD (between-fixed-muon-Heed variance + within-conditional-avalanche variance), 90% coverage, asymmetry bias and bootstrap intervals.
 - Gaussian/statistical significance is not assumed from 200 A20 replications. All such replicates share only 20 original avalanche outcomes per cell and do NOT reduce the A20 finite-training uncertainty. Additional 120 independent full-Garfield muons check real validation variability, not A20 training adequacy at the few-percent level.
 
+## One-time physical field-wire start recovery of the already completed original chunk_07 (29 Oct 2026)
+
+This is ONLY for the actual stopped original run with original 7 SHA-complete
+chunks and originally completed eighth **native C++ physics** execution,
+whose Python reference validator stopped on eleven failed starts in a
+p4_FW75 75um field-wire metal, real muon
+\`jpsi40-bore|2|4138|1|2|1|38\`, primary indices 18..28.
+
+Cause: \`ComponentAnalyticField::AddWire\` receives a **diameter** of 75 um,
+i.e. a wire **radius** of 0.0375 mm, with p4 field-wire centres at
+\`u = (...,-2,+2,...) mm\`, \`v=0\`. All observed 11 Heed electron
+starting positions lie *inside the conductor*. Microscopic Garfield++
+cannot initiate gas-electron transport at a point inside a metal wire;
+it returns \`successful=0, garfield_ne=1, garfield_ni=0,
+ion_births=0, capped=0\`. This is a physically **absorbed or embedded
+initial electron with zero gas avalanche**, NOT a capped or unphysical
+cascade. Original raw CSV statuses must remain unchanged; no claim is
+made that Garfield's return value is a successful transport.
+
+The Python physical validator now accepts ONLY this strict geometrically
+confirmed case. It continues to reject:
+- any nonzero avalanche ions, endpoints, collection/attachment or
+  angular-sector counts in a supposed in-wire no-transport seed,
+- any cap; every failed/no-transport seed outside field-wire metal;
+- start points at anodes or other media unless separately validated.
+
+Run after previous process exited and BEFORE resuming, without
+rebuilding C++ or editing original physics files:
+
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git pull --ff-only
+    python3 -m py_compile test/mwpc-stage-c/pi_run_muon_lut_validation.py test/mwpc-stage-c/pi_holdout120_A20_from_D500.py
+    python3 test/mwpc-stage-c/test_pi_muon_lut_validation.py
+    python3 test/mwpc-stage-c/test_pi_holdout120_A20_from_D500.py
+    python3 test/mwpc-stage-c/pi_holdout120_A20_from_D500.py recover07
+    python3 test/mwpc-stage-c/pi_holdout120_A20_from_D500.py status
+
+\`recover07\` asserts ORIGINAL input/C++ executable SHA, ALL seven
+existing sealed checkpoints, original unchanged chunk_07 Geant4 source,
+physical C++ end-of-run marker, all original Heed/ion CSV schemas,
+no caps and precisely **11 physically in-wire zero-ion failed seeds**
+in \`p4_FW75\`. It NEVER calls Garfield. If and only if all conditions
+pass it writes the single missing \`chunk_07/complete.json\` containing
+SHA256 of every original C++ result and a conspicuous recovery note.
+
+The original Python exited before recording original eighth-chunk wall
+clock, so no elapsed-time value is inferred or fabricated. Its timing
+will be marked missing, and whole-120 measured runtime ratios will
+remain unavailable unless separately and legitimately benchmarked.
+The remaining original source chunks 08..11 will have genuine
+monotonic wall/CPU timing. Every original chunk_00..07 CSV stays untouched.
+
+**Physical modeling caveat for follow-up:** A20@D500 is currently a
+0.1mm×0.2mm spatial-bin empirical sampler. If a Heed primary starts
+inside a 75um field-wire metal, exact geometry dictates zero gas avalanche;
+the empirical spatial bin might include both metal and gas starts.
+The original A20@D500 sampler is NOT automatically geometrically vetoed
+by this change, so future holdout results should explicitly inspect
+any possible LUT-vs-Garfield bias caused by embedded-metal electron
+starts. A dedicated documented metal veto may be needed in an upgraded
+surrogate; do not conceal this discrepancy or silently retrofit the
+historical 84k physical LUT.
+
 ## Reproducible runtime benchmark (BOTH simulation methods)
 
 The 120-muon holdout additionally benchmarks **time**, with physically
