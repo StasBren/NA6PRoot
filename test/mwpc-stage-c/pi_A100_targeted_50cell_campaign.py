@@ -128,8 +128,11 @@ def verify_plan():
 def prepare():
     if ROOT.exists():
         raise FileExistsError("Existing targeted experiment MUST NOT be overwritten: "+str(ROOT))
-    _,meta_original,src=payload_rows()
-    _,full_stats,_=verify_full() # SHA verification of immutable full physics
+    src,meta_original=payload_rows()  # Exact interface: (rows, manifest).
+    ref_rows,full_stats,_=verify_full() # (rows, stats, reference SHA).
+    if ([id_of(r) for r in src] != [id_of(r) for r in ref_rows]
+        or len(src)!=120):
+        raise ValueError("Original 120 real Geant4 muon identities differ from SHA-sealed full Garfield reference")
     a20=json.loads((A20_ORIGINAL/"manifest.json").read_text())
     if (a20.get("status")!="complete" or
         a20.get("n_completed_avalanches")!=84000 or
