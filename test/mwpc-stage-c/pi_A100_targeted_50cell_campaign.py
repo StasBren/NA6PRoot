@@ -31,6 +31,9 @@ from datetime import datetime,timezone
 from pathlib import Path
 
 from pi_run_native_muon_b1 import EXE,CXX,check_executable,commit
+from pi_publish_run_to_drive import (
+    prepare as drive_prepare,publish as drive_publish,EXPECTED_REMOTE,
+)
 from pi_garfield_runtime_env import garfield_runtime_env
 from pi_prepare_muon_avalanche_b1 import FIELDS,sha
 from pi_audit_avalanche_lut_reuse import BASE,EXPORT_FIELDS,CONFIGS,locations
@@ -445,6 +448,23 @@ def finish():
           "16,000 new original D500 starts, SHA-sealed without "
           "modifying original 84k or 120 real muons",flush=True)
 
+def publish_results():
+    _,rows,targets=verify_plan()
+    f=ROOT/"manifest.json"
+    if not f.exists():
+        raise FileNotFoundError("Targeted original Garfield 16k full run not finished")
+    data=json.loads(f.read_text())
+    if data.get("status")!="complete" or data.get("new_full_Garfield_avalanches")!=TOTAL:
+        raise ValueError("Not a completed original targeted 16k Garfield source")
+    for filename,digest in data["files_sha256"].items():
+        if sha(ROOT/filename)!=digest:
+            raise ValueError("Original A100 physics changed after SHA seal: "+filename)
+    bundle=drive_prepare(ROOT,"mwpc_A100D500_targeted50x4_original_Garfield_v1")
+    drive_publish(bundle,EXPECTED_REMOTE,upload=True)
+    print("PASS published frozen 16k original targeted A100 Garfield + "
+          "per-cell targets and source hashes (no source overwrite)",flush=True)
+
+
 def status():
     print("TARGET ROOT",ROOT,"present" if ROOT.is_dir() else "absent")
     if MANIFEST.is_file():
@@ -460,13 +480,14 @@ def status():
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument("mode",choices=("prepare","run","finish","status"))
+    p.add_argument("mode",choices=("prepare","run","finish","publish","status"))
     p.add_argument("--hours",type=float,default=6.75)
     p.add_argument("--max-chunks",type=int,default=N_CHUNKS)
     a=p.parse_args()
     if a.mode=="prepare":prepare()
     elif a.mode=="run":run(a.hours,a.max_chunks)
     elif a.mode=="finish":finish()
+    elif a.mode=="publish":publish_results()
     elif a.mode=="status":status()
 
 if __name__=="__main__":main()
