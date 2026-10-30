@@ -19,7 +19,7 @@ from pi_run_muon_lut_validation import (
     read_csv,stable_seed,summarize_samples,asym,percent,id_of,
 )
 from pi_holdout120_A20_from_D500 import (
-    REF,FULL120,GEOMS,ROOT as HOLDOUT_ROOT,COMP as ORIGINAL_COMP,
+    REF,GEOMS,ROOT as HOLDOUT_ROOT,COMP as ORIGINAL_COMP,
     payload_rows,verify_full,write_csv,write_json,
 )
 from pi_A100_targeted_50cell_campaign import (
@@ -107,7 +107,7 @@ def evaluate(reps=N_REP):
     physical=defaultdict(list)
     for r in read_csv(REF/"muon_reference_heed_primaries.csv",PRIMARY_FIELDS):
         physical[r["crossing_id"]].append(r)
-    crossing={(r["crossing_id"],r["configuration"]):r for r in
+    crossing={(r[KEY],r["configuration"]):r for r in
              read_csv(REF/"muon_reference_crossing.csv",CROSSING_COLUMNS)}
     more=[];replays=[]
     for j,mu in enumerate(rows):
