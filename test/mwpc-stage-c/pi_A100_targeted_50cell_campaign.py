@@ -316,7 +316,7 @@ def validate_chunk_physics(c,rows):
     return stat,blocked
 
 def run(hours,maxchunks):
-    if not 0<hours<=168 or maxchunks<1:
+    if not 0<hours<=168 or not 1<=maxchunks<=N_CHUNKS:
         raise ValueError("Unreasonable run budget/count")
     m,rows,targets=verify_plan()
     if (ROOT/"manifest.json").is_file():
@@ -380,6 +380,14 @@ def finish():
     out=ROOT/"manifest.json"
     if out.exists():
         raise FileExistsError("Original targeted final reference already completed")
+    for geom in GEOMS:
+        if (ROOT/f"trials_extra_{geom}.csv").exists():
+            raise FileExistsError(
+                "Previous aggregate was interrupted; preserve original "
+                "files and inspect before retrying, do not overwrite: "
+                +str(ROOT/f"trials_extra_{geom}.csv"))
+    if (ROOT/"summary.json").exists():
+        raise FileExistsError("Preserve existing original A100 summary")
     bundles=[]
     for i in range(N_CHUNKS):
         batch=rows[i*CHUNK:(i+1)*CHUNK]
