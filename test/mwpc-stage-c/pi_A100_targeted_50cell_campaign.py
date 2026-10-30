@@ -25,6 +25,7 @@ import json
 import math
 import random
 import subprocess
+import tempfile
 import time
 from collections import Counter,defaultdict
 from datetime import datetime,timezone
@@ -268,6 +269,31 @@ def prepare():
           "original A20/Geant4/Garfield reference unchanged; "
           "safe to run SHA-checkpointed 'run' mode.",flush=True)
 
+def preflight():
+    """Actual SHA-pinned C++ parser for ORIGINAL D500 source rows;
+    NO Garfield/Heed physics or modifications to prepared source.
+    """
+    m,rows,targets=verify_plan()
+    env=garfield_runtime_env()
+    with tempfile.TemporaryDirectory() as td:
+        td=Path(td)
+        for i,batch in enumerate((rows[:CHUNK],rows[-CHUNK:])):
+            p=td/f"source_preflight_{i}.csv"
+            write_csv(p,EXPORT_FIELDS,batch)
+            proc=subprocess.run(
+                [str(EXE),"--validate-lut-input",str(p)],
+                capture_output=True,text=True,check=False,env=env)
+            marker=f"PASS parsed {CHUNK} ORIGINAL frozen LUT20/500 exact-start rows in C++"
+            if proc.returncode!=0 or marker not in proc.stdout:
+                raise RuntimeError(
+                    "Actual SHA-pinned C++ D500 start parser refused "
+                    f"segment {i}; NO physics performed:\n"+
+                    proc.stdout+"\n"+proc.stderr)
+    print("PASS compiled C++ D500 original exact-start preflight, "
+          "first + last 400 rows parsed, NO Garfield/Heed physics",
+          flush=True)
+
+
 def chunk_dir(i):return ROOT/"chunks"/f"chunk_{i:03d}"
 
 def validate_chunk(c,i,rows,binary):
@@ -480,11 +506,12 @@ def status():
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument("mode",choices=("prepare","run","finish","publish","status"))
+    p.add_argument("mode",choices=("prepare","preflight","run","finish","publish","status"))
     p.add_argument("--hours",type=float,default=6.75)
     p.add_argument("--max-chunks",type=int,default=N_CHUNKS)
     a=p.parse_args()
     if a.mode=="prepare":prepare()
+    elif a.mode=="preflight":preflight()
     elif a.mode=="run":run(a.hours,a.max_chunks)
     elif a.mode=="finish":finish()
     elif a.mode=="publish":publish_results()
