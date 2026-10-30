@@ -87,6 +87,7 @@ All commands from repository root.
     python3 -m py_compile test/mwpc-stage-c/pi_A100_targeted_50cell_campaign.py test/mwpc-stage-c/pi_compare_A100_targeted_vs_A20.py test/mwpc-stage-c/test_pi_A100_targeted_campaign.py
     python3 test/mwpc-stage-c/test_pi_A100_targeted_campaign.py
     python3 -u test/mwpc-stage-c/pi_A100_targeted_50cell_campaign.py prepare
+    python3 test/mwpc-stage-c/pi_A100_targeted_50cell_campaign.py preflight
     python3 test/mwpc-stage-c/pi_A100_targeted_50cell_campaign.py status
 
 This PREPARATION verifies original SHA and scans original frozen 500
