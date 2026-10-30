@@ -39,7 +39,7 @@ from pi_garfield_runtime_env import garfield_runtime_env
 from pi_prepare_muon_avalanche_b1 import FIELDS,sha
 from pi_audit_avalanche_lut_reuse import BASE,EXPORT_FIELDS,CONFIGS,locations
 from pi_run_lut500_overnight import (
-    ROOT as A20_ORIGINAL, source_maps,selected_j,
+    ROOT as A20_ORIGINAL, source_maps,selected_j,offset_for,STRIDE,
 )
 from pi_run_avalanche_lut_sidecar import (
     COLUMNS,BIRTH_COLUMNS,TIME_COLUMNS,validate_outputs,
@@ -66,6 +66,21 @@ RANK_FIELDS=("geometry","box_id","rank","n_Heed_electrons",
              "n_occupied_muons","A20_sd_ion_births",
              "finite_A20_mean_variance_score","fraction_of_geometry_score")
 OUTFILE_FIELDS=("geometry","box_id","iu","iv","extra_n","old_n","new_n")
+
+
+def additional_original_D500_sample(geometry,box_id,pass_id):
+    """Use exact ORIGINAL D500 index permutation for NEW passes 20..99.
+
+    The original 'selected_j' is INTENTIONALLY limited to passes 0..19
+    to protect the frozen original A20 table; never alter that script
+    or its old 84,000 Gaussian-independent full Garfield results.
+    A coprime stride 137 mod 500 guarantees the 80 new sample IDs
+    are all distinct and do not overlap the first 20.
+    """
+    if not isinstance(pass_id,int) or not 20<=pass_id<100:
+        raise ValueError("Targeted A100 original D500 pass must be 20..99")
+    return (offset_for(geometry,box_id)+STRIDE*pass_id)%500
+
 
 def write_csv(p,cols,records):
     with p.open("w",newline="") as f:
@@ -106,7 +121,7 @@ def verify_plan():
             raise ValueError("Targeted D500 start not in frozen priority cell list")
         if s in {selected_j(g,b,p) for p in range(20)}:
             raise ValueError("New avalanche start overlaps already run A20 starts")
-        if s not in {selected_j(g,b,p) for p in range(20,100)}:
+        if s not in {additional_original_D500_sample(g,b,p) for p in range(20,100)}:
             raise ValueError("Extra trial not deterministic D500 pass 20..99")
     return m,rows,targets
 
@@ -180,7 +195,7 @@ def prepare():
         _,raw=locations(500,pitch,fw)
         if sha(raw)!=orig_meta[g]["lut_csv_sha256"]:
             raise ValueError("Original immutable D500 input SHA changed: "+g)
-        bysample={b:{selected_j(g,b,k):k for k in range(20,100)}
+        bysample={b:{additional_original_D500_sample(g,b,k):k for k in range(20,100)}
                   for b in groups[g]}
         seen=set()
         with raw.open(newline="") as f:
