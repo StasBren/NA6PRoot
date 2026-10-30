@@ -58,6 +58,13 @@ Original 20 indices and new 80 indices are disjoint for all 4,200 original cells
 - Source-readback verified matching C++ parser flag, 18-column header and success marker. An isolated mocked dispatch test checked exactly 40 batches / 16k row indices; **this is NOT a successful user-WSL actual `--real-source-check`, `prepare`, or native C++ preflight**.
 - WSL local access is not available from the assistant's tool runtime. The user must execute the exact next commands below on their WSL and report actual output; until then A100 physics remains NOT STARTED. Do not mark any WSL gate PASS on the strength of the isolated static/mock check.
 
+## User-confirmed WSL gate outcome (2026-10-30, after pull to 9f6225a)
+
+- User pasted actual shell output proving `py_compile` succeeded and `test_pi_A100_targeted_campaign.py --real-source-check` printed PASS ORIGINAL REAL WSL INPUTS and PASS SYNTHETIC/OFFLINE ONLY, including all 4,200 spatial cells and original A20 / D500 / 120 Geant4 + Heed SHA contracts.
+- `pi_A100_targeted_50cell_campaign.py prepare` ACTUALLY PASSED, creating `test_runs/mwpc_stage_c/pi_A100_targeted_50cells_per_geometry_v1` and SHA-sealed 16,000 new source starts; target 50 scores cover 76.554%, 73.354%, 73.394%, 72.804% of modeled finite-A20 mean variance for p3_noFW, p3_FW75, p4_noFW, p4_FW75.
+- C++ preflight ACTUALLY PASSED only first and last 400 rows because that WSL pull ended at `9f6225a`, BEFORE subsequent GitHub fix `46eb88d2` introduced ALL-40-block preflight and a preflight gate in `run`. WSL status: PLAN prepared 16000, TARGETED GARFIELD 0/40, SEALED COMPLETE False.
+- **Do NOT run `prepare` again**: it correctly refuses overwrite of existing prepared root. Next action: WSL `git pull --ff-only` to include exhaustive preflight fix, then `python3 test/mwpc-stage-c/pi_A100_targeted_50cell_campaign.py preflight`; require ALL 40 blocks / 16,000 rows PASS before launching new Garfield physics. No new A100 avalanches reported.
+
 ## Exact immediate NEXT WSL command (NO new Garfield avalanches)
 
     cd ~/na6p/src/NA6PRoot-mwpc
