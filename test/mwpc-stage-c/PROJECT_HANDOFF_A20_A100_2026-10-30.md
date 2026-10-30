@@ -51,6 +51,13 @@ First user's WSL attempt on old commit 91e733a stopped during OFFLINE test with 
 
 Original 20 indices and new 80 indices are disjoint for all 4,200 original cells. The user HAS NOW RUN the updated WSL synthetic offline test and it PASSED (all 4,200 cells). The same user's next step prepare FAILED due to a SECOND simple Python interface bug: the targeted prepare() wrongly did `_,meta_original,src=payload_rows()` even though original holdout `payload_rows()` returns exactly TWO values (rows, manifest), whereas `verify_full()` returns THREE (rows, stats, SHA). This was fixed in GitHub (commit ce9774b9) to `src,meta_original=payload_rows()` and `ref_rows,full_stats,_=verify_full()`, and cross-check all 120 physical muon IDs. A new opt-in WSL real-source-only test `test_pi_A100_targeted_campaign.py --real-source-check` now asserts these actual interfaces and verifies original input SHA/schema without launching Garfield physics. The previous preparation failed BEFORE creating the new A100 ROOT directory; no clean-up is necessary. User has NOT YET confirmed the revised prepare/preflight on WSL, and no new A100 full avalanches have been run.
 
+## Follow-up static audit: exhaustive C++ preflight (2026-10-30)
+
+- GitHub commit 46eb88d2d9b490ad0a1596618c48abbded47d97a changes `pi_A100_targeted_50cell_campaign.py` to validate **ALL 40 x 400 = 16,000 prepared original D500 rows** with the actual native `--validate-lut-input` C++ parser, rather than only the first and last block. C++ hard limit is 432 rows/call, so all blocks use 400.
+- The `run` mode now calls this full `preflight()` before ANY new Garfield computation, including on resumes. The original D500, 84k A20 and 120-muon physics remain unchanged.
+- Source-readback verified matching C++ parser flag, 18-column header and success marker. An isolated mocked dispatch test checked exactly 40 batches / 16k row indices; **this is NOT a successful user-WSL actual `--real-source-check`, `prepare`, or native C++ preflight**.
+- WSL local access is not available from the assistant's tool runtime. The user must execute the exact next commands below on their WSL and report actual output; until then A100 physics remains NOT STARTED. Do not mark any WSL gate PASS on the strength of the isolated static/mock check.
+
 ## Exact immediate NEXT WSL command (NO new Garfield avalanches)
 
     cd ~/na6p/src/NA6PRoot-mwpc
