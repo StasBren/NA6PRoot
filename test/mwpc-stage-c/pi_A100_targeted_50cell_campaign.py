@@ -295,8 +295,11 @@ def preflight():
     env=garfield_runtime_env()
     with tempfile.TemporaryDirectory() as td:
         td=Path(td)
-        for i,batch in enumerate((rows[:CHUNK],rows[-CHUNK:])):
-            p=td/f"source_preflight_{i}.csv"
+        for i in range(N_CHUNKS):
+            batch=rows[i*CHUNK:(i+1)*CHUNK]
+            if len(batch)!=CHUNK:
+                raise ValueError(f"Targeted preflight block {i} is not exactly {CHUNK} starts")
+            p=td/f"source_preflight_{i:03d}.csv"
             write_csv(p,EXPORT_FIELDS,batch)
             proc=subprocess.run(
                 [str(EXE),"--validate-lut-input",str(p)],
@@ -305,11 +308,11 @@ def preflight():
             if proc.returncode!=0 or marker not in proc.stdout:
                 raise RuntimeError(
                     "Actual SHA-pinned C++ D500 start parser refused "
-                    f"segment {i}; NO physics performed:\n"+
+                    f"block {i+1}/{N_CHUNKS}; NO physics performed:\n"+
                     proc.stdout+"\n"+proc.stderr)
     print("PASS compiled C++ D500 original exact-start preflight, "
-          "first + last 400 rows parsed, NO Garfield/Heed physics",
-          flush=True)
+          f"ALL {N_CHUNKS} blocks / {TOTAL:,} rows parsed, "
+          "NO Garfield/Heed physics",flush=True)
 
 
 def chunk_dir(i):return ROOT/"chunks"/f"chunk_{i:03d}"
@@ -369,6 +372,8 @@ def run(hours,maxchunks):
     if (ROOT/"manifest.json").is_file():
         print("PASS original complete targeted A100 run already sealed; no Garfield repeated")
         return
+    # Gate ALL new Garfield calculations on the actual SHA-pinned C++ parser.
+    preflight()
     start=time.monotonic();n_done=0;n_new=0
     for i in range(N_CHUNKS):
         batch=rows[i*CHUNK:(i+1)*CHUNK]
