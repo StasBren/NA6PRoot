@@ -28,6 +28,9 @@ from pi_A100_targeted_50cell_campaign import (
 )
 from pi_prepare_muon_avalanche_b1 import FIELDS,sha
 from pi_run_native_muon_b1 import CROSSING_COLUMNS
+from pi_publish_run_to_drive import (
+    prepare as drive_prepare,publish as drive_publish,EXPECTED_REMOTE,
+)
 
 OUTPUT=NEW/"compare_frozen_120_real_muons_A100_vs_original_A20"
 N_REP=200
@@ -228,10 +231,28 @@ def evaluate(reps=N_REP):
     print("PASS A100 target-cell sensitivity analysis, ORIGINAL 120 full Garfield "
           "physics and 84k baseline A20 untouched, SHA-sealed",flush=True)
 
+def publish_results():
+    manifest=OUTPUT/"manifest.json"
+    if not manifest.is_file():
+        raise FileNotFoundError("No SHA-sealed A20 vs A100 comparison yet")
+    data=json.loads(manifest.read_text())
+    if data.get("status")!="complete":
+        raise RuntimeError("Incomplete A100 comparison")
+    for name,d in data.get("outputs_sha256",{}).items():
+        if sha(OUTPUT/name)!=d:
+            raise ValueError("Original A100 comparison data changed: "+name)
+    bundle=drive_prepare(
+        OUTPUT,"mwpc_A20_vs_A100_targeted50x4_same120muons_v1")
+    drive_publish(bundle,EXPECTED_REMOTE,upload=True)
+    print("PASS published unchanged, SHA-checked A20 versus "
+          "targeted A100 comparison on original 120 Heed muons",flush=True)
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument("mode",choices=("compare",))
+    p.add_argument("mode",choices=("compare","publish"))
     a=p.parse_args()
     if a.mode=="compare":evaluate()
+    elif a.mode=="publish":publish_results()
 
 if __name__=="__main__":main()
