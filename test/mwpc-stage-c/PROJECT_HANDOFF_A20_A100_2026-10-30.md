@@ -58,6 +58,31 @@ Original 20 indices and new 80 indices are disjoint for all 4,200 original cells
 - Source-readback verified matching C++ parser flag, 18-column header and success marker. An isolated mocked dispatch test checked exactly 40 batches / 16k row indices; **this is NOT a successful user-WSL actual `--real-source-check`, `prepare`, or native C++ preflight**.
 - WSL local access is not available from the assistant's tool runtime. The user must execute the exact next commands below on their WSL and report actual output; until then A100 physics remains NOT STARTED. Do not mark any WSL gate PASS on the strength of the isolated static/mock check.
 
+## Published Drive diagnostics: completed A100/A20 (2026-10-30)
+
+**CONFIRMED publications through authenticated Google Drive connector:**
+- A100 aggregated physical trial folder: https://drive.google.com/drive/folders/1cqY2mNpdOBhu4rO6DyFz529nYf8bSdSo
+- A20 vs A100 comparison folder: https://drive.google.com/drive/folders/1ppAtbBOvAWrn6rK3dn9Ww0yf0wNQh1C7
+- Original A20 84k folder: https://drive.google.com/drive/folders/1R-GxGNkwH8LWqqYlDKHyPhc1jm56ubiB
+- Downloaded all four new A100 aggregated trials, all four original A20 trials, per-muon comparison, target list and cell rank; **each downloaded byte file SHA256 matches its original published manifest digest**. A100 `summary.json` SHA also matched its published manifest. All 16k new avalanches and 40/40 chunks complete, zero capped/nonmetal censored and zero recorded metal starts on new 16k, new physics wall-clock sum 7287.985900988278 s (~2.024 h). Do not confuse this with 11 previously observed physically in-metal start electrons in the original 120-muon p4_FW75 reference.
+
+**Read-only new scientific diagnostics on 480 frozen muon×geometry comparison rows:**
+- Transitions missed→covered / covered→missed: p3_noFW **9/5**, p3_FW75 **4/5**, p4_noFW **7/7**, p4_FW75 **8/2**, total **28/19**. Pooled covered 365/480 → 374/480 = **+1.875 percentage points** (480 not independent parents).
+- 20,000-resample *paired cluster bootstrap by 120 physical Geant4 parent muons* (resample all 4 geometries together), seed 20261030, gives 95% percentile CI **[-0.833,+4.792] percentage points**, contains zero. This is source-conditioned and does not account for ranking selection or replay Monte Carlo uncertainty.
+- Old full Garfield outside A20 interval, lower/upper: p3_noFW 13/22, p3_FW75 8/13, p4_noFW 14/17, p4_FW75 16/12. New outside A100 interval lower/upper: p3_noFW 10/21, p3_FW75 10/12, p4_noFW 12/19, p4_FW75 10/12. No single uniform lower-versus-upper miss pattern.
+- Median old→new 90%-PI widths (ion births): p3_noFW 11160.85→11467.95, p3_FW75 117828.60→118131.875, p4_noFW 30281.475→29675.775, p4_FW75 113159.30→110949.05. Average absolute per-muon mean-gain prediction error falls on all four geometry samples, but intervals remain poorly calibrated.
+- **Natural no-target control:** 38/32/43/45 of 120 muons for p3_noFW/p3_FW75/p4_noFW/p4_FW75, respectively, touch *no* A100-selected cells; old and new underlying response pools for these muons are identical. Even among these unchanged observations, independently drawn 200-replica A20/A100 predictions flip 2 misses to covered and 2 covered to misses in aggregate. Common-random-number (CRN) replay is needed to isolate sampling noise.
+- Source-selected Heed electron fraction across the 480 geometry comparisons has median about **6.7%**, 25th percentile **0**, 75th percentile **32.2%**; 158/480 observations touch no selected A100 cells. The top50 estimated finite-A20 cell-mean variance share (73–77%) must not be equated with fraction of electrons (26.5–29.2%) or total predictive error.
+
+**Independent old20 versus new80 full Garfield ion birth samples in the 200 target cells:**
+- Original first 20 sample mean exceeds additional independent 80 sample mean in **140/200 cells** (by geometry p3_noFW 37/50, p3_FW75 34/50, p4_noFW 37/50, p4_FW75 32/50).
+- Frozen 120-Heed-electron-count-weighted per-selected-cell mean ion births (old20→additional80): p3_noFW 622.31→574.64 (**−7.66%**), p3_FW75 6031.27→5694.24 (**−5.59%**), p4_noFW 1653.18→1483.37 (**−10.27%**), p4_FW75 5732.17→5358.90 (**−6.51%**). The drop is compatible with noisy old20 estimates / positive-skew gain tail / outcome-blind high-SD cell selection, but it does NOT uniquely establish a cause.
+- Selected-cell original ranking score reconstructed replacing old20 `sd^2` with independent new80 `sd^2` (fixed original source n-cell weights) is 85.1%/98.8%/98.1%/89.2% of the old scores for p3_noFW/p3_FW75/p4_noFW/p4_FW75 respectively. These are *within-target score ratios*, NOT overall error reduction or validation of 90% coverage.
+
+**Next steps**: preserve all existing physics and associated directory, then run new *purely statistical* CRN A20/A100 replay with more than 200 replicas; hierarchical cell-pool bootstrap to propagate `n_cell^2` correlated training uncertainty; check within-bin start dependence and true heavy-tail behavior; then independent third Geant4 source sample for external generalization. No new Garfield calculations authorized for this diagnostic.
+
+**Archival caution:** Published A100 folder currently has aggregates and targeting files, **not the 40 chunk directories including physics.log, ion-birth reservoirs, and per-start timing CSVs**. Leave original WSL SHA-sealed chunks intact; make another immutable complete archive before any cleanup, especially for eventual spatial cloud studies.
+
 ## User-confirmed A100 vs A20 comparison (2026-10-30)
 
 User pasted the complete successful WSL `pi_compare_A100_targeted_vs_A20.py compare` output and `summary.json`. It reports `PASS A100 target-cell sensitivity analysis`, 120 physical muons, 5,881 primary TrackHeed electrons, 200 conditional LUT replicas per muon×geometry, original A20 84k unchanged, SHA-sealed A100 16k unchanged, original full 120 Garfield unchanged. Comparison `status=complete` and targeted A100 full manifest SHA256 `2a8520c61dc38dc2b32aa31319c3665e36d9ed86f9119e8f3737f32849d7da82`; original A20 SHA256 `8ba639e3f082192d716d328775e13743ca72f9035ebfe703b1f722a202fb006c`; full 120 reference SHA256 `dfffdeabfac813f339a1746480a99e19aa78ee8f376b2a8683f42e2fc393a763`.
