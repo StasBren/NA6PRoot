@@ -58,6 +58,15 @@ Original 20 indices and new 80 indices are disjoint for all 4,200 original cells
 - Source-readback verified matching C++ parser flag, 18-column header and success marker. An isolated mocked dispatch test checked exactly 40 batches / 16k row indices; **this is NOT a successful user-WSL actual `--real-source-check`, `prepare`, or native C++ preflight**.
 - WSL local access is not available from the assistant's tool runtime. The user must execute the exact next commands below on their WSL and report actual output; until then A100 physics remains NOT STARTED. Do not mark any WSL gate PASS on the strength of the isolated static/mock check.
 
+## User-confirmed full A100 physics completion (2026-10-30)
+
+- User pasted actual WSL output from `pi_A100_targeted_50cell_campaign.py status`: `PLAN prepared 16000`, `TARGETED GARFIELD 40/40 blocks`, `SEALED COMPLETE True`.
+- Same user's run log tail reports successful SHA-sealed checkpoint messages for chunks 12..40, including `PASS TARGETED 40/40, +400 independent Garfield avalanche starts` and the final message `PASS TARGETED A100 full microscopic Garfield complete, 16,000 new original D500 starts, SHA-sealed without modifying original 84k or 120 real muons`.
+- Log excerpt shows `physically embedded metal starts 0` for chunks 12..40; do not generalize this to chunks 1..11 without their complete logs or `summary.json`.
+- **A100 NEW PHYSICS COMPLETE per user-provided native execution and final SHA manifest.** Assistant has not independently read WSL chunk manifests/outputs; source verification is the next comparison's job. Do NOT rerun `prepare`, `run` or `finish` and do NOT delete the new A100 output directory.
+- Next safe step: `python3 -u test/mwpc-stage-c/pi_compare_A100_targeted_vs_A20.py compare`; this re-verifies all 40 SHA chunks, original 84k A20 and frozen 120 physical Geant4/TrackHeed/Garfield reference, then performs 200 stochastic LUT replays per muon and geometry. This is NOT new Garfield physics. Check `summary.json`, then publish only after successful comparison and integrity checks.
+- Important inference limit: 120-muon *coordinates* were used for target ranking. Treat comparison as source-conditioned A100 sensitivity, not independent generalization. For external validation use unseen third Geant4 source sample.
+
 ## User-confirmed WSL gate outcome (2026-10-30, after pull to 9f6225a)
 
 - User pasted actual shell output proving `py_compile` succeeded and `test_pi_A100_targeted_campaign.py --real-source-check` printed PASS ORIGINAL REAL WSL INPUTS and PASS SYNTHETIC/OFFLINE ONLY, including all 4,200 spatial cells and original A20 / D500 / 120 Geant4 + Heed SHA contracts.
