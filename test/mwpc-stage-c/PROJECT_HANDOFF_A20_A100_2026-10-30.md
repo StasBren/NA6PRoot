@@ -49,14 +49,14 @@ First user's WSL attempt on old commit 91e733a stopped during OFFLINE test with 
 
     original_D500_index = (offset_for(geom,box) + 137*pass_id) % 500
 
-Original 20 indices and new 80 indices are disjoint for all 4,200 original cells. The new GitHub test exhaustively checks this; correction committed in branch feature/mwpc-stage-c, latest fix commit 6327ce09. An isolated arithmetic check of all 4200 cells passed, but actual UPDATED WSL offline test has not yet been reported. Because user's command chained with &&, prepare and preflight never started in the failure: no recovery or file deletion is needed.
+Original 20 indices and new 80 indices are disjoint for all 4,200 original cells. The user HAS NOW RUN the updated WSL synthetic offline test and it PASSED (all 4,200 cells). The same user's next step prepare FAILED due to a SECOND simple Python interface bug: the targeted prepare() wrongly did `_,meta_original,src=payload_rows()` even though original holdout `payload_rows()` returns exactly TWO values (rows, manifest), whereas `verify_full()` returns THREE (rows, stats, SHA). This was fixed in GitHub (commit ce9774b9) to `src,meta_original=payload_rows()` and `ref_rows,full_stats,_=verify_full()`, and cross-check all 120 physical muon IDs. A new opt-in WSL real-source-only test `test_pi_A100_targeted_campaign.py --real-source-check` now asserts these actual interfaces and verifies original input SHA/schema without launching Garfield physics. The previous preparation failed BEFORE creating the new A100 ROOT directory; no clean-up is necessary. User has NOT YET confirmed the revised prepare/preflight on WSL, and no new A100 full avalanches have been run.
 
 ## Exact immediate NEXT WSL command (NO new Garfield avalanches)
 
     cd ~/na6p/src/NA6PRoot-mwpc
     git pull --ff-only && \
     python3 -m py_compile test/mwpc-stage-c/pi_A100_targeted_50cell_campaign.py test/mwpc-stage-c/pi_compare_A100_targeted_vs_A20.py test/mwpc-stage-c/test_pi_A100_targeted_campaign.py && \
-    python3 test/mwpc-stage-c/test_pi_A100_targeted_campaign.py && \
+    python3 test/mwpc-stage-c/test_pi_A100_targeted_campaign.py --real-source-check && \
     python3 -u test/mwpc-stage-c/pi_A100_targeted_50cell_campaign.py prepare && \
     python3 test/mwpc-stage-c/pi_A100_targeted_50cell_campaign.py preflight
 
