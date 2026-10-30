@@ -58,6 +58,29 @@ Original 20 indices and new 80 indices are disjoint for all 4,200 original cells
 - Source-readback verified matching C++ parser flag, 18-column header and success marker. An isolated mocked dispatch test checked exactly 40 batches / 16k row indices; **this is NOT a successful user-WSL actual `--real-source-check`, `prepare`, or native C++ preflight**.
 - WSL local access is not available from the assistant's tool runtime. The user must execute the exact next commands below on their WSL and report actual output; until then A100 physics remains NOT STARTED. Do not mark any WSL gate PASS on the strength of the isolated static/mock check.
 
+## Completed CRN + global cell-training bootstrap validation (2026-10-30)
+
+**GitHub reproducible, read-only analysis**:
+- `test/mwpc-stage-c/pi_A100_crn_hierarchical_check.py` (commit `74376572`); standalone synthetic tests `test_pi_A100_crn_hierarchical_check.py` (commit `779dfe3`). Native run: `python3 test/mwpc-stage-c/test_pi_A100_crn_hierarchical_check.py` and `python3 -u test/mwpc-stage-c/pi_A100_crn_hierarchical_check.py run --reps 3000 --training-reps 1200`. In native mode the script first verifies original 40 new Garfield chunk seals, all A20 source SHA, frozen 120 Geant4+TrackHeed+Garfield original SHA/chunk seals, and original comparison. Output root: `test_runs/mwpc_stage_c/pi_A100_targeted_50cells_per_geometry_v1/diagnose_CRN_A20_A100_training_bootstrap_v1`. It refuses overwrite and performs **no new microscopic physics**.
+- Independently ran the same code against **downloaded, SHA-matched Google Drive aggregated source files** in analysis runtime (`--published-dir /mnt/data`), 3,000 coupled conditional A20/A100 Monte Carlo replicas per muon×geom, 1,200 global cell-training bootstraps. Uploaded archive source SHA and target/crossing/Heed/parent identities were checked. This is real source data, NOT a synthetic result. Original 40 native chunk dirs were not accessible from this runtime; native WSL execution of the new analysis still needs to be user-confirmed. Output SHA manifest verified: `summary.json` SHA `e88b142697d9f88d0c29e5f5598016db0b5f99d729e33ec87e1d0249d4e6db5d`, per-muon CSV SHA `dde18cd5a424e6559b6e6ec2dddb87a8c8171321710b0077a9694d8717df3d5e`.
+
+**Actual results** for nominal 90% predictive intervals (120 muons per geometry, 480 geometry-comparisons sharing 120 parent muons):
+
+| Geometry | CRN A20 | CRN A100 | Cell-training bootstrap A20 | Cell-training bootstrap A100 |
+|---|---:|---:|---:|---:|
+| p3_noFW | 87/120=72.50% | 90/120=75.00% | 100/120=83.33% | 96/120=80.00% |
+| p3_FW75 | 102/120=85.00% | 99/120=82.50% | 105/120=87.50% | 102/120=85.00% |
+| p4_noFW | 89/120=74.17% | 92/120=76.67% | 102/120=85.00% | 99/120=82.50% |
+| p4_FW75 | 93/120=77.50% | 96/120=80.00% | 100/120=83.33% | 102/120=85.00% |
+| ALL (480 correlated) | 371/480=77.29% | 377/480=78.54% | 407/480=84.79% | 399/480=83.13% |
+
+- CRN Δ(A100−A20) = **+1.25 pp**, 95% 120-parent-clustered paired bootstrap **[-0.83,+3.33] pp** (contains zero). Global cell-training bootstrap Δ = **−1.67 pp**, 95% parent-clustered bootstrap **[-3.33,0.00] pp** (zero on boundary). No demonstrated A100 coverage improvement.
+- Critically, **158/480 cases touch zero A100 target cells**. Those cases have STRICTLY identical A20/A100 conditional and bootstrap outputs, including gain and sector asymmetry, verified on the REAL 480-source CSV. Earlier 200-rep independent-randomness comparisons had random flips in some of these cases.
+- Cell-bootstrap A20 coverage rises relative to fixed-LUT CRN from **77.29% to 84.79% (+7.50 pp)**; A100 from **78.54% to 83.13% (+4.58 pp)**. This supports correlated finite-training-LUT uncertainty as a material *candidate mechanism*, but bootstrap predictive distributions are approximations, not externally calibrated truths. Residual undercoverage persists (especially p3_noFW).
+- CRN A100 gain mean absolute errors are lower across all four geometries, even where interval coverage worsens. CRN A20 vs A100 typical medians: gain interval widths change little; integrating finite-training bootstrap typically widens intervals. Zero-target identity confirms sampling-noise removal.
+- **Careful limitations**: A100 target cells were ranked using these same 120 source POSITION exposures, not reference full-Garfield outcomes; strong true generalization needs new unseen Geant4 source and new full Garfield reference. One full microscopic realization per muon×geometry only, B=0. Empirical cell bootstrap assumes exchangeable starts within spatial bin; heavy-tail rare gains / coarse subcell gradient and 11 p4_FW75 metal-start Heed primaries remain unaddressed. Not induced strip signal.
+- Full report in ChatGPT generated `MWPC_A100_CRN_hierarchical_results_2026-10-30.md`; separate source-conditioned SHA-sealed analysis outputs in conversation runtime are not automatically archived to Drive. **Next:** user can run native diagnostic once to independently check chunk SHA and reproduce exact local numbers, without any new microscopic Garfield physics. Then investigate residual undercoverage via sub-cell start-position gradient, rare large gain tails and exact metal-start veto; only then new unseen source validation.
+
 ## Published Drive diagnostics: completed A100/A20 (2026-10-30)
 
 **CONFIRMED publications through authenticated Google Drive connector:**
