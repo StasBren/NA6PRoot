@@ -85,10 +85,17 @@ All commands from repository root.
     cd ~/na6p/src/NA6PRoot-mwpc
     git pull --ff-only
     python3 -m py_compile test/mwpc-stage-c/pi_A100_targeted_50cell_campaign.py test/mwpc-stage-c/pi_compare_A100_targeted_vs_A20.py test/mwpc-stage-c/test_pi_A100_targeted_campaign.py
-    python3 test/mwpc-stage-c/test_pi_A100_targeted_campaign.py
+    python3 test/mwpc-stage-c/test_pi_A100_targeted_campaign.py --real-source-check
     python3 -u test/mwpc-stage-c/pi_A100_targeted_50cell_campaign.py prepare
     python3 test/mwpc-stage-c/pi_A100_targeted_50cell_campaign.py preflight
     python3 test/mwpc-stage-c/pi_A100_targeted_50cell_campaign.py status
+
+The source test verifies BOTH the synthetic 4,200-cell disjoint
+sampling logic and the ORIGINAL already existing 120 Geant4/TrackHeed/
+Garfield source read contracts, 84k empirical A20 input SHA/schema,
+and D500 source headers WITHOUT running new microscopic physics.
+The earlier Python unpacking error in prepare() was fixed: original
+payload_rows() returns exactly (rows, manifest), NOT three values.
 
 This PREPARATION verifies original SHA and scans original frozen 500
 drift-trial records/cell; it does not launch any Garfield physics.
