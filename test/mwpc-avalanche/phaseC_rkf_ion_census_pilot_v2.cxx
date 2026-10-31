@@ -184,7 +184,6 @@ void pilot(const std::vector<Start>& starts,const std::string& gasFile,
          <<(metal?1:0)<<","<<(good?1:0)<<",";
       if(good||metal)out<<gain<<","<<loss<<","<<neEstimate<<","<<niEstimate<<",";
       else out<<",,,,";
-      else out<<",,";
       if(good)out<<10.*xx<<","<<10.*yy<<","<<10.*zz<<","<<endStatus<<",";
       else out<<",,,,";
       if(good||metal)out<<polyaProxy;
