@@ -104,3 +104,8 @@ target_compile_features(mwpc_phase_b_native_muon_3p3 PRIVATE cxx_std_17)
 add_executable(mwpc_phase_c_rkf_polya_pilot phaseC_rkf_polya_pilot.cxx)
 target_link_libraries(mwpc_phase_c_rkf_polya_pilot PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_phase_c_rkf_polya_pilot PRIVATE cxx_std_17)
+
+# Separate read-only physical comparison V2, preserves SHA-sealed V1 executable/source.
+add_executable(mwpc_phase_c_rkf_ion_census_pilot_v2 phaseC_rkf_ion_census_pilot_v2.cxx)
+target_link_libraries(mwpc_phase_c_rkf_ion_census_pilot_v2 PRIVATE Garfield::Garfield)
+target_compile_features(mwpc_phase_c_rkf_ion_census_pilot_v2 PRIVATE cxx_std_17)
