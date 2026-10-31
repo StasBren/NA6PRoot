@@ -1,3 +1,25 @@
+## User V2 100/100 RKF ion comparison PASS; V3 matched 16k created (2026-10-31)
+
+**Native WSL confirmed V2**: user successfully ran `pi_run_rkf_ion_census_v2.py compare` after Python-only `configuration` column fix. Status `complete`, original 100 Garfield D500 starts paired to RKF, 25 per geometry, all 100 RKF transport passes, no in-metal starts, zero nonmetal failures; all original V1 source/gas/output SHAs and original A100 SHA verified. Results:
+
+| Geometry | Microscopic mean birth ions | RKF estimated mean ions | RKF/micro | 0-micro events/25 | mean single-draw Pearson |
+|---|---:|---:|---:|---:|---:|
+| p3_noFW | 499.28 | 730.82647 | 1.46376 | 7 | -0.03313 |
+| p3_FW75 | 4320.92 | 7609.01605 | 1.76097 | 3 | 0.15866 |
+| p4_noFW | 2066.96 | 1955.63584 | 0.94614 | 4 | -0.01699 |
+| p4_FW75 | 5282.76 | 7179.96645 | 1.35913 | 3 | 0.20912 |
+| ALL 100 (mixed geometry) | 3042.48 | 4368.86120 | 1.43595 | 17 | 0.47648 |
+
+**Physical interpretation:** macroscopic RKF estimated ne and ni are positive on all 100, while 17/100 individual stochastic microscopic avalanches yield zero ions; **this is expected for a mean-response model** and calls for a separately validated stochastic zero/positive branch, not a blind correction. Pooled Pearson across geoms is confounded by between-geometry differences; within-geometry correlations are weak but one stochastic micro trial per start cannot validate a conditional expectation. 25/geom too small, heavy-tailed and source-cell selected. Do NOT propose calibrating per-geometry RKF/micro ratios from this small pilot. V2 output SHA `e5dd149a2d5f02d0fd2e07f9a4ced9ed386eee0442bd374b6706995a81d9cee7`; original gas SHA `f6f6a8a561d52c788c7fe8168256d3add78bdca131172fcf9526159707e1e693`.
+
+**V3 prepared, native Garfield physics NOT YET RUN**:
+- New **independent** `test/mwpc-avalanche/phaseC_rkf_ion_census_full16k_v3.cxx` and CMake target `mwpc_phase_c_rkf_ion_census_full16k_v3` (V1/V2 untouched), plus `test/mwpc-stage-c/pi_run_rkf_ion_census_full16k_v3.py` and detailed `PI_PHASEC_RKF_ION_CENSUS_FULL16K_V3_2026-10-31.md`.
+- Run macroscopic RKF on **all 16,000 A100 original D500 starts** (80 original new full Garfield trials per each of 200 cells, 50 cells/geometry), using existing V1 Magboltz gas table and no new microscopic Garfield/Geant4/Heed physics; compare direct RKF ion count against same-start original microscopic birth ions. Group by 80 starts/cell and analyze 50 cell means/geometry, cluster-bootstrap cell means; 2-fold 25 train/25 holdout *selected-cell* diagnostic for an optional multiplicative gain scale. Verifies 100 overlapping v2 RKF ion-count outputs exactly, all original source trial SHA and matching geometry/coordinates. Full run and comparison must be on user WSL.
+- Offline Python `py_compile`, 100% pure synthetic functional selftest, and **full-16k data-shape regression** with all 16k real original A100 micro trial files and *fabricated* RKF outputs PASS. This is a software validation only, **not** real V3 RKF physics or evidence of accuracy. C++ V3 is derived from successful native V2 C++ with only max number of CSV input rows increased 400→16000, so it is likely to build but actual native compilation is pending.
+- Original A100 microscopic zeros in all 16k: p3_noFW **626/4000**, p3_FW75 **703/4000**, p4_noFW **689/4000**, p4_FW75 **690/4000**. These are genuine stored physics records, not V3 outcomes. Each of the 16k has identical original Garfield `garfield_ni == ion_births`, verified from actual archived trials; original A100 all 16k includes zero capped.
+- **Run sequence**: `git pull --ff-only`; script `selftest`; `cmake -S test/mwpc-avalanche -B test/mwpc-avalanche/build`; `cmake --build test/mwpc-avalanche/build --target mwpc_phase_c_rkf_ion_census_full16k_v3 -j2`; script `buildcheck`; then separately script `run`, `compare`, `status`, with `set -euo pipefail`. v3 output **NEW** root `test_runs/mwpc_stage_c/pi_RKF_ion_census_B0_A100all16k_v3`. **DO NOT rerun any old V1/V2 prepare/gas/run; source/binary originals are SHA-sealed.**
+- V3 inherited a **nonphysical Pólya proxy** column from V2 but it is categorically excluded from all stats. No metal-starts in prior 100 run; if new 16k have nonmetal failures or metal, the comparison fails closed to avoid silently biased cell means. Inspect those cases then decide a different estimand. New RKF estimated ions not full charge cloud or U/V strip signal; B=0. A100 selection conditioned on old A20 variance and old 120 Heed source exposure — conclusions are NOT independent external generalization.
+
 ## V2 native 100/100 physics run PASS; comparison column bug fixed (2026-10-31)
 
 - User WSL execution `python3 -u test/mwpc-stage-c/pi_run_rkf_ion_census_v2.py run` **PASSED** on all 100 original D500 starts and loaded original unchanged B=0 Ar/CO2 (70/30) Magboltz 40E gas. `PASS 100/100 exact original starts; V1 coordinate/gain reproduction; V2 RKF estimated ne/ni saved; no original physics changed`. Native V2 CSV saved in `test_runs/mwpc_stage_c/pi_RKF_ion_census_B0_pilot_v2/rkf_estimated_ions_100_exact_starts.csv`, along with run receipt.
