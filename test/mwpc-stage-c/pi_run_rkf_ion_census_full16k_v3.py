@@ -394,6 +394,16 @@ def status():
                 ('Input16k',INPUT),('Gas',GAS),('V3 RKF output',OUTPUT),
                 ('V3 receipt',RECEIPT),('Matched16k',PAIRS),('Summary',SUMMARY),('Manifest',SEAL)):
         print(k,v.exists())
+    if SUMMARY.is_file():
+        old=json.loads(SUMMARY.read_text())
+        if (old.get('overall',{}).get('n_transport_ok') == 0
+                and old.get('overall',{}).get('n') == 16000
+                and CELLS.is_file()):
+            print('WARNING: original SHA-sealed V3 summary has a known integer/string status bug.')
+            print('WARNING: n_transport_ok=0 and mean_rkf_ions=null are WRONG; do not overwrite the original.')
+            audit=(BASE/'pi_RKF_ion_census_B0_A100all16k_v3_status_audit_v1'
+                   /'corrected_summary.json')
+            print('Corrected SHA-verified audit exists',audit.is_file(),audit)
 
 
 def main():
