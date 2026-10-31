@@ -55,6 +55,17 @@ def identity(r):
     return r['geometry'], int(r['box_id']), int(r['sample'])
 
 
+def microscopic_identity(r):
+    """Identity from SHA-sealed A100 Garfield trials, NOT pilot input CSV.
+
+    A100 trials use "configuration"/"original_geometry", whereas the V1/V2
+    pilot files use "geometry".  Silently reusing identity() causes KeyError.
+    """
+    if r['configuration'] != r['original_geometry']:
+        raise ValueError('Inconsistent original/active Garfield geometry in A100 trial')
+    return r['configuration'], int(r['box_id']), int(r['sample'])
+
+
 def verified_v1():
     rows, plan = verify_v1_plan()  # SHA of V1 source, D500 selection, A100 manifest
     if not V1_GAS.is_file() or not V1_OUTPUT.is_file():
@@ -223,7 +234,7 @@ def compare():
             raise ValueError('Original A100 trial source SHA mismatch: '+source.name)
         with source.open(newline='') as f:
             for r in csv.DictReader(f):
-                key = identity(r)
+                key = microscopic_identity(r)
                 if key in wanted:
                     if key in truth: raise ValueError('Duplicate microscopic physics at '+str(key))
                     if r['configuration'] != geom:raise ValueError('Microscopic geometry mismatch')
@@ -300,6 +311,18 @@ def selftest():
     assert s['mean_microscopic_ion_births']==5 and s['mean_RKF_estimated_ion_population_good']==8.5
     assert s['n_microscopic_zero_ion_births']==1 and s['nonmetal_failures']==0
     assert identity(a[0])==('p3_noFW',1,20)
+    # Regression: native Garfield's trial CSV has "configuration", not
+    # "geometry".  This formerly crashed only after the real RKF run.
+    src = {'configuration':'p3_FW75', 'original_geometry':'p3_FW75',
+           'box_id':'42', 'sample':'57'}
+    assert microscopic_identity(src)==('p3_FW75',42,57)
+    assert identity({'geometry':'p3_FW75','box_id':'42','sample':'57'})==microscopic_identity(src)
+    try:
+        microscopic_identity(dict(src,original_geometry='p4_noFW'))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('A100 geometry-inconsistency guard did not trip')
     assert COLUMNS[10:12] == ('rkf_electrons_estimate','rkf_ions_estimate')
     print('PASS V2 read-only statistical selftest; no Garfield physics',flush=True)
 
