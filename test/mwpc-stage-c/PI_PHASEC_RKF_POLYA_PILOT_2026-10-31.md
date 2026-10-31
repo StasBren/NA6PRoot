@@ -12,6 +12,10 @@ Unlike microscopic `AvalancheMicroscopic`, `DriftLineRKF` needs an **Ar/CO₂ Ma
 
 **Metal starts:** Exact anode and field-wire diameter geometry is used for physical zero start classification; other failed drift starts are recorded as **nonmetal transport failures**, never silently turned into physical zero avalanches. The program has explicit checks for nonfinite/excessive gains and invalid numerical input. It never creates new Geant4 or TrackHeed primaries.
 
+## Actual first WSL attempt and CMake cache fix (user-confirmed 2026-10-31)
+
+The user pulled through `ef8e8a3` and attempted `cmake --build test/mwpc-avalanche/build --target mwpc_phase_c_rkf_polya_pilot -j2`. Make returned `No rule to make target`. This indicates the existing build tree did not know the new CMake target; **no C++ compilation began**. The user separately ran `prepare`, which **PASSED**, creating the immutable 100 exact original D500 start plan. The later `buildcheck`, `gas`, `run` and `compare` modes failed because no RKF executable or output exists. This was a dependent build failure, not evidence for physical inaccuracies. Do **not** re-run `prepare`, wipe build caches, delete the new plan or modify old Garfield sources. The fix is `cmake -S test/mwpc-avalanche -B test/mwpc-avalanche/build` followed by building the target. Stop on any compiler error and inspect the actual user's installed Garfield API; the earlier mock-header syntax test is not native compilation. The user has not yet confirmed a successful reconfiguration/build.
+
 ## Safe first native WSL sequence
 
 ```bash
@@ -19,7 +23,10 @@ cd ~/na6p/src/NA6PRoot-mwpc
 git pull --ff-only
 python3 -m py_compile test/mwpc-stage-c/pi_run_rkf_polya_pilot.py
 
-# Existing test/mwpc-avalanche/build must already be configured with Garfield.
+# The previous build directory predates the newly added CMake target.
+# Reconfigure it explicitly. This reuses its existing cached Garfield settings;
+# it does NOT delete existing binaries or change original Garfield physics.
+cmake -S test/mwpc-avalanche -B test/mwpc-avalanche/build
 cmake --build test/mwpc-avalanche/build --target mwpc_phase_c_rkf_polya_pilot -j2
 
 # Verify 40 SHA-sealed A100 physical chunk manifests and prepare 100 fixed starts.
