@@ -65,3 +65,28 @@ python3 -u test/mwpc-stage-c/pi_run_rkf_ion_census_full16k_v3.py status
 - B=0, no ion drift, no `A_{ion}` sectors and no induced U/V cathode signal in RKF V3. Even if cell-mean ion counts agree, this does not constitute a strip-signal simulator.
 
 **Native V3 results are pending.** Do not assert improvement, 16k correlation, crossvalidated gain correction or speedups until WSL output is seen.
+
+## Native 16k completion and sealed reporting bug (2026-10-31)
+
+User WSL completed compilation, `buildcheck`, `run`, `compare`, `status`: 16,000 RKF physics estimates generated and SHA-sealed, 16,000 exact A100 microscopic starts matched, 100 shared V2 values verified, 200 cells × 80 starts verified. User's reported `status` confirms all output artifacts exist. Original `summary.json` is **internally inconsistent**: it says `n_transport_ok=0`, `n_nonmetal_fail=16000`, but all 200 cell-level diagnostics require 80 successful RKF outcomes per cell and return nonempty means, correlations and crossfit values.
+
+Root cause confirmed in the original `summary_for`: it compared `rkf_transport_ok` and `rkf_metal` (integers after constructing `trial`) with **string literals** `'1'`, so it misreported every physical trial as failed. `run` and `compare` actual physical pair construction, cell means, ratios, cell bootstrap and crossfit used integer conversion and completed successfully. **Do not delete or modify the original V3 `summary.json` or its SHA-sealed source; do not rerun `run` or `compare`.** The main Python script's `summary_for` was fixed to normalize both integer/string flags, with regression `selftest` (commit `ee7b6bf`). Original summary remains a frozen incorrect historical report.
+
+**Separate full 16k read-only audit:** `test/mwpc-stage-c/pi_audit_rkf_v3_16k_status.py`. It verifies original V3 output receipt and comparison SHA, all 16k raw RKF vs paired CSV identities and actual independent microscopic Garfield original trials, all 200 stored cell means, original cell correlations and fold calibration, and recomputes corrected transport and ion summary. Writes exclusively to a **new** sibling directory `test_runs/mwpc_stage_c/pi_RKF_ion_census_B0_A100all16k_v3_status_audit_v1` and refuses overwrite. Local offline synthetic `selftest` PASS, plus a full-size 16k synthetic integration with the real 16k original micro trial files and fully fabricated RKF responses PASS. **User's native real-data audit has NOT run yet.**
+
+To run **only offline audit** in WSL:
+
+```bash
+(
+set -euo pipefail
+cd ~/na6p/src/NA6PRoot-mwpc
+git pull --ff-only
+python3 test/mwpc-stage-c/pi_run_rkf_ion_census_full16k_v3.py selftest
+python3 test/mwpc-stage-c/pi_audit_rkf_v3_16k_status.py selftest
+python3 -u test/mwpc-stage-c/pi_audit_rkf_v3_16k_status.py audit
+)
+```
+
+If audit prints PASS, use `test_runs/mwpc_stage_c/pi_RKF_ion_census_B0_A100all16k_v3_status_audit_v1/corrected_summary.json`, **not** original v3 `summary.json`, when reporting overall transport success and RKF mean ion count. It also creates `audit_note.md` and `audit_manifest.json` with SHA of new reports.
+
+**Scientific preliminary numbers from user-reported original cell means (independent of the string/int bug):** estimated RKF/microscopic mean ion ratios: p3_noFW ~1.273, p3_FW75 ~1.333, p4_noFW ~1.334, p4_FW75 ~1.321. Cell-mean Pearson correlations only 0.0498/0.0830/0.1133/0.1801. A simple per-geometry training-cell ratio rescale decreased average held-out cell MAE from 157.7→59.1, 1906.0→427.5, 490.1→160.4, 1738.3→420.6, respectively. These are **internal selected-cell measurements, not independent Geant4 muon validation**; still not a calibrated stochastic avalanche response. Zero microscopic ion births: 2708/16000. Do not interpret any numerical `n_transport_ok=0` or nonexistent `mean_rkf_ions` from the old report. Reconfirm with real native audit before publication.
