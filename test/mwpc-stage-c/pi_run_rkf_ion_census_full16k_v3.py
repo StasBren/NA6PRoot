@@ -110,9 +110,22 @@ def pearson(a,b):
 
 
 def summary_for(items):
-    good=[a for a in items if a['rkf_transport_ok']=='1']
-    metals=[a for a in items if a['rkf_metal']=='1']
-    failed=[a for a in items if a['rkf_transport_ok']!='1' and a['rkf_metal']!='1']
+    """Count paired outcomes correctly whether flags are CSV strings or integers.
+
+    compare() creates paired dicts with integer flags. Original V3 mistakenly
+    compared these with string '1' and reported 0/16000 transport successes,
+    while the independent 80-per-cell analysis correctly used integer flags.
+    """
+    for a in items:
+        if int(a['rkf_transport_ok']) not in (0,1) or int(a['rkf_metal']) not in (0,1):
+            raise ValueError('Invalid RKF outcome flag in paired records')
+        if int(a['rkf_transport_ok'])==1 and int(a['rkf_metal'])==1:
+            raise ValueError('RKF physics cannot both start inside metal and transport successfully')
+    good=[a for a in items if int(a['rkf_transport_ok'])==1]
+    metals=[a for a in items if int(a['rkf_metal'])==1]
+    failed=[a for a in items if int(a['rkf_transport_ok'])==0 and int(a['rkf_metal'])==0]
+    if len(good)+len(metals)+len(failed)!=len(items):
+        raise ValueError('RKF outcomes do not exhaust all original physical trials')
     micro=[float(a['micro_ion_births']) for a in items]
     rkf=[float(a['rkf_ni']) for a in good]
     micro_good=[float(a['micro_ion_births']) for a in good]
@@ -365,6 +378,14 @@ def selftest():
     assert all(math.isclose(x['training_scale_micro_over_rkf'],.5) for x in cf['two_folds'])
     assert cf['mean_heldout_abs_cell_error_scaled']==0
     assert bootstrap_ratio(dat,200)==[2.,2.]
+    # Regression for the real 16k comparison: paired records store integer
+    # statuses, whereas initial CSV reader stores strings.
+    a={'rkf_transport_ok':1,'rkf_metal':0,'micro_ion_births':12,
+       'micro_zero':0,'rkf_ni':'15.0','rkf_wall_seconds':'0.001'}
+    b=dict(a,rkf_transport_ok='1',rkf_metal='0')
+    assert summary_for([a,b])['n_transport_ok']==2
+    assert summary_for([a,b])['n_nonmetal_fail']==0
+    assert summary_for([a,b])['mean_rkf_ions_on_transport_ok']==15
     print('PASS V3 offline statistics/crossfit/identity selftest; no Garfield physics',flush=True)
 
 
