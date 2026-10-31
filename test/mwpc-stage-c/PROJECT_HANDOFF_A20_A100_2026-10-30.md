@@ -1,3 +1,20 @@
+## User-confirmed native RKF pilot SUCCESS (2026-10-31)
+
+User ran `cmake -S test/mwpc-avalanche -B test/mwpc-avalanche/build` and built the isolated `mwpc_phase_c_rkf_polya_pilot` target, followed by `prepare` (already done), `buildcheck`, `gas --ncoll 5`, `run`, `compare`, `status`. The pasted native summary has **status complete**, `PILOT_PLAN True GAS True CSV True COMPARISON True`, 100 exact original D500 paired starts (25 per geometry), all 100 `rkf_transport_ok`, 0 unexpected nonmetal failures, 0 in-metal starts (thus metal-start handling **not yet tested**). Gasfile SHA `f6f6a8a561d52c788c7fe8168256d3add78bdca131172fcf9526159707e1e693`, pilot RKF CSV SHA `a6464df3a5ba52b5077b1994f4963477fa186f583335d5836b56a04a866f45a4`, original A100 manifest SHA `2a8520c61dc38dc2b32aa31319c3665e36d9ed86f9119e8f3737f32849d7da82`. Native summary contains:
+
+| Geometry | microscopic ion births mean (25) | RKF GetGain mean (25) | Pólya proxy mean (25) | Median RKF drift seconds | Total RKF drift seconds |
+|---|---:|---:|---:|---:|---:|
+| p3_noFW | 499.28 | 884.06536 | 639.95229 | 0.001301445 | 0.035049887 |
+| p3_FW75 | 4320.92 | 9482.58460 | 6850.31237 | 0.002209678 | 0.056000974 |
+| p4_noFW | 2066.96 | 2404.49161 | 1747.09694 | 0.001300205 | 0.032970023 |
+| p4_FW75 | 5282.76 | 8981.33237 | 6518.35376 | 0.001916572 | 0.050068558 |
+
+Total drift-only RKF wall 0.174089442 sec (mean 1.74089 ms/electron), excludes gas generation/startup. Success means numerical transport, NOT 100% physical electron survival. Default Pólya theta 0.4 and zero-proxy p=0.17 are illustrative, not calibrated. **DO NOT claim accuracy or speedup yet**, matched microscopic runtimes for these same 100 starts not compared. Means of single microscopic random ion birth outcomes and deterministic RKF gain are different observables; 25 each is too small for stable heavy-tailed estimates.
+
+**New verification from Garfield++ official guide/ROOT experts:** `DriftLineRKF::GetGain()` represents multiplication \(\exp\int\alpha ds\), while `GetLoss()` represents attenuation \(\exp(-\int\eta ds)\); their product is approximately net electron multiplication, not direct total ion births. Importantly, ROOT/Garfield++ experts say RKF has `GetAvalancheSize(ne,ni)` to retrieve estimated number of electrons/ions after a drift, see https://root-forum.cern.ch/t/simulation-of-fe55-source-on-a-parallel-plate-detector/59290 and https://root-forum.cern.ch/t/li-in-a-cylindrical-drifttube/62635 ; inspect user's locally installed `Garfield/DriftLineRKF.hh` for exact signature/version **before coding a new source-only version**. If supported, a v2 separate pilot can explicitly produce RKF-estimated ion count, directly matching the *type* of observable (still approximate and model-based). DO NOT modify C++ v1 because `verify_plan()` SHA-binds the original source and its 100-start outputs must remain immutable.
+
+Recommended next test: verify installed RKF `GetAvalancheSize` API, then implement isolated v2 pilot using RKF estimated ion count (not only GetGain) on enough independent exact starts, quantify zero mass, per-coordinate correlation and mean differences, paired uncertainty; eventually 16k original D500 start comparison and untouched Geant4/TrackHeed external source. Avoid interpreting four 25-event mean ratios as calibration factors. The 100-row RKF CSV is only on user's WSL (NOT uploaded to Drive), so per-seed correlations unavailable to assistant yet.
+
 ## RKF pilot first WSL build-tree incident (2026-10-31)
 
 - User pulled through `ef8e8a3`; `cmake --build test/mwpc-avalanche/build --target mwpc_phase_c_rkf_polya_pilot -j2` returned `gmake: *** No rule to make target`. Likely existing CMake tree predates new target; compiler never started. Do **not** infer Garfield API/physics failures from this.
