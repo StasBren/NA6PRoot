@@ -11,6 +11,7 @@ on the fixed, cached original Geant4 crossings. Explicit phases, SHA seals,
 from __future__ import annotations
 import argparse
 import csv
+import importlib.util
 import json
 import math
 import random
@@ -19,7 +20,6 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import numpy as np
-import pi_holdout120_A20_from_D500 as legacy
 from pi_2m_native_six_geometry_fold import crossing_provenance, SOURCE
 from pi_prepare_muon_avalanche_b1 import FIELDS, validate, sha, seed
 from pi_spatial_lut_muon120_crn_v1 import GEOMS, load_native as load_lut_native, donors_for, compile_neighbors
@@ -27,6 +27,15 @@ from pi_A100_crn_hierarchical_check import bin_for
 from pi_spatial_lut_muon120_hier_v1 import simulate, metrics, report, MODES
 
 REPO = Path(__file__).resolve().parents[2]
+# Load the previously validated original 120-muon physical pipeline under a
+# DIFFERENT MODULE NAME. It must NEVER redirect the canonical holdout module
+# used by SHA verification of the old A20/A100 source archive.
+_LEGACY_SRC=REPO/'test/mwpc-stage-c/pi_holdout120_A20_from_D500.py'
+_LEGACY_SPEC=importlib.util.spec_from_file_location('pi_external_new120_isolated_native_driver',_LEGACY_SRC)
+if _LEGACY_SPEC is None or _LEGACY_SPEC.loader is None:
+    raise RuntimeError('Cannot isolate the immutable original full Garfield driver')
+legacy=importlib.util.module_from_spec(_LEGACY_SPEC)
+_LEGACY_SPEC.loader.exec_module(legacy)
 BASE = REPO/'test_runs/mwpc_stage_c'
 ROOT = BASE/'pi_external_new120_guarded_lut_blind_v1'
 INPUT = ROOT/'input_unseen_chunk2_120'
@@ -38,7 +47,7 @@ SOURCE_CHUNK = 2
 N_PARENT = 120
 LUT_CODE = REPO/'test/mwpc-stage-c/pi_spatial_lut_muon120_crn_v1.py'
 HIER_CODE = REPO/'test/mwpc-stage-c/pi_spatial_lut_muon120_hier_v1.py'
-OLD_RUNNER_CODE = REPO/'test/mwpc-stage-c/pi_holdout120_A20_from_D500.py'
+OLD_RUNNER_CODE = _LEGACY_SRC
 PARAMS = {'radius_bins':2,'neighbor_probability':0.75,'local_probability':0.25,
           'neighbor_kernel':'exp(-(du**2+dv**2)/2)',
           'guard':'same v hemisphere; near-axis u sign; no donor/receiver within 0.35mm of wire centre',
