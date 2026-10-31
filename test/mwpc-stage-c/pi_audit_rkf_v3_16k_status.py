@@ -165,7 +165,7 @@ def analyze():
              f"nonmetal failures {overall['n_nonmetal_fail']}, "
              f"original micro zeros {overall['n_micro_zero']}.",
              '', '**Do not use the original V3 summary\'s 0/16,000 transport statistic.**',
-             'The low cell correlations and corrected scale suggest gain bias and limited spatial discrimination, '
+             'Use the tabulated cell correlations and calibration errors to assess spatial predictivity; '
              'not a validated stochastic replacement of microscopic Garfield.',
              'No new microscopic or macroscopic physics was run.']
     (OUT/'audit_note.md').write_text('\n'.join(report)+'\n')
