@@ -98,3 +98,9 @@ target_compile_features(mwpc_phase_b_avalanche_angle_scan PRIVATE cxx_std_17)
 add_executable(mwpc_phase_b_native_muon_3p3 phaseB_native_muon_3p3_avalanche.cxx)
 target_link_libraries(mwpc_phase_b_native_muon_3p3 PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_phase_b_native_muon_3p3 PRIVATE cxx_std_17)
+
+# Separate phase-C research-only macroscopic RKF/Polya baseline. The archived
+# full microscopic native B1 target/physics and source are left untouched.
+add_executable(mwpc_phase_c_rkf_polya_pilot phaseC_rkf_polya_pilot.cxx)
+target_link_libraries(mwpc_phase_c_rkf_polya_pilot PRIVATE Garfield::Garfield)
+target_compile_features(mwpc_phase_c_rkf_polya_pilot PRIVATE cxx_std_17)
