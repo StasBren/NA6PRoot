@@ -1,3 +1,9 @@
+## RKF pilot first WSL build-tree incident (2026-10-31)
+
+- User pulled through `ef8e8a3`; `cmake --build test/mwpc-avalanche/build --target mwpc_phase_c_rkf_polya_pilot -j2` returned `gmake: *** No rule to make target`. Likely existing CMake tree predates new target; compiler never started. Do **not** infer Garfield API/physics failures from this.
+- User **already ran** `pi_run_rkf_polya_pilot.py prepare` and got `PASS RKF PILOT PREPARED`; this immutable 100-start plan exists and must not be rebuilt or deleted. `buildcheck`, `gas`, `run` then failed strictly because compiled executable is absent; `compare` has no run receipt. RKF gas generation and physical drift are NOT yet performed. Existing microscopic 100k untouched.
+- Immediate WSL repair: `git pull --ff-only`, then `cmake -S test/mwpc-avalanche -B test/mwpc-avalanche/build`, `cmake --build test/mwpc-avalanche/build --target mwpc_phase_c_rkf_polya_pilot -j2`, then `python3 -u test/mwpc-stage-c/pi_run_rkf_polya_pilot.py buildcheck`. STOP if native Garfield compile fails, capture error and correct only isolated pilot code. **Skip prepare**. Full corrected guide at `PI_PHASEC_RKF_POLYA_PILOT_2026-10-31.md` commit `b73c46e`.
+
 ## Isolated macroscopic RKF + Pólya pilot source (2026-10-31)
 
 - User approved implementation. Added **new** independent native C++ `test/mwpc-avalanche/phaseC_rkf_polya_pilot.cxx` with new CMake target `mwpc_phase_c_rkf_polya_pilot`; Python SHA-guarded wrapper `test/mwpc-stage-c/pi_run_rkf_polya_pilot.py`. Detailed WSL reproducibility/physics limits: `test/mwpc-stage-c/PI_PHASEC_RKF_POLYA_PILOT_2026-10-31.md`. **Original microscopic `phaseB_native_muon_3p3_avalanche.cxx`, all 100k avalanches, 120 full reference and original gas definitions remain unmodified.**
