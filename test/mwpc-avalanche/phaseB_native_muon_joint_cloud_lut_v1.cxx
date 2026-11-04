@@ -788,6 +788,14 @@ int main(int argc,char**argv) {
       RunLutSidecar(argv[2],argv[3],std::numeric_limits<std::size_t>::max());
       return 0;
     }
+    if(argc==4 && std::string(argv[1])=="--lut-sidecar-joint512") {
+      // Optional spatial/time cloud bank if 128-ion sampling proves
+      // insufficient on the separate complete-birth pilot.
+      // Identical microscopic avalanche physics and independent RNG.
+      RunLutSidecar(argv[2],argv[3],512);
+      return 0;
+    }
+
     if(argc==4 && std::string(argv[1])=="--lut-sidecar"){
       RunLutSidecar(argv[2],argv[3]);
       return 0;
