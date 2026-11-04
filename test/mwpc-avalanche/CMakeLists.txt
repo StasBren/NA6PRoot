@@ -105,6 +105,13 @@ add_executable(mwpc_phase_b_native_muon_3p3_spacetime_v1 phaseB_native_muon_3p3_
 target_link_libraries(mwpc_phase_b_native_muon_3p3_spacetime_v1 PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_phase_b_native_muon_3p3_spacetime_v1 PRIVATE cxx_std_17)
 
+# Isolated source of the joint per-electron ion-cloud LUT.  The new modes
+# save 128 sampled or ALL exact ion birth coordinates for heldout compression
+# checks.  Never edit the pinned native-muon physics sources.
+add_executable(mwpc_phase_b_joint_cloud_lut_v1 phaseB_native_muon_joint_cloud_lut_v1.cxx)
+target_link_libraries(mwpc_phase_b_joint_cloud_lut_v1 PRIVATE Garfield::Garfield)
+target_compile_features(mwpc_phase_b_joint_cloud_lut_v1 PRIVATE cxx_std_17)
+
 # Separate phase-C research-only macroscopic RKF/Polya baseline. The archived
 # full microscopic native B1 target/physics and source are left untouched.
 add_executable(mwpc_phase_c_rkf_polya_pilot phaseC_rkf_polya_pilot.cxx)
