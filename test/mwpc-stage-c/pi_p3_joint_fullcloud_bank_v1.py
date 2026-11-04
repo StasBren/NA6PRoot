@@ -303,6 +303,31 @@ def crps_discrete(outcome, support):
                  .5 * np.dot(p, np.abs(x[:, None] - x[None, :]) @ p))
 
 
+def cloud_features(record, points):
+    """Event-level joint features of a WHOLE cloud; zeros remain physical zeros."""
+    n = record['n_ion_births']
+    if n == 0:
+        return np.zeros(7, dtype=float)
+    a = points[record['offset']:record['offset'] + n]
+    stats = CORE.cloud_stats(a)
+    return np.array([math.log1p(n), stats['mean_radius_mm'],
+                     stats['sd_radius_mm'], stats['mean_t_ns'],
+                     stats['q90_t_ns'], stats['mean_w_mm'],
+                     stats['top_frac']], dtype=float)
+
+
+def energy_score(y, support):
+    """Proper multivariate energy score on pre-scaled whole-cloud features."""
+    if not support:
+        return None
+    x = np.stack([v for v, p in support])
+    p = np.asarray([p for v, p in support], dtype=float)
+    p /= p.sum()
+    first = float(np.dot(p, np.linalg.norm(x - y, axis=1)))
+    distances = np.linalg.norm(x[:, None] - x[None, :], axis=2)
+    return first - .5 * float(p @ distances @ p)
+
+
 def evaluate():
     audit()
     b = Bank()
@@ -314,6 +339,14 @@ def evaluate():
         require(train and test and not ({r['box_id'] for r in train} &
                                         {r['box_id'] for r in test}),
                 'Leaking a spatial cell into both train and test')
+        # Scales fixed using TRAINING CELLS ONLY; no held-out cloud leakage.
+        features = {(r['box_id'], r['sample']): cloud_features(r, b.points[g])
+                    for r in b.items[g]}
+        train_features = np.stack([features[r['box_id'], r['sample']]
+                                   for r in train])
+        scale = np.quantile(train_features, .75, axis=0) - \
+                np.quantile(train_features, .25, axis=0)
+        scale = np.where(scale > 1.e-5, scale, 1.)
         print('\nGEOMETRY', g, 'train', len(train), 'test', len(test),
               'held-out spatial cells', len({r['box_id'] for r in test}))
         preds = {mode: defaultdict(list) for mode in ('nearest', 'guarded')}
@@ -328,8 +361,13 @@ def evaluate():
                 n = truth['n_ion_births']
                 support = [(r['n_ion_births'], p) for r, p in cand]
                 pzero = sum(p for r, p in cand if r['n_ion_births'] == 0)
-                preds[mode][truth['box_id']].append(
-                    (crps_discrete(n, support), (pzero - float(n == 0))**2))
+                truth_z = features[truth['box_id'], truth['sample']] / scale
+                support_z = [(features[r['box_id'], r['sample']] / scale, p)
+                             for r, p in cand]
+                preds[mode][truth['box_id']].append((
+                    crps_discrete(n, support),
+                    (pzero - float(n == 0))**2,
+                    energy_score(truth_z, support_z)))
         common = set(preds['nearest']) & set(preds['guarded'])
         for mode in preds:
             cells = preds[mode]
@@ -341,18 +379,33 @@ def evaluate():
                                   for arr in cells.values()]))
             brier = float(np.mean([np.mean([x[1] for x in arr])
                                    for arr in cells.values()]))
+            energy = float(np.mean([np.mean([x[2] for x in arr])
+                                    for arr in cells.values()]))
             print(mode, 'coverage', n_ok, '/', len(test),
                   'tested cells', len(cells), 'abstained', missing[mode],
                   'cell-balanced count CRPS', round(crps, 5),
-                  'zero-Brier', round(brier, 6))
+                  'zero-Brier', round(brier, 6),
+                  'joint-feature energy score', round(energy, 6))
         if common:
             delta = np.array([
                 np.mean([x[0] for x in preds['nearest'][cell]]) -
                 np.mean([x[0] for x in preds['guarded'][cell]])
                 for cell in sorted(common)])
+            energy_delta = np.array([
+                np.mean([x[2] for x in preds['nearest'][cell]]) -
+                np.mean([x[2] for x in preds['guarded'][cell]])
+                for cell in sorted(common)])
+            rng = np.random.default_rng(20261104)
+            sample = rng.integers(0, len(delta), size=(2000, len(delta)))
+            ci = list(map(float, np.quantile(delta[sample].mean(axis=1), [.025, .975])))
+            energy_ci = list(map(float, np.quantile(
+                energy_delta[sample].mean(axis=1), [.025, .975])))
             print('PAIRED nearest-minus-guarded count CRPS',
                   float(np.mean(delta)), 'common held-out cells', len(common),
-                  '(positive favors guarded; exploratory)')
+                  '(positive favors guarded; exploratory)',
+                  'cell-bootstrap CI95', ci)
+            print('PAIRED nearest-minus-guarded joint-feature energy score',
+                  float(np.mean(energy_delta)), 'CI95', energy_ci)
         else:
             print('No cells supported by both samplers')
     print('\nPASS read-only evaluation; NO Garfield calls, NO LUT acceptance')
@@ -383,6 +436,9 @@ def selftest():
                 'No-data query must abstain')
         require(bank.sample(0., 0., 0., 0., 'p3_noFW', random.Random(42)) is None,
                 'Metal starting point must not generate gas ionization')
+        require(abs(energy_score(np.array([1.]),
+                     [(np.array([0.]), .5), (np.array([2.]), .5)])-.5)<1e-12,
+                'Energy-score selftest wrong')
         require(abs(crps_discrete(1, [(0, .5), (2, .5)])-.5)<1e-12,
                 'Discrete proper scoring formula wrong')
         require(Bank.holdout('p3_noFW', 50) ==
