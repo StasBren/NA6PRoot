@@ -335,12 +335,23 @@ def selftest():
         except ValueError as exc:
             must('Gap in physical checkpoint' in str(exc),
                  'Wrong error for a skipped physical checkpoint')
+        # chunk_0003 remains unsealed from the gap check above. Creating
+        # chunk_0002 gives TWO unsealed directories, which MUST be rejected.
         paths[2].mkdir()
-        must(scan_chunk_state(paths)==([0,1],2),
-             'Two consecutive pending physical chunks accepted')
+        try:
+            scan_chunk_state(paths)
+            raise AssertionError('Two simultaneous unsealed chunks were accepted')
+        except ValueError as exc:
+            must('Multiple unsealed physical chunks' in str(exc),
+                 'Wrong error when two physical chunks are unsealed')
+        # Once chunk_0002 is sealed, exactly one unsealed last chunk is
+        # again a legitimate snapshot of a currently running writer.
         (paths[2]/'complete.json').write_text('{}')
         must(scan_chunk_state(paths)==([0,1,2],3),
              'Final unfinished chunk not reported as pending')
+        (paths[3]/'complete.json').write_text('{}')
+        must(scan_chunk_state(paths)==([0,1,2,3],None),
+             'Fully sealed campaign not recognized')
     print('PASS extended p3 SHA source selection, disjoint 40-pass D500 starts, '
           'stratum/cell balancing, 5-cap cloud metrics and live-status checkpoint '
           'safety; NO new Garfield',flush=True)
