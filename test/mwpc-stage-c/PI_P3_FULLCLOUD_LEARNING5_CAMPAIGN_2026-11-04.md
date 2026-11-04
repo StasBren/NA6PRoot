@@ -166,3 +166,67 @@ Stop if *any* guard or command fails. No 1125-chunk background writer
 before one SHA-sealed C++ pilot chunk succeeds. This Python patch was
 committed on branch `feature/mwpc-stage-c`; real native WSL tests
 are pending and must not be claimed as completed.
+
+
+## 2026-11-04: Native WSL first 8-start gate PASS — continue remaining 1124 chunks
+
+The user executed the corrected source selection in WSL. Actual terminal output:
+
+- `PASS P3 learning5 disjoint original D500 pass ranges and metal guards`.
+- `PASS FROZEN new full-cloud P3 learning5 inputs: 9000 D500 original starts`.
+- For each P3 geometry: **900 spatial cells x five different original D500 starts**,
+  or 4500 starts per geometry. 72,000 reserved candidate passes per geometry
+  were SHA-checked; seven old-pilot IDs were excluded for noFW and six for FW75.
+  No gas-start inside-metal candidates in this selection.
+- `PASS real C++ parser 8 unique unused D500 starts and frozen binary`.
+- `FULL MICROSCOPIC GARFIELD p3 ONLY chunk 0 avalanches 8`.
+- `PASS SHA FULL BIRTHS 0 ions 31019 zero 0 wall_s 3.4`.
+- `SAFE STOP 1 / 1125`; `VERIFIED CHUNKS 1 / 1125`.
+- `PASS new learning5 P3 physics status: SHA-sealed avalanches 8 / 9000`;
+  `EXACT ION BIRTH POINTS 31019`; four full avalanches in each P3 geometry;
+  `NEXT UNUSED CHUNK 1`.
+
+**This is only one real eight-start physical checkpoint, not 9000 finished
+avalanches.** The first block's 3.4s wall clock is not a reliable full-run
+runtime forecast; future blocks may have much larger gain/time/CSV volume.
+
+Next command to **run only once** after verifying no other active physical
+writer; resumes from frozen chunk 1 and preserves completed chunk 0:
+
+~~~bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git switch feature/mwpc-stage-c
+git pull --ff-only
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+SCRIPT=test/mwpc-stage-c/pi_p3_fullcloud_learning5_campaign_v1.py
+"$PY" "$SCRIPT" status
+
+# Must be exactly one physical writer; do not start a second job in parallel.
+nohup nice -n 15 "$PY" -u "$SCRIPT" run --max-chunks 1124 --hours 18 \
+  > "$HOME/na6p/p3_fullcloud_learning5_rest.log" 2>&1 < /dev/null &
+echo "P3 learning5 physical writer PID $!"
+
+# Read-only progress (safe while latest chunk is unsealed/in flight):
+tail -n 25 "$HOME/na6p/p3_fullcloud_learning5_rest.log"
+"$PY" "$SCRIPT" status
+~~~
+
+`run` skips and rechecks the exact same SHA-sealed chunk 0 and will not
+overwrite frozen source or checkpoint output. It verifies C++ source and
+binary against the recorded `preflight.json` before any new native physics.
+The optional 18-hour soft budget stops only between finished chunks; if
+reached, repeat the **same** `run` invocation only after the old writer
+has definitely exited and no unsealed partial chunk remains.
+
+After `VERIFIED CHUNKS 1125 / 1125` and no active writer, perform the
+strict whole-campaign source/checkpoint audit:
+
+~~~bash
+"$PY" -u "$SCRIPT" audit \
+  | tee "$HOME/na6p/p3_fullcloud_learning5_audit.log"
+~~~
+
+Do not assert final complete physics or begin training model until the
+actual WSL whole-campaign audit reports 9000 SHA-sealed full Garfield
+avalanche records. This new 9000-start campaign is a **first learning-curve
+point**, not detector response validation.
