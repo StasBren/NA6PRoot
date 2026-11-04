@@ -140,6 +140,33 @@ def values_for(rows, cap, metric, *, informative=False):
     return result
 
 
+def ion_weighted(rows, cap, metric, bootstrap, rng):
+    """Weight whole-avalanche compression errors by their FULL ion counts.
+
+    For future charge modeling the most populous avalanches can matter much
+    more than the large number of zero/small avalanches. Resampling unit is
+    STILL the independent original avalanche, never an individual ion.
+    """
+    data=[]
+    for row in rows:
+        if row['n_ion_births']<=0:
+            continue
+        measure=row['cap_study'][str(cap)][metric]
+        if measure is not None:
+            data.append((float(row['n_ion_births']),float(measure['mean'])))
+    if not data:
+        return None
+    a=np.asarray(data,dtype=float)
+    must(np.all(np.isfinite(a)) and np.all(a[:,0]>0),
+         'Invalid ion weight / compression error')
+    val=float(np.average(a[:,1],weights=a[:,0]))
+    ix=rng.integers(len(a),size=(bootstrap,len(a)))
+    sel=a[ix]
+    bs=(sel[:,:,0]*sel[:,:,1]).sum(axis=1)/sel[:,:,0].sum(axis=1)
+    return {'n_independent_avalanches':len(a),'weighted_mean':val,
+            'bootstrap95_across_avalanches':list(map(float,np.quantile(bs,[.025,.975])))}
+
+
 def report(root, bootstrap, seed):
     must(200 <= bootstrap <= 10000, 'Require 200-10000 bootstrap draws')
     cloud, meta, n_births = checked(root)
@@ -192,6 +219,15 @@ def report(root, bootstrap, seed):
                     print(f'      {cap:3d}: {value["mean"]:.6g} [95% CI {ci[0]:.6g},{ci[1]:.6g}] '
                           f'n={value["n_avalanches"]}; truly compressed {compressed["n_avalanches"] if compressed else 0}')
                 else: print(f'      {cap:3d}: no defined observations')
+        print('\n  ION-BIRTH-WEIGHTED full-cloud compression errors '
+              '(still bootstrap by whole avalanche; NOT source-flux weighted):')
+        for metric in ('joint_phi_time_TV','mean_radius_rel_abs','abs_q90_t_ns'):
+            for cap in CAPS:
+                q=ion_weighted(active,cap,metric,bootstrap,rng)
+                if q:
+                    print(f'    {metric}, cap={cap}: {q["weighted_mean"]:.6g} '
+                          f'CI95 {q["bootstrap95_across_avalanches"]}, '
+                          f'independent n={q["n_independent_avalanches"]}')
         # Paired benefit from more ion samples; each input avalanche is one
         # independent unit, not each random subsampling repetition.
         for metric in ('joint_phi_time_TV','abs_A_TB','abs_q90_t_ns'):
@@ -231,6 +267,9 @@ def selftest():
          'Uncompressed avalanche must not count as informative 128 comparison')
     a=stats([0.,1.,2.],300,z)
     must(a['mean']==1. and a['n_avalanches']==3, 'Bootstrap independence')
+    q=ion_weighted(raw,32,'joint_phi_time_TV',300,z)
+    must(abs(q['weighted_mean']-(100*.15+600*.25)/700)<1e-12,
+         'Ion-weighted sample measure wrong')
     with tempfile.TemporaryDirectory() as temp:
         p=Path(temp)/'file.json'
         p.write_text('{"x":1}\n')
