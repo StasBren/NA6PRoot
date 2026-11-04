@@ -275,6 +275,10 @@ class Bank:
         return [(r, p/z) for r, p in result]
 
     def sample(self, u0, v0, w0, t0, g, rng, mode='guarded', train=None):
+        if self.guards(u0, v0, g) is None:
+            return {'n_ion_births': 0, 'births_uvwt_mm_ns': np.empty((0, 4)),
+                    'source_cell': None, 'source_sample': None,
+                    'mode': 'metal_veto', 'physical_basis': 'start inside wire metal'}
         choices = self.candidates(u0, v0, g, mode=mode, train=train)
         if not choices:
             return None  # ABSTAIN: missing coverage or physical metal
@@ -425,7 +429,7 @@ def selftest():
             'p3_noFW': [item], 'p3_FW75': []}})
         bank = Bank(p)
         sample = bank.sample(.02, .01, 3., 20., 'p3_noFW', random.Random(42),
-                             mode='local')
+                             mode='local', train=[item])
         require(sample is not None and sample['n_ion_births'] == 2,
                 'Selftest whole-cloud selection failed')
         require(np.allclose(sample['births_uvwt_mm_ns'][:, 2], 3.) and
@@ -434,8 +438,15 @@ def selftest():
         require(bank.sample(.02, .01, 0., 0., 'p3_noFW', random.Random(42),
                             mode='local', train=[]) is None,
                 'No-data query must abstain')
-        require(bank.sample(0., 0., 0., 0., 'p3_noFW', random.Random(42)) is None,
-                'Metal starting point must not generate gas ionization')
+        metal = bank.sample(0., 0., 0., 0., 'p3_noFW', random.Random(42))
+        require(metal['n_ion_births'] == 0 and metal['mode'] == 'metal_veto',
+                'A start inside wire metal must be a physical zero')
+        zero = dict(item, sample=102, offset=2, n_ion_births=0)
+        empty_cloud = bank.sample(.02, .01, 0., 0., 'p3_noFW',
+                                  random.Random(42), mode='local', train=[zero])
+        require(empty_cloud is not None and empty_cloud['n_ion_births'] == 0 and
+                empty_cloud['births_uvwt_mm_ns'].shape == (0, 4),
+                'A sampled true zero cloud must not be an abstention')
         require(abs(energy_score(np.array([1.]),
                      [(np.array([0.]), .5), (np.array([2.]), .5)])-.5)<1e-12,
                 'Energy-score selftest wrong')
