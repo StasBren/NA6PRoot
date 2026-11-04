@@ -115,3 +115,54 @@ and U/V induced-charge validation are later gates, not performed here.
 
 GitHub script and source protocol are staged.
 **Physical 9000-start campaign: not yet run.**
+
+
+## 2026-11-04: User first WSL attempt stopped in Python source selection; FIXED
+
+The original script called `old.sample_for(g,box,pass_index)` from
+`pi_p3_extended_full_cloud_campaign_v1.py` with `pass_index` in
+`140..219`. That OLD helper is correctly **restricted to 100..139**.
+Thus `selftest` and `prepare` failed with `ValueError: Invalid
+reserved D500 trial pass`. Later `preflight/run/status` raised
+`FileNotFoundError` only because `prepare` never created
+`input/exact_D500_p3_unseen.csv`. The D500 file, SHA-sealed Garfield
+data and prior full-cloud bank are NOT implicated; first eight new native
+avalanches were NOT started. User's WSL reported **647 GB free**.
+
+**Code fix:** add local `sample_for_pass(g,box,p)`:
+`(offset_for(g,box)+STRIDE*p)%500` with pass range 0..499.
+Use it in `reserved`, `check_plan` and `selftest`. The latter
+now verifies every 500-pass mapping is a full bijection, old 0..139
+and planned 140..219 and reserved 460..499 have disjoint indices,
+and agrees exactly with the OLD helper for 100..139. Keep the old
+restricted helper unchanged; source identities are the same permutation.
+
+**New safe first-gate retry:**
+
+~~~bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git pull --ff-only
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+SCRIPT=test/mwpc-stage-c/pi_p3_fullcloud_learning5_campaign_v1.py
+set -euo pipefail
+"$PY" -m py_compile "$SCRIPT"
+"$PY" "$SCRIPT" selftest
+
+# Do NOT delete any existing campaign directory. The failed attempt
+# should have left the root absent, because source selection failed
+# before INPUT.mkdir().
+CAMPAIGN=test_runs/mwpc_stage_c/pi_p3_fullcloud_learning5_v1
+if [ -e "$CAMPAIGN" ]; then
+  echo "STOP: existing campaign root; inspect before preparing"; exit 1
+fi
+
+"$PY" -u "$SCRIPT" prepare
+"$PY" -u "$SCRIPT" preflight
+"$PY" -u "$SCRIPT" run --max-chunks 1 --hours 2
+"$PY" "$SCRIPT" status
+~~~
+
+Stop if *any* guard or command fails. No 1125-chunk background writer
+before one SHA-sealed C++ pilot chunk succeeds. This Python patch was
+committed on branch `feature/mwpc-stage-c`; real native WSL tests
+are pending and must not be claimed as completed.
