@@ -56,3 +56,62 @@ Optional cap 8192 is available; choose it only after inspecting 2048/4096. The n
 4. Only after held-out joint count/shape/time validity can we separately study ion drift, Shockley–Ramo U/V weighting, electronics, and detector-level hit precision.
 
 **No assertion of validated cathode signal or single-hit resolution follows from these data.**
+
+## 2026-11-04: WSL 2048/4096 high-cap report PASS
+
+The user's WSL executed the new high-cap script on the existing exact
+960-avalanche archive and independently SHA-audited all 120 native chunks.
+The job completed with `PASS high-cap read-only study; frozen files untouched`.
+No new Garfield physical samples and no cathode simulation occurred.
+
+**Across-regime, equal-spatial-cell 12x6 angular/time TV** (mean, 95% spatial-cell bootstrap CI):
+
+| Cap | p3_noFW mean [95% CI] | p3_FW75 mean [95% CI] |
+|---:|---|---|
+|1024|0.00333627 [0.00256563, 0.00412207]|0.0212616 [0.02025997, 0.02222811]|
+|2048|0.000310342 [0.000146759, 0.000485737]|0.0116908 [0.01083416, 0.01249914]|
+|4096|0.000003467 [0, 0.000010401]|0.00531799 [0.00471979, 0.00590224]|
+
+**How often compression actually occurs:**
+- noFW: >1024: 92/417; >2048: 18/417; >4096: only **1/417** nonzero clouds.
+- FW75: >1024: 367/401; >2048: 319/401; >4096: **233/401** nonzero clouds.
+- Conditional on actually compressed clouds, the 4096-point FW75
+  12x6 TV is **0.00879–0.00928** across four regimes; the low global
+  noFW TV at 4096 primarily reflects exact storage for 416/417 clouds.
+- FW75 **ion-birth-weighted** TV = 0.0250369/0.0158979/0.00889384
+  at 1024/2048/4096. This sensitivity analysis emphasizes high-gain clouds.
+- At 4096 FW75, mean radius relative absolute error = 0.00112916;
+  q90 birth-time absolute error = 0.000419749 ns (0.420 ps), and
+  top-bottom asymmetry absolute error = 0.00380857 **only where defined**.
+  Undefined sector asymmetries are excluded, not silently set to zero.
+- Paired 2048 -> 4096 FW75 TV improvement = 0.00637279,
+  95% cell CI [0.00588062, 0.00686369].
+
+**Decision:** 2048 noFW and 4096 FW75 are candidates for *storage
+compression diagnostics*, not final cathode-LUT acceptance. Choosing a
+cap requires a predefined tolerance and scrutiny of tail clouds. In
+particular, a 12x6 angular/time TV is deliberately coarse, uses each
+exact cloud's true time range when scoring, and does **not** verify
+longitudinal `w` structure, strip-weighting response, induced current,
+spatial generalization or independent Geant4-muon event response.
+
+**Next conservative read-only gate:** compare 4096 with 8192 in the same
+exact archived FW75 avalanches using the already supported high-cap
+script. This reprocesses the noFW archive too (no extra physics) but
+the FW75 result is decision-critical. All original data stay untouched.
+
+~~~bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git switch feature/mwpc-stage-c
+git pull --ff-only
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+"$PY" test/mwpc-stage-c/pi_p3_highcap_compression_v1.py selftest
+set -o pipefail
+"$PY" -u test/mwpc-stage-c/pi_p3_highcap_compression_v1.py \
+  report --caps 4096 8192 --reps 32 --bootstrap 3000 \
+  | tee "$HOME/na6p/p3_highcap_8192_v1.log"
+~~~
+
+The 8192 comparison is *not yet run*. Avoid commissioning a massive
+conditional-LUT production job until compression selection and the
+held-out joint-response validation protocol are explicitly agreed.
