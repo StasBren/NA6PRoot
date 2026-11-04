@@ -306,7 +306,8 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
                  std::ostream* timingOut=nullptr,
                  const bool exactLutCellStart=false,
                  const std::size_t birthReservoirLimit=100,
-                 std::ostream* exactMomentsOut=nullptr) {
+                 std::ostream* exactMomentsOut=nullptr,
+                 std::ostream* endpointSampleOut=nullptr) {
   const double p=.1*geom.pitchMm;
   const double wireRadius=.0015; // 30 um diameter = 0.0015 cm radius
   // For the finite centered anode grid, translate the Geant4 physical
@@ -366,10 +367,30 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
     double firstCollectedT=std::numeric_limits<double>::infinity();
     double lastCollectedT=-std::numeric_limits<double>::infinity();
     const auto nEnd=avalanche.GetNumberOfElectronEndpoints();
+    // Independent reservoir does NOT advance Garfield's collision RNG.
+    constexpr std::size_t endCap=64;
+    std::mt19937_64 electronSampleRng(
+        std::uint64_t(rngSeed)+0xbf58476d1ce4e5b9ULL);
+    std::vector<std::array<double,8>> endpointSample;
+    std::vector<int> endpointSampleStatus;
+    if(endpointSampleOut){endpointSample.reserve(endCap);endpointSampleStatus.reserve(endCap);}
     for(std::size_t j=0;j<nEnd;++j){
       double x0,y0,z0,t0,E0,x1,y1,z1,t1,E1;int status=0;
       avalanche.GetElectronEndpoint(j,x0,y0,z0,t0,E0,
                                    x1,y1,z1,t1,E1,status);
+      if(endpointSampleOut){
+        const std::array<double,8> point{{x0,y0,z0,t0,x1,y1,z1,t1}};
+        if(endpointSample.size()<endCap){
+          endpointSample.push_back(point);endpointSampleStatus.push_back(status);
+        }else{
+          std::uniform_int_distribution<std::uint64_t> choose(0,j);
+          const auto idx=choose(electronSampleRng);
+          if(idx<endCap){
+            endpointSample[static_cast<std::size_t>(idx)]=point;
+            endpointSampleStatus[static_cast<std::size_t>(idx)]=status;
+          }
+        }
+      }
       const double du=x1-std::round(x1/p)*p;
       if(std::hypot(du,y1)<wireRadius*1.5) {
         ++collected;eCounts.Add(du,y1);
@@ -413,7 +434,7 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
     // Exact summary of the FULL birth point process: no reservoir noise.
     // Available even when only 128 birth positions are kept for later use.
     if(exactMomentsOut) {
-      (*exactMomentsOut)<<std::setprecision(15)<<crossingLabel<<","<<geom.label<<","<<i<<","<<births.total;
+      (*exactMomentsOut)<<std::setprecision(15)<<crossingLabel<<","<<geom.label<<","<<i<<","<<births.total<<","<<nEnd;
       if(births.total) {
         const long double n=static_cast<long double>(births.total);
         const long double mt=births.sumBirthT/n,mr=births.sumBirthR/n,mw=births.sumBirthW/n;
@@ -433,6 +454,19 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
       (*exactMomentsOut)<<",";
       if(collected)(*exactMomentsOut)<<lastCollectedT;
       (*exactMomentsOut)<<"\n";
+    }
+    if(endpointSampleOut){
+      const double sampleWeight=endpointSample.empty()?0.:
+         double(nEnd)/endpointSample.size();
+      for(std::size_t j=0;j<endpointSample.size();++j){
+        const auto& p0=endpointSample[j];
+        (*endpointSampleOut)<<std::setprecision(15)
+            <<crossingLabel<<","<<geom.label<<","<<i<<","<<j;
+        for(std::size_t d=0;d<p0.size();++d)
+          (*endpointSampleOut)<<","<<((d==3||d==7)?p0[d]:(10.*p0[d]));
+        (*endpointSampleOut)<<","<<endpointSampleStatus[j]
+            <<","<<nEnd<<","<<sampleWeight<<"\n";
+      }
     }
     // The full birth census is used for A; this bounded independent-RNG
     // reservoir gives unbiased spatial draws WITHIN each seed avalanche.
@@ -538,8 +572,9 @@ void RunLutSidecar(const std::string& input,const std::string& prefix,
   std::ofstream trialOut(prefix+"_trials.csv"),
                 birthsOut(prefix+"_birth_reservoir.csv"),
                 timingOut(prefix+"_timing.csv"),
-                momentsOut(prefix+"_moments.csv");
-  if(!trialOut||!birthsOut||!timingOut||!momentsOut)
+                momentsOut(prefix+"_moments.csv"),
+                endpointsOut(prefix+"_electron_endpoint_sample.csv");
+  if(!trialOut||!birthsOut||!timingOut||!momentsOut||!endpointsOut)
     throw std::runtime_error("Cannot create new LUT avalanche sidecar outputs");
   trialOut << "lut_trials,original_geometry,original_lut_sha256,box_id,"
               "iu,iv,sample,original_random_seed,original_u_start_mm,"
@@ -553,10 +588,13 @@ void RunLutSidecar(const std::string& input,const std::string& prefix,
               "ion_top,ion_bottom,A_ion_hemi,A_ion_TB\n";
   birthsOut << "crossing_id,configuration,primary_index,u_mm,v_mm,w_mm,"
                "t_ns,seed_ion_births_total,reservoir_weight\n";
-  momentsOut<<"crossing_id,configuration,primary_index,ion_births,"
+  momentsOut<<"crossing_id,configuration,primary_index,ion_births,n_electron_endpoints,"
                "min_birth_time_ns,max_birth_time_ns,mean_birth_time_ns,sd_birth_time_ns,"
                "mean_birth_radius_mm,sd_birth_radius_mm,mean_birth_w_mm,sd_birth_w_mm,"
                "min_collected_electron_time_ns,max_collected_electron_time_ns\n";
+  endpointsOut<<"crossing_id,configuration,primary_index,saved_index,"
+                  "u0_mm,v0_mm,w0_mm,t0_ns,u1_mm,v1_mm,w1_mm,t1_ns,"
+                  "status,n_end_total,reservoir_weight\n";
   timingOut << "crossing_id,station,theta_u_deg,theta_w_deg,configuration,"
                "primary_index,n_true_heed_primaries,u_seed_mm,v_seed_mm,"
                "garfield_seed,wall_seconds,avalanche_electrons,"
@@ -589,7 +627,7 @@ void RunLutSidecar(const std::string& input,const std::string& prefix,
     oneBirth<<std::setprecision(15);
     oneHit<<std::setprecision(15);
     RunGeometry(gas,*it,h,primaries,identity,oneSeed,oneBirth,oneHit,
-                0,0,0,nullptr,&timingOut,true,birthReservoirLimit,&momentsOut);
+                0,0,0,nullptr,&timingOut,true,birthReservoirLimit,&momentsOut,&endpointsOut);
     std::string record=oneSeed.str();
     if(record.empty()||record.back()!='\n')
       throw std::runtime_error("Missing single-electron avalanche result");
@@ -605,7 +643,7 @@ void RunLutSidecar(const std::string& input,const std::string& prefix,
              << q.originalTime << "," << q.originalEnergy << ","
              << record << "\n";
     birthsOut << oneBirth.str();
-    trialOut.flush();birthsOut.flush();momentsOut.flush();
+    trialOut.flush();birthsOut.flush();momentsOut.flush();endpointsOut.flush();
     if((i+1)%16==0||i+1==starts.size()) {
       std::cout<<"LUT avalanche sidecar "<<i+1<<"/"<<starts.size()
                <<" original exact starts; NO Geant4-muon aggregate\n"<<std::flush;
