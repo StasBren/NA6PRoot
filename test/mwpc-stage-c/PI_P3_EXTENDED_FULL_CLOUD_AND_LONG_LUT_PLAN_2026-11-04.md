@@ -247,3 +247,48 @@ unsealed chunk remains, do not retry blindly: inspect
 `chunk_0013/physics.log`, checkpoint files and process exit
 reason. Keep them for exact forensic recovery. Only after all
 120 chunks are `VERIFIED` should `analyze --reps 32` run.
+
+## 2026-11-04: All 960 true Garfield avalanches PASS; selftest fixture correction
+
+WSL ended successfully with **120/120 SHA-sealed blocks**, **960/960
+independent D500 initial electron avalanches**, **480 per each of the two
+p3 geometries**, and **2,981,533 exactly recorded ionization-birth
+points**. The background job ended normally with
+`PASS ALL COMPLETE 960 independent exact-start p3 avalanches`.
+The updated read-only `status` independently verified all 120 native
+chunk SHA receipts. No missing or unfinished physical chunks exist.
+
+One Python `selftest` failed after the status-reader code update:
+the synthetic test created `chunk_0003` unsealed, then created
+`chunk_0002` also unsealed, but incorrectly EXPECTED the scanner
+to accept the two simultaneous unsealed physical chunks. The scanner
+correctly rejected this as an invalid campaign state. In the
+`selftest`, this is now an EXPECTED failure case; when
+`chunk_0002` is sealed, the remaining `chunk_0003` is correctly
+reported as the single possible in-flight chunk. A final all-sealed
+case was added as well.
+
+**Only Python selftest was repaired.** No changes to the executable,
+physical source, frozen input, physics records, SHA receipts, strict
+chunk scanner or first 48 full-cloud pilot.
+
+Next WSL commands:
+
+```bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git switch feature/mwpc-stage-c
+git pull --ff-only
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+"$PY" test/mwpc-stage-c/pi_p3_extended_full_cloud_campaign_v1.py selftest
+"$PY" test/mwpc-stage-c/pi_p3_extended_full_cloud_campaign_v1.py status
+# Analysis reads only the already-completed exact birth points:
+"$PY" -u test/mwpc-stage-c/pi_p3_extended_full_cloud_campaign_v1.py analyze --reps 32
+"$PY" -u test/mwpc-stage-c/pi_p3_extended_cloud_readout_v1.py report --bootstrap 3000 \
+  | tee "$HOME/na6p/p3_extended_cloud_report_v1.log"
+```
+
+If `analysis_complete_v2/` already exists from an earlier attempt,
+DO NOT delete it. Inspect the directory and its log first; the analyzer
+refuses overwrite. The analysis and report must be completed before
+fixing any final 512/1024 compression format or starting the much
+larger conditional full-LUT learning-curve experiment.
