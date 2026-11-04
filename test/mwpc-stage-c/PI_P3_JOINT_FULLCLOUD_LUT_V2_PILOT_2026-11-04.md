@@ -177,3 +177,85 @@ on the user's WSL; report results must not be fabricated.** Treat
 all comparisons as developmental diagnostics. Do not yet modify
 validated A20, commit large new microscopic jobs, or represent this
 as full U/V cathode-signal validation.
+
+
+## 2026-11-04: User WSL five-fold and independent within-cell report PASS
+
+The user completed the committed cross-validation script in WSL and pasted its entire report. Synthetic selftest and original 960-cloud SHA bank audit both PASS.
+
+### Five-fold SPATIALLY HELD-OUT BOXES
+
+Every distinct *represented* bank cell appears once in held-out evaluation,
+without data from that cell in training. Source is spatially stratified, not
+flux-weighted. All scores are **lower=better**.
+
+| Geometry | Held-out cells | supported cells | nearest count CRPS | guarded count CRPS | nearest 7D energy | guarded 7D energy |
+|---|---:|---:|---:|---:|---:|---:|
+| p3_noFW | 324 | 323; 479/480 trials | 602.2524 | 416.9288 | 17.5142 | 12.2986 |
+| p3_FW75 | 275 | 266; 471/480 trials | 6360.7730 | 4717.8104 | 71.1179 | 48.7687 |
+
+Paired nearest minus guarded improvements (cell-bootstrap 95% CI):
+
+- noFW count CRPS **+185.3236 [149.019,224.875]**; zero Brier
+  **+0.070202 [0.041257,0.098561]**; energy **+5.21565 [3.299,7.579]**.
+- FW75 count CRPS **+1642.963 [1271.189,2018.638]**; zero Brier
+  **+0.089667 [0.060160,0.120547]**; energy **+22.3492 [15.178,29.669]**.
+
+### Within-cell HELD-OUT AVALANCHE
+
+For cells with >=2 source starts, one independent full Garfield history was
+held out; local-only and guarded both had usable source candidates in a
+SUBSET of cells, so compare **PAIRED** differences, not unmatched overall means.
+
+- noFW: 35 eligible multiply sampled test cells, 23 have valid local-only
+  predictions; 35 have guarded predictions. Paired local-minus-guarded
+  CRPS **+77.4037 [27.7475,132.569]**; zero Brier
+  **+0.044132 [0.015308,0.079287]**; 7D energy
+  **+2.61367 [0.935,4.649]**.
+- FW75: 57 eligible multiply sampled test cells, 52 have valid local-only
+  predictions; 57 guarded. Paired CRPS
+  **+701.2351 [256.795,1148.086]**; zero Brier
+  **+0.0468291 [0.008534,0.086724]**; 7D energy
+  **+11.1662 [2.0022,20.7104]**.
+
+**Scientific interpretation:** On this thin complete-cloud source, geometric
+pooling of complete events beats (a) choosing only one neighboring box for
+spatially unseen boxes and (b) local-only sampling where sparse local
+training exists. This supports further work on guarded conditional full-cloud
+banks. It does **not** mean 25% local/75% neighboring is optimal, nor
+prove the full unbinned 4D ion-birth point process matches Garfield on
+arbitrary TrackHeed muons. The local baseline has small and unequal support,
+the source has many empty boxes, and bootstrap is conditional on training.
+
+### Next decision gate, NO additional microscopic physics
+
+Created `pi_p3_joint_fullcloud_coverage_v1.py` to check the entire
+900-box D500 grid **for both p3 geometries** by inspecting exactly
+10 fixed original D500 gas/start sites per box (9000/geometry),
+using physical wire guards and exact frozen D500 source SHA. The
+10 deterministic indices have D500 permutation passes >=140, disjoint
+from old A20/A100 0..99 and completed full-cloud 100..139.
+This measures how often the current FULL CLOUD bank can return a
+non-extrapolative physical event and reports boxes with no coverage.
+
+~~~bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git switch feature/mwpc-stage-c
+git pull --ff-only
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+SCRIPT=test/mwpc-stage-c/pi_p3_joint_fullcloud_coverage_v1.py
+"$PY" -m py_compile "$SCRIPT"
+"$PY" "$SCRIPT" selftest
+set -o pipefail
+"$PY" -u "$SCRIPT" coverage \
+  | tee "$HOME/na6p/p3_joint_fullcloud_coverage_v1.log"
+~~~
+
+**This new coverage report is NOT yet run on WSL.** Do not invent its
+findings. It does no Garfield or writes to old sources. The nominal
+next prospective campaign is an explicitly staged full-cloud
+learning curve, e.g. 5 new independent events per gas-covered box
+before considering 20/50/100 per box. Actual campaign should only
+be specified after full-grid coverage is measured; reserve independent
+sources and separate validation. Leave all 120 original Garfield SHA
+chunks, A20 and D500 unchanged.
