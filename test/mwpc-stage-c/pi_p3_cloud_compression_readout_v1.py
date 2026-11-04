@@ -194,7 +194,7 @@ def report(root, bootstrap, seed):
                         for v in active)
             print(f'  CAP {cap}: {n_full}/{len(active)} nonzero avalanches do not need any compression; '
                   f'{len(active)-n_full} genuinely compressed; '
-                  f'{n_undef} originally-defined A_TB lost in compressed draw(s)')
+                  f'{n_undef} originally-defined A_TB have no valid compressed A_TB error estimate')
         for regime in ('near_anode','near_field','transition','bulk'):
             rr=[r for r in arr if r['regime']==regime]
             if not rr:continue
@@ -209,14 +209,16 @@ def report(root, bootstrap, seed):
                       f'CI95={v["bootstrap95_across_avalanches"] if v else None} '
                       f'[compressed-only n={len(vals_st)}, mean={round(inf["mean"],4) if inf else None}]')
         print('\n  ALL REGIMES PER CAP (unweighted across independent nonzero avalanches):')
-        for label,metric in METRICS:
+        for metric,label in METRICS:
             print('    '+label)
             for cap in CAPS:
                 value=stats(values_for(arr,cap,metric),bootstrap,rng)
                 compressed=stats(values_for(arr,cap,metric,informative=True),bootstrap,rng)
                 if value:
                     ci=value['bootstrap95_across_avalanches']
-                    print(f'      {cap:3d}: {value["mean"]:.6g} [95% CI {ci[0]:.6g},{ci[1]:.6g}] '
+                    ci_text=(f'[95% CI {ci[0]:.6g},{ci[1]:.6g}]'
+                             if ci is not None else '[95% CI unavailable: n=1]')
+                    print(f'      {cap:3d}: {value["mean"]:.6g} {ci_text} '
                           f'n={value["n_avalanches"]}; truly compressed {compressed["n_avalanches"] if compressed else 0}')
                 else: print(f'      {cap:3d}: no defined observations')
         print('\n  ION-BIRTH-WEIGHTED full-cloud compression errors '
@@ -265,6 +267,23 @@ def selftest():
     must(values_for(raw,32,'joint_phi_time_TV')==[.15,.25], 'Nonzero compression rows')
     must(values_for(raw,128,'joint_phi_time_TV',informative=True)==[.11],
          'Uncompressed avalanche must not count as informative 128 comparison')
+    # Regression: every (machine_key, display_label) pair must read a
+    # scientific metric from the CAP structure, NEVER the display label.
+    must(len(METRICS)==len(set(k for k,_ in METRICS))==5,
+         'Repeated or missing scientific metric keys')
+    metrics_by_cap={str(cap):{metric:{'mean':float(i+1)*.01}
+                         for i,(metric,_) in enumerate(METRICS)}
+                    for cap in CAPS}
+    fixture=[{'n_ion_births':900,'cap_study':metrics_by_cap}]
+    for metric,label in METRICS:
+        must(metric in metrics_by_cap['128'] and metric != label,
+             'METRICS order or scientific key mismatch: '+str((metric,label)))
+        for cap in CAPS:
+            must(values_for(fixture,cap,metric)==[float(
+                     next(i+1 for i,(k,_) in enumerate(METRICS) if k==metric))*.01],
+                 'Unrecognized scientific metric key '+metric)
+    must(stats([.2],300,z)['bootstrap95_across_avalanches'] is None,
+         'Single-avalanche confidence interval should be unavailable')
     a=stats([0.,1.,2.],300,z)
     must(a['mean']==1. and a['n_avalanches']==3, 'Bootstrap independence')
     q=ion_weighted(raw,32,'joint_phi_time_TV',300,z)
