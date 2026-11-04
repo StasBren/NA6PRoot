@@ -493,6 +493,25 @@ def full_cloud_iterator(path):
 
 def quantile(v,p):return float(np.quantile(v,p)) if len(v) else None
 
+def defined_asymmetry(value):
+    """Physics: undefined sector asymmetry is JSON null, never a fake zero."""
+    return float(value) if math.isfinite(value) else None
+
+def verify_finite_json(obj,where='root'):
+    """Fail closed on any accidental NaN/Infinity; no blanket sanitization."""
+    if isinstance(obj,dict):
+        for k,v in obj.items():verify_finite_json(v,where+'.'+str(k))
+    elif isinstance(obj,(tuple,list)):
+        for i,v in enumerate(obj):verify_finite_json(v,where+'['+str(i)+']')
+    elif isinstance(obj,(float,np.floating)):
+        must(math.isfinite(float(obj)),
+             'Non-finite scientific result was not explicitly defined: '+where)
+    elif isinstance(obj,(int,str,bool,type(None),np.integer)):
+        pass
+    else:
+        raise ValueError('Unexpected non-JSON scientific result type at '+where+
+                         ': '+str(type(obj)))
+
 def analyze(reps,partial=False):
     must(8<=reps<=500,'Require 8..500 subsampling reps')
     rows,labels,m,done=completed()
@@ -500,7 +519,11 @@ def analyze(reps,partial=False):
     must(partial or len(done)*GROUP==len(rows),
          'Incomplete; analyze with --partial for diagnostic only, or finish physics')
     n=len(done)*GROUP
-    target=ROOT/('analysis_partial_%03d'%len(done) if partial else 'analysis_complete')
+    # The original analysis_complete (v1) may contain a partial summary.json
+    # from an aborted NaN serialization. It is preserved untouched.
+    # New analysis lives in a separately sealed, non-overwriting v2 directory.
+    target=ROOT/('analysis_partial_%03d_v2'%len(done) if partial
+                 else 'analysis_complete_v2')
     must(not target.exists(),'Preserve existing analysis directory: '+str(target))
     truth=[];seedplan={}
     for r,t in zip(rows[:n],labels[:n]):
@@ -531,7 +554,8 @@ def analyze(reps,partial=False):
             entry={'geometry':g,'box_id':b,'sample':s,
                    'regime':label['regime'],'v_sign':label['v_sign'],
                    'n_ion_births':len(full),'exact_top_frac':fullstats['top_frac'],
-                   'exact_A_TB':fullstats['A_TB'],
+                   'exact_top_bottom_ion_count':fullstats['top']+fullstats['bottom'],
+                   'exact_A_TB':defined_asymmetry(fullstats['A_TB']),
                    'cap_study':{}}
             rg=random.Random(stable(RNG_TAG,'subsample',g,b,s))
             for cap in CAPS:
@@ -557,6 +581,7 @@ def analyze(reps,partial=False):
             truth.append({'geometry':g,'box_id':b,'sample':s,
                 'regime':label['regime'],'v_sign':label['v_sign'],
                 'n_ion_births':0,'exact_top_frac':None,'exact_A_TB':None,
+                'exact_top_bottom_ion_count':0,
                 'cap_study':{}})
     must(len(truth)==n and len({(x['geometry'],x['box_id'],x['sample']) for x in truth})==n,
          'Final analysis missing full microscopic avalanches')
@@ -566,6 +591,8 @@ def analyze(reps,partial=False):
         must(len(allrows)==n//2,'Independent geometry cardinality')
         s={'n':len(allrows),'n_nonzero':sum(r['n_ion_births']>0 for r in allrows),
            'n_zero':sum(r['n_ion_births']==0 for r in allrows),
+           'n_nonzero_with_undefined_A_TB':sum(
+               r['n_ion_births']>0 and r['exact_A_TB'] is None for r in allrows),
            'total_exact_ion_births':sum(r['n_ion_births'] for r in allrows),
            'by_regime':{}}
         for regime in ('near_anode','near_field','transition','bulk'):
@@ -585,18 +612,25 @@ def analyze(reps,partial=False):
                 }
             s['by_regime'][regime]=region
         summaries[g]=s
-    target.mkdir(parents=True)
     outputs={'summary.json':{
-                'schema':'NA60_P3_FULL_BIRTH_COMPRESS_ANALYSIS_V1',
+                'schema':'NA60_P3_FULL_BIRTH_COMPRESS_ANALYSIS_V2',
                 'selected_starts':n,'completed_chunks':len(done),
                 'reps_per_cap_per_avalanche':reps,
                 'warning':'These are deliberately stratified D500 starts, NOT a muon sample and NOT a cathode signal validation.',
                 'no_automatic_pass':'All benchmark thresholds must be fixed before downstream signal analysis.',
                 'summary_by_geometry':summaries},
              'per_avalanche.json':truth}
-    for name,obj in outputs.items():write_json(target/name,obj)
+    # Serialize every output before creating ANY new artifact directory.
+    # A physically undefined top/bottom asymmetry is explicitly null.
+    encoded={}
+    for name,obj in outputs.items():
+        verify_finite_json(obj,name)
+        encoded[name]=json.dumps(obj,sort_keys=True,indent=2,allow_nan=False)+'\n'
+    target.mkdir(parents=True)
+    for name,blob in encoded.items():
+        (target/name).write_text(blob)
     write_json(target/'manifest.json',{
-        'schema':'NA60_P3_FULL_CLOUD_ANALYSIS_SHA_V1',
+        'schema':'NA60_P3_FULL_CLOUD_ANALYSIS_SHA_V2',
         'selection_sha256':m['input_sha256'],
         'input_chunk_sha256':{f'chunk_{i:04d}/complete.json':sha(chunk_path(i)/'complete.json') for i in range(len(done))},
         'output_sha256':{name:sha(target/name) for name in outputs}})
@@ -631,7 +665,31 @@ def selftest():
     must(max(abs(x) for x in vals.values() if x is not None)<1.e-10,
          'Self-consistent cloud compression nonzero')
     must(len(list(itertools.groupby([1,1,2,2,3])))==3,'Streaming test')
-    print('PASS p3 2-geometry input strata, D500 >=100 disjointness, exact-cloud measures; NO Garfield',flush=True)
+    # Actual observed failure mode: real ion births all outside top/bottom.
+    # A_TB=(top-bottom)/(top+bottom) must be undefined, NOT zero or NaN JSON.
+    side=np.array([[.10,0.,0.,0.],[.20,0.,0.,.2],
+                   [.30,0.,0.,.5],[.40,0.,0.,.7]],float)
+    side_stats=cloud_stats(side)
+    must(side_stats['top']+side_stats['bottom']==0 and
+         math.isnan(side_stats['A_TB']) and
+         defined_asymmetry(side_stats['A_TB']) is None,
+         'Undefined side-only birth A_TB not correctly represented')
+    err=compression_errors(side,side)
+    must(err['abs_A_TB'] is None,
+         'Undefined A_TB must stay excluded from asymmetry-error statistics')
+    val={'exact_A_TB':defined_asymmetry(side_stats['A_TB']),
+         'abs_A_TB':err['abs_A_TB']}
+    verify_finite_json(val)
+    must(json.loads(json.dumps(val,allow_nan=False))==
+         {'exact_A_TB':None,'abs_A_TB':None},
+         'Undefined A_TB must round-trip through strict JSON')
+    try:
+        verify_finite_json({'bad':float('nan')})
+        raise ValueError('Nonfinite result improperly accepted')
+    except ValueError as e:
+        must('Non-finite scientific result' in str(e),
+             'Nonfinite audit error was hidden')
+    print('PASS p3 2-geometry input strata, D500 >=100 disjointness, exact-cloud measures and undefined-A_TB strict JSON; NO Garfield',flush=True)
 
 
 def main():
