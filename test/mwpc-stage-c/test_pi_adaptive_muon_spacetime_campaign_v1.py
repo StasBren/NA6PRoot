@@ -24,7 +24,8 @@ def attach(names,ns):
 def main():
     fields=('source|chunk|event|hit_index|track_id|station|det_id',
             'configuration','G_eff_per_Heed_primary','A_ion_hemi','A_ion_TB',
-            'collected_avalanche_electrons','heed_primaries')
+            'collected_avalanche_electrons','heed_primaries',
+            'ion_births','zero_seeds','ion_top','ion_bottom')
     geoms=('p3_noFW','p3_FW75','p4_noFW','p4_FW75')
     parents=[]
     for st in range(6):
@@ -60,7 +61,9 @@ def main():
                           'A_ion_hemi':.15*math.sin(ix*1.7)+.04*gnum,
                           'A_ion_TB':.2*math.sin(ix*1.7)/math.sqrt(gnum+1),
                           'collected_avalanche_electrons':gnum*1000+100,
-                          'heed_primaries':50})
+                          'heed_primaries':50,'ion_births':gnum*1000+120,
+                          'zero_seeds':gnum+2,
+                          'ion_top':40+gnum*300,'ion_bottom':35+gnum*200})
         ns.update({'REPORTS':base/'reports','read_completed':read_completed,
                    'chunk_dir':chunk_dir,'load_json':load_json,
                    'write_json':write_json})
