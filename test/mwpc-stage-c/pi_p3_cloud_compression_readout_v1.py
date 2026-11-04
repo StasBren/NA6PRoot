@@ -289,12 +289,50 @@ def selftest():
     q=ion_weighted(raw,32,'joint_phi_time_TV',300,z)
     must(abs(q['weighted_mean']-(100*.15+600*.25)/700)<1e-12,
          'Ion-weighted sample measure wrong')
+    # End-to-end REPORT renderer regression: mocks only the verified input
+    # reader with two complete synthetic geometries (48 physical avalanches).
+    # This exercises every score, every cap, missing asymmetries, ion-weighting,
+    # all four spatial regimes, paired 128->512 improvement and final footer.
+    from contextlib import redirect_stdout
+    from io import StringIO
+    from unittest.mock import patch
+    cloud=[]
+    for geom in GEOMS:
+        regimes=(('near_anode','transition','bulk') if geom=='p3_noFW'
+                 else ('near_anode','near_field','transition','bulk'))
+        for i in range(24):
+            n=0 if i in (4,12,20) else (16,90,240,700,2300)[i%5]
+            valid_tb=(i%7!=0)
+            curves={}
+            if n:
+                for cap in CAPS:
+                    curves[str(cap)]={key: (
+                        None if key=='abs_A_TB' and not valid_tb
+                        else {'mean':(float(j+1)*.01)*(max(0,n-cap)/n)})
+                        for j,(key,_) in enumerate(METRICS)}
+            cloud.append({'geometry':geom,'box_id':i,'sample':100+i,
+                          'regime':regimes[i%len(regimes)],
+                          'n_ion_births':n,
+                          'exact_A_TB':0. if valid_tb and n else None,
+                          'cap_study':curves})
+    output=StringIO()
+    with patch(__name__+'.checked',return_value=(cloud,{},
+                        sum(x['n_ion_births'] for x in cloud))):
+        with redirect_stdout(output):
+            report(ROOT,200,20261104)
+    printed=output.getvalue()
+    must(all(geom in printed for geom in GEOMS)
+         and 'ALL REGIMES PER CAP' in printed
+         and 'ION-BIRTH-WEIGHTED' in printed
+         and 'Improvement 512 relative to 128' in printed
+         and 'PASS read-only SHA-sealed p3 cloud compression report' in printed,
+         'Full synthetic report renderer did not complete correctly')
     with tempfile.TemporaryDirectory() as temp:
         p=Path(temp)/'file.json'
         p.write_text('{"x":1}\n')
         must(sha(p)==hashlib.sha256(p.read_bytes()).hexdigest(),
              'SHA checksum')
-    print('PASS synthetic reservoir cap strata, per-avalanche (NOT per-ion) bootstrap, and SHA. No Garfield physics.')
+    print('PASS synthetic 48-avalanche end-to-end report rendering, all 5 metrics/3 caps/2 p3 geometries, independent avalanche bootstrap, SHA; NO Garfield physics.')
 
 
 def main():
