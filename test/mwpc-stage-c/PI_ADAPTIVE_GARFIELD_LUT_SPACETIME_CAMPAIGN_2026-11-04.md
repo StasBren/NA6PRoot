@@ -86,3 +86,22 @@ Uniform 100/4200 cells across four fields requires **320k new** actual microscop
 - Seed `(u,v,w,t)` and field geometry models are fixed to the existing small periodic 9-anode analytic patch; physical chamber edges, B field and gas-condition uncertainties are NOT validated.
 - Stage results are source-/geometry-specific; no prototype gain/ion mobility/Penning/field-wire voltage calibration. Sample size does not remove model systematic errors.
 - A statistically converged full Garfield parent ensemble answers **what the microscopic model predicts**, not necessarily what the actual chamber measures. Reliable replacement requires a *signal-level* physical reference and ideally measurements.
+
+## 6. Verified nonphysics tests and PI figures
+
+The synthetic 120-parent test is available as `test/mwpc-stage-c/test_pi_adaptive_muon_spacetime_campaign_v1.py`. It checks independent parent selection, 12 strata, source-proxy weights, paired four-geometry bootstrap, gain/ion-sector metrics and immutable report files, **without running Garfield**. Run after `git pull`:
+
+```bash
+python3 test/mwpc-stage-c/test_pi_adaptive_muon_spacetime_campaign_v1.py
+```
+
+After 12 or more SHA-valid completed 10-parent native Garfield blocks, run `report` and then create three PI-facing real-muon figures, strictly from the **development cohort** (reserved validation never read):
+
+```bash
+python3 -u test/mwpc-stage-c/pi_adaptive_muon_spacetime_campaign_v1.py report --reps 2000
+python3 -u test/mwpc-stage-c/pi_adaptive_muon_sasha_figures_v1.py build
+```
+
+Outputs: `test_runs/mwpc_stage_c/pi_adaptive_muon_spacetime_v1/plots_development_NNNN/{01_mean_effective_gain_CI.png,02_true_muon_ion_asymmetry_distributions.png,03_weighted_ion_birth_azimuth.png,manifest.json}`. The third plot is normalized **per ionization birth via inverse-inclusion reservoir weights**, not per muon and not an induced cathode-charge observable. The first two concern physical muon crossing outcomes. These plots are research illustrations and should be cross-checked against the independently validated ion-sector count summaries.
+
+The report also contains *exploratory*, parent-bootstrap estimates for `ion_gain` (new avalanche ionization births per Heed primary), `zero_frac` (zero **collected avalanche electron** fraction, not necessarily zero ion births) and `cathode_sector_frac` (fraction of created avalanche ions born in top/bottom ±45° sectors), each for balanced-stratum and approximate source-stratum weighting. Signal readiness **is not assessed** by these proxies.
