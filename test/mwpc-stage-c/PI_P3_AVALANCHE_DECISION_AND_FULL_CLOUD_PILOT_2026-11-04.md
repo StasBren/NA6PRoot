@@ -1,0 +1,204 @@
+# NA60+ MWPC p3-only avalanche model decision and full-ion cloud pilot
+
+**Status 2026-11-04:** Two independent 3 mm geometries: `p3_noFW`,
+`p3_FW75`. These are separate scientific hypotheses and must never
+be combined for error/coverage/CRPS model acceptance. No induced signal,
+ion drift, weighting fields or electronics are calculated here.
+
+## Physics decision
+
+1. Keep original immutable A20, A100 and independent old/new120 Geant4→Heed→
+   full microscopic Garfield archives. The fixed `guarded_A20`
+   (25% local + 75% Gaussian nearby A20 with geometric wire/hemisphere guards)
+   is the **current validated count/sector baseline**, NOT a proven spatial
+   cloud model. The original 5 ion birth samples per avalanche cannot certify
+   eventwise space/time response.
+2. Reassess Pólya fairly: `pi_p3_fair_avalanche_model_selection_v1.py` uses
+   SAME old A20 training for local20/guarded20/geometry-only zero+Gamma;
+   holds out 80 independent new A100 outcomes in each of 50 previously selected
+   cells **per geometry**. Reports CRPS and rare tails, with cell-bootstrap CI.
+   This is development, not untouched new-muon validation; near-wire A100
+   exposure is very sparse.
+3. Challenge count models on old, previously-seen **external new120** physically
+   independent Geant4 parent muons with shared frozen Heed electrons:
+   `pi_p3_muon_count_model_challenge_v1.py`. Gamma fit on old A20 only;
+   protected A20 fixed before original external new120 Garfield truth. Both
+   sampled with 3000 replicas per parent. Separate parent bootstrap per
+   geometry, proper CRPS and q99 pinball. **This is retrospective**, not a
+   newly blind hypothesis-selection test, because that reference has already
+   been analyzed in previous work.
+4. **Critical next physics**: microphysical complete ion BIRTH cloud (all
+   Garfield ionization callback positions `u,v,w,t`, not ion drift);
+   `pi_p3_full_cloud_convergence_v1.py` uses untouched old D500 initial
+   electrons with deterministic sample passes >=100, excluding **all A20
+   indices 0..19 and A100 extra indices 20..99**, and intentionally sampling
+   distinct spatial cells. The independent Garfield ionization collision
+   RNG is generated from original D500 IDs. The two p3 geometries have
+   individually balanced anode-near/transition/bulk and plus/minus v samples;
+   FW75 additionally gets a *near field-wire* stratum.
+5. Pilot compares *exact same Garfield avalanche* full birth cloud to
+   repeated 32/128/512-ion WITHOUT-replacement samples. The exact
+   per-avalanche all-birth moments, angular sector counts and number of
+   births are checked against the C++ full-census output. The output
+   compares radius/time moments and percentiles, angle fractions,
+   top-bottom asymmetry and 12x6 joint azimuth/time histogram TV.
+   This tests storage compression, not geometry-conditioned model
+   generalization. No automatic go/no-go threshold is asserted.
+6. Based on each geometry's result, select spatial response storage: 128,
+   512, or a more explicit cloud representation. The separate C++ target
+   `mwpc_phase_b_joint_cloud_lut_v1` now supports
+   `--lut-sidecar-joint128`, `--lut-sidecar-joint512`, and
+   `--lut-sidecar-full-births`. **Do not launch a uniform multi-day
+   new cloud LUT campaign before the exact/full cloud convergence report.**
+   That would risk spending compute and disk on an unverified schema.
+7. Then make one further SHA-frozen learning-curve campaign for the **two p3
+   geometries only**, at increasing independent samples per spatial bin.
+   Evaluate trial-level proper scores and multivariate spatial/temporal
+   distances against separate untouched D500 positions; finally test
+   the new model on reserved genuinely independent Geant4 muons. Spatial
+   pooling must be relearned/validated for cloud shapes, not blindly
+   inherited from the 5-sector count baseline.
+
+**Not validated:** this work does not provide an induced cathode current,
+SPSC chamber readout, detector resolution, or response at new HV/B/gas;
+the current analytic-wire gas model is 1800 V, B=0, Ar/CO2 70:30,
+cathode spacing ±3 mm. Frozen D500 `w=0` starts rely on translation
+invariance along wires, which must be revisited for finite-strip/end effects.
+
+## 0. Update and test Python only (no new Garfield physics)
+
+```bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git switch feature/mwpc-stage-c
+git pull --ff-only
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+"$PY" -m py_compile \
+  test/mwpc-stage-c/pi_p3_fair_avalanche_model_selection_v1.py \
+  test/mwpc-stage-c/pi_p3_muon_count_model_challenge_v1.py \
+  test/mwpc-stage-c/pi_p3_full_cloud_convergence_v1.py
+"$PY" test/mwpc-stage-c/pi_p3_fair_avalanche_model_selection_v1.py selftest
+"$PY" test/mwpc-stage-c/pi_p3_muon_count_model_challenge_v1.py selftest
+"$PY" test/mwpc-stage-c/pi_p3_full_cloud_convergence_v1.py selftest
+```
+
+**Optional immediate no-physics model evaluations** (separate new sibling
+output directories; each refuses to overwrite):
+
+```bash
+"$PY" -u test/mwpc-stage-c/pi_p3_fair_avalanche_model_selection_v1.py audit --bootstrap 4000
+"$PY" -u test/mwpc-stage-c/pi_p3_muon_count_model_challenge_v1.py audit --reps 3000 --bootstrap 4000
+```
+
+Both compare two p3 geometries in separately reported groups, never as a
+pooled four-geometry score. The muon challenge on the already-known new120
+sample is a retrospective check, not an untouched final validation.
+
+## 1. Build the SEPARATE full-ion-cloud microscopic research target
+
+The CMake target was added separately from all pinned original physical
+binaries. Rebuilding this C++ code has no effect on already-sealed A20,
+A100 or 2400-parent muon samples.
+
+```bash
+cmake -S test/mwpc-avalanche -B test/mwpc-avalanche/build
+cmake --build test/mwpc-avalanche/build --target mwpc_phase_b_joint_cloud_lut_v1 -j2
+```
+
+If CMake needs the Garfield package discovery hint, reuse your original
+successful Garfield++ `-DGarfield_DIR=...` setup. **Do not change** the gas,
+RNG, field or old source code.
+
+## 2. Pilot with exact full ion birth point clouds, 24 per geometry
+
+**Each of the 48 independent source sites is one frozen old D500 original
+ELECTRON START**, never a muon crossing. D500 drift endpoint flags are
+provenance only and never used to accept/reject a true new microscopic
+avalanche. Default is 24 per geometry (6 native full-cloud 8-start
+checkpoints). This is a compression-pilot scale, not a tail
+statistics/production model sample.
+
+```bash
+"$PY" test/mwpc-stage-c/pi_p3_full_cloud_convergence_v1.py prepare --per-geometry 24
+"$PY" -u test/mwpc-stage-c/pi_p3_full_cloud_convergence_v1.py preflight
+"$PY" -u test/mwpc-stage-c/pi_p3_full_cloud_convergence_v1.py run --max-chunks 1 --hours 2
+"$PY" test/mwpc-stage-c/pi_p3_full_cloud_convergence_v1.py status
+```
+
+Inspect first eight true full-cloud avalanches and their `physics.log`
+before leaving WSL unattended. If the native process stops midway through
+one block, the directory is preserved **unsealed**, and the runner will
+fail instead of pretending it is complete or overwriting it. Never delete
+or edit a failed physical checkpoint without a recovery plan.
+
+## 3. Finish the remaining five SHA-frozen chunks
+
+```bash
+nohup nice -n 15 "$PY" -u \
+  test/mwpc-stage-c/pi_p3_full_cloud_convergence_v1.py \
+  run --max-chunks 5 --hours 16 \
+  > "$HOME/na6p/p3_full_cloud_pilot_20261104.log" 2>&1 < /dev/null &
+echo "P3 full-cloud PID $!"
+```
+
+Read-only progress:
+
+```bash
+tail -n 25 "$HOME/na6p/p3_full_cloud_pilot_20261104.log"
+"$PY" test/mwpc-stage-c/pi_p3_full_cloud_convergence_v1.py status
+```
+
+If the soft 16h limit is reached BETWEEN complete chunks, repeat the same
+`run --max-chunks 5 --hours 16` command. Every completed chunk is
+cryptographically verified and skipped. Never start two runs at once.
+
+## 4. Compare 32/128/512 points against FULL identical microscopic clouds
+
+Run only after `status` reports `6 / 6` complete chunks:
+
+```bash
+"$PY" -u test/mwpc-stage-c/pi_p3_full_cloud_convergence_v1.py analyze --reps 64
+```
+
+Outputs for p3 noFW and p3 FW75 separately:
+`test_runs/mwpc_stage_c/pi_p3_full_cloud_convergence_v1/analysis_complete/`
+contains `summary.json`, `per_avalanche.json`, `manifest.json`.
+The full particle births remain SHA-sealed in
+`.../full_cloud_chunks/chunk_0000/cloud_birth_reservoir.csv` etc.
+No Cathode signal is simulated.
+
+The origin and physics configuration, exact 4-D birth points, ion counts,
+electron endpoint 64-point reservoir, timing and birth moments are
+preserved in each sealed chunk. Full-census comparison validates every
+surviving cloud in the pilot, *not* only pooled averages.
+
+**Decision process:** for *each* geometry independently, examine the
+full-clock results and all near-wire/bulk strata. If 128 ion samples
+miss significant angle-time correlations, radial width, upper time tails
+or near-wire distribution, consider 512 or a different compression.
+The precise tolerances are engineering precriteria to be agreed before
+any induced-signal study; do not call a model 'cathode-ready' based on
+these pilot distributions alone. Retain full clouds as ground truth.
+
+### What will and will not be determined
+
+After commands (0)–(4), we can decide whether:
+- `guarded_A20` or count-only `geometry_hurdle_gamma` better predicts
+  **counts** on selected cells and on the known new120 muons;
+- `128` is an adequate *exploratory* compression for **ion birth space/time**
+  versus more points, separately near anode and field wire.
+
+We **cannot** yet certify the complete joint spatio-temporal surrogate as
+a replacement for Garfield: that requires an independently trained
+conditional joint bank, increasing learning-curve sample sizes and
+untouched test source electrons/muons. Preserve all physical outputs to
+make that later campaign auditably reusable.
+
+## Reproducibility/security
+
+New driver/source target only. The old A20/A100 original and native muon
+source/binary remain SHA-frozen. New records refuse overwrite, every
+completed original exact-source full-cloud chunk stores source and binary
+SHA. New script does not upload physical data externally and has no
+network dependency. Native C++ compilation/execution must occur on
+user's installed WSL Garfield++; Python mock/synthetic selftests are NOT
+proof of native physics operation.
