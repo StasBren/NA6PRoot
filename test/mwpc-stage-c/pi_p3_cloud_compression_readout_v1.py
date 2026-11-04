@@ -175,7 +175,7 @@ def report(root, bootstrap, seed):
     print('FULL MICROSCOPIC: 48 independent D500 electron starts,', n_births,
           'EXACT ionization births; NO signal response')
     print('TV=0 indicates identical coarse angular/time probabilities; 1 means disjoint distributions.')
-    print('All scores below are PER AVALANCHE, not weighted by its ion count.')
+    print('Default scores are PER AVALANCHE; separate ion-birth-weighted summaries follow.')
     print('64 subsamples are repeated measurements of the SAME avalanche, not 64 independent avalanches.')
     print('\nBASIC AND BY-REGIME:')
     for g in GEOMS:
