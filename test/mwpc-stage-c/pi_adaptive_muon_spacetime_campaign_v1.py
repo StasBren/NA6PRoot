@@ -274,16 +274,16 @@ def run(max_chunks,hours):
     if configfile.exists():
         if load_json(configfile)!=config:raise ValueError('Frozen campaign run configuration changed')
     else:write_json(configfile,config)
-    completed=sum((chunk_dir(i)/'complete.json').is_file() for i in range(len(batches)))
+    original_completed=sum((chunk_dir(i)/'complete.json').is_file() for i in range(len(batches)))
     attempted=0;started=time.monotonic()
-    print('Original completed chunks',completed,'/',len(batches),flush=True)
+    print('Original completed chunks',original_completed,'/',len(batches),flush=True)
     for i,batch in enumerate(batches):
         d=chunk_dir(i)
         if d.exists():
             audit_chunk(i,batch,binary)
             continue
         if attempted>=max_chunks or time.monotonic()-started>=hours*3600:
-            print('SAFE STOP:',completed+attempted,'/',len(batches),
+            print('SAFE STOP:',original_completed+attempted,'/',len(batches),
                   'physics checkpoints complete',flush=True)
             return
         d.mkdir() # atomic; never overwrite an unfinished native run
@@ -386,6 +386,16 @@ def report(reps,rms_target,gain_target,paired_target,final_holdout=False):
         k=(int(s['station']),-1 if float(s['theta_u_in_deg'])<0 else 1)
         strata[k].append(j)
     if len(strata)!=12:raise ValueError('Missing station/signed-angle validation stratum')
+    # Reweighting is a SOURCE-STRATUM PROXY, not an exact unstratified flux:
+    # a single source parent is selected once, while the source can generate
+    # multiple correlated crossings at different stations.
+    src_counts=m['eligible_source_counts']
+    denom=sum(int(v) for v in src_counts.values())
+    source_weights=np.zeros(len(source),float)
+    for (station,sign),ii in strata.items():
+        source_weights[ii]=int(src_counts[f'{station}_{sign}'])/denom/len(ii)
+    if abs(float(source_weights.sum())-1)>1e-10:
+        raise ValueError('Geant4 source stratum weight normalization failed')
     # Stable predeclared stratified parent-level bootstrap; 4 geometries of
     # each parent resampled together, never treat their electrons as independent.
     rng=np.random.default_rng(20261104)
@@ -394,17 +404,25 @@ def report(reps,rms_target,gain_target,paired_target,final_holdout=False):
         sample=np.concatenate([rng.choice(z,size=len(z),replace=True)
                                for _,z in sorted(strata.items())])
         boots.append(sample)
-    def value(g,metric,ii,stat):
+    def value(g,metric,ii,stat,source_weighted=False):
         z=raw[g][metric][ii]
-        z=z[np.isfinite(z)]
+        ok=np.isfinite(z)
+        z=z[ok]
         if len(z)==0:return float('nan')
-        return float(z.mean() if stat=='mean' else z.std(ddof=0))
+        if not source_weighted:
+            return float(z.mean() if stat=='mean' else z.std(ddof=0))
+        w=source_weights[ii][ok]
+        w=w/w.sum()
+        mean=float(np.dot(w,z))
+        return mean if stat=='mean' else float(np.sqrt(np.dot(w,(z-mean)**2)))
     result={'schema':'NA60_SPACETIME_PARENT_PRECISION_REPORT_V1',
             'population':'reserved_holdout' if final_holdout else 'development',
             'n_parent_events':len(source),'n_true_Garfield_avalanche_realizations':
              sum(load_json(chunk_dir(i)/'complete.json')['n_full_Garfield_avalanches']
                  for i in range(begin//GROUP,stop//GROUP)),
-            'source':'12 equal-sized station x signed-angle strata: CONDITIONAL, not physical flux',
+            'source':'12 equal-sized station x signed-angle strata, with optional Geant4-eligible-stratum weighted PROXY moments; not an exactly flux-random source sample',
+            'source_proxy_weighting':'Original eligible Geant4 source crossing counts for 12 station/signed-angle bins; exact parent-level unstratified cross-section requires another sampling design',
+            'source_proxy_effective_sample_size':round(1.0/float(np.sum(source_weights**2)),1),
             'bootstrap':'95pct percentile stratified parent resampling, four geometries paired',
             'n_bootstrap_replicates':reps,'per_geometry':{},'FW_minus_noFW':{},
             'thresholds':{'rms_half_width':rms_target,
@@ -425,7 +443,23 @@ def report(reps,rms_target,gain_target,paired_target,final_holdout=False):
                           'CI95':[lo,hi],'halfwidth':round(hw,7),
                           'threshold':round(threshold,7), 'criterion_met':ready,
                           'defined_count':int(np.isfinite(raw[g][metric]).sum())}
-        data['pooled_electron_weighted_gain']=collected[g]/primaries if primaries else None
+        data['pooled_electron_weighted_gain_balanced_sample']=collected[g]/primaries if primaries else None
+        data['source_proxy_moments']={}
+        for metric,stat in (('gain','mean'),('hemi','rms'),('TB','rms')):
+            z=value(g,metric,point,'mean' if stat=='mean' else 'rms',True)
+            vals=np.array([value(g,metric,b,'mean' if stat=='mean' else 'rms',True)
+                           for b in boots])
+            ci=quantile_interval(vals);hw=(ci[1]-ci[0])/2
+            threshold=gain_target*abs(z) if metric=='gain' else rms_target
+            passes.append(hw<=threshold)
+            data['source_proxy_moments'][metric]={'estimate':round(z,7),
+                'CI95':ci,'halfwidth':round(hw,7),
+                'criterion_met':bool(hw<=threshold)}
+        # Tail quantiles are exploratory diagnostics, not precision-stopping
+        # metrics. In particular 99th-percentile gain needs many more parents.
+        valid=raw[g]['gain'][np.isfinite(raw[g]['gain'])]
+        data['gain_tail_quantiles_balanced']={f'q{q}':round(float(np.quantile(valid,int(q)/100)),5)
+              for q in ('50','90','95','99')} if len(valid) else {}
         result['per_geometry'][g]=data
     for p in (3,4):
         no=f'p{p}_noFW';fw=f'p{p}_FW75';key=f'p{p}_FW75_minus_noFW_TB_RMS'
@@ -436,6 +470,14 @@ def report(reps,rms_target,gain_target,paired_target,final_holdout=False):
         passes.append(ready)
         result['FW_minus_noFW'][key]={'estimate':round(observed,7),
              'CI95':ci,'halfwidth':round(hw,7),'criterion_met':ready}
+        proxy=value(fw,'TB',point,'rms',True)-value(no,'TB',point,'rms',True)
+        proxvals=[value(fw,'TB',b,'rms',True)-value(no,'TB',b,'rms',True)
+                  for b in boots]
+        ci2=quantile_interval(proxvals);hw2=(ci2[1]-ci2[0])/2
+        passes.append(hw2<=paired_target)
+        result['FW_minus_noFW'][key]['source_proxy']={
+            'estimate':round(proxy,7),'CI95':ci2,'halfwidth':round(hw2,7),
+            'criterion_met':bool(hw2<=paired_target)}
     result['all_prespecified_precision_criteria_met']=bool(all(passes))
     result['scientific_readiness_note']=(
        'Only mean collected gain and ion birth sector asymmetry are checked. '
