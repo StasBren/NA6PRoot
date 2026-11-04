@@ -369,9 +369,9 @@ def report(reps,rms_target,gain_target,paired_target,final_holdout=False):
             rows.extend(csv.DictReader(f))
     source=rr[begin:stop]
     ix={id_of(x):j for j,x in enumerate(source)}
-    raw={g:{'gain':np.full(len(source),np.nan),
-            'hemi':np.full(len(source),np.nan),
-            'TB':np.full(len(source),np.nan)} for g in GEOMS}
+    raw={g:{k:np.full(len(source),np.nan) for k in
+          ('gain','hemi','TB','ion_gain','zero_frac','cathode_sector_frac')}
+          for g in GEOMS}
     collected={g:0 for g in GEOMS};primaries=0
     for h in rows:
         g=h['configuration'];j=ix[h['source|chunk|event|hit_index|track_id|station|det_id']]
@@ -379,8 +379,14 @@ def report(reps,rms_target,gain_target,paired_target,final_holdout=False):
         for metric,col in (('gain','G_eff_per_Heed_primary'),
                             ('hemi','A_ion_hemi'),('TB','A_ion_TB')):
             raw[g][metric][j]=float(h[col]) if h[col] else float('nan')
+        nprim=int(h['heed_primaries']);nbirth=int(h['ion_births'])
+        if nprim>0:
+            raw[g]['ion_gain'][j]=nbirth/nprim
+            raw[g]['zero_frac'][j]=int(h['zero_seeds'])/nprim
+        if nbirth>0:
+            raw[g]['cathode_sector_frac'][j]=(int(h['ion_top'])+int(h['ion_bottom']))/nbirth
         collected[g]+=int(h['collected_avalanche_electrons'])
-        if g==GEOMS[0]:primaries+=int(h['heed_primaries'])
+        if g==GEOMS[0]:primaries+=nprim
     strata=defaultdict(list)
     for j,s in enumerate(source):
         k=(int(s['station']),-1 if float(s['theta_u_in_deg'])<0 else 1)
@@ -455,6 +461,18 @@ def report(reps,rms_target,gain_target,paired_target,final_holdout=False):
             data['source_proxy_moments'][metric]={'estimate':round(z,7),
                 'CI95':ci,'halfwidth':round(hw,7),
                 'criterion_met':bool(hw<=threshold)}
+        data['additional_signal_relevance_diagnostics']={}
+        for metric in ('ion_gain','zero_frac','cathode_sector_frac'):
+            v=value(g,metric,point,'mean')
+            ci=quantile_interval([value(g,metric,b,'mean') for b in boots])
+            weighted=value(g,metric,point,'mean',True)
+            ciproxy=quantile_interval([value(g,metric,b,'mean',True) for b in boots])
+            data['additional_signal_relevance_diagnostics'][metric]={
+                'balanced_mean':round(v,7),'balanced_CI95':ci,
+                'source_proxy_mean':round(weighted,7),'source_proxy_CI95':ciproxy,
+                'definition':{'ion_gain':'avalanche ionization births per true Heed primary',
+                   'zero_frac':'per-muon fraction of true Heed primaries with zero COLLECTED avalanche electrons (not necessarily zero ion births)',
+                   'cathode_sector_frac':'per-muon fraction of actual born avalanche ions in top/bottom ±45deg'}[metric]}
         # Tail quantiles are exploratory diagnostics, not precision-stopping
         # metrics. In particular 99th-percentile gain needs many more parents.
         valid=raw[g]['gain'][np.isfinite(raw[g]['gain'])]
