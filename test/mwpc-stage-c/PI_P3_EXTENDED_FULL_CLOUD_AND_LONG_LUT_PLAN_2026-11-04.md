@@ -196,3 +196,54 @@ cannot generate full ion clouds alone.
 
 **No conclusion that 512 or 1024 is cathode-signal-ready is justified
 by these compression-only tests.**
+
+## 2026-11-04: LIVE status race on chunk_0013 (13 sealed / 120)
+
+Observed after background `nohup` (PID originally **142387**):
+`chunk_0000` ... `chunk_0012` each printed `PASS SHA FULL BIRTHS`;
+the writer next printed `FULL MICROSCOPIC ... chunk 13`.
+A simultaneous `status` process raised
+
+```text
+ValueError: Unsealed/incomplete chunk must be inspected:
+.../full_cloud_chunks/chunk_0013
+```
+
+This **does not show Garfield failed**. The original `status` called
+`core.completed()`, a deliberately strict all-chunks SHA verifier
+also used by final analysis. The asynchronous writer creates
+`chunk_0013` and its `physics.log` first, then later creates
+`complete.json`. The status query raced in that normal interval.
+
+**Patch:** the NEW extended campaign's `status()` now uses a
+read-only checkpoint directory scan:
+- audits every sequential **sealed** chunk using the original
+  complete.json, source data and all physical file SHA;
+- reports the single newest **unsealed** chunk as
+  `ACTIVE or INTERRUPTED; not counted`, without treating the
+  presence of a directory as proof of successful simulation;
+- still fails closed on gaps, two unfinished chunks, a sealed
+  later chunk after an unsealed predecessor, or a changed sealed SHA;
+- **does not alter** `core.completed()`, `core.run()`,
+  C++ target, preflight binary hashes, original 48-cloud pilot or
+  any physical output. Synthetic tests now include the live-reader race.
+
+Run (safe while the original one writer is still running):
+
+```bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git switch feature/mwpc-stage-c
+git pull --ff-only
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+"$PY" test/mwpc-stage-c/pi_p3_extended_full_cloud_campaign_v1.py selftest
+ps -p 142387 -o pid,ppid,stat,etime,cmd || true
+tail -n 25 "$HOME/na6p/p3_extended_full_cloud_v1.log"
+"$PY" test/mwpc-stage-c/pi_p3_extended_full_cloud_campaign_v1.py status
+```
+
+**Do not launch another `run` process while PID 142387 or its
+Garfield child is still active.** If the PID has exited and an
+unsealed chunk remains, do not retry blindly: inspect
+`chunk_0013/physics.log`, checkpoint files and process exit
+reason. Keep them for exact forensic recovery. Only after all
+120 chunks are `VERIFIED` should `analyze --reps 32` run.
