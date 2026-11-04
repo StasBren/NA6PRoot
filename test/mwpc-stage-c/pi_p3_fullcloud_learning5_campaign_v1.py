@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pi_p3_extended_full_cloud_campaign_v1 as old
 from pi_audit_avalanche_lut_reuse import BASE, CONFIGS, EXPORT_FIELDS, locations, sha
-from pi_run_lut500_overnight import source_maps
+from pi_run_lut500_overnight import source_maps, offset_for, STRIDE
 
 core = old.core
 ROOT = BASE / 'pi_p3_fullcloud_learning5_v1'
@@ -46,10 +46,24 @@ def choose_seed(*parts):
     return int.from_bytes(hashlib.sha256(msg.encode()).digest()[:8], 'big')
 
 
+def sample_for_pass(g, box, pass_index):
+    """Original 500-per-cell D500 permutation, valid for ANY pass 0..499.
+
+    The earlier extended-cloud module's old.sample_for() intentionally
+    restricts its API to passes 100..139. DO NOT call that helper for this
+    separate campaign's passes 140..219 or its reserved blind holdouts.
+    """
+    must(g in GEOMS and 0 <= box < N_CELLS and 0 <= pass_index < 500,
+         'Invalid original D500 geometry, cell or permutation pass')
+    return (offset_for(g, box) + STRIDE * pass_index) % 500
+
+
 def reserved(g, box):
-    """80 genuine old D500 permutation indices, no rerun of electron transport."""
+    """80 unused original D500 permutation indices, no electron rerun."""
     must(g in GEOMS and 0 <= box < N_CELLS, 'Invalid original D500 cell')
-    return {old.sample_for(g, box, p): p for p in PASSES}
+    mapping = {sample_for_pass(g, box, p): p for p in PASSES}
+    must(len(mapping) == len(PASSES), 'D500 reserved source passes collide')
+    return mapping
 
 
 def immutable_sources():
@@ -203,7 +217,7 @@ def check_plan():
         must(g == GEOMS[i%2] and label['geometry'] == g and
              label['box_id'] == box and label['sample'] == s and
              label['replica'] in range(N_PER_CELL) and passage in PASSES and
-             old.sample_for(g,box,passage) == s and
+             sample_for_pass(g,box,passage) == s and
              core.stratum(float(r['u_start_mm']),float(r['v_start_mm']),g) ==
                  (label['regime'], label['v_sign']) and
              k not in unique and k not in old_keys and k not in ext_keys,
@@ -270,11 +284,19 @@ def selftest():
     for g in GEOMS:
         for box in (0,1,450,899):
             current = set(reserved(g,box))
-            older = {old.sample_for(g,box,p) for p in range(140)}
-            future = {old.sample_for(g,box,p) for p in FUTURE_PHYSICS_HOLDOUT}
-            must(len(current)==80 and not current.intersection(older) and
-                 not current.intersection(future),
-                 'D500 pass source overlaps old physics or reserved future holdout')
+            older = {sample_for_pass(g,box,p) for p in range(140)}
+            future = {sample_for_pass(g,box,p) for p in FUTURE_PHYSICS_HOLDOUT}
+            all500 = {sample_for_pass(g,box,p) for p in range(500)}
+            must(len(all500) == 500 and len(current) == 80 and
+                 len(older) == 140 and len(future) == 40 and
+                 not current.intersection(older) and
+                 not current.intersection(future) and
+                 not older.intersection(future),
+                 'D500 permutation/source-pass collision or reuse')
+            for pass_index in (100,111,125,139):
+                must(sample_for_pass(g,box,pass_index) ==
+                     old.sample_for(g,box,pass_index),
+                     'D500 absolute permutation differs from old SHA-frozen helper')
     for g in GEOMS:
         must(core.classify(0.,0.,g) is None,'Anode metal incorrectly accepted')
         must(core.classify(1.5,0.,'p3_FW75') is None,
