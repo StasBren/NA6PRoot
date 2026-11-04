@@ -311,18 +311,104 @@ def selftest():
         v=core.compression_errors(toy,toy)
         must(all(x is None or abs(x)<1e-10 for x in v.values()),
              'Full ion cloud should self-match at all reservoir caps')
+    # A live status reader MUST tolerate exactly one unsealed (in-flight)
+    # physical chunk, while rejecting gaps and inconsistent future seals.
+    import tempfile
+    with tempfile.TemporaryDirectory() as work:
+        paths=[Path(work)/f'chunk_{i:04d}' for i in range(4)]
+        must(scan_chunk_state(paths)==([],None),
+             'Empty campaign must be reportable')
+        paths[0].mkdir()
+        must(scan_chunk_state(paths)==([],0),
+             'Active first chunk incorrectly treated as corrupt')
+        (paths[0]/'complete.json').write_text('{}')
+        paths[1].mkdir()
+        must(scan_chunk_state(paths)==([0],1),
+             'Sealed first + active second chunk must be reportable')
+        (paths[1]/'complete.json').write_text('{}')
+        must(scan_chunk_state(paths)==([0,1],None),
+             'Two sealed chunks incorrectly reported')
+        paths[3].mkdir()
+        try:
+            scan_chunk_state(paths)
+            raise AssertionError('A gap between physical chunks was accepted')
+        except ValueError as exc:
+            must('Gap in physical checkpoint' in str(exc),
+                 'Wrong error for a skipped physical checkpoint')
+        paths[2].mkdir()
+        must(scan_chunk_state(paths)==([0,1],2),
+             'Two consecutive pending physical chunks accepted')
+        (paths[2]/'complete.json').write_text('{}')
+        must(scan_chunk_state(paths)==([0,1,2],3),
+             'Final unfinished chunk not reported as pending')
     print('PASS extended p3 SHA source selection, disjoint 40-pass D500 starts, '
-          'stratum/cell balancing, 5-cap cloud metrics; NO new Garfield',flush=True)
+          'stratum/cell balancing, 5-cap cloud metrics and live-status checkpoint '
+          'safety; NO new Garfield',flush=True)
+
+
+def scan_chunk_state(paths):
+    """Read-only snapshot of checkpoint directories.
+
+    A writer creates a chunk directory and physics.log BEFORE it writes the
+    final SHA seal. Therefore the newest *unsealed* chunk is expected while
+    the background Garfield++ subprocess is alive. Never count it as done.
+    Reject gaps, multiple unfinished chunks, or a sealed chunk after a
+    pending chunk; those indicate an inconsistent physical campaign.
+    """
+    verified_ids=[]
+    pending=None
+    missing_seen=False
+    for i,d in enumerate(paths):
+        if not d.exists():
+            missing_seen=True
+            continue
+        must(d.is_dir(), 'Checkpoint path is not a directory: '+str(d))
+        must(not missing_seen,
+             'Gap in physical checkpoint directories before '+str(d))
+        seal=d/'complete.json'
+        if seal.is_file():
+            must(pending is None,
+                 'A later sealed chunk exists beyond an unsealed chunk: '+str(d))
+            verified_ids.append(i)
+        else:
+            must(not seal.exists(),
+                 'Malformed physical checkpoint seal path: '+str(seal))
+            must(pending is None,
+                 'Multiple unsealed physical chunks found: '+str(d))
+            pending=i
+    return verified_ids,pending
 
 
 def status():
-    rows,tags,manifest,done=core.completed()
-    n=len(done)*GROUP
+    # Deliberately NOT core.completed(): the strict completed() API is used
+    # by final analysis and must fail on unsealed chunks. Status, however,
+    # must be safe to query WHILE the one permitted background writer runs.
+    rows,_,manifest=check_plan()
+    binary=core.verified_binary()
+    blocks=core.batch(rows)
+    ids,pending=scan_chunk_state([core.chunk_path(i)
+                                  for i in range(len(blocks))])
+    done=[core.audit_chunk(i,blocks[i],binary) for i in ids]
+    n=sum(x['n_avalanches'] for x in done)
     births=sum(x['n_ion_births'] for x in done)
-    print('PASS SHA extended cloud completed',n,'of',len(rows),'exact D500 electrons')
-    print('VERIFIED CHUNKS',len(done),'/',len(rows)//GROUP)
-    print('FULL MICROSCOPIC ION BIRTHS',births)
-    print('p3_noFW',n//2,'p3_FW75',n//2,'; no ion drift or cathode signal')
+    must(n==len(ids)*GROUP and len(ids)==(pending if pending is not None
+                                         else len(ids)),
+         'Non-contiguous/invalid SHA-verified completed chunk census')
+    print('PASS SHA extended cloud COMPLETED',n,'of',len(rows),
+          'exact D500 electrons (sealed only)')
+    print('VERIFIED CHUNKS',len(done),'/',len(blocks))
+    print('FULL MICROSCOPIC ION BIRTHS (verified)',births)
+    print('p3_noFW',n//2,'p3_FW75',n//2,
+          '; no ion drift or cathode signal')
+    if pending is not None:
+        d=core.chunk_path(pending)
+        print('UNSEALED CHUNK',pending,'NOT COUNTED; may be ACTIVE or INTERRUPTED')
+        print('Check the writer PID and latest log. Do NOT launch a second run')
+        print('or remove',str(d),'while the original writer may be running.')
+    elif len(done)<len(blocks):
+        print('NEXT NOT YET STARTED CHUNK',len(done))
+    else:
+        print('PASS ALL SHA-SEALED 120 / 120 FULL CLOUD CHUNKS')
 
 
 def main():
