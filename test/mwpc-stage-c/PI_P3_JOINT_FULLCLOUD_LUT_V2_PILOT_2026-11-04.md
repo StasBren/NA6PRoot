@@ -114,3 +114,66 @@ Do not interpret these as completed or invent their results.
 
 Do not rebuild or modify the SHA-frozen native executable or the
 original full-cloud source; this is a Python read-only derivative.
+
+
+## 2026-11-04: User WSL completed the bank and first spatial holdout
+
+**Observed in native WSL log:** `selftest` PASS; `build` verified all
+120 native chunks and built the full uncompressed bank; `audit` passed
+all SHA checks with exactly 480 avalanches / 284,272 births for noFW
+and 480 avalanches / 2,697,261 births for FW75; `evaluate` PASS.
+
+| Geometry | Held-out trials / distinct held-out cells | Nearest count CRPS | Guarded count CRPS | Nearest joint-feature energy | Guarded joint-feature energy |
+|---|---|---:|---:|---:|---:|
+| p3_noFW | 88 / 63; both 88/88 supported | 650.89732 | 416.72733 | 24.691456 | 14.902488 |
+| p3_FW75 | 84 / 48; both 81/84 supported | 6548.8635 | 4644.33446 | 70.639634 | 50.266223 |
+
+Paired **nearest-minus-guarded** count CRPS improvement from the
+original WSL diagnostic: noFW +234.170 [95% spatial-cell bootstrap
+155.505, 320.209]; FW75 +1904.529 [999.851, 3022.605].
+Joint-feature score improvement: noFW +9.789 [5.346, 14.423];
+FW75 +20.373 [5.653, 37.809]. Zero-Brier also improves:
+noFW .318594 -> .158461, FW75 .265556 -> .189017.
+
+**Interpretation limitation:** In the first test every test spatial
+cell is excluded completely, so the guarded sampler has NO local
+training events at the exact test cell. Therefore this is a test of
+multiple physically admissible neighboring cells versus ONE nearest
+neighboring cell, **not** a validation of 25% local / 75% neighbors.
+The 7-feature energy score tests the joint distribution of summaries,
+NOT the complete four-dimensional ion-birth point process.
+The 960 sources are an intentionally spatially stratified pilot, not
+incident muon flux; 3/84 FW75 test starts explicitly ABSTAIN.
+
+To test further without new physics, added **separate**
+`pi_p3_joint_fullcloud_crossval_v1.py`, which:
+- scores **all five deterministic spatial-cell folds**, such that each
+  original spatial cell is held out exactly once;
+- independently leaves out one avalanche per multiply observed cell,
+  allowing a real local-only vs guarded 25%/75% comparison;
+- compares whole-cell-balanced ion-count CRPS, zero-Brier,
+  seven-feature multivariate energy score, and coverage/abstention;
+- estimates *exploratory* cell-bootstrap paired confidence intervals
+  and reports each geometry separately;
+- re-audits the original Garfield and binary-bank SHA receipts, and
+  neither writes new outputs nor launches any Garfield simulation.
+
+~~~bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git switch feature/mwpc-stage-c
+git pull --ff-only
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+SCRIPT=test/mwpc-stage-c/pi_p3_joint_fullcloud_crossval_v1.py
+
+"$PY" -m py_compile "$SCRIPT"
+"$PY" "$SCRIPT" selftest
+set -o pipefail
+"$PY" -u "$SCRIPT" report --bootstrap 3000 \
+  | tee "$HOME/na6p/p3_joint_fullcloud_crossval_v1.log"
+~~~
+
+**New cross-validation script was committed but has NOT been executed
+on the user's WSL; report results must not be fabricated.** Treat
+all comparisons as developmental diagnostics. Do not yet modify
+validated A20, commit large new microscopic jobs, or represent this
+as full U/V cathode-signal validation.
