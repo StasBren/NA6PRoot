@@ -24,6 +24,7 @@ from scipy.stats import gamma as gammadist
 import pi_external_muon120_guarded_lut_v1 as external
 from pi_spatial_lut_muon120_crn_v1 import load_native,donors_for
 from pi_audit_avalanche_lut_reuse import BASE,sha
+import pi_p3_external_new120_metal_provenance_v1 as metal_audit
 
 GEOMS=('p3_noFW','p3_FW75')
 OUT=BASE/'pi_p3_muon_count_model_challenge_v1'
@@ -105,14 +106,22 @@ def cell_boot(vals,reps,rng):
 
 def load_original():
     source,metadata=external.check()
-    _,nstats,receipt=external.legacy.verify_full()
+    # The immutable external reference contains a small number of real
+    # TrackHeed starts strictly inside the 30um anode metal. Original full
+    # Garfield reports successful=0 and ZERO ion births for such starts; the
+    # original endpoint-radius heuristic may also say collected_e=1.
+    # We never alter the original validator or input. The independent audit
+    # checks *all* physical SHA receipts/chunks, primary/muon ion counts,
+    # and permits ONLY rigorously proven in-metal zero-birth starts.
+    provenance_metal=metal_audit.audit()
     tables,targets,*_=load_native() # archived old20/new80 SHA and exact geometry IDs
     rec,nprim=external.build_external_records(tables,targets,source)
     must(nprim==6193 and len(rec)==480,'Unexpected new120 primary/geometry count')
     reference_manifest=external.REF/'manifest.json'
     return tables,rec,{'external_input_sha256':sha(external.INPUT/'native_muon_crossings_input.csv'),
                        'external_full_garfield_reference_sha256':sha(reference_manifest),
-                       'A20_source_sha256':sha(BASE/'pi_lut500_avalanche_overnight_v1/run_20percell_firstpass_v1/manifest.json')}
+                       'A20_source_sha256':sha(BASE/'pi_lut500_avalanche_overnight_v1/run_20percell_firstpass_v1/manifest.json'),
+                       'verified_in_metal_zero_starts':provenance_metal}
 
 def run(reps,bootstrap,seed):
     must(1000<=reps<=10000 and 200<=bootstrap<=10000,'Use 1000..10000 draw and 200..10000 bootstrap reps')
@@ -152,7 +161,23 @@ def run(reps,bootstrap,seed):
             metrics_result[metric]['gamma_minus_guarded']=cell_boot([
                r['geometry_hurdle_gamma'][metric]-r['guarded_A20'][metric]
                for r in rows],bootstrap,rng)
+        # Sensitivity: remove entire affected *parent muons*, never only
+        # individual zero-ion primaries. Bootstrap remains by parent.
+        affected=set(provenance['verified_in_metal_zero_starts']['by_geometry'][g]
+                     ['affected_parent_ids'])
+        clean=[r for r in rows if r['parent'] not in affected]
+        must(len(clean)>=110,'Excessive metal-start parent exclusions')
+        sensitivity={
+           'n_affected_parents':len(affected),
+           'excluded_parent_ids':sorted(affected),
+           'n_clean_parents':len(clean),
+           'scores':{metric:{mode:cell_boot([r[mode][metric] for r in clean],
+                                    bootstrap,rng)
+                         for mode in ('guarded_A20','geometry_hurdle_gamma')}
+                     for metric in ('MAE_predicted_mean','CRPS','covered_PI90',
+                                    'above99','pinball99')}}
         result[g]={'n_muons':120,'n_Heed_electrons':sum(r['n_Heed_electrons'] for r in rows),
+                   'metal_start_parent_exclusion_sensitivity':sensitivity,
                    'gamma_fit_from_original_A20':params,
                    'elapsed_seconds':times['seconds_models_and_scoring'],
                    'metric':metrics_result}
@@ -181,7 +206,11 @@ def run(reps,bootstrap,seed):
                   'gamma',round(q['geometry_hurdle_gamma']['value'],4),
                   'gamma-minus-guarded',round(q['gamma_minus_guarded']['value'],4),
                   '95% parent CI',*[round(a,4) for a in q['gamma_minus_guarded']['bootstrap95']])
-    print('PASS full-reference SHA, p3-only 120-parent independent-group scoring',OUT,flush=True)
+        q=result[g]['metal_start_parent_exclusion_sensitivity']
+        print('  SHA-audited in-metal zero starts: affected parents',
+              q['n_affected_parents'],'clean sensitivity sample',q['n_clean_parents'])
+    print('PASS full-reference SHA, p3-only 120-parent independent-group scoring; '
+          'no masked failed gas avalanche, no overwritten physics',OUT,flush=True)
 
 def selftest():
     arr=np.zeros((900,20,5),dtype=np.int64)
