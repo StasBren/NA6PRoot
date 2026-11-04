@@ -202,3 +202,70 @@ SHA. New script does not upload physical data externally and has no
 network dependency. Native C++ compilation/execution must occur on
 user's installed WSL Garfield++; Python mock/synthetic selftests are NOT
 proof of native physics operation.
+
+## 2026-11-04: Corrected new120 in-metal electron audit (after first WSL run)
+
+The first `pi_p3_muon_count_model_challenge_v1.py audit` halted during
+the **archived legacy validator**, before training/evaluating any muon
+predictions. The recorded failing source is
+
+```text
+parent=jpsi40-bore|2|8904|5|2|5|266
+geometry=p3_noFW, primary=7,
+seed_u_mm=0.00237593484574722, seed_v_mm=0.0107657602328344,
+successful=0, capped=0, garfield_ne=1, garfield_ni=0,
+ion_births=0, collected_e=1, attached=0, other=0
+```
+
+This start has radial distance about **0.0110 mm** from the center of
+a 30um-diameter anode: STRICTLY INSIDE its physical metal radius
+0.015 mm. It is not a gas transport failure; it is a physically
+nontransportable start. A historical simple endpoint radius heuristic
+nevertheless classified the one endpoint as collected. The old
+`validate_reference` recognized *field-wire* metal starts only and
+rejected this anode-metal zero. **Do not change it or the original C++,
+CSV or SHA manifests retroactively.** The raw `collected_e=1` here is
+not a valid physical collected electron for any future signal study.
+
+New helper `pi_p3_external_new120_metal_provenance_v1.py` checks:
+- unchanged original complete Geant4 selection, full SHA-locked 12
+  Garfield chunks, SHA of every aggregated original file;
+- all 120 actual parents, original TrackHeed cluster→electron membership,
+  exact four-geometry Garfield per-electron count and sector sums;
+- `successful=0` only for a geometrically **interior** 30um anode or
+  pre-existing allowed 75um field-wire metal position, with rigorously
+  constrained one-electron/no-birth/no-cap physical outcomes. Unknown
+  failures abort. The helper does not modify or overwrite any inputs.
+
+The patched **p3-only** muon challenge uses this helper instead of
+`legacy.verify_full()`, retaining zero ion births exactly and reporting
+a separate parent-bootstrap **sensitivity exclusion** for any affected
+whole Geant4 parents, for each 3mm geometry separately. It continues
+to make no claim of signal validation or new blind holdout independence.
+
+### Run after the observed first full cloud pilot 1 / 6
+
+```bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git switch feature/mwpc-stage-c
+git pull --ff-only
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+
+"$PY" test/mwpc-stage-c/pi_p3_external_new120_metal_provenance_v1.py selftest
+"$PY" test/mwpc-stage-c/pi_p3_external_new120_metal_provenance_v1.py audit
+
+# Only after the audit says PASS, retry the model challenge.
+"$PY" -u test/mwpc-stage-c/pi_p3_muon_count_model_challenge_v1.py audit --reps 3000 --bootstrap 4000
+
+# Already selected, preflighted, native compiled, and SHA-sealed 8/48 starts:
+# DO NOT re-prepare, rebuild the C++ executable, or delete original chunk_0000.
+"$PY" -u test/mwpc-stage-c/pi_p3_full_cloud_convergence_v1.py run --max-chunks 5 --hours 2
+"$PY" test/mwpc-stage-c/pi_p3_full_cloud_convergence_v1.py status
+# Only when status shows 6 / 6 verified:
+"$PY" -u test/mwpc-stage-c/pi_p3_full_cloud_convergence_v1.py analyze --reps 64
+```
+
+These commands operate on already frozen independently generated D500
+electron starts and existing new120 muon truth; no signal-response.
+The 48-avalanche full-cloud pilot is a **compression fidelity pilot**
+and cannot establish rare-tail or whole-muon joint-LUT accuracy.
