@@ -269,3 +269,56 @@ These commands operate on already frozen independently generated D500
 electron starts and existing new120 muon truth; no signal-response.
 The 48-avalanche full-cloud pilot is a **compression fidelity pilot**
 and cannot establish rare-tail or whole-muon joint-LUT accuracy.
+
+## 2026-11-04: 48/48 full clouds PASS, analysis strict JSON NaN fix
+
+WSL completed all six immutable full Garfield++ chunks: **48 true
+independent exact-start D500 electron avalanches**, **99,388 exact
+ionization-birth callbacks**, separately `p3_noFW` and `p3_FW75`.
+The follow-up `analyze --reps 64` reached report serialization but
+refused a nonfinite float because some nonzero avalanches have no ions
+in either the top or bottom ±45° cathode-facing angular sector:
+`A_TB=(top-bottom)/(top+bottom)=0/0` is *undefined*, not zero.
+The physics data and full-ion moment/sector verification were already
+successful; the issue was a REPORT ONLY missing-value serialization.
+
+The Python analyzer is now patched to represent such exact asymmetries
+as **JSON null**, exclude these physically undefined values from
+conditional asymmetry-error statistics and explicitly count how many
+nonzero avalanches have undefined `A_TB` for each geometry. It asserts
+every output is finite and strictly JSON compliant BEFORE creating an
+output directory. An extra synthetic selftest demonstrates the
+side-only birth distribution and undefined asymmetry. The failed v1
+`analysis_complete/` directory is retained exactly as found:
+**never delete/overwrite it or any physical checkpoints**. The
+corrected script creates separate `analysis_complete_v2/` containing
+SHA-sealed `summary.json`, `per_avalanche.json`, `manifest.json`.
+
+Run from updated source (NO Garfield or C++ rebuild):
+
+```bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git switch feature/mwpc-stage-c
+git pull --ff-only
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+"$PY" test/mwpc-stage-c/pi_p3_full_cloud_convergence_v1.py selftest
+"$PY" test/mwpc-stage-c/pi_p3_full_cloud_convergence_v1.py status
+"$PY" -u test/mwpc-stage-c/pi_p3_full_cloud_convergence_v1.py analyze --reps 64
+```
+
+The existing independent external new120 p3 count challenge completed
+with 120 muons/geometry and parent-bootstrap confidence intervals:
+`gamma - guarded` CRPS = **-109.2, 95% CI [-360.4,+133.2]** on
+p3_noFW and **-419.4, CI [-1538.1,+671.4]** on p3_FW75;
+neither CI excludes zero. A separate strict audit of 24,772
+original microscopic trials found exactly four no-transport
+non-ionizing metal starts across all four old reference geometries,
+including exactly one 30um-anode-metal start in each of the p3
+geometries, with one affected parent event shared by these two.
+The sensitivity check excludes *whole affected parents* and retains
+119 clean parent events per p3 geometry. The old physical source and
+legacy verifier remain immutable.
+
+**No physical signal response is included.** Forty-eight total
+avalanches are useful as a storage-compression pilot, not a
+proof of 99% tails or cathode-ready LUT accuracy.
