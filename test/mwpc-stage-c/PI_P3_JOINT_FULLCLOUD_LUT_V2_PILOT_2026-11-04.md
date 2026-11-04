@@ -3,38 +3,38 @@
 ## Scope
 
 This is an **independent, append-only research prototype** on branch
-\`feature/mwpc-stage-c\`; it does not replace the validated \`guarded_A20\`
+`feature/mwpc-stage-c`; it does not replace the validated `guarded_A20`
 count/sector LUT, modify old SHA-sealed physical runs, or claim cathode-ready
 detector response.
 
 **Physical source already completed:** 120/120 SHA-frozen native Garfield
 chunks with 960 independent original D500 starting electrons (480 for each
-of \`p3_noFW\`, \`p3_FW75\`). The exact census is **2,981,533 ionization
-BIRTH coordinates** (\`u_mm,v_mm,w_mm,t_ns\`): noFW 284,272, FW75 2,697,261.
+of `p3_noFW`, `p3_FW75`). The exact census is **2,981,533 ionization
+BIRTH coordinates** (`u_mm,v_mm,w_mm,t_ns`): noFW 284,272, FW75 2,697,261.
 Every new archive record is the complete cloud from ONE physical microscopic
 avalanche, not a random 128/512/4096-point subsample and not an ion trajectory.
 
 ## What was implemented
 
-\`pi_p3_joint_fullcloud_bank_v1.py\` provides four commands.
+`pi_p3_joint_fullcloud_bank_v1.py` provides four commands.
 
-- \`selftest\`: local toy tests of complete-cloud replay, w displacement, absolute
+- `selftest`: local toy tests of complete-cloud replay, w displacement, absolute
   TrackHeed time offset, true zero-ion record, physical metal veto, abstention
   when no nearby data, deterministic holdout, proper-score arithmetic.
-- \`build\`: read-only SHA audits of all native input chunks and old analysis.
+- `build`: read-only SHA audits of all native input chunks and old analysis.
   Independently streams their full birth CSVs, verifies all exact C++ ion
   counts/moments/sectors, then writes a new **binary lossless float64 bank**
-  using \`numpy\` memory-mappable \`.npy\` files, one per geometry, plus
-  \`index.json\` with start, cell, sample, zero vs nonzero, offset and length,
-  and a SHA256 \`manifest.json\`. Final results are written in a distinct
-  \`test_runs/mwpc_stage_c/pi_p3_joint_fullcloud_bank_v1/\` folder.
-  Build creates a separate \`.INCOMPLETE\` staging folder first, refuses
+  using `numpy` memory-mappable `.npy` files, one per geometry, plus
+  `index.json` with start, cell, sample, zero vs nonzero, offset and length,
+  and a SHA256 `manifest.json`. Final results are written in a distinct
+  `test_runs/mwpc_stage_c/pi_p3_joint_fullcloud_bank_v1/` folder.
+  Build creates a separate `.INCOMPLETE` staging folder first, refuses
   any prior output, and renames only on complete success. **Do not delete
   an incomplete directory without diagnosing the failure.** Original
   source CSVs, analyses, and physics checkpoints are NEVER changed.
-- \`audit\`: verifies all source/checkpoint SHA receipts, stored binary
+- `audit`: verifies all source/checkpoint SHA receipts, stored binary
   and index SHA, exact offset/census continuity and all 960 identities.
-- \`evaluate\`: **spatially disjoint** SHA-deterministic ~20% of D500 cells
+- `evaluate`: **spatially disjoint** SHA-deterministic ~20% of D500 cells
   held out PER geometry; two safeguarded sampling models are tested with
   *only the remaining cells*, using nearest admissible cell versus
   distance-weighted guarded neighbors. **Zero prediction coverage is
@@ -48,24 +48,24 @@ avalanche, not a random 128/512/4096-point subsample and not an ion trajectory.
   exploratory 2,000 cell-bootstrap replicates. This is NOT a full 4D
   point-process test, and uses a sparse non-flux source.
 
-The replay API is \`Bank.sample(u0,v0,w0,t0,g,rng,mode,train)\`: returns
-\`n_ion_births\` and \`births_uvwt_mm_ns\` together from the **same**
-avalanche. It shifts only \`w\` by the requested starting-wire coordinate
+The replay API is `Bank.sample(u0,v0,w0,t0,g,rng,mode,train)`: returns
+`n_ion_births` and `births_uvwt_mm_ns` together from the **same**
+avalanche. It shifts only `w` by the requested starting-wire coordinate
 and adds **TrackHeed t0** to stored full-microscopic birth times. It does
 NOT add D500 drift time (which would double count primary-electron drift);
-it does NOT shift the cloud in transverse \`u,v\`, because doing so would
+it does NOT shift the cloud in transverse `u,v`, because doing so would
 distort the actual wire electric field response. This discrete empirical
 replay approximates the new source position with the chosen archive start.
 
 The guards forbid mixing the two geometries, v hemispheres, near-wire
 regimes, opposite sides of the anode near the wire, and opposite sides
-of field wires in the \`near_field\` regime. Candidates live within a
+of field wires in the `near_field` regime. Candidates live within a
 5x5 cell index neighborhood. Nearest-cell and guarded-neighbor baselines
 in this *new bank* are NOT the same trained model as historical
-\`guarded_A20\`; **no model replacement or superiority is inferred**.
+`guarded_A20`; **no model replacement or superiority is inferred**.
 For a position inside conductor metal the API returns a physical
-zero-ion cloud (\`mode=metal_veto\`); where no valid source cloud exists
-it returns \`None\`, deliberately avoiding unsupported extrapolation.
+zero-ion cloud (`mode=metal_veto`); where no valid source cloud exists
+it returns `None`, deliberately avoiding unsupported extrapolation.
 
 ## Execute in user's WSL
 
@@ -90,7 +90,7 @@ set -o pipefail
 ~~~
 
 The source code and its toy selftest have been locally syntax-checked
-and toy-tested; **actual WSL \`build/audit/evaluate\` are not yet observed**.
+and toy-tested; **actual WSL `build/audit/evaluate` are not yet observed**.
 Do not interpret these as completed or invent their results.
 
 ## Decision after the first WSL report
