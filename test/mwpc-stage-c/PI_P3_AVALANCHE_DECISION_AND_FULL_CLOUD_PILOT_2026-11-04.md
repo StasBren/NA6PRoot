@@ -322,3 +322,58 @@ legacy verifier remain immutable.
 **No physical signal response is included.** Forty-eight total
 avalanches are useful as a storage-compression pilot, not a
 proof of 99% tails or cathode-ready LUT accuracy.
+
+## 2026-11-04: full-cloud v2 analysis PASS; independent 32/128/512 readout
+
+The original WSL `analyze --reps 64` completed with sealed
+`analysis_complete_v2/`. Final source numbers:
+- `p3_noFW`: 24 D500 electron-start avalanches, 18 nonzero, 6 zero,
+  **10,634** exact ion birth points. Mean 128-point
+  coarse 12 azimuth × 6 time joint total-variation (TV) distances:
+  near anode 0.0508, transition 0.0715, bulk 0.0569.
+- `p3_FW75`: 24 D500 start avalanches, 19 nonzero, 5 zero,
+  **88,754** exact ion births. Mean 128-point joint TV:
+  near anode 0.0763, near field wire 0.0709,
+  transition 0.0746, bulk 0.0703.
+
+**These are compression diagnostics, NOT 128-point bank acceptance:**
+the number of independent nonzero avalanches is 18/19; 64 Monte Carlo
+subsamplings per avalanche do NOT count as 64 new independent avalanches.
+Some avalanches can have <=128 ions so the 128-point sample is the full
+cloud; all such exact cases inflate apparent compression quality and
+must be shown separately. The report bins angle/time from exact
+full-cloud per-avalanche values, not from an independent spatial model.
+
+New read-only report
+`pi_p3_cloud_compression_readout_v1.py` displays the **32, 128, 512**
+comparisons for each of the two geometries and each near-wire/bulk
+stratum independently; verifies both the final analysis output SHA and
+all six FULL microscopic physics chunk SHA seals, including each raw
+cloud file. Reports unconditional and genuinely compressed
+(`N_ion>cap`) results, ion-birth top/bottom missingness,
+angular/time joint TV, absolute angular errors, relative radius
+error, time q90 error, and paired improvement of 512 vs 128 with
+bootstrap over independent full-Garfield *avalanches*.
+
+```bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git switch feature/mwpc-stage-c
+git pull --ff-only
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+"$PY" test/mwpc-stage-c/pi_p3_cloud_compression_readout_v1.py selftest
+"$PY" -u test/mwpc-stage-c/pi_p3_cloud_compression_readout_v1.py report --bootstrap 3000
+```
+
+No Garfield job, no changes to `analysis_complete_v2`, and no
+new output files. The report is intentionally exhaustive so the
+independent (p=3mm) geometric decisions can be made after inspecting
+the real precision, rather than declaring that TV≈0.06 is sufficient.
+
+**Next experiment decision**: validate compression further with
+larger independent complete birth-cloud sets in each p3 geometry;
+then train a *joint* conditional generator and test on truly
+unseen exact D500 cells and independent real Geant4/TrackHeed muons.
+The selected-cell and muon-count model comparisons show near-equal
+Guarded A20/Gamma count scores; no count-only Pólya fit by itself
+provides real ion-birth space/time positions. Don't pool errors
+from noFW/FW75 or claim signal readiness.
