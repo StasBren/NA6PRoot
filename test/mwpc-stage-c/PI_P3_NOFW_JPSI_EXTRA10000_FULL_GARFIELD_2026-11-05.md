@@ -132,5 +132,5 @@ This additional 10k will likely create order 50–70 million saved
 position records, several GB of CSV. Check sufficient disk capacity
 before an overnight run, ideally tens of GB free. This is a full
 physical Garfield runtime campaign, not a full uncompressed ion-cloud
-archive. No additional simulated m.uon parents are secretly selected
+archive. No additional simulated muon parents are secretly selected
 from the first 1000.
