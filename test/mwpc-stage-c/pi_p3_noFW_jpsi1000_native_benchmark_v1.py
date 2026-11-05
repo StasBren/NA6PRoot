@@ -545,7 +545,8 @@ def status(audit=False):
     n_heed = sum(r["stats"]["n_trackheed_electrons"] for r in results)
     n_caps = sum(r["stats"]["n_capped_seeds"] for r in results)
     n_failed = sum(r["stats"]["n_unsuccessful_seeds"] for r in results)
-    print(f"SHA VERIFIED P3 NO-FW JPSI MUONS {parents} / {N}")
+    print(f"SHA-SEALED P3 NO-FW JPSI MUONS {parents} / {N} "
+          "(full file rehash via audit)")
     print(f"SEALED CHUNKS {len(results)} / {N//GROUP}")
     print(f"ACTUAL MICROSCOPIC GARFIELD AVALANCHES {avalanches}")
     print(f"TRACKHEED ELECTRONS {n_heed}")
