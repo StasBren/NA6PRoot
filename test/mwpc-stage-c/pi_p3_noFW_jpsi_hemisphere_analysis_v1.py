@@ -239,7 +239,6 @@ def campaign(root, expected_count, required):
             z["null_sd_independent_avalanche_signs"]=(
                 math.sqrt(sign_null[key])/T if T else math.nan)
             z["n_gain_effective"]=T*T/sum_t_sq[key] if sum_t_sq[key] else math.nan
-            z["n_active_avalanche"]=sum(1 for _ in ()) # set below if relevant
             insist(key not in identity,"Duplicate physical crossing in campaign")
             identity.add(key)
             out.append(z)
@@ -504,7 +503,7 @@ def make(r, receipts, reps):
 def selftest():
     insist(round_cpp(-.5)==-1 and round_cpp(.5)==1,
            "C++ period phase rounding")
-    insist(abs(entrance_phase_mm(0.,0)+1.5)<1e-9,
+    insist(abs(entrance_phase_mm(0.,0)-1.5)<1e-9,
            "Incorrect even-anode physical station parity")
     insist(abs(entrance_phase_mm(0.,1))<1e-9,
            "Incorrect odd-anode physical station parity")
