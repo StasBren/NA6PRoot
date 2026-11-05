@@ -286,7 +286,8 @@ def selftest():
            "Prior full Garfield source or geometry changed")
     original,proof=original_1000()
     ensure(len(original)==1000,"Invalid old disjointness fence")
-    sample={("Jpsi",str(3+i//1000),str(i)) for i in range(10000)}
+    sample={(str(SOURCE["Jpsi"]),str(30+i//1000),str(i))
+            for i in range(10000)}
     ensure(len(sample)==10000 and sample.isdisjoint(original),
            "Synthetic parent exclusion test failed")
     print("PASS disjoint selection, 10000 genuine J/psi parents, 500x20 plan")
