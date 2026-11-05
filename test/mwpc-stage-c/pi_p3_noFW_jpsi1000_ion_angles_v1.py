@@ -213,8 +213,14 @@ def analyze():
             sample_count+=1
         print(f"READ SHA-VERIFIED ion birth reservoir {ichunk+1}/50",flush=True)
 
-    require(len(seen_crossings) == 1000 and
-            len(seed_counts) == sum(nprim) == 54912,
+    n_expected_avalanche = sum(int(z["stats"]["n_full_garfield_avalanches"])
+                               for z in finished)
+    n_expected_failed = sum(int(z["stats"]["n_unsuccessful_seeds"])
+                            for z in finished)
+    n_expected_births = sum(int(z["stats"]["n_ion_births"])
+                            for z in finished)
+    require(len(seen_crossings) == n and
+            len(seed_counts) == sum(nprim) == n_expected_avalanche,
             "Missing or repeated true TrackHeed electron/Garfield avalanche")
     for key,nion in seed_counts.items():
         expected_samples = min(nion,bench.RESERVOIR)
@@ -228,10 +234,12 @@ def analyze():
     require(np.allclose(hist.sum(axis=1),births_exact,rtol=1e-7,atol=1e-6),
             "Some muon reservoirs do not sum to true total N_ion")
     require(np.all(capped==0), "Capped avalanches are censored; do not plot as full physics")
-    require(int(failed.sum()) == 2,
-            "Unexpected unsuccessful trial census: inspect new physical state first")
+    require(int(failed.sum()) == n_expected_failed,
+            "Unsuccessful Garfield event count differs from frozen SHA physics")
 
     total_ions = int(births_exact.sum())
+    require(total_ions == n_expected_births,
+            "Source all-ion census differs from original SHA-sealed checkpoints")
     global_hist = hist.sum(axis=0)
     require(abs(global_hist.sum()-total_ions)<1e-5*max(1,total_ions),
             "Ion-birth weighted angle histogram normalization failed")
