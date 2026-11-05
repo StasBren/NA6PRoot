@@ -396,8 +396,11 @@ def validate_native(d, selected):
              "Muon timing source mismatch")
         values = [float(r[f]) for f in ("muon_total_wall_seconds",
                    "heed_wall_seconds", "garfield_and_output_wall_seconds")]
+        # The gap between Heed and Garfield timers also includes writing
+        # the Heed clusters/primary cache. It must NOT be forced to zero:
+        # full per-muon wall time legitimately exceeds these two components.
         must(all(math.isfinite(x) and x >= 0. for x in values)
-             and abs(values[0] - values[1] - values[2]) < 0.001,
+             and values[0] + 0.001 >= values[1] + values[2],
              "Native per-muon wall-time decomposition invalid")
         muon_time[k] = values[0]
         muon_total_wall += values[0]
