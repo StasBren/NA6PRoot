@@ -563,6 +563,23 @@ def status(audit=False):
         print(f"TOTAL avg true Heed electrons / muon {n_heed/parents:.3f}")
         print(f"TOTAL avg measured seconds / avalanche "
               f"{sum(r['stats']['sum_seed_garfield_wall_seconds'] for r in results)/max(1,avalanches):.4f}")
+        # The mean alone hides expensive high-gain/long-Heed tails; these
+        # are actual muon-level wall times, never independent ion samples.
+        per_muon = sorted(
+            float(x["muon_total_wall_seconds"])
+            for i in range(len(results))
+            for x in csvread(folder(i) / "muon_reference_muon_timing.csv",
+                             ("muon_total_wall_seconds",))
+        )
+        must(len(per_muon) == parents, "Incomplete per-muon timing census")
+        def q(p):
+            pos = (len(per_muon)-1)*p
+            lo = math.floor(pos)
+            hi = math.ceil(pos)
+            return per_muon[lo]*(hi-pos)+per_muon[hi]*(pos-lo)
+        print("OBSERVED per-muon wall time percentiles s "
+              f"p50={q(.5):.3f} p90={q(.9):.3f} p99={q(.99):.3f} "
+              f"max={per_muon[-1]:.3f}")
     if pending is not None:
         print("UNSEALED CHUNK", pending, ": may be ACTIVE or INTERRUPTED; NOT COUNTED")
         print("Do not restart/delete without checking process and physics.log")
