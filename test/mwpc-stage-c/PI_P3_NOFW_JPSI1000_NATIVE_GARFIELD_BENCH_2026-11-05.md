@@ -48,9 +48,9 @@ by the assistant.
 cd ~/na6p/src/NA6PRoot-mwpc
 git switch feature/mwpc-stage-c
 git pull --ff-only
-set -euo pipefail
 source "$HOME/na6p/env.sh"
 source "$HOME/na6p/install/garfieldpp/share/Garfield/setupGarfield.sh"
+set -euo pipefail
 
 cmake -S test/mwpc-avalanche -B test/mwpc-avalanche/build \
   -DGarfield_DIR="$HOME/na6p/install/garfieldpp/lib/cmake/Garfield"
