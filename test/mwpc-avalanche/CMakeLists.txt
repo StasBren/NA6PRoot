@@ -127,3 +127,10 @@ target_compile_features(mwpc_phase_c_rkf_ion_census_pilot_v2 PRIVATE cxx_std_17)
 add_executable(mwpc_phase_c_rkf_ion_census_full16k_v3 phaseC_rkf_ion_census_full16k_v3.cxx)
 target_link_libraries(mwpc_phase_c_rkf_ion_census_full16k_v3 PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_phase_c_rkf_ion_census_full16k_v3 PRIVATE cxx_std_17)
+
+# Isolated native Geant4 J/psi TrackHeed -> FULL Garfield benchmark for
+# p3_noFW ONLY; per-primary and per-muon native timings. Does NOT replace
+# the frozen four-geometry native/spacetime reference or their binaries.
+add_executable(mwpc_phase_b_native_p3_noFW_jpsi_bench_v1 phaseB_native_muon_p3_noFW_jpsi_runtime_v1.cxx)
+target_link_libraries(mwpc_phase_b_native_p3_noFW_jpsi_bench_v1 PRIVATE Garfield::Garfield)
+target_compile_features(mwpc_phase_b_native_p3_noFW_jpsi_bench_v1 PRIVATE cxx_std_17)
