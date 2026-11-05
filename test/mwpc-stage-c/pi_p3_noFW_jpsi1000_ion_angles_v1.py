@@ -41,7 +41,10 @@ PITCH_MM = 3.0
 NBINS = 72  # 5 degrees
 EDGES = np.linspace(-180.0, 180.0, NBINS + 1)
 CENTRES = (EDGES[:-1] + EDGES[1:]) / 2
-MUON_CSV_COLS = ("crossing_id","station","theta_u_in_deg","theta_w_in_deg",
+# Native crossing file identifies events by a composite source|chunk|... header,
+# not by the "crossing_id" field used in seed/reservoir files.
+MUON_CSV_COLS = (bench.CROSSING_COLUMNS[0],"configuration",
+                 "station","theta_u_in_deg","theta_w_in_deg",
                  "ion_births","ion_up","ion_down","ion_boundary",
                  "ion_top","ion_bottom","ion_side",
                  "A_ion_hemi","A_ion_TB","heed_primaries",
