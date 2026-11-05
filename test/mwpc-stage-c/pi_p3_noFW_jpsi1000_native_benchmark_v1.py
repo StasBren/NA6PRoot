@@ -497,7 +497,11 @@ def run(max_chunks, hours):
                 "stats": stats,
                 "file_sha256": {name: sha(d / name) for name in FILES}
             }
-            jwrite(d / "complete.json", receipt)
+            # Atomic seal: status readers never observe partial JSON while
+            # the physical subprocess finishes its last I/O and validation.
+            receipt_tmp = d / "complete.json.tmp"
+            jwrite(receipt_tmp, receipt)
+            receipt_tmp.replace(d / "complete.json")
             audit_chunk(i, batch, physics)
             completed += 1
             added += 1
