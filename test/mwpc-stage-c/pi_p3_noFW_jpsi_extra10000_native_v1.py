@@ -226,6 +226,59 @@ def check_input():
 base.check_input = check_input
 
 
+def status(audit=False):
+    """Full 10k campaign status, no misleading 1000-muon inherited label."""
+    results,pending=base.scanned_status(full_audit=audit)
+    parents=sum(r["stats"]["n_parents"] for r in results)
+    avalanches=sum(r["stats"]["n_full_garfield_avalanches"] for r in results)
+    prim=sum(r["stats"]["n_trackheed_electrons"] for r in results)
+    ion_births=sum(r["stats"]["n_ion_births"] for r in results)
+    elapsed=sum(r["actual_native_wall_seconds"] for r in results)
+    failed=sum(r["stats"]["n_unsuccessful_seeds"] for r in results)
+    capped=sum(r["stats"]["n_capped_seeds"] for r in results)
+    print("SHA-SEALED P3 NOFW EXTRA JPSI MUONS",parents,"/",N)
+    print("SEALED CHUNKS",len(results),"/",N//GROUP)
+    print("REAL MICROSCOPIC GARFIELD AVALANCHES",avalanches)
+    print("TRACKHEED ELECTRONS",prim)
+    print("FULL ION-BIRTH CENSUS",ion_births)
+    print("ACTUAL NATIVE PHYSICS+IO WALL SECONDS",round(elapsed,2))
+    print("SIZE-CAPPED CALLS",capped,"UNSUCCESSFUL CALLS",failed)
+    if parents:
+        mean=elapsed/parents
+        print("MEASURED s/MUON",round(mean,4))
+        print("MEASURED s/GARFIELD AVALANCHE",
+              round(sum(r["stats"]["sum_seed_garfield_wall_seconds"]
+                        for r in results)/max(1,avalanches),5))
+        print("PROJECTED ADDITIONAL 10000 MUONS sequential HOURS",
+              round(N*mean/3600,3))
+        print("PROJECTED REMAINING sequential HOURS",
+              round((N-parents)*mean/3600,3))
+        muon_times=sorted(
+            float(x["muon_total_wall_seconds"])
+            for i in range(len(results))
+            for x in base.csvread(base.folder(i)/"muon_reference_muon_timing.csv",
+                                  ("muon_total_wall_seconds",))
+        )
+        ensure(len(muon_times)==parents,"Incomplete real-muon timing rows")
+        def q(p):
+            f=(parents-1)*p
+            lo=math.floor(f)
+            hi=math.ceil(f)
+            return muon_times[lo]*(hi-f)+muon_times[hi]*(f-lo)
+        print("TRUE MUON TIMES s p50/p90/p99/max",
+              *(round(q(p),3) for p in (.5,.9,.99)),
+              round(muon_times[-1],3))
+    if pending is not None:
+        print("UNSEALED LAST CHUNK",pending,
+              "may be actively computing; do not overwrite/delete")
+    elif len(results)==N//GROUP:
+        print("PASS ALL 10000 NEW JPSI P3 NOFW MUONS SHA-SEALED")
+    else:
+        print("NEXT UNUSED CHUNK",len(results))
+    if audit:
+        print("PASS all completed native result file hashes independently re-audited")
+
+
 def selftest():
     ensure(N==10000 and GROUP==20 and N//GROUP==500,
            "Wrong extra 10k target count/chunk plan")
@@ -261,9 +314,9 @@ def main():
     elif a.mode=="run":
         base.run(a.max_chunks,a.hours)
     elif a.mode=="status":
-        base.status()
+        status()
     else:
-        base.status(audit=True)
+        status(audit=True)
 
 
 if __name__=="__main__":
