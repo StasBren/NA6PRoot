@@ -79,14 +79,39 @@ This demonstrates that **no FW has a smaller RMS for the specified full-hemisphe
 
 The 100k-parent **LUT20** has finite-20-histories-per-cell re-use and nontrivial parent-event correlations. No independent finite-LUT error budget or complete matched-parent confidence interval is claimed for these numbers.
 
-### 2.3 Separate parent-level p=3 mm LUT500 comparison
+### 2.3 Primary figure and selection evidence: complete MS0 station parent-level P(A), p3 LUT500 (6 Nov 2026)
 
-In the earlier LUT500 dashboard, MS0 had 99,968 J/ψ **parents with a station crossing**:
-- **No FW:** mean A=+0.0008, RMS(A)=0.3106.
-- **FW75:** mean A=−0.0014, RMS(A)=0.3500.
-- These are *parent-aggregated* A values and **must not** be overlaid with the full34 crossing A values as though they were the same measurement.
+**This is the preferred plot for the supporting note:** use **MS0 / entire station**, rather than a selected detector module. The dashboard combines **100,000 generated J/ψ parent slots** from two complete native Geant4 input chunks. A total of **99,968 distinct parents have a muon gas crossing in MS0**. Electron endpoint counts are first added across **all chambers and all crossings in MS0 belonging to each parent**, then one
+`A = (N_up − N_down) / (N_up + N_down)` is calculated for that parent. Each defined parent contributes equally to P(A). The distribution is not the crossing-level full34 result in §2.2 and must not be overlaid with it.
 
-The original p=3 mm independent microscopic LUT500 maps remain frozen and are the natural check of finite-LUT uncertainty in the new crossing-level study. The ongoing/finished p=4 mm LUT500 is separate, and **not needed** to document the present p=3 mm decision.
+| MS0 entire station, equal-weight parent events, p=3 mm LUT500 | No field wire | Grounded FW75 |
+|:--|--:|--:|
+| Parents with ≥1 MS0 gas crossing | 99,968 | 99,968 |
+| Valid parent A | **99,968** | **99,968** |
+| Undefined parent A | 0 | 0 |
+| Mean(A) | +0.0008 | −0.0014 |
+| **Population RMS(A)** | **0.3106** | **0.3500** |
+| Classified anode electron endpoints | 8,524,668 | 8,242,284 |
+| Upper hemisphere count | 4,274,033 | 4,125,035 |
+| Lower hemisphere count | 4,250,635 | 4,117,249 |
+
+The no-FW distribution is **narrower**: `RMS_FW75 − RMS_noFW = 0.0394`, a **11.26% reduction relative to FW75**, or ~12.69% increase when expressed relative to noFW. Both mean values are close to zero: this decision is based on the **width of the eventwise A distribution**, not its mean offset. The same-parent comparison reports paired mean `A_FW75 − A_noFW ≈ −0.0022` for **99,968** valid pairs, but this small mean shift is **not** the RMS contrast. The no-FW scenario also has ~3.43% more classified anode endpoints than FW75 at MS0 (different from the percentage-point change in electron collection probability in §2.1–2.2).
+
+**Figure 3 — MS0 entire station, parent-event electron-count asymmetry P(A).** The original 6 Nov dashboard screenshot shows the blue solid **no field wire** distribution and the dashed red **grounded 75 μm field wire** distribution, 41 bins across [-1,1], normalized as fraction of valid parent events per bin of width ~0.049. For a reproducible, high-resolution PNG using the **original saved histogram bins** rather than digitizing the screenshot, run:
+
+```bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git switch feature/mwpc-stage-c
+git pull --ff-only
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+"$PY" test/mwpc-stage-c/plot_pi_ms0_station_parent_asymmetry.py \
+  --summary test_runs/mwpc_stage_c/pi_lut500_parent_asymmetry_root_v1/summary.json \
+  --output test/mwpc-stage-c/figures/ms0_station_parent_A_p3_LUT500.png
+```
+
+The plotter intentionally reads `stations["0"]["station_parent"]`, not `chambers["21"]`. It verifies complete exposure and conservation of the saved 41-bin counts. **It does not rerun Geant4, Heed or Garfield.** The numerical table above comes from the user-provided 6 Nov 2026 complete-station dashboard screenshot, and was not independently checked against the locally frozen `summary.json` here.
+
+**Interpretation:** this is direct evidence favoring **p3 noFW as the working electron-transport baseline** for the tested station and P(A) definition. It does **not** prove improved spatial hit resolution, double-hit separation, avalanche uniformity, or cathode-charge symmetry. The restricted cathode-facing-sector asymmetry in §2.2 still shows the opposite trend. A definitive detector-configuration recommendation awaits the full avalanche and induced-signal studies.
 
 ### 2.4 Local MS0 / physical DET21 parent-level LUT500 cross-check (6 Nov 2026)
 
@@ -125,7 +150,7 @@ The script reads existing JSON only and refuses partial-exposure data; **no Gean
 
 ## 3. Decision for the PI and open conditions
 
-**Working decision:** continue with **p=3 mm, no field wire** for the **first avalanche and gain simulations**. **Primary evidence for this provisional choice is the narrower full-hemisphere electron-count A distribution (smaller population RMS), now confirmed both in the all-station crossing-level LUT20 study and in a separate MS0/DET21 parent-level LUT500 comparison (§2.4).** This keeps the current geometry simple, is consistent with the lower observed *full-hemisphere* event-by-event A RMS and higher primary-electron anode collection, and avoids sacrificing ~3.4 pp of collection for a shift of only ~0.54 ns in the uniform Garfield pilot's *conditional mean drift time*.
+**Working decision:** continue with **p=3 mm, no field wire** for the **first avalanche and gain simulations**. **The headline evidence is the smaller full-hemisphere electron-count asymmetry RMS in the complete MS0 parent-event LUT500 comparison (§2.3), supported independently by the crossing-level LUT20 study (§2.2).** The single-module DET21 result (§2.4) is supplementary, not the main figure. This keeps the current geometry simple, is consistent with the lower observed *full-hemisphere* event-by-event A RMS and higher primary-electron anode collection, and avoids sacrificing ~3.4 pp of collection for a shift of only ~0.54 ns in the uniform Garfield pilot's *conditional mean drift time*.
 
 **Important qualifications:**
 1. \`0.54 ns\` is a small *magnitude*, not yet a formal statistically non-significant difference; obtain uncertainties from paired Garfield and native 100k timing reports.
@@ -205,7 +230,7 @@ using positive-ion and electron charge transport and each cathode's weighting fi
 
 1. **Figure 1 — Geometry and definitions.** Schematic of p=3 mm, gap ±3 mm, noFW vs grounded FW75; anode hemispheres versus cathode-facing ±45° sectors (different definitions).
 2. **Figure 2 — Primary collection and time.** Anode-collected fractions and drift-time PDFs (paired 18k-cell pilot; in final version prefer 100k native time report). Show observation population and uncertainty.
-3. **Figure 3 — Native J/ψ event-by-event primary asymmetry.** p=3 mm \`P(A_hemi)\` on one **muon gas crossing** (LUT20 full34, blue solid noFW/red dashed FW75; RMS/valid counts). Separate parent-level LUT500 only if labelled distinctly.
+3. **Figure 3 — MAIN RESULT: MS0 entire-station J/ψ parent-level asymmetry.** Use the complete 100k-parent p=3 mm LUT500 `station_parent` P(A) from §2.3 (blue solid noFW/red dashed FW75), with RMS and 99,968 valid-parent count; show the station-level aggregation explicitly. The full34 per-crossing distribution is a separate optional control, **not** the main figure.
 4. **Figure 4 — Counterpoint relevant to future cathodes.** p=3 mm \`P(A_TB)\` and cathode-facing electron fraction; explicitly show opposite RMS trend.
 5. **Figure 5 — Future avalanche physics.** Unconditional \`P(G_eff)\`, zero-gain fraction, ion-birth angular histograms, then \`A_ion\`, \`A_e,aval\`, and \`A_Q(T)\` vs each other from same primary-crossing ensemble.
 
