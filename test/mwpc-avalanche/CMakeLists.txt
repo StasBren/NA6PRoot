@@ -134,3 +134,10 @@ target_compile_features(mwpc_phase_c_rkf_ion_census_full16k_v3 PRIVATE cxx_std_1
 add_executable(mwpc_phase_b_native_p3_noFW_jpsi_bench_v1 phaseB_native_muon_p3_noFW_jpsi_runtime_v1.cxx)
 target_link_libraries(mwpc_phase_b_native_p3_noFW_jpsi_bench_v1 PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_phase_b_native_p3_noFW_jpsi_bench_v1 PRIVATE cxx_std_17)
+
+# Emergency high-Heed-multiplicity recovery ONLY. Physics identical to the
+# frozen p3_noFW native J/psi executable except accepted-primary safety
+# budget of 50000 (rather than 1000). Build this independent target alone.
+add_executable(mwpc_phase_b_native_p3_noFW_jpsi_highheed_recovery_v1 phaseB_native_muon_p3_noFW_jpsi_highheed_recovery_v1.cxx)
+target_link_libraries(mwpc_phase_b_native_p3_noFW_jpsi_highheed_recovery_v1 PRIVATE Garfield::Garfield)
+target_compile_features(mwpc_phase_b_native_p3_noFW_jpsi_highheed_recovery_v1 PRIVATE cxx_std_17)
