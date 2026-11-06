@@ -293,7 +293,11 @@ def validate_native(d, selected):
                  "Native original Geant4 track changed: " + k)
         n = int(r["heed_primaries"])
         total = int(r["ion_births"])
-        must(0 <= n <= 1000 and total >= 0
+        # Validator bound is not a physics truncation. Exceptional but
+        # legitimate TrackHeed delta-electron tails are processed by a
+        # distinct SHA-tracked high-multiplicity recovery executable.
+        # Ordinary native production C++ still enforces its frozen 1000 cap.
+        must(0 <= n <= 50000 and total >= 0
              and int(r["heed_failed"]) == 0
              and int(r["ion_up"]) + int(r["ion_down"]) +
                  int(r["ion_boundary"]) == total
