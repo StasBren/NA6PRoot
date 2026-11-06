@@ -64,7 +64,7 @@ The script selects **`stations["0"]["station_parent"]`**, verifies complete sour
 
 ### 3.1 Primary electron transport: independent 126k Garfield full-cell pilot (21 Oct)
 
-Same pitch and full-cell source, **18,000 Garfield microscopic electron starts/geometry** at p=3 mm. Original output documented in \`test/mwpc-stage-c/README.md\` under “2026-10-21: full 126k Garfield pitch pilot completed” and saved under \`test_runs/mwpc_stage_c/pi_pitch_fieldwire_pilot_v1/pilot/\`.
+Same pitch and full-cell source, **18,000 Garfield microscopic electron starts/geometry** at p=3 mm. Original output documented in `test/mwpc-stage-c/README.md` under “2026-10-21: full 126k Garfield pitch pilot completed” and saved under `test_runs/mwpc_stage_c/pi_pitch_fieldwire_pilot_v1/pilot/`.
 
 | p=3 mm microscopic full-cell pilot | No field wire | 75 μm grounded FW | FW − noFW |
 |:--|--:|--:|--:|
@@ -75,10 +75,10 @@ Same pitch and full-cell source, **18,000 Garfield microscopic electron starts/g
 
 Interpretation: adding field wires produces a small shift toward faster *surviving-electron* drift (~0.54 ns or 2.0% of the noFW mean), **not** a demonstrated improvement in signal timing resolution. It also reduces the anode collection fraction by ~3.43 pp in this run; this is a measured model trade-off, not an automatically “negligible” loss. Field-wire geometries can change which slow electrons survive; the conditional time difference is **not** necessarily a paired physical drift-time acceleration.
 
-The paired exact-birth Garfield comparison exists in \`pi_pitch_fieldwire_paired_analysis.py\` and its read-only runner; preserve the special exclusion for source electrons artificially relocated out of metal volume.
+The paired exact-birth Garfield comparison exists in `pi_pitch_fieldwire_paired_analysis.py` and its read-only runner; preserve the special exclusion for source electrons artificially relocated out of metal volume.
 
 
-### 3.2 Complete 100k-parent J/ψ Geant4 → Heed → six LUT20 response (uploaded \`full34.zip\`)
+### 3.2 Complete 100k-parent J/ψ Geant4 → Heed → six LUT20 response (uploaded `full34.zip`)
 
 989,695 physical **muon gas crossings** across MS0–MS5 from 100,000 generated J/ψ parents; for each crossing, use matched Heed primary electrons and the frozen p=3 mm noFW/FW75 LUT20. Both variants have 55,784,197 **primary electron instances** in the folded gas crossings (not independent microscopic Garfield histories).
 
@@ -87,10 +87,10 @@ The paired exact-birth Garfield comparison exists in \`pi_pitch_fieldwire_paired
 | Primary electron instances | 55,784,197 | 55,784,197 | same |
 | Collected at a physical anode | 46,066,785 | 44,168,063 | −1,898,722 |
 | Collection / primary electron | **82.580%** | **79.177%** | **−3.404 pp** |
-| RMS of crossing \`A_hemi\` | **0.36490** | **0.40066** | **+0.03576** |
-| Valid crossing \`A_hemi\` | 988,899 | 988,830 | −69 |
+| RMS of crossing `A_hemi` | **0.36490** | **0.40066** | **+0.03576** |
+| Valid crossing `A_hemi` | 988,899 | 988,830 | −69 |
 | Electron fraction landing in ±45° cathode-facing sectors | 41.563% | **64.408%** | **+22.845 pp** |
-| RMS of crossing \`A_TB\` among defined crossings | 0.61871 | **0.45675** | **−0.16196** |
+| RMS of crossing `A_TB` among defined crossings | 0.61871 | **0.45675** | **−0.16196** |
 
 This demonstrates that **no FW has a smaller RMS for the specified full-hemisphere crossing-count asymmetry**, and **higher primary anode collection**. It also demonstrates the **opposite trend** for the restricted cathode-facing-sector A: with FW, fewer extreme differences appear between those sectors because many more electrons reach them. Therefore the data **do not justify the general claim** “no FW gives more balanced upper/lower cathode signals”. A full cathode signal requires avalanche ion-birth positions, ion transport, Shockley–Ramo weighting fields, time integration and strip response.
 
@@ -101,7 +101,7 @@ The 100k-parent **LUT20** has finite-20-histories-per-cell re-use and nontrivial
 
 ### 4.1 Local MS0 / physical DET21 parent-level LUT500 cross-check (6 Nov 2026)
 
-**Purpose:** strengthen the **provisional choice of p=3 mm with no field wire on the basis of the smaller RMS of full-hemisphere electron-count asymmetry**. This cross-check concerns a **single physical chamber (MS0 / DET21)**, not the full station, and it is distinct from the full34 *crossing-level* values in §2.2 and the *station-parent* values in §2.3.
+**Purpose:** strengthen the **provisional choice of p=3 mm with no field wire on the basis of the smaller RMS of full-hemisphere electron-count asymmetry**. This cross-check concerns a **single physical chamber (MS0 / DET21)**, not the full station, and it is distinct from the full34 *crossing-level* values in §3.2 and the *station-parent* values in §2.
 
 The complete selected source consists of **100,000 generated J/ψ parent slots in two native Geant4 input chunks**. Only **10,803 parents actually crossed this DET**. For each such parent, aggregate classified upper/lower primary-electron endpoints across all of its gas crossings in DET21, then compute **one** valid `A_hemi = (N_up-N_down)/(N_up+N_down)` for that parent. A zero denominator is undefined, not A=0. Geometry uses p=3 mm and the matched noFW/FW75 **LUT500** maps; no avalanche multiplication or cathode signal is included.
 
@@ -117,7 +117,7 @@ The complete selected source consists of **100,000 generated J/ψ parent slots i
 
 **RMS contrast:** `RMS_FW75 − RMS_noFW = 0.0356`; noFW gives a **~8.96% lower RMS relative to FW75** (equivalently FW75 is ~9.85% higher than noFW). The two means are both near zero, so the observed difference is primarily in **width**, not a sizeable bias in the mean. The dashboard reports **10,761 paired parents with both A defined** and mean paired `ΔA = A_FW75 − A_noFW ≈ −0.0011`; that paired *mean shift* is not the RMS effect. The unequal valid populations do not invalidate the descriptive comparison, but a matched-parent uncertainty analysis should precede a significance claim.
 
-**Decision relevance and limits:** this local P(A) corroborates the selected no-FW *electron-transport* baseline because a narrower full-hemisphere A distribution is desirable for balanced upper/lower primary-electron counting. It **does not** establish smaller *reconstructed spatial-resolution RMS*, smaller measured cathode-charge asymmetry, or better readout performance. Do not extend the DET21 result to every MS0 module or all stations without checking their own distributions. The restricted cathode-facing A_TB still exhibits the opposite trend in §2.2.
+**Decision relevance and limits:** this local P(A) corroborates the selected no-FW *electron-transport* baseline because a narrower full-hemisphere A distribution is desirable for balanced upper/lower primary-electron counting. It **does not** establish smaller *reconstructed spatial-resolution RMS*, smaller measured cathode-charge asymmetry, or better readout performance. Do not extend the DET21 result to every MS0 module or all stations without checking their own distributions. The restricted cathode-facing A_TB still exhibits the opposite trend in §3.2.
 
 **Reproducible Figure 3b — MS0 / DET21, parent-level P(A).** Generate the *actual 41-bin histograms* directly from the frozen `summary.json` using the new source-only plotter; do not digitize this screenshot or approximate either distribution by a Gaussian:
 
@@ -139,14 +139,14 @@ The script reads existing JSON only and refuses partial-exposure data; **no Gean
 
 ### 5.1 Existing reference workflows already completed in the repository
 
-The existing reference research code is in \`test/mwpc-avalanche/\`, documented in its \`README.md\`. These are previous validated *methodological prototypes*, largely using **p=4 mm and asymmetric 2+4 mm gaps** by default; they **are not yet production measurements of the present p=3 mm, ±3 mm, noFW baseline**.
+The existing reference research code is in `test/mwpc-avalanche/`, documented in its `README.md`. These are previous validated *methodological prototypes*, largely using **p=4 mm and asymmetric 2+4 mm gaps** by default; they **are not yet production measurements of the present p=3 mm, ±3 mm, noFW baseline**.
 
-- \`phaseA_gain_fluctuations.cxx\` / target \`mwpc_phase_a_gain\`: independent **single-electron AvalancheMicroscopic** ensembles. Outputs \`avalanche_electrons\`, \`avalanche_ions\`, **\`collected_on_wire\`**, attached and other endpoints, eventwise collection times; prints unconditional effective gain mean/RMS/quantiles and zero-collected fraction. Has explicit avalanche-size cap and detects capped events.
-- \`phaseA_heed_avalanche.cxx\`: **Heed muon clusters -> all primary electrons -> microscopic avalanches -> collected charge per anode**. Already captures seedwise and trackwise electron/ion counts and wire multiplicity, but its default reference geometry is p=4 mm, gap 2+4 mm, no FW.
-- \`phaseB_real_avalanche_signal.cxx\`: actual single-electron microscopic avalanche with **ionisation-birth callback**, real positive-ion drift and induced electron/ion strip currents. A one-seed demonstrator, **not** a full muon hit.
-- \`phaseB_avalanche_angle_scan.cxx\` / \`analyze_stageB_avalanche_angle_scan.py\`: scans avalanche-seed azimuth, records ionisation birth angles/centroids, ion multiplicity, and integrated **upper/lower complete-cathode induced charges** versus seed azimuth. The source defaults to **p=4 mm, gap 2+4 mm**. It skips zero/failed avalanches in the output; **do not** derive unbiased gain from its accepted-only subset.
-- \`MWPCSignalUtils.h\` and \`MWPCStereoReadout.h\` implement reusable signal/strip infrastructure.
-- \`test/mwpc-stage-c/PI_FAST_LUT_TRANSPORT_ONLY_README.md\` documents prior fast **AvalancheMC** transport-only (attachment OFF, 5 μm step) comparisons; **these are not avalanche-gain simulations**. Do not infer avalanche multiplicative gain or signal charges from this transport benchmark.
+- `phaseA_gain_fluctuations.cxx` / target `mwpc_phase_a_gain`: independent **single-electron AvalancheMicroscopic** ensembles. Outputs `avalanche_electrons`, `avalanche_ions`, **`collected_on_wire`**, attached and other endpoints, eventwise collection times; prints unconditional effective gain mean/RMS/quantiles and zero-collected fraction. Has explicit avalanche-size cap and detects capped events.
+- `phaseA_heed_avalanche.cxx`: **Heed muon clusters -> all primary electrons -> microscopic avalanches -> collected charge per anode**. Already captures seedwise and trackwise electron/ion counts and wire multiplicity, but its default reference geometry is p=4 mm, gap 2+4 mm, no FW.
+- `phaseB_real_avalanche_signal.cxx`: actual single-electron microscopic avalanche with **ionisation-birth callback**, real positive-ion drift and induced electron/ion strip currents. A one-seed demonstrator, **not** a full muon hit.
+- `phaseB_avalanche_angle_scan.cxx` / `analyze_stageB_avalanche_angle_scan.py`: scans avalanche-seed azimuth, records ionisation birth angles/centroids, ion multiplicity, and integrated **upper/lower complete-cathode induced charges** versus seed azimuth. The source defaults to **p=4 mm, gap 2+4 mm**. It skips zero/failed avalanches in the output; **do not** derive unbiased gain from its accepted-only subset.
+- `MWPCSignalUtils.h` and `MWPCStereoReadout.h` implement reusable signal/strip infrastructure.
+- `test/mwpc-stage-c/PI_FAST_LUT_TRANSPORT_ONLY_README.md` documents prior fast **AvalancheMC** transport-only (attachment OFF, 5 μm step) comparisons; **these are not avalanche-gain simulations**. Do not infer avalanche multiplicative gain or signal charges from this transport benchmark.
 
 The existence and prior validation of these workflows is supported by repository documentation, but the original numerical CSV/run manifests for Phase-A gain or Stage-B ion signal **have not been rechecked against the local WSL outputs in this review**. No numeric gain is claimed here.
 
@@ -156,19 +156,19 @@ The existence and prior validation of these workflows is supported by repository
 Geant4's muon gas hit gives the **entry/exit trajectory, gas path and deposited energy**, but no avalanche multiplication. Heed turns a crossing into **ionisation clusters and N_primary primary conduction electrons**, with start space/time coordinates. Garfield **AvalancheMicroscopic** must then track each primary seed in the chamber's high field, where it can create additional e⁻–ion⁺ pairs. All offspring form one microscopic avalanche for that seed.
 
 For one seed k:
-- \`N_pairs,k\`: count of avalanche ionisation electron–ion **pairs generated**, best monitored using the ionisation callback; **not** initial Heed primary pairs.
-- \`N_e,aval,k\`, \`N_i,aval,k\`: bookkeeping numbers returned by \`GetAvalancheSize(ne, ni)\`, whose detailed counting conventions/attachment effects must be inspected.
-- \`N_e,anode,k\`: **number of avalanche electron endpoints actually collected at an anode**; a different number, and the observable used for effective charge gain.
-- \`G_eff,k=N_e,anode,k/1\` for one initial primary electron, **including zero-response seeds**.
+- `N_pairs,k`: count of avalanche ionisation electron–ion **pairs generated**, best monitored using the ionisation callback; **not** initial Heed primary pairs.
+- `N_e,aval,k`, `N_i,aval,k`: bookkeeping numbers returned by `GetAvalancheSize(ne, ni)`, whose detailed counting conventions/attachment effects must be inspected.
+- `N_e,anode,k`: **number of avalanche electron endpoints actually collected at an anode**; a different number, and the observable used for effective charge gain.
+- `G_eff,k=N_e,anode,k/1` for one initial primary electron, **including zero-response seeds**.
 
-For a muon gas crossing with \`N_primary\` Heed electrons:
+For a muon gas crossing with `N_primary` Heed electrons:
 \[
 G_{\mathrm{eff,hit}} =
 \frac{\sum_{k=1}^{N_{\rm primary}}N_{e,\mathrm{anode},k}}
      {N_{\rm primary}}
 \quad(N_{\rm primary}>0).
 \]
-Average gain across crossings **must specify the weighting**: pooled collected electrons / pooled primary seeds vs equal-hit average of \`G_eff,hit\`. Also report conditional gain for primaries surviving to the multiplication region separately. Do **not** use \`N_e+N_i\` (a double counting of ionisation products) as a gain denominator. Do not treat a Garfield upper avalanche size cap as a physical gain value.
+Average gain across crossings **must specify the weighting**: pooled collected electrons / pooled primary seeds vs equal-hit average of `G_eff,hit`. Also report conditional gain for primaries surviving to the multiplication region separately. Do **not** use `N_e+N_i` (a double counting of ionisation products) as a gain denominator. Do not treat a Garfield upper avalanche size cap as a physical gain value.
 
 
 ## 6. Historical symmetric-gap avalanche pilots (NOT a chamber-design verdict)
@@ -234,7 +234,7 @@ results must never be substituted for this ±3 mm campaign.
 
 ## 7. Literature and interpretation of the field-wire gain shift
 
-### 7.1 Literature interpretation of FW gain and Stage B1 protocol
+### 7.1 Literature interpretation of FW gain (single-position pilot only)
 
 **Question raised 28 October 2026:** At a fixed +1800 V, the p3 noFW to
 p3 FW75 gain changed from 554.45 to 6418.18 (11.58×), and at p4 from
@@ -298,13 +298,13 @@ Before any quantitative recommendation goes beyond the provisional statement in 
 
 ### Original source references
 
-- \`test/mwpc-stage-c/README.md\`: 21 Oct 126k six-geometry Garfield pilot and conditional drift times.
-- \`test/mwpc-stage-c/pi_pitch_fieldwire_paired_analysis.py\`: matched-birth collection/time audit.
-- \`test/mwpc-stage-c/pi_lut500_muon_crossing_asymmetry.py\`: exact crossing-level A, raw IDs.
-- \`test/mwpc-stage-c/PI_FAST_LUT_TRANSPORT_ONLY_README.md\`: AvalancheMC is a **transport-only** candidate, not multiplication.
-- \`test/mwpc-avalanche/README.md\`: existing Phase-A and Phase-B scope; older p=4 mm and 2+4 mm reference geometry.
-- \`test/mwpc-avalanche/phaseA_gain_fluctuations.cxx\`, \`phaseA_heed_avalanche.cxx\`, \`phaseB_real_avalanche_signal.cxx\`, \`phaseB_avalanche_angle_scan.cxx\`: existing tested methods.
-- Garfield++ User Guide and ROOT/Garfield maintainers' clarification of \`GetAvalancheSize\` vs electron endpoint-count and the role of attachment: https://garfieldpp.web.cern.ch/doxygen/UserGuide.pdf and https://root-forum.cern.ch/t/difference-between-getavalanchesize-and-getnumberofelectronendpoints/50834
+- `test/mwpc-stage-c/README.md`: 21 Oct 126k six-geometry Garfield pilot and conditional drift times.
+- `test/mwpc-stage-c/pi_pitch_fieldwire_paired_analysis.py`: matched-birth collection/time audit.
+- `test/mwpc-stage-c/pi_lut500_muon_crossing_asymmetry.py`: exact crossing-level A, raw IDs.
+- `test/mwpc-stage-c/PI_FAST_LUT_TRANSPORT_ONLY_README.md`: AvalancheMC is a **transport-only** candidate, not multiplication.
+- `test/mwpc-avalanche/README.md`: existing Phase-A and Phase-B scope; older p=4 mm and 2+4 mm reference geometry.
+- `test/mwpc-avalanche/phaseA_gain_fluctuations.cxx`, `phaseA_heed_avalanche.cxx`, `phaseB_real_avalanche_signal.cxx`, `phaseB_avalanche_angle_scan.cxx`: existing tested methods.
+- Garfield++ User Guide and ROOT/Garfield maintainers' clarification of `GetAvalancheSize` vs electron endpoint-count and the role of attachment: https://garfieldpp.web.cern.ch/doxygen/UserGuide.pdf and https://root-forum.cern.ch/t/difference-between-getavalanchesize-and-getnumberofelectronendpoints/50834
 
 All tables here use the existing full-cell Garfield pilot numbers from repository documentation or the exact full34 ZIP provided earlier. **No new Garfield avalanche physics run was carried out in producing these notes.**
 
