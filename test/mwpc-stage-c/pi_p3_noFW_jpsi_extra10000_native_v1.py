@@ -17,7 +17,14 @@ import csv
 import hashlib
 import json
 import math
+import fcntl
+import re
+import shutil
+import subprocess
+import time
 from pathlib import Path
+
+from pi_garfield_runtime_env import garfield_runtime_env
 
 from pi_2m_native_six_geometry_fold import SOURCE
 from pi_prepare_muon_avalanche_b1 import FIELDS, seed, validate, sha
@@ -225,6 +232,225 @@ def check_input():
 # Their global config/lookups are monkeypatched only in this NEW Python module.
 base.check_input = check_input
 
+# Recover exceptional >1000-Heed-electron native events WITHOUT modifying the
+# already SHA-sealed 426+ existing 20-parent chunks or the original binary.
+# The failed attempt is PRESERVED BYTE-FOR-BYTE in chunk_XXXX/; the full
+# scientific re-run lives in chunk_XXXX/high_heed_replay_v1/.
+RECOVERY_TAG = "high_heed_replay_v1"
+SPECIAL_CXX = base.REPO / (
+    "test/mwpc-avalanche/"
+    "phaseB_native_muon_p3_noFW_jpsi_highheed_recovery_v1.cxx"
+)
+SPECIAL_EXE = base.REPO / (
+    "test/mwpc-avalanche/build/"
+    "mwpc_phase_b_native_p3_noFW_jpsi_highheed_recovery_v1"
+)
+SPECIAL_MAX_PRIMARY = 50000
+ORIGINAL_AUDIT_CHUNK = base.audit_chunk
+
+
+def special_physics():
+    ensure(SPECIAL_CXX.is_file() and SPECIAL_EXE.is_file(),
+           "Build HIGH-Heed-only target before recover: " + str(SPECIAL_EXE))
+    text_source = SPECIAL_CXX.read_text()
+    ensure("highMultiplicityMaxPrimary=50000" in text_source
+           and "RunGeometry(gas,GEOMS.front()" in text_source
+           and "p3_noFW ONLY" in text_source,
+           "Recovery C++ is not the reviewed p3_noFW real-muon code")
+    return {"cpp_sha256":sha(SPECIAL_CXX),"exe_sha256":sha(SPECIAL_EXE)}
+
+
+def recovery_chunk_audit(i, batch, phys, verify_files=True):
+    """Accept normal frozen binary OR formally SHA-receipted rare-event replay."""
+    d=base.folder(i)
+    seal=d/"complete.json"
+    if not seal.is_file():
+        return ORIGINAL_AUDIT_CHUNK(i,batch,phys,verify_files=verify_files)
+    m=base.jread(seal)
+    if m.get("recovery_layout") != RECOVERY_TAG:
+        return ORIGINAL_AUDIT_CHUNK(i,batch,phys,verify_files=verify_files)
+
+    rec=d/RECOVERY_TAG
+    ensure(rec.is_dir() and m["schema"]=="NA60_JPSI_20PARENT_P3NOFW_SHA_V1"
+           and m["chunk"]==i and m["n_parents"]==len(batch)
+           and m["base_physics"]==phys
+           and m["physics"]==special_physics(),
+           "High-Heed recovery physics provenance or 20-parent count changed")
+    ensure(m["source_sha256"]==sha(d/base.FILES[0])
+           and m["recovery_source_sha256"]==sha(rec/base.FILES[0]),
+           "High-Heed recovered source identity SHA changed")
+    ids=[base.id_of(x) for x in batch]
+    for src in (d/base.FILES[0],rec/base.FILES[0]):
+        ensure([base.id_of(x) for x in base.csvread(src,FIELDS)]==ids,
+               "Replayed or original source rows differ from frozen J/psi input")
+    ensure(m["original_partial_sha256"].keys() <=
+           set(p.name for p in d.iterdir() if p.is_file()),
+           "Part of original failed attempt has disappeared")
+    if verify_files:
+        ensure(set(m["file_sha256"])==set(base.FILES),
+               "High-Heed recovered final physics file list invalid")
+        for name,h in m["file_sha256"].items():
+            ensure(sha(rec/name)==h,
+                   "High-Heed recovered full physics SHA mismatch: "+str(rec/name))
+        for name,h in m["original_partial_sha256"].items():
+            ensure(sha(d/name)==h,
+                   "Original failed chunk was modified: "+str(d/name))
+    return m
+
+
+# The old benchmark's own functions use globals of its module, so patching
+# only audit_chunk is sufficient for BOTH its run() and scanned_status().
+base.audit_chunk = recovery_chunk_audit
+
+
+def diagnose_high_heed(i):
+    """No avalanche calls and no output changes: exact TrackHeed counts."""
+    rr,_=check_input()
+    ensure(0<=i<N//GROUP,"Invalid 20-muon chunk index")
+    d=base.folder(i)
+    src=d/"native_muon_crossings_input.csv"
+    ensure(src.is_file(),"No failed native chunk input: "+str(src))
+    batch=rr[i*GROUP:(i+1)*GROUP]
+    ensure([base.id_of(x) for x in base.csvread(src,FIELDS)]==
+           [base.id_of(x) for x in batch],
+           "Original failed native source does not match frozen selected 10000")
+    env=garfield_runtime_env()
+    cp=subprocess.run(
+        [str(base.EXE),"--validate-heed",str(src)],
+        capture_output=True,text=True,env=env)
+    print(cp.stdout,flush=True)
+    if cp.stderr:
+        print("STDERR:",cp.stderr[-2000:],flush=True)
+    ensure(cp.returncode==0 and
+           "PASS: true TrackHeed source generated" in cp.stdout,
+           "Heed-only diagnostic failed; NO Garfield replay")
+    observed=[]
+    for row in cp.stdout.splitlines():
+        m=re.search(r"Heed native crossing event=(\d+).*?\belectrons=(\d+)",row)
+        if m:
+            observed.append((int(m.group(1)),int(m.group(2))))
+    ensure(len(observed)==GROUP,"TrackHeed diagnostic did not cover all 20 parents")
+    peak=max(n for _,n in observed)
+    print(f"TRUE Heed high-multiplicity diagnostic: max={peak}, "
+          f"n_over_1000={sum(n>1000 for _,n in observed)} "
+          f"full microscopic avalanches needed={sum(n for _,n in observed)}",
+          flush=True)
+    return peak,observed
+
+
+def recover_high_heed(i):
+    """Complete one failed chunk via separate higher-budget C++ binary, safely."""
+    rr,_=check_input()
+    base_phys=base.checked_physics()
+    special_phys=special_physics()
+    ensure(0<=i<N//GROUP,"Invalid recovery 20-parent chunk index")
+    base.CHUNKS.mkdir(parents=True,exist_ok=True)
+    lock=base.CHUNKS/".writer.lock"
+    with lock.open("a+") as fh:
+        try:
+            fcntl.flock(fh,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError("Normal or recovery Garfield writer is ACTIVE")
+        batches=base.chunks(rr)
+        for k in range(i):
+            ensure((base.folder(k)/"complete.json").is_file(),
+                   "Earlier chunk is not already fully SHA-sealed: "+str(k))
+            recovery_chunk_audit(k,batches[k],base_phys,verify_files=False)
+        d=base.folder(i)
+        ensure(d.is_dir() and not (d/"complete.json").exists(),
+               "Recovery requires an existing UNSEALED failed 20-parent chunk")
+        log=d/"physics.log"
+        ensure(log.is_file() and "Heed primary budget exceeded" in
+               log.read_text(errors="replace"),
+               "Recovery is permitted ONLY for a verified 1000-Heed budget failure")
+        src=d/"native_muon_crossings_input.csv"
+        ensure([base.id_of(x) for x in base.csvread(src,FIELDS)]==
+               [base.id_of(x) for x in batches[i]],
+               "Failed chunk native input not identical to frozen source")
+        peak,observed=diagnose_high_heed(i)
+        ensure(1000<peak<=SPECIAL_MAX_PRIMARY,
+               "Heed primary count outside validated recovery range; "
+               f"max={peak}. Do NOT truncate or skip this physical J/psi event.")
+        recovered=d/RECOVERY_TAG
+        ensure(not recovered.exists(),
+               "A recovery attempt already exists: "+str(recovered)+
+               ". Do not overwrite any potentially partial physics.")
+        # Record every original partial byte so a future audit also proves
+        # the interrupted 35-avalanche event was NOT overwritten/deleted.
+        old_hash={
+            p.name:sha(p) for p in sorted(d.iterdir()) if p.is_file()
+            and p.name!="complete.json"
+        }
+        recovered.mkdir()
+        r_input=recovered/"native_muon_crossings_input.csv"
+        shutil.copyfile(src,r_input)
+        ensure(sha(src)==sha(r_input),"Frozen source copy differs")
+        env=garfield_runtime_env()
+        print(f"REPLAY full 20 parents p3_noFW (highest Heed={peak}) "
+              f"with physically identical special binary; old partial "
+              f"remains at {d}",flush=True)
+        t0=time.monotonic()
+        with (recovered/"physics.log").open("x") as f:
+            cp=subprocess.run(
+                [str(SPECIAL_EXE),"--muon-cache-physics-p3-noFW",
+                 str(r_input),str(recovered/"muon_reference")],
+                stdout=f,stderr=subprocess.STDOUT,cwd=recovered,env=env)
+        wall=time.monotonic()-t0
+        stdout=(recovered/"physics.log").read_text(errors="replace")
+        ensure(cp.returncode==0 and
+               "PASS: immutable same-Heed primary/cluster cache and full "
+               "Garfield microscopic reference emitted; p3_noFW ONLY" in stdout,
+               "Recovery full Garfield incomplete: preserve "+str(recovered))
+        stats=base.validate_native(recovered,batches[i])
+        # Replay the original first completed native muon and all its 35
+        # original electron avalanches exactly; no silent physics changes.
+        partial_hit=list(base.csvread(d/"muon_reference_crossing.csv",
+                                      CROSSING_COLUMNS))
+        full_hit=list(base.csvread(recovered/"muon_reference_crossing.csv",
+                                   CROSSING_COLUMNS))
+        ensure(len(full_hit)==GROUP
+               and full_hit[:len(partial_hit)]==partial_hit,
+               "Recovered original completed muon counts differ: "
+               "possible physics or RNG change; NOT SHA-sealing")
+        partial_seeds=list(base.csvread(d/"muon_reference_seed.csv",
+                                        ("crossing_id","primary_index")))
+        replay_seeds=list(base.csvread(recovered/"muon_reference_seed.csv",
+                                       ("crossing_id","primary_index")))
+        ensure(replay_seeds[:len(partial_seeds)]==partial_seeds,
+               "Recovered partial Garfield avalanche counts differ: "
+               "possible RNG change; NOT SHA-sealing")
+        source_hash=sha(src)
+        receipt={
+            "schema":"NA60_JPSI_20PARENT_P3NOFW_SHA_V1",
+            "chunk":i,"n_parents":len(batches[i]),
+            "recovery_layout":RECOVERY_TAG,
+            "base_physics":base_phys,
+            "physics":special_phys,
+            "source_sha256":source_hash,
+            "recovery_source_sha256":sha(r_input),
+            "original_partial_sha256":old_hash,
+            "original_first_completed_crossings_replayed_identically":len(partial_hit),
+            "original_partial_seeds_replayed_identically":len(partial_seeds),
+            "Heed_max_primaries_in_one_muon":peak,
+            "Heed_primaries_in_all_20":sum(n for _,n in observed),
+            "actual_native_wall_seconds":wall,
+            "stats":stats,
+            "file_sha256":{name:sha(recovered/name) for name in base.FILES},
+        }
+        # Publish the chunk as complete ONLY AFTER checking all real
+        # Geant4/Heed/Garfield conservation and physical replay identity.
+        tmp=d/"complete.json.tmp"
+        base.jwrite(tmp,receipt)
+        tmp.replace(d/"complete.json")
+        recovery_chunk_audit(i,batches[i],base_phys,verify_files=True)
+        print(f"PASS HIGH-HEED RECOVERY SHA chunk {i}: "
+              f"{stats['n_parents']} true muons, "
+              f"{stats['n_full_garfield_avalanches']} full avalanches, "
+              f"{stats['n_ion_births']} ion births, "
+              f"max Heed {peak}, wall {wall:.1f} s",flush=True)
+        print("Original partial native physics remains unmodified; "
+              "resume ordinary campaign with run, status, audit",flush=True)
+
 
 def status(audit=False):
     """Full 10k campaign status, no misleading 1000-muon inherited label."""
@@ -297,7 +523,10 @@ def selftest():
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("mode",choices=("selftest","prepare","preflight","run",
-                                   "status","audit"))
+                                   "status","audit","diagnose-high-heed",
+                                   "recover-high-heed"))
+    p.add_argument("--chunk",type=int,default=426,
+                   help="Exact failed 20-muon chunk index for high-Heed recovery")
     p.add_argument("--start-chunk",type=int,default=3)
     p.add_argument("--end-chunk",type=int,default=40)
     p.add_argument("--max-chunks",type=int,default=1,
@@ -316,6 +545,10 @@ def main():
         base.run(a.max_chunks,a.hours)
     elif a.mode=="status":
         status()
+    elif a.mode=="diagnose-high-heed":
+        diagnose_high_heed(a.chunk)
+    elif a.mode=="recover-high-heed":
+        recover_high_heed(a.chunk)
     else:
         status(audit=True)
 
