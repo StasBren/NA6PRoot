@@ -227,3 +227,60 @@ Output total remains 10000 NEW unique parents (500x20), not
 The hemisphere-only reader now also honors the documented sealed
 recovery layout and reads its FULL 20-parent native C++ census
 instead of the incomplete original root-level first-muon output.
+
+## Post-replay Python NameError and lossless finalize (2026-11-06)
+
+On the user's WSL, the special 20-parent p3_noFW high-Heed executable
+completed; the recovery Python controller then hit
+`NameError: name 'CROSSING_COLUMNS' is not defined` while verifying
+that the saved first 35 normal-binary microscopic avalanches reproduce
+exactly. That exception is AFTER successful C++ return and AFTER the
+complete base.validate_native() conservation audit; it does not
+invalidate the already written 20-parent high-Heed replay files.
+
+**DO NOT rerun recover-high-heed**. That mode intentionally refuses
+any existing high_heed_replay_v1 directory and should remain so.
+Do NOT delete or rename any original/partial/replay output files.
+
+The controller now imports CROSSING_COLUMNS correctly and adds a
+`seal-existing-high-heed` mode that does NO TrackHeed or Garfield
+calculations. It revalidates original and replay input identities,
+last full C++ PASS line, all 20 native C++/TrackHeed/Garfield output
+conservation, exact original first muon/35 avalanches replay,
+presence of 1066-electron rare parent, and source file hashes.
+Only then does it atomically write the original chunk's
+`complete.json` with original and special binary provenance.
+
+~~~bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git pull --ff-only
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+SCRIPT=test/mwpc-stage-c/pi_p3_noFW_jpsi_extra10000_native_v1.py
+"$PY" -m py_compile "$SCRIPT"
+"$PY" -u "$SCRIPT" seal-existing-high-heed --chunk 426 \
+  | tee ~/na6p/p3_noFW_extra10000_seal0426.log
+"$PY" "$SCRIPT" status
+"$PY" "$SCRIPT" audit
+~~~
+
+Once the old partial+replay are sealed and status says 8540/10000,
+continue with the ORIGINAL normal native Garfield executable:
+
+~~~bash
+"$PY" -u "$SCRIPT" run --max-chunks 73 --hours 20 \
+  | tee ~/na6p/p3_noFW_extra10000_after_recovery.log
+"$PY" "$SCRIPT" status
+"$PY" "$SCRIPT" audit
+~~~
+
+The original replay subprocess total wall seconds were lost when the
+controller threw NameError; its immutable per-muon timing CSV remains.
+The recovered SHA receipt therefore explicitly records the SUM of
+muon wall times as a **lower bound**, not falsely as the actual
+process wall. The aggregate sequential throughput estimate may be
+slightly optimistic for this ONE recovered block. The full physics
+counts and unsampled hemisphere asymmetries are unaffected.
+
+Do not execute the 73-block continuation if SHA seal fails, if
+the original first 35 avalanches fail exact reproduction, or if
+any other error is detected. Preserve all files and inspect the log.
