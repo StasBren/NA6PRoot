@@ -102,6 +102,8 @@ The complete selected source consists of **100,000 generated J/ψ parent slots i
 | Mean A | −0.0017 | −0.0030 |
 | **Population RMS(A)** | **0.3616** | 0.3972 |
 
+**Numerical provenance:** the DET21 numbers below were transcribed from the 6 November 2026 dashboard screenshot. The original frozen `summary.json` and bin-level histograms were **not independently re-read in preparing this update**; the plotting command below is provided to regenerate and check the exact distribution locally.
+
 **RMS contrast:** `RMS_FW75 − RMS_noFW = 0.0356`; noFW gives a **~8.96% lower RMS relative to FW75** (equivalently FW75 is ~9.85% higher than noFW). The two means are both near zero, so the observed difference is primarily in **width**, not a sizeable bias in the mean. The dashboard reports **10,761 paired parents with both A defined** and mean paired `ΔA = A_FW75 − A_noFW ≈ −0.0011`; that paired *mean shift* is not the RMS effect. The unequal valid populations do not invalidate the descriptive comparison, but a matched-parent uncertainty analysis should precede a significance claim.
 
 **Decision relevance and limits:** this local P(A) corroborates the selected no-FW *electron-transport* baseline because a narrower full-hemisphere A distribution is desirable for balanced upper/lower primary-electron counting. It **does not** establish smaller *reconstructed spatial-resolution RMS*, smaller measured cathode-charge asymmetry, or better readout performance. Do not extend the DET21 result to every MS0 module or all stations without checking their own distributions. The restricted cathode-facing A_TB still exhibits the opposite trend in §2.2.
