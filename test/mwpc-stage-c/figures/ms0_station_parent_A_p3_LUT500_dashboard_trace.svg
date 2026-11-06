@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 615" width="940" height="615" role="img" aria-label="MS0 entire station: blue no-field-wire electron-count asymmetry distribution narrower than red grounded field-wire 75 micrometers">
+  <title>NA60+ MS0 entire-station parent-event electron-count asymmetry</title>
+  <desc>Visual vector tracing of the user-supplied 6 November 2026 MS0 dashboard screenshot. Display curves are pixel-extracted approximations; exact numerical RMS values are from the screenshot. Replot precise bins with plot_pi_ms0_station_parent_asymmetry.py and the frozen summary.json.</desc>
+  <style>.tick{font:12px Arial,Helvetica,sans-serif;fill:#333}.main{font:17px Arial,Helvetica,sans-serif;fill:#141414}.small{font:13px Arial,Helvetica,sans-serif;fill:#333}</style>
+  <rect width="940" height="615" fill="white"/>
+  <text x="113" y="32" style="font:bold 19px Arial,Helvetica,sans-serif;fill:#151515">NA60+ Simulation</text>
+  <text x="113" y="53" class="small">MS0 / entire station · p = 3 mm · LUT500 · work in progress</text>
+  <g><line x1="107" y1="451" x2="862" y2="451" stroke="#444"/><text x="101" y="455" text-anchor="end" class="tick">0.000</text></g>
+<g><line x1="107" y1="374.2" x2="862" y2="374.2" stroke="#e5e5e5"/><text x="101" y="378.2" text-anchor="end" class="tick">0.015</text></g>
+<g><line x1="107" y1="297.4" x2="862" y2="297.4" stroke="#e5e5e5"/><text x="101" y="301.4" text-anchor="end" class="tick">0.030</text></g>
+<g><line x1="107" y1="220.60000000000002" x2="862" y2="220.60000000000002" stroke="#e5e5e5"/><text x="101" y="224.60000000000002" text-anchor="end" class="tick">0.045</text></g>
+<g><line x1="107" y1="143.79999999999995" x2="862" y2="143.79999999999995" stroke="#e5e5e5"/><text x="101" y="147.79999999999995" text-anchor="end" class="tick">0.060</text></g>
+<g><line x1="107" y1="67" x2="862" y2="67" stroke="#e5e5e5"/><text x="101" y="71" text-anchor="end" class="tick">0.075</text></g>
+  <rect x="113" y="67" width="749" height="384" fill="none" stroke="#393939" stroke-width="1.2"/>
+  <g><line x1="113" y1="451" x2="113" y2="458" stroke="#393939"/><text x="113" y="478" text-anchor="middle" class="tick">-1.00</text></g>
+<g><line x1="206.625" y1="451" x2="206.625" y2="458" stroke="#393939"/><text x="206.625" y="478" text-anchor="middle" class="tick">-0.75</text></g>
+<g><line x1="300.25" y1="451" x2="300.25" y2="458" stroke="#393939"/><text x="300.25" y="478" text-anchor="middle" class="tick">-0.50</text></g>
+<g><line x1="393.875" y1="451" x2="393.875" y2="458" stroke="#393939"/><text x="393.875" y="478" text-anchor="middle" class="tick">-0.25</text></g>
+<g><line x1="487.5" y1="451" x2="487.5" y2="458" stroke="#393939"/><text x="487.5" y="478" text-anchor="middle" class="tick">0.00</text></g>
+<g><line x1="581.125" y1="451" x2="581.125" y2="458" stroke="#393939"/><text x="581.125" y="478" text-anchor="middle" class="tick">0.25</text></g>
+<g><line x1="674.75" y1="451" x2="674.75" y2="458" stroke="#393939"/><text x="674.75" y="478" text-anchor="middle" class="tick">0.50</text></g>
+<g><line x1="768.375" y1="451" x2="768.375" y2="458" stroke="#393939"/><text x="768.375" y="478" text-anchor="middle" class="tick">0.75</text></g>
+<g><line x1="862" y1="451" x2="862" y2="458" stroke="#393939"/><text x="862" y="478" text-anchor="middle" class="tick">1.00</text></g>
+  <path d="M 113 450 H 131.27 V 447 H 149.54 V 443 H 167.80 V 440 H 186.07 V 432 H 204.34 V 426 H 222.61 V 419 H 240.88 V 406 H 259.15 V 394 H 277.41 V 380 H 295.68 V 359 H 313.95 V 336 H 332.22 V 321 H 350.49 V 279 H 368.76 V 253 H 387.02 V 218 H 405.29 V 190 H 423.56 V 164 H 441.83 V 132 H 460.10 V 119 H 478.37 V 120 H 496.63 V 119 H 514.90 V 139 H 533.17 V 157 H 551.44 V 184 H 569.71 V 222 H 587.98 V 247 H 606.24 V 287 H 624.51 V 309 H 642.78 V 337 H 661.05 V 360 H 679.32 V 380 H 697.59 V 392 H 715.85 V 409 H 734.12 V 419 H 752.39 V 425 H 770.66 V 433 H 788.93 V 438 H 807.20 V 444 H 825.46 V 446 H 843.73 V 450 H 862.00" fill="none" stroke="#2754AA" stroke-width="2.4" stroke-linejoin="miter"/>
+  <path d="M 113 450 H 131.27 V 444 H 149.54 V 436 H 167.80 V 430 H 186.07 V 420 H 204.34 V 415 H 222.61 V 401 H 240.88 V 385 H 259.15 V 378 H 277.41 V 351 H 295.68 V 338 H 313.95 V 316 H 332.22 V 294 H 350.49 V 266 H 368.76 V 252 H 387.02 V 229 H 405.29 V 210 H 423.56 V 196 H 441.83 V 182 H 460.10 V 181 H 478.37 V 165 H 496.63 V 173 H 514.90 V 186 H 533.17 V 196 H 551.44 V 208 H 569.71 V 230 H 587.98 V 248 H 606.24 V 274 H 624.51 V 294 H 642.78 V 320 H 661.05 V 334 H 679.32 V 356 H 697.59 V 375 H 715.85 V 392 H 734.12 V 404 H 752.39 V 413 H 770.66 V 421 H 788.93 V 429 H 807.20 V 438 H 825.46 V 444 H 843.73 V 450 H 862.00" fill="none" stroke="#C12A47" stroke-width="2.4" stroke-dasharray="8 5" stroke-linejoin="miter"/>
+  <text x="487" y="515" text-anchor="middle" class="main">Electron-count asymmetry A (dimensionless)</text>
+  <text x="23" y="250" text-anchor="middle" transform="rotate(-90 23 250)" class="main">Fraction of valid parent events / 0.049</text>
+  <line x1="113" y1="545" x2="160" y2="545" stroke="#2754AA" stroke-width="3"/>
+  <text x="169" y="550" class="small">No field wire · RMS 0.3106</text>
+  <line x1="475" y1="545" x2="522" y2="545" stroke="#C12A47" stroke-width="3" stroke-dasharray="8 5"/>
+  <text x="531" y="550" class="small">Grounded FW 75 μm · RMS 0.3500</text>
+  <text x="113" y="586" class="small">99,968 valid J/ψ parent events per configuration · Parent-aggregated A</text>
+  <text x="113" y="605" style="font:11px Arial,Helvetica,sans-serif;fill:#666">Vector trace from dashboard screenshot (illustrative); exact histogram plotter available in source.</text>
+</svg>
