@@ -97,7 +97,13 @@ The 100k-parent **LUT20** has finite-20-histories-per-cell re-use and nontrivial
 
 The no-FW distribution is **narrower**: `RMS_FW75 − RMS_noFW = 0.0394`, a **11.26% reduction relative to FW75**, or ~12.69% increase when expressed relative to noFW. Both mean values are close to zero: this decision is based on the **width of the eventwise A distribution**, not its mean offset. The same-parent comparison reports paired mean `A_FW75 − A_noFW ≈ −0.0022` for **99,968** valid pairs, but this small mean shift is **not** the RMS contrast. The no-FW scenario also has ~3.43% more classified anode endpoints than FW75 at MS0 (different from the percentage-point change in electron collection probability in §2.1–2.2).
 
-**Figure 3 — MS0 entire station, parent-event electron-count asymmetry P(A).** The original 6 Nov dashboard screenshot shows the blue solid **no field wire** distribution and the dashed red **grounded 75 μm field wire** distribution, 41 bins across [-1,1], normalized as fraction of valid parent events per bin of width ~0.049. For a reproducible, high-resolution PNG using the **original saved histogram bins** rather than digitizing the screenshot, run:
+**Figure 3 — MS0 entire station, parent-event electron-count asymmetry P(A).** The plot below shows the blue solid **no field wire** distribution and the dashed red **grounded 75 μm field wire** distribution, 41 bins across [-1,1], normalized as fraction of valid parent events per bin of width ~0.049. The embedded SVG is a **vector trace of the user-provided complete-station screenshot**, preserving its displayed step geometry and reported RMS values, but its digitized bin heights are not a substitute for the original numerical histogram. It is included now for discussion; the plotter below creates an **exact data-derived figure** from the frozen summary.
+
+![Figure 3: MS0 entire-station parent-event electron-count asymmetry for noFW versus FW75](figures/ms0_station_parent_A_p3_LUT500_dashboard_trace.svg)
+
+**Figure caption:** NA60+ Simulation, MS0 entire station, p=3 mm, LUT500. Distribution of A for 99,968 J/ψ parents with at least one muon gas crossing in MS0 (both configurations valid). The no-field-wire option has a narrower electron-count asymmetry distribution: population RMS 0.3106 compared with 0.3500 for 75 μm grounded field wires. Each parent contributes one A after pooling all its MS0 gas crossings. This is **electron endpoint counting before avalanche**, not charge measured on cathodes.
+
+To render an exact, high-resolution PNG from the **original saved histogram bins**, rather than screenshot tracing, run:
 
 ```bash
 cd ~/na6p/src/NA6PRoot-mwpc
