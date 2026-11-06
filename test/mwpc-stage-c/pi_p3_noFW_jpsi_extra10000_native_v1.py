@@ -611,7 +611,7 @@ def status(audit=False):
             for i in range(len(results))
             for x in base.csvread(
                 base.folder(i) /
-                (RECOVERY_TAG if r.get("recovery_layout")==RECOVERY_TAG else "") /
+                (RECOVERY_TAG if results[i].get("recovery_layout")==RECOVERY_TAG else "") /
                 "muon_reference_muon_timing.csv",
                 ("muon_total_wall_seconds",))
         )
