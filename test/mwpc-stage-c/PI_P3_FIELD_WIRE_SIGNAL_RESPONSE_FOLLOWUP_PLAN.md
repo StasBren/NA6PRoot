@@ -18,7 +18,7 @@
 
 **Question 2 — 3 mm versus 4 mm anode pitch:** **OPEN / DEFERRED UNTIL SIGNAL RESPONSE.** The working p3 baseline is *not* a validated preference over p4. No pitch ranking will be made from the old isolated fixed-position gain ratios, electron-count asymmetry alone, or a single fixed-voltage test. Return to p3 versus p4 when the signal response (including comparable effective gain) can be computed for both and when a relevant reconstruction metric is available.
 
-**Question 3 — sufficient detector performance:** establish whether a candidate meets the experiment's required *position resolution, efficiency and occupancy/multiple-hit behaviour*, not merely a qualitative symmetry criterion. Treat the detector requirements in [A. Milov, *Readout for the MS modules of NA60+/DiCE* (30 Aug 2026)](../../../README.md) and the collaboration experiment proposal as separate design requirements to be verified against the appropriate reconstructed observables. No current A RMS is a single-hit position resolution.
+**Question 3 — sufficient detector performance:** establish whether a candidate meets the experiment's required *position resolution, efficiency and occupancy/multiple-hit behaviour*, not merely a qualitative symmetry criterion. Use the detector-performance requirements described in A. Milov, *Readout for the MS modules of NA60+/DiCE* (30 Aug 2026), and in the [NA60+/DiCE experiment proposal](https://cds.cern.ch/record/2932302) as the targets for **separately validated** reconstructed observables. No current A RMS is a single-hit position resolution.
 
 ### Geometry and physics comparability lock
 
