@@ -138,17 +138,28 @@ def campaign(root, expected_count, required):
                seal["schema"]=="NA60_JPSI_20PARENT_P3NOFW_SHA_V1",
                "Wrong source campaign checkpoint")
         fhash=seal["file_sha256"]
+        # High-Heed rare-event recovery stores the COMPLETE replay in a
+        # distinct subdirectory, preserving failed partial original files.
+        layout=seal.get("recovery_layout")
+        insist(layout in (None,"high_heed_replay_v1"),
+               "Unknown full Garfield physics recovery layout")
+        physdir=d/layout if layout else d
+        if layout:
+            insist(physdir.is_dir() and
+                   seal["recovery_source_sha256"]==
+                       digest(physdir/"native_muon_crossings_input.csv"),
+                   "Invalid SHA-sealed full high-Heed replay")
         insist(all(name in fhash for name in NEEDED),"Missing SHA protection")
         for name in NEEDED:
-            insist(digest(d/name)==fhash[name],
-                   "SHA mismatch for native microscopic data: "+str(d/name))
-        inputs=list(read_csv(d/"native_muon_crossings_input.csv",FIELDS))
+            insist(digest(physdir/name)==fhash[name],
+                   "SHA mismatch for native microscopic data: "+str(physdir/name))
+        inputs=list(read_csv(physdir/"native_muon_crossings_input.csv",FIELDS))
         insist([crossing_id(r) for r in inputs]==
                [crossing_id(r) for r in frozen[k*20:(k+1)*20]],
                "Chunk Geant4 input does not match original SHA-frozen selection")
         source={crossing_id(r):r for r in inputs}
         stats={}
-        for r in read_csv(d/"muon_reference_crossing.csv",
+        for r in read_csv(physdir/"muon_reference_crossing.csv",
                           (HIT_ID,"configuration","ion_births","ion_up",
                            "ion_down","ion_boundary","A_ion_hemi",
                            "heed_primaries","failed_seeds","capped_seeds")):
@@ -192,7 +203,7 @@ def campaign(root, expected_count, required):
         # has a randomized independent sign, magnitude and gain unchanged.
         sign_null=Counter()
         sum_t_sq=Counter()
-        for r in read_csv(d/"muon_reference_seed.csv",
+        for r in read_csv(physdir/"muon_reference_seed.csv",
                           ("crossing_id","configuration","primary_index",
                            "ion_births","ion_up","ion_down","successful","capped")):
             key=r["crossing_id"]
@@ -210,7 +221,7 @@ def campaign(root, expected_count, required):
             sign_null[key]+=(ui-di)**2
             sum_t_sq[key]+=(ui+di)**2
         primary_v=defaultdict(lambda:[0,0,0,0.0])
-        for r in read_csv(d/"muon_reference_heed_primaries.csv",
+        for r in read_csv(physdir/"muon_reference_heed_primaries.csv",
                           ("crossing_id","primary_index","v_abs_cm")):
             key=r["crossing_id"]
             insist(key in stats,"Unknown original TrackHeed electron source")
