@@ -88,9 +88,42 @@ In the earlier LUT500 dashboard, MS0 had 99,968 J/ψ **parents with a station cr
 
 The original p=3 mm independent microscopic LUT500 maps remain frozen and are the natural check of finite-LUT uncertainty in the new crossing-level study. The ongoing/finished p=4 mm LUT500 is separate, and **not needed** to document the present p=3 mm decision.
 
+### 2.4 Local MS0 / physical DET21 parent-level LUT500 cross-check (6 Nov 2026)
+
+**Purpose:** strengthen the **provisional choice of p=3 mm with no field wire on the basis of the smaller RMS of full-hemisphere electron-count asymmetry**. This cross-check concerns a **single physical chamber (MS0 / DET21)**, not the full station, and it is distinct from the full34 *crossing-level* values in §2.2 and the *station-parent* values in §2.3.
+
+The complete selected source consists of **100,000 generated J/ψ parent slots in two native Geant4 input chunks**. Only **10,803 parents actually crossed this DET**. For each such parent, aggregate classified upper/lower primary-electron endpoints across all of its gas crossings in DET21, then compute **one** valid `A_hemi = (N_up-N_down)/(N_up+N_down)` for that parent. A zero denominator is undefined, not A=0. Geometry uses p=3 mm and the matched noFW/FW75 **LUT500** maps; no avalanche multiplication or cathode signal is included.
+
+| MS0 / DET21, parent-level P(A), p3 LUT500 | No field wire | Grounded FW75 |
+|:--|--:|--:|
+| Parents with gas crossing | 10,803 | 10,803 |
+| Valid parent A | **10,767** | **10,761** |
+| Undefined parent A | 36 | 42 |
+| Mean A | −0.0017 | −0.0030 |
+| **Population RMS(A)** | **0.3616** | 0.3972 |
+
+**RMS contrast:** `RMS_FW75 − RMS_noFW = 0.0356`; noFW gives a **~8.96% lower RMS relative to FW75** (equivalently FW75 is ~9.85% higher than noFW). The two means are both near zero, so the observed difference is primarily in **width**, not a sizeable bias in the mean. The dashboard reports **10,761 paired parents with both A defined** and mean paired `ΔA = A_FW75 − A_noFW ≈ −0.0011`; that paired *mean shift* is not the RMS effect. The unequal valid populations do not invalidate the descriptive comparison, but a matched-parent uncertainty analysis should precede a significance claim.
+
+**Decision relevance and limits:** this local P(A) corroborates the selected no-FW *electron-transport* baseline because a narrower full-hemisphere A distribution is desirable for balanced upper/lower primary-electron counting. It **does not** establish smaller *reconstructed spatial-resolution RMS*, smaller measured cathode-charge asymmetry, or better readout performance. Do not extend the DET21 result to every MS0 module or all stations without checking their own distributions. The restricted cathode-facing A_TB still exhibits the opposite trend in §2.2.
+
+**Reproducible Figure 3b — MS0 / DET21, parent-level P(A).** Generate the *actual 41-bin histograms* directly from the frozen `summary.json` using the new source-only plotter; do not digitize this screenshot or approximate either distribution by a Gaussian:
+
+```bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git switch feature/mwpc-stage-c
+git pull --ff-only
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+"$PY" test/mwpc-stage-c/plot_pi_ms0_det21_parent_asymmetry.py \
+  --summary test_runs/mwpc_stage_c/pi_lut500_parent_asymmetry_root_v1/summary.json \
+  --station 0 --det 21 \
+  --output ms0_det21_parent_A_p3_LUT500.png
+```
+
+The script reads existing JSON only and refuses partial-exposure data; **no Geant4, Heed, Garfield or LUT production is rerun**. Once its PNG is reviewed, add it to the notes with a caption that states *parent-level MS0/DET21*, **10,803 exposed parents**, **p3 LUT500**, and the two valid samples. The image itself is not yet part of this commit; plotting code and exact summary inputs are supplied rather than a synthetic/guessed histogram.
+
 ## 3. Decision for the PI and open conditions
 
-**Working decision:** continue with **p=3 mm, no field wire** for the **first avalanche and gain simulations**. This keeps the current geometry simple, is consistent with the lower observed *full-hemisphere* event-by-event A RMS and higher primary-electron anode collection, and avoids sacrificing ~3.4 pp of collection for a shift of only ~0.54 ns in the uniform Garfield pilot's *conditional mean drift time*.
+**Working decision:** continue with **p=3 mm, no field wire** for the **first avalanche and gain simulations**. **Primary evidence for this provisional choice is the narrower full-hemisphere electron-count A distribution (smaller population RMS), now confirmed both in the all-station crossing-level LUT20 study and in a separate MS0/DET21 parent-level LUT500 comparison (§2.4).** This keeps the current geometry simple, is consistent with the lower observed *full-hemisphere* event-by-event A RMS and higher primary-electron anode collection, and avoids sacrificing ~3.4 pp of collection for a shift of only ~0.54 ns in the uniform Garfield pilot's *conditional mean drift time*.
 
 **Important qualifications:**
 1. \`0.54 ns\` is a small *magnitude*, not yet a formal statistically non-significant difference; obtain uncertainties from paired Garfield and native 100k timing reports.
