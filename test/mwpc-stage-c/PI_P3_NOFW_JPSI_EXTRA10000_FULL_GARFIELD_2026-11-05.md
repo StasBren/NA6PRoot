@@ -134,3 +134,96 @@ before an overnight run, ideally tens of GB free. This is a full
 physical Garfield runtime campaign, not a full uncompressed ion-cloud
 archive. No additional simulated muon parents are secretly selected
 from the first 1000.
+
+## High TrackHeed multiplicity recovery (November 6, 2026)
+
+Checkpoint 426 stopped after the FIRST fully processed muon:
+jpsi40-bore|3|47714|6|1|5|232, with 35 primary electrons.
+The second parent (jpsi40-bore|3|36473|4|2|4|155) generated
+more than 1000 real TrackHeed electrons. The original native
+benchmark binary has a bookkeeping limit of 1000. This is NOT
+Garfield size saturation, a corrupted output, nor disk exhaustion.
+All 426 previously sealed blocks (8520 true parents) are untouched.
+
+A separate high-Heed binary has identical physical configuration,
+seeds and microscopic AvalancheElectron logic; ONLY the administrative
+accepted-Heed-primary bound is increased from 1000 to 50000.
+It is used ONLY for explicit manual recovery of a failed high-Heed
+20-parent block. The normal benchmark executable remains unchanged,
+along with all previously SHA-sealed physics receipts.
+
+### Build separate recovery binary and inspect exact Heed counts
+
+~~~bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git switch feature/mwpc-stage-c
+git pull --ff-only
+source ~/na6p/env.sh
+source ~/na6p/install/garfieldpp/share/Garfield/setupGarfield.sh
+
+cmake -S test/mwpc-avalanche -B test/mwpc-avalanche/build \
+  -DGarfield_DIR="$HOME/na6p/install/garfieldpp/lib/cmake/Garfield"
+cmake --build test/mwpc-avalanche/build \
+  --target mwpc_phase_b_native_p3_noFW_jpsi_highheed_recovery_v1 -j2
+
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+SCRIPT=test/mwpc-stage-c/pi_p3_noFW_jpsi_extra10000_native_v1.py
+"$PY" -m py_compile "$SCRIPT"
+"$PY" "$SCRIPT" selftest
+"$PY" -u "$SCRIPT" diagnose-high-heed --chunk 426
+~~~
+
+The diagnostic invokes only genuine TrackHeed (no avalanches).
+Confirm the exact count for the second parent, particularly if it
+is unusually large. The automatic recovery refuses a count above
+50000 rather than silently truncating a physically genuine tail.
+
+### Recover the SINGLE unsealed 20-muon chunk, never overwrite it
+
+~~~bash
+"$PY" -u "$SCRIPT" recover-high-heed --chunk 426 \
+  | tee ~/na6p/p3_noFW_extra10000_recover0426.log
+"$PY" "$SCRIPT" status
+"$PY" "$SCRIPT" audit
+~~~
+
+The code acquires the SAME writer lock as the original native runner
+and verifies the input frozen 10000 selection, SHA of earlier
+checkpoints, original abort message, source identities, exact per-event
+TrackHeed primary counts and high-Heed binary fingerprint.
+Recovery writes FULL recomputed 20-parent physics in
+`native_chunks/chunk_0426/high_heed_replay_v1/`. The failed partial
+root-level files (including the first complete 35-avalanche muon)
+are NEVER deleted, renamed or overwritten. The first successfully
+replayed event and its 35 original Garfield seed outcomes must match
+the original partial results exactly before SHA sealing. Only when
+all 20 new recovered outputs pass the complete conservation
+validator does the program atomically publish the root
+`chunk_0426/complete.json` with provenance for BOTH executables.
+Checkpoint audit uses the new binary SHA only for this exceptional
+block; all original blocks retain their old binary provenance.
+
+If the recovery command itself is interrupted after writing partial
+`high_heed_replay_v1`, it refuses to overwrite that data. Inspect
+first; do NOT delete anything while debugging or attempting another
+recovery. If later native blocks also encounter the same original
+primary cap, use the same diagnostic and recovery command with that
+block index.
+
+### Continue normal Garfield for the remaining 73 blocks
+
+~~~bash
+"$PY" -u "$SCRIPT" run --max-chunks 73 --hours 20 \
+  | tee ~/na6p/p3_noFW_extra10000_after_recovery.log
+"$PY" "$SCRIPT" status
+"$PY" "$SCRIPT" audit
+~~~
+
+Blocks 0..425 and recovered 426 are audited/skipped. Standard
+original native executable is used unchanged for blocks 427..499.
+Output total remains 10000 NEW unique parents (500x20), not
+9999 and not an outlier-trimmed muon sample.
+
+The hemisphere-only reader now also honors the documented sealed
+recovery layout and reads its FULL 20-parent native C++ census
+instead of the incomplete original root-level first-muon output.
