@@ -117,6 +117,8 @@ PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
 
 The plotter intentionally reads `stations["0"]["station_parent"]`, not `chambers["21"]`. It verifies complete exposure and conservation of the saved 41-bin counts. **It does not rerun Geant4, Heed or Garfield.** The numerical table above comes from the user-provided 6 Nov 2026 complete-station dashboard screenshot, and was not independently checked against the locally frozen `summary.json` here.
 
+**A statistical caution:** noFW also has **3.43% more classified electron endpoints**, so smaller finite-electron counting fluctuations may contribute to its lower A RMS. Under an oversimplified equal-probability independent-counting model, the gross population difference alone gives only a **~1.7%** RMS scaling; the observed **11.3%** width difference is larger, but electron correlations, different parent multiplicities, and geometry-dependent collection prevent this estimate from being a proof of an intrinsic symmetry improvement. A matched-parent, electron-multiplicity-controlled comparison and bootstrap are appropriate follow-ups.
+
 **Interpretation:** this is direct evidence favoring **p3 noFW as the working electron-transport baseline** for the tested station and P(A) definition. It does **not** prove improved spatial hit resolution, double-hit separation, avalanche uniformity, or cathode-charge symmetry. The restricted cathode-facing-sector asymmetry in §2.2 still shows the opposite trend. A definitive detector-configuration recommendation awaits the full avalanche and induced-signal studies.
 
 ### 2.4 Local MS0 / physical DET21 parent-level LUT500 cross-check (6 Nov 2026)
