@@ -25,6 +25,7 @@ import time
 from pathlib import Path
 
 from pi_garfield_runtime_env import garfield_runtime_env
+from pi_run_native_muon_b1 import CROSSING_COLUMNS
 
 from pi_2m_native_six_geometry_fold import SOURCE
 from pi_prepare_muon_avalanche_b1 import FIELDS, seed, validate, sha
@@ -452,6 +453,132 @@ def recover_high_heed(i):
               "resume ordinary campaign with run, status, audit",flush=True)
 
 
+def seal_existing_high_heed(i):
+    """Read-only physical replay validation, followed by an atomic SHA seal.
+
+    Specifically recovers the state where recovery C++ and full
+    conservation validation succeeded but the Python orchestration failed
+    before publishing the completion receipt. It NEVER calls Garfield,
+    NEVER overwrites existing native output, and NEVER moves original
+    interrupted files.
+    """
+    rr,_=check_input()
+    normal=base.checked_physics()
+    special=special_physics()
+    ensure(0<=i<N//GROUP,"Invalid 20-parent native chunk")
+    lock=base.CHUNKS/".writer.lock"
+    with lock.open("a+") as fh:
+        try:
+            fcntl.flock(fh,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError("Another native Garfield writer or recovery is ACTIVE")
+        chunks=base.chunks(rr)
+        for k in range(i):
+            ensure((base.folder(k)/"complete.json").is_file(),
+                   f"Earlier chunk {k} is missing its original SHA seal")
+            recovery_chunk_audit(k,chunks[k],normal,verify_files=False)
+
+        d=base.folder(i)
+        rec=d/RECOVERY_TAG
+        ensure(d.is_dir() and rec.is_dir(),"Previous recovery output not present")
+        ensure(not (d/"complete.json").exists(),
+               "Chunk already sealed: refusing to overwrite completion receipt")
+        ensure(not (d/"complete.json.tmp").exists(),
+               "Found a tentative old seal: inspect before changing anything")
+        oldlog=(d/"physics.log").read_text(errors="replace")
+        ensure("Heed primary budget exceeded" in oldlog,
+               "Original stop was not the documented TrackHeed primary budget")
+        original_input=d/base.FILES[0]
+        replay_input=rec/base.FILES[0]
+        chosen=[base.id_of(x) for x in chunks[i]]
+        for p in (original_input,replay_input):
+            ensure(p.is_file() and
+                   [base.id_of(x) for x in base.csvread(p,FIELDS)]==chosen,
+                   "Partial/replayed native sources differ from frozen 10k parents")
+        ensure(sha(original_input)==sha(replay_input),
+               "Recovery replay source CSV differs byte-for-byte")
+        replay_log=rec/"physics.log"
+        ensure(replay_log.is_file(),"No complete replay physics.log")
+        text=replay_log.read_text(errors="replace")
+        success_token=("PASS: immutable same-Heed primary/cluster cache and full "
+                       "Garfield microscopic reference emitted; p3_noFW ONLY")
+        ensure(success_token in text and text.rstrip().endswith(success_token),
+               "Full high-Heed Garfield did not produce its final PASS; NO seal")
+        # This counts ALL 20 authentic parents, ALL Heed electrons and ALL
+        # individual Garfield ion births; <=50000 is a safety audit bound,
+        # NOT a truncation threshold.
+        stats=base.validate_native(rec,chunks[i])
+        partial_hit=list(base.csvread(d/"muon_reference_crossing.csv",
+                                       CROSSING_COLUMNS))
+        replay_hit=list(base.csvread(rec/"muon_reference_crossing.csv",
+                                      CROSSING_COLUMNS))
+        ensure(len(partial_hit)==1 and len(replay_hit)==GROUP and
+               replay_hit[:len(partial_hit)]==partial_hit,
+               "First old complete parent does NOT reproduce exactly")
+        seed_required=("crossing_id","primary_index","garfield_seed",
+                       "ion_births","collected_e","successful","capped",
+                       "ion_up","ion_down","ion_top","ion_bottom")
+        partial_seeds=list(base.csvread(d/"muon_reference_seed.csv",seed_required))
+        replay_seeds=list(base.csvread(rec/"muon_reference_seed.csv",seed_required))
+        ensure(len(partial_seeds)==35 and
+               replay_seeds[:len(partial_seeds)]==partial_seeds,
+               "Initial 35 original Garfield avalanches did not reproduce exactly")
+        # Recheck rare event is present in the finished output, rather
+        # than silently dropping the 1066-electron parent.
+        rare="jpsi40-bore|3|36473|4|2|4|155"
+        all_muon=list(base.csvread(rec/"muon_reference_crossing.csv",
+                                   CROSSING_COLUMNS))
+        matching=[x for x in all_muon if x[CROSSING_COLUMNS[0]]==rare]
+        if i==426:
+            ensure(len(matching)==1 and int(matching[0]["heed_primaries"])==1066,
+                   "High-multiplicity parent not preserved in recovered result")
+        old_hash={
+            p.name:sha(p) for p in sorted(d.iterdir())
+            if p.is_file() and p.name!="complete.json"
+        }
+        # C++ wall timer for the replay subprocess was held in Python
+        # memory and lost when the earlier orchestrator raised NameError.
+        # Do not invent it. Use a documented lower bound from native
+        # per-muon timers, excluding gas setup and process startup.
+        recovered_wall_lower_bound=stats["sum_muon_wall_seconds"]
+        receipt={
+            "schema":"NA60_JPSI_20PARENT_P3NOFW_SHA_V1",
+            "chunk":i,
+            "n_parents":len(chunks[i]),
+            "recovery_layout":RECOVERY_TAG,
+            "base_physics":normal,
+            "physics":special,
+            "source_sha256":sha(original_input),
+            "recovery_source_sha256":sha(replay_input),
+            "original_partial_sha256":old_hash,
+            "original_first_completed_crossings_replayed_identically":len(partial_hit),
+            "original_partial_seeds_replayed_identically":len(partial_seeds),
+            "Heed_max_primaries_in_one_muon":max(
+                int(x["heed_primaries"]) for x in all_muon),
+            "Heed_primaries_in_all_20":stats["n_trackheed_electrons"],
+            "actual_native_wall_seconds":recovered_wall_lower_bound,
+            "wall_time_kind":"lower_bound_sum_muon_timers__initial_C++_wall_lost_by_Python_error",
+            "full_cpp_wall_time_unavailable":True,
+            "physics_log_sha256":sha(replay_log),
+            "stats":stats,
+            "file_sha256":{name:sha(rec/name) for name in base.FILES}
+        }
+        # Atomic completion; no original partial/recovery output modified.
+        temporary=d/"complete.json.tmp"
+        base.jwrite(temporary,receipt)
+        temporary.replace(d/"complete.json")
+        recovery_chunk_audit(i,chunks[i],normal,verify_files=True)
+        print(f"PASS SEALED EXISTING HIGH-HEED REPLAY chunk {i}: "
+              f"{stats['n_parents']} parents, "
+              f"{stats['n_full_garfield_avalanches']} full Garfield avalanches, "
+              f"{stats['n_ion_births']} full ion births",flush=True)
+        print("PASS: 35 old Garfield avalanches exactly reproduced; "
+              "1066-electron outlier retained",flush=True)
+        print("NO new Garfield run. NO original/recovery native data overwritten.")
+        print("NOTE replay subprocess wall time was lost; total status includes "
+              "in-muon timing lower bound for this one chunk.")
+
+
 def status(audit=False):
     """Full 10k campaign status, no misleading 1000-muon inherited label."""
     results,pending=base.scanned_status(full_audit=audit)
@@ -482,8 +609,11 @@ def status(audit=False):
         muon_times=sorted(
             float(x["muon_total_wall_seconds"])
             for i in range(len(results))
-            for x in base.csvread(base.folder(i)/"muon_reference_muon_timing.csv",
-                                  ("muon_total_wall_seconds",))
+            for x in base.csvread(
+                base.folder(i) /
+                (RECOVERY_TAG if r.get("recovery_layout")==RECOVERY_TAG else "") /
+                "muon_reference_muon_timing.csv",
+                ("muon_total_wall_seconds",))
         )
         ensure(len(muon_times)==parents,"Incomplete real-muon timing rows")
         def q(p):
@@ -524,7 +654,7 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("mode",choices=("selftest","prepare","preflight","run",
                                    "status","audit","diagnose-high-heed",
-                                   "recover-high-heed"))
+                                   "recover-high-heed","seal-existing-high-heed"))
     p.add_argument("--chunk",type=int,default=426,
                    help="Exact failed 20-muon chunk index for high-Heed recovery")
     p.add_argument("--start-chunk",type=int,default=3)
@@ -549,6 +679,8 @@ def main():
         diagnose_high_heed(a.chunk)
     elif a.mode=="recover-high-heed":
         recover_high_heed(a.chunk)
+    elif a.mode=="seal-existing-high-heed":
+        seal_existing_high_heed(a.chunk)
     else:
         status(audit=True)
 
