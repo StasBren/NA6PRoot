@@ -59,3 +59,37 @@ test_runs/mwpc_stage_c/pi_p3_noFW_jpsi11000_gain_angle_v1/
 Note that these concern births and collection, not positive-ion drift,
 Shockley-Ramo induced whole-cathode signals or U/V strip reconstruction.
 Only hemisphere asymmetry is considered in the project's other analysis.
+
+## Linear-scale revision (2026-11-08)
+
+The source file `pi_p3_noFW_jpsi11000_gain_angle_plots_v1.py` was updated
+in place. The **physics inputs are unchanged**. Electron multiplicity
+is plotted with **linear X and Y**, no percentile truncation, including
+zero-electron avalanches. Legend of both histogram and CDF reports the
+full-sample mean and ROOT-style RMS (`np.std(ddof=0)`) separately for
+`garfield_ne` and `collected_e`.
+
+Quick redraw of ONLY requested electron-number figure, avoiding the
+60,780,188-line ion-birth reservoir CSV parsing:
+
+~~~bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git pull --ff-only
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+SCRIPT=test/mwpc-stage-c/pi_p3_noFW_jpsi11000_gain_angle_plots_v1.py
+"$PY" -m py_compile "$SCRIPT"
+"$PY" "$SCRIPT" selftest
+"$PY" -u "$SCRIPT" electrons-linear
+~~~
+
+New immutable output:
+`test_runs/mwpc_stage_c/pi_p3_noFW_jpsi11000_electrons_linear_v2/`
+(figure and `statistics.json`). SHA source file checks are retained;
+no new Garfield runs and no edits to old images.
+
+For ALL three figures using the updated styling (including a linear
+gain-map colorbar) run `"$PY" -u "$SCRIPT" plot`. It creates a second,
+distinct output directory
+`test_runs/mwpc_stage_c/pi_p3_noFW_jpsi11000_gain_angle_linear_v2/`.
+This full mode must read all 60.8M source birth-reservoir rows and is
+much slower, but still runs no Garfield simulations.
