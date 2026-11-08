@@ -342,7 +342,7 @@ def analyze():
     OUT.mkdir(parents=True,exist_ok=False)
 
     # Figure 1: true full-range linear electron multiplicity, mean and RMS.
-    plot_electron_counts_linear(raw_ne,coll,OUT/"01_electrons_per_avalanche.png",N and passed_muons)
+    plot_electron_counts_linear(raw_ne,coll,OUT/"01_electrons_per_avalanche.png",passed_muons)
 
     # Figure 2: correct per-ION vs per-avalanche angular comparisons.
     # Both angles are of ion creation around nearest physical anode.
