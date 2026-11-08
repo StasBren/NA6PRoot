@@ -130,3 +130,41 @@ New, nonoverwriting output
 `test_runs/mwpc_stage_c/pi_p3_noFW_jpsi11000_electrons_linear_v3_nonzero_mean/`
 has `statistics.json` containing both all-inclusive and conditional
 means/RMSs, plus their zero fractions.
+
+## Histogram fix v5 — no CDF, separate zero bin, linear and log Y
+
+The previous user-local patch added a return schema without the
+`RMS_given_positive` field, causing a `KeyError` **after** writing
+its histogram files. The GitHub source now has the correctly matching
+producer/consumer schema (including positive-only RMS).
+
+Mode `electrons-hist` reads the ORIGINAL 550 SHA-sealed native 20-muon
+source chunks, including replay 0426, but checks only source selection,
+crossing and seed CSVs: **does not scan/read the expensive ion-birth
+reservoir** and does not execute Garfield.
+
+Two PNGs, **NO CDF**:
+- `01_electrons_per_avalanche_with_zero_bin.png`: explicitly separate
+  single-electron-count zero bin `[0,1)`, and nonzero bins `[1,...]`.
+  Probability per bin with normalization over ALL 588560 avalanches.
+- `01_electrons_per_avalanche_with_zero_bin_without_zero_bin.png`:
+  removes bin `[0,1)`; normalizes over positive-count avalanches only.
+
+Each PNG contains **left linear-Y** and **right logarithmic-Y** panels,
+both with linear X over full observed counts. Legend contains
+mean(all), mean(>0), RMS(all) and number of zero outcomes, separately
+for Garfield ne and anode-collected electrons. JSON adds
+`RMS_given_positive`, positive counts and zero fractions.
+
+Output is new, immutable:
+`test_runs/mwpc_stage_c/pi_p3_noFW_jpsi11000_electrons_hist_v5/`.
+The full `plot` mode creates another independent
+`pi_p3_noFW_jpsi11000_gain_angle_hist_v5/` with the same two
+electron histograms plus ion-birth azimuth and conditional gain maps.
+
+Because an earlier assistant instructed making local direct edits to
+the same tracked script, ordinary `git pull --ff-only` **may refuse**
+to update the dirty tracked file. First back up the existing local
+script outside the Git checkout, then fetch the GitHub branch and
+extract the exact reviewed file from `FETCH_HEAD` (see chat commands).
+No original Garfield data or existing previous plot outputs are touched.
