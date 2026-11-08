@@ -155,3 +155,9 @@ target_compile_features(mwpc_phase_c_p3_noFW_two_cathode_ion_v1 PRIVATE cxx_std_
 add_executable(mwpc_p3_noFW_jpsi_penning057_pilot_v1 phaseB_native_muon_p3_noFW_jpsi_penning057_pilot_v1.cxx)
 target_link_libraries(mwpc_p3_noFW_jpsi_penning057_pilot_v1 PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_p3_noFW_jpsi_penning057_pilot_v1 PRIVATE cxx_std_17)
+
+# Independent Penning-ON 10k PBS campaign executable. Only accepted TrackHeed
+# primary safety bound is increased to 50000; physical avalanche cap unchanged.
+add_executable(mwpc_p3_noFW_jpsi_penning057_highheed_v1 phaseB_native_muon_p3_noFW_jpsi_penning057_highheed_v1.cxx)
+target_link_libraries(mwpc_p3_noFW_jpsi_penning057_highheed_v1 PRIVATE Garfield::Garfield)
+target_compile_features(mwpc_p3_noFW_jpsi_penning057_highheed_v1 PRIVATE cxx_std_17)
