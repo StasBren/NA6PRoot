@@ -315,7 +315,14 @@ def analyze():
     axs[1].set_ylabel("Mean anode-collected electrons per primary")
     axs[1].legend(fontsize=8);axs[1].grid(alpha=.13)
     fig.suptitle("Mean effective gas gain vs exact TrackHeed start, not ne/N_ionization")
-    fig.tight_layout();fig.savefig(OUT/"03_mean_collected_gas_gain.png",dpi=190);plt.close(fig)
+    fig.text(.5,.016,
+        f"Mean collected/seed = {mean_overall:,.2f}    "
+        f"Mean Garfield ne/seed = {raw_ne.mean():,.2f}    "
+        f"Mean ion pairs/seed = {mean_ion:,.2f}    "
+        f"collected / ion pairs = {balance:.4g} (NOT gas gain)",
+        fontsize=9,ha="center")
+    fig.tight_layout(rect=[0,.05,1,.96])
+    fig.savefig(OUT/"03_mean_collected_gas_gain.png",dpi=190);plt.close(fig)
 
     report={
         "schema":"P3_NOFW_JPSI11000_ELECTRONS_ION_AZIMUTH_GAIN_V1",
