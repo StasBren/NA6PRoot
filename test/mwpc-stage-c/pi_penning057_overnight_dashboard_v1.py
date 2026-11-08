@@ -68,9 +68,9 @@ def main():
     rows=[summary(a.base,ch) for ch in CHANNELS]
     known=[v for v in rows if v is not None]
     print("PENNING r=0.57 | original Geant4 muon crossings | all three channels")
-    for r in rows:
+    for channel,r in zip(CHANNELS,rows):
         if r is None:
-            print("NOT PREPARED")
+            print(f"{channel:<5}: NOT PREPARED")
             continue
         avg=r["wall"]/r["muons"] if r["muons"] else None
         print(f"{r['channel']:<5}: {r['muons']:>5}/10000 muons "
