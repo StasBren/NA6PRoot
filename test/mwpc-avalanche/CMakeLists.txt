@@ -148,3 +148,10 @@ target_compile_features(mwpc_phase_b_native_p3_noFW_jpsi_highheed_recovery_v1 PR
 add_executable(mwpc_phase_c_p3_noFW_two_cathode_ion_v1 phaseC_p3_noFW_two_cathode_ion_reference_v1.cxx)
 target_link_libraries(mwpc_phase_c_p3_noFW_two_cathode_ion_v1 PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_phase_c_p3_noFW_two_cathode_ion_v1 PRIVATE cxx_std_17)
+
+# SCIENCE-ONLY comparison: original frozen p3_noFW (no Penning) vs
+# independent identical geometry/gas/TrackHeed/Microscopic clone with
+# Ar(70)/CO2(30) Penning r=0.57; no production source/binary modification.
+add_executable(mwpc_p3_noFW_jpsi_penning057_pilot_v1 phaseB_native_muon_p3_noFW_jpsi_penning057_pilot_v1.cxx)
+target_link_libraries(mwpc_p3_noFW_jpsi_penning057_pilot_v1 PRIVATE Garfield::Garfield)
+target_compile_features(mwpc_p3_noFW_jpsi_penning057_pilot_v1 PRIVATE cxx_std_17)
