@@ -40,6 +40,7 @@ mkdir "$OUT" || {
 exec > "$OUT/worker.log" 2>&1
 echo "START PBS job $PBS_JOBID chunk $FOUR node $(hostname) date $(date -u)"
 START_TIME=$(date +%s)
+printf '%s\n' "$START_TIME" > "$OUT/started_epoch.txt"
 WORK=""
 
 finalize() {
