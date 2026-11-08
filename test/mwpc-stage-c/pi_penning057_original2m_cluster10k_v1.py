@@ -110,7 +110,13 @@ def prepare(source, campaign, binary, channel, selection_manifest):
             1 <= selection["n_source_chunks"] <= 40 and
             sum(int(x["n_selected"]) for x in selection["original_sources"])==N and
             len(selection["original_sources"])==selection["n_source_chunks"] and
-            selection["n_source_chunks_possible"]==40,
+            selection.get("n_source_chunks_possible",40)==40 and
+            (("n_source_chunks_possible" in selection) or
+             (selection["n_source_chunks"]==40 and
+              selection.get("n_per_chunk")==250)) and
+            all(1<=int(x["chunk"])<=40 for x in selection["original_sources"]) and
+            len({int(x["chunk"]) for x in selection["original_sources"]})==
+                selection["n_source_chunks"],
             "Not the correct provenance-checked original 2M event selection")
     rows = source_rows(source,channel)  # validate before creating output.
     source_sha, binary_sha = digest(source), digest(binary)
