@@ -34,7 +34,7 @@ DATA=REPO/"test_runs/mwpc_stage_c"
 OLD=DATA/"pi_p3_noFW_jpsi1000_native_v1"
 NEW=DATA/"pi_p3_noFW_jpsi_extra10000_native_v1"
 OUT=DATA/"pi_p3_noFW_jpsi11000_gain_angle_linear_v2"
-ELECTRONS_ONLY_OUT=DATA/"pi_p3_noFW_jpsi11000_electrons_linear_v2"
+ELECTRONS_ONLY_OUT=DATA/"pi_p3_noFW_jpsi11000_electrons_linear_v3_nonzero_mean"
 GNAME="p3_noFW"
 NR=72
 PHI_EDGES=np.linspace(-180.,180.,NR+1)
@@ -78,7 +78,7 @@ def circular_phi(u_mm,v_mm):
     n=math.floor(u_mm/WIRE_PITCH_MM+.5) if u_mm>=0 else math.ceil(u_mm/WIRE_PITCH_MM-.5)
     return math.degrees(math.atan2(v_mm,u_mm-n*WIRE_PITCH_MM))
 
-def physics_files():
+def physics_files(*, verify_births=True):
     selected_parent_ids=set()
     manifest=[]
     for root,nparents in ((OLD,1000),(NEW,10000)):
@@ -112,10 +112,13 @@ def physics_files():
             must(layout in (None,"high_heed_replay_v1"),
                  "Unknown recovery layout in original Garfield SHA checkpoint")
             p=d/layout if layout else d
-            # The long ion-birth sample file MUST be checked as well.
-            for name in ("muon_reference_seed.csv",
-                         "muon_reference_crossing.csv",
-                         "muon_reference_ion_birth_sample.csv"):
+            # Fast electron-only analysis verifies all exact seed/crossing
+            # SHA-sealed files but SKIPS hashing the 60M-row birth reservoir.
+            # The full-angle analysis still verifies the ion-birth SHA.
+            names=("muon_reference_seed.csv","muon_reference_crossing.csv")
+            if verify_births:
+                names+=("muon_reference_ion_birth_sample.csv",)
+            for name in names:
                 must(name in rec["file_sha256"] and
                      sha(p/name)==rec["file_sha256"][name],
                      "Physics file SHA differs from original sealed Garfield "+str(p/name))
@@ -158,8 +161,21 @@ def plot_electron_counts_linear(raw_ne, coll, filename, num_muons=11000):
         rms=float(np.std(x,ddof=0))
         zeros=int(np.sum(x==0))
         name="garfield_ne" if label=="Garfield ne" else "collected_e"
-        statistics[name]={"mean":mu,"RMS":rms,"zeros":zeros,"n_avalanche_calls":N}
-        legend=f"{label}: mean={mu:,.2f}, RMS={rms:,.2f} (zero={zeros:,})"
+        active=x[x>0]
+        must(len(active)>0,"No nonzero Garfield electrons to estimate conditional mean")
+        positive_mean=float(np.mean(active))
+        positive_rms=float(np.std(active,ddof=0))
+        active_count=int(len(active))
+        statistics[name]={
+            "mean":mu,"RMS":rms,
+            "mean_given_positive":positive_mean,
+            "RMS_given_positive":positive_rms,
+            "zeros":zeros,"n_positive":active_count,
+            "p_zero":zeros/N,"n_avalanche_calls":N
+        }
+        legend=(f"{label}: mean(all)={mu:,.2f}, "
+                f"mean(>0)={positive_mean:,.2f}, "
+                f"RMS(all)={rms:,.2f}; zeros={zeros:,}")
         # Probability per linear bin sums to 1, including zero-G avalanches.
         axs[0].hist(x,bins=edges,histtype="step",
                     weights=np.full(N,1./N),linewidth=1.7,
@@ -167,7 +183,9 @@ def plot_electron_counts_linear(raw_ne, coll, filename, num_muons=11000):
         values,counts=np.unique(x,return_counts=True)
         cdf=np.cumsum(counts)/N
         axs[1].step(values,cdf,where="post",linewidth=1.7,
-                    linestyle=linestyle,label=f"{label}: mean={mu:,.2f}, RMS={rms:,.2f}")
+                    linestyle=linestyle,
+                    label=(f"{label}: mean(all)={mu:,.2f}, "
+                           f"mean(>0)={positive_mean:,.2f}, RMS(all)={rms:,.2f}"))
     axs[0].set_xlim(0,xmax+1)
     axs[0].set_ylim(bottom=0)
     axs[0].set_xlabel("Electrons in a single Garfield avalanche")
@@ -195,7 +213,7 @@ def plot_electrons_only():
     must(not ELECTRONS_ONLY_OUT.exists(),
          "Refusing to overwrite already generated electron plot: "+str(ELECTRONS_ONLY_OUT))
     raw_ne=[];collected=[];n_muons=0
-    for root,ch,p in physics_files():
+    for root,ch,p in physics_files(verify_births=False):
         events=list(csv_rows(p/"muon_reference_crossing.csv",
                              ("configuration","heed_primaries")))
         must(len(events)==20 and all(e["configuration"]==GNAME for e in events),
@@ -222,7 +240,9 @@ def plot_electrons_only():
         "physics":"Original true full Garfield + Heed; no new simulations",
         "n_true_Jpsi_muon_parents":n_muons,
         "n_full_Garfield_avalanche_calls":len(raw_ne),
-        "RMS_definition":"np.std(ddof=0), ROOT-style population standard deviation",
+        "RMS_definition":"np.std(ddof=0), ROOT-style population standard deviation; calculated separately for all and positive-only",
+        "conditional_mean_definition":"E[electron count | electron count > 0], excluding all exactly-zero events; unconditional mean remains E[count]",
+        "source_checks":"SHA of original selected inputs and all consumed seed/crossing CSVs; full birth-reservoir hashes omitted in fast electron-only mode",
         "range":"All nonnegative values (no clipping), zeros included",
         "statistics":stats,
         "plot_sha256":sha(png),
@@ -233,8 +253,10 @@ def plot_electrons_only():
         f.write("\n")
     print("PASS LINEAR electron avalanche figure, no microscopic Garfield calls")
     for name,z in stats.items():
-        print(f"{name}: mean={z['mean']:.4f} RMS={z['RMS']:.4f} "
-              f"zero={z['zeros']} / {len(raw_ne)}")
+        print(f"{name}: mean_all={z['mean']:.4f}, "
+              f"mean_gain_given_nonzero={z['mean_given_positive']:.4f}, "
+              f"RMS_all={z['RMS']:.4f}, RMS_positive={z['RMS_given_positive']:.4f}, "
+              f"zeros={z['zeros']} / {len(raw_ne)}, p_zero={z['p_zero']:.6f}")
     print("OUTPUT",ELECTRONS_ONLY_OUT,flush=True)
 
 
@@ -341,8 +363,10 @@ def analyze():
          "Nonfinite original TrackHeed starts")
     OUT.mkdir(parents=True,exist_ok=False)
 
-    # Figure 1: true full-range linear electron multiplicity, mean and RMS.
-    plot_electron_counts_linear(raw_ne,coll,OUT/"01_electrons_per_avalanche.png",passed_muons)
+    # Figure 1: true full-range linear electron multiplicity, including
+    # conditional mean given gain > 0 in legend.
+    electron_stats=plot_electron_counts_linear(
+        raw_ne,coll,OUT/"01_electrons_per_avalanche.png",passed_muons)
 
     # Figure 2: correct per-ION vs per-avalanche angular comparisons.
     # Both angles are of ion creation around nearest physical anode.
@@ -420,6 +444,9 @@ def analyze():
         "n_unsuccessful_avalanches":unsuccessful,
         "n_capped_avalanches":caps,
         "mean_Garfield_ne_per_seed":float(raw_ne.mean()),
+        "mean_Garfield_ne_given_ne_positive":electron_stats["garfield_ne"]["mean_given_positive"],
+        "mean_collected_e_given_collected_positive":electron_stats["collected_e"]["mean_given_positive"],
+        "p_zero_collected_e":electron_stats["collected_e"]["p_zero"],
         "rms_Garfield_ne_per_seed":float(raw_ne.std(ddof=0)),
         "rms_collected_e_per_Heed_seed":float(coll.std(ddof=0)),
         "RMS_definition":"Population standard deviation (ddof=0), including zeros",
@@ -472,7 +499,9 @@ def selftest():
     must(abs(circular_phi(3.,1.)-90.)<1e-12,"Nearest anode folding broken")
     must(abs(circular_phi(-3.,1.)-90.)<1e-12,"Negative wire folding broken")
     assert len(PHI_CENTRE)==72
-    print("PASS exact C++ nearest-anode geometry and 5-degree angular bins")
+    x=np.array([0.,0.,2.,4.])
+    assert x.mean()==1.5 and x[x>0].mean()==3.0
+    print("PASS mean(all) and mean(>0) distinct, exact C++ wire azimuth")
     print("NO physics, file writing or Garfield calls")
 
 if __name__=="__main__":
