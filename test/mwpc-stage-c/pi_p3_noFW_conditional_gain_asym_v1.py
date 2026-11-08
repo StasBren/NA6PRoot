@@ -202,9 +202,9 @@ def render(truth,valid,mean,models,phi):
     ph_edges=np.linspace(-1.5,1.5,13)
     centres=(ph_edges[:-1]+ph_edges[1:])/2
     for x,label in [(truth,"True Garfield"),(mean,"Conditional mean"),
-                    (np.mean(models["paired_empirical"],axis=0),"Paired empirical"),
+                    (np.mean(np.abs(models["paired_empirical"]),axis=0),"Paired empirical |A| mean"),
                     (np.mean(np.abs(models["factorized_gamma"]),axis=0),"Factorized |A| mean")]:
-        if label=="Factorized |A| mean":
+        if label in ("Factorized |A| mean","Paired empirical |A| mean"):
             vals=[float(np.mean(x[valid&(phi>=lo)&(phi<hi)]))
                   for lo,hi in zip(ph_edges[:-1],ph_edges[1:])]
         else:
