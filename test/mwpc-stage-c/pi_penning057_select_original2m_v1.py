@@ -85,9 +85,13 @@ def source_chunk(export_root, channel, i):
     folder=export_root/channel.lower()/f"chunk{i:04d}"
     path=folder/"geant_muon_crossings.csv"
     m=folder/"crossings_manifest.json"
+    # A completed original Geant4 ROOT chunk may not have a native CSV
+    # export yet. Use verified exports only, and report limited coverage.
+    if not path.exists() and not m.exists():
+        return None
     must(path.is_file() and m.is_file(),
-         f"Missing verified original native Geant4 export: {folder}. "
-         "Run the existing ROOT crossing exporter on WSL before selection.")
+         f"Partially exported original Geant4 chunk: {folder}. "
+         "Do not use an unmanifested CSV.")
     doc=json.loads(m.read_text())
     info=doc["immutable_input"]
     must(info["channel"]==channel and info["chunk"]==i and
@@ -104,8 +108,25 @@ def select(export_root, channel, out):
     must(not out.exists(), "Refusing to overwrite existing selected input: "+str(out))
     allselected=[]
     scanned=[]
+    available=[]
+    missing=[]
     for i in range(1,N_CHUNKS+1):
-        path,doc=source_chunk(export_root,channel,i)
+        found=source_chunk(export_root,channel,i)
+        if found is None:
+            missing.append(i)
+        else:
+            path,doc=found
+            available.append((i,path,doc))
+    must(available, f"No original verified Geant4 native exports for {channel}")
+    n_available=len(available)
+    print(f"{channel}: {n_available}/40 verified original Geant4 CSV export chunks "
+          f"available; absent exports: {missing}",flush=True)
+    # Choose 10k unique muon-parent events with quotas balanced across the
+    # AVAILABLE verified exports. Every selected parent is genuine original
+    # Geant4 data, even if not all 40 source chunks have been CSV-exported.
+    quota,remainder=divmod(10000,n_available)
+    for ordinal,(i,path,doc) in enumerate(available):
+        required=quota+(ordinal<remainder)
         unique={}
         eligible=0
         with path.open(newline="",encoding="utf-8") as f:
@@ -132,15 +153,16 @@ def select(export_root, channel, out):
                                 "momentum_GeV":f"{p:.12g}",
                                 "heed_seed":seed(TAG,"heed",*ident)})
                     unique[parent]=(rank,rec)
-        must(len(unique)>=PER_CHUNK,
+        must(len(unique)>=required,
              f"{channel} chunk{i}: only {len(unique)} eligible unique "
-             f"parent events; need {PER_CHUNK}. No campaign created.")
+             f"parent events; need {required}. Export more original Geant4 "
+             "chunks with the existing ROOT exporter; no campaign created.")
         candidates=[]
         for parent,(_,rec) in unique.items():
             parenthash=hashlib.sha256((TAG+"|parent|"+"|".join(map(str,parent))).encode()).hexdigest()
             candidates.append((parenthash,parent,rec))
         candidates.sort()
-        selected=[rec for _,_,rec in candidates[:PER_CHUNK]]
+        selected=[rec for _,_,rec in candidates[:required]]
         allselected.extend(selected)
         scanned.append({
             "chunk":i, "csv_sha256":doc["csv_sha256"],
@@ -149,8 +171,8 @@ def select(export_root, channel, out):
             "eligible_unique_generated_parents":len(unique),
             "n_selected":len(selected),
         })
-        print(f"PASS {channel} chunk {i:02d}/40: {len(unique)} eligible parents; "
-              f"250 unique parents selected", flush=True)
+        print(f"PASS {channel} source chunk {i:02d}/40: {len(unique)} eligible parents; "
+              f"{required} independent parents selected", flush=True)
     must(len(allselected)==10000 and len({
         (r["source"],int(r["chunk"]),int(r["event"])) for r in allselected})==10000,
         "Not 10,000 globally independent generated parents")
@@ -164,20 +186,25 @@ def select(export_root, channel, out):
         "schema":"NA60_PENNING057_ORIGINAL_2M_SOURCE_SELECTION_V1",
         "channel":channel,"source":CHANNEL_SOURCE[channel],
         "generated_parent_events_in_source":2000000,
-        "n_selected":10000,"n_source_chunks":N_CHUNKS,
-        "n_per_chunk":PER_CHUNK,
+        "n_selected":10000,"n_source_chunks":n_available,
+        "n_source_chunks_possible":N_CHUNKS,
+        "missing_unexported_chunks":missing,
+        "per_export_chunk_selection":"as balanced as possible among presently verified exports",
         "input_sha256":sha(csvpath),
         "selection_tag":TAG,
         "original_sources":scanned,
-        "selection_note":"250 random-hash-ranked unique generated parents per original 50k-parent "
-                         "Geant4 chunk; one SHA-ranked eligible gas crossing per parent; "
-                         "physical muon/track/gas-domain cuts. Not an unbiased "
-                         "all-crossings sample and not a detector efficiency denominator.",
+        "selection_note":"10,000 hash-ranked distinct parent events sampled across "
+                         "the currently available manifest-verified original 50k-parent "
+                         "Geant4 CSV exports. Equal per-export quotas. ONE gas crossing "
+                         "per parent. Missing unexported chunks never fabricated. "
+                         "Not an unbiased all-crossings sample, a full-2M sample, "
+                         "or a detector-efficiency denominator.",
         "physics_note":"Native ORIGINAL Geant4 crossing only; later run full TrackHeed "
                        "and Penning r=0.57 Garfield on the ATLAS worker nodes.",
     }
     (out/"selection_manifest.json").write_text(json.dumps(meta,indent=2,sort_keys=True)+"\n")
-    print("PASS 10000 unique original Geant4 parent crossings for",channel)
+    print(f"PASS 10000 unique original Geant4 parent crossings for {channel} "
+          f"using {n_available} verified source chunks (of 40 total)")
     print("SELECTED CSV:",csvpath)
     print("SHA256:",meta["input_sha256"])
     print("SELECTION MANIFEST:",out/"selection_manifest.json")
