@@ -1,0 +1,853 @@
+// NEW independent cluster 10k Penning-ON variant. The ONLY physical-code change
+// versus phaseB_native_muon_p3_noFW_jpsi_penning057_pilot_v1.cxx is
+// increasing the accepted TrackHeed primaries safety budget 1000 -> 50000.
+// Geometry, Penning r=0.57, random seeds and Avalon microscopic cap unchanged.
+// Original pilot and historical SHA-sealed results remain untouched.
+// PENNING-ON isolated physics gain PILOT: only difference from original
+// 11k p3_noFW executable is enabled Ar Penning transfer r=0.57.
+// Original SHA-sealed microscopic 11k campaign is NEVER overwritten.
+// NEW separate native MWPC spatial-time reference (V1).
+// Physical Geant4/TrackHeed/Garfield microphysics remains identical to the
+// archived 5-point sampler. This variant raises independent-RNG
+// per-primary ion-birth coordinate/time reservoir size to 128 for studying
+// cathode response approximations. Still NOT a complete cloud for arbitrary
+// weighting-field readout; verify convergence before use.
+// REAL native Geant4 crossing -> one common TrackHeed cluster population
+// -> four independent full microscopic Garfield avalanche geometries.
+// B1 is an ionization-BIRTH count, not induced cathode signal.
+// No old 2+4mm code, original ROOT files or frozen LUTs are modified.
+// One-geometry p3_noFW-only native J/psi benchmark; isolated fork of frozen
+// phaseB_native_muon_3p3_spacetime_v1.cxx. No changes to physics kernel:
+// TrackHeed + AvalancheMicroscopic + all ion-sector counts. 128-point
+// unbiased per-primary birth reservoir, NOT full cathode signal.
+// The one-geometry filter deliberately avoids timing the other 3 fields.
+#include <algorithm>
+#include <array>
+#include <chrono>
+#include <cmath>
+#include <cstdint>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <limits>
+#include <memory>
+#include <numeric>
+#include <random>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+#include "Garfield/AvalancheMicroscopic.hh"
+#include "Garfield/ComponentAnalyticField.hh"
+#include "Garfield/ComponentConstant.hh"
+#include "Garfield/MediumMagboltz.hh"
+#include "Garfield/Random.hh"
+#include "Garfield/RandomEngineRoot.hh"
+#include "Garfield/Sensor.hh"
+#include "Garfield/TrackHeed.hh"
+
+namespace {
+constexpr double PI=3.1415926535897932384626433832795;
+constexpr double CM_PER_MM=.1;
+constexpr double ANGLE_EPS=1.e-12;
+
+struct Crossing {
+  std::string source;
+  int chunk=0,event=0,hit=0,track=0,station=0,det=0,pdg=0;
+  std::array<double,3> a{},b{},p{};
+  double thetaU=0,thetaW=0,length=0,edep=0,momentum=0;
+  unsigned int heedSeed=0;
+};
+struct Primary {
+  double u=0,v=0,w=0,t=0,energy=0;
+  double dx=0,dy=0,dz=0;
+  int clusterIndex=-1; // Original accepted TrackHeed cluster per muon.
+};
+struct HeedCluster {
+  double u=0,v=0,w=0,t=0;
+  int nOriginal=0,nKept=0;
+};
+struct Counts {
+  std::uint64_t up=0,down=0,boundary=0,top=0,bottom=0,side=0;
+  void Add(double du,double v) {
+    const double phi=std::atan2(v,du)*180./PI;
+    if (phi>0 && phi<180.)++up;
+    else if (phi<0 && phi>-180.)++down;
+    else ++boundary;
+    if(phi>=45.&&phi<135.)++top;
+    else if(phi>=-135.&&phi<-45.)++bottom;
+    else ++side;
+  }
+  void Merge(const Counts& o) {
+    up+=o.up;down+=o.down;boundary+=o.boundary;
+    top+=o.top;bottom+=o.bottom;side+=o.side;
+  }
+};
+std::string Asym(std::uint64_t a,std::uint64_t b) {
+  if(a+b==0)return ""; // Empty denominators are UNDEFINED.
+  std::ostringstream s;
+  s<<std::setprecision(12)<<(double(a)-double(b))/double(a+b);
+  return s.str();
+}
+struct BirthAccumulator {
+  Counts counts;
+  double pitch=0;
+  std::size_t reservoirLimit=100;
+  std::uint64_t total=0;
+  // Independent reservoir RNG; MUST NOT consume Garfield microscopic RNG.
+  std::mt19937_64 sampleRng;
+  std::vector<std::array<double,4>> sample;
+  BirthAccumulator(unsigned int seed,double p,std::size_t limit=100)
+    :pitch(p),reservoirLimit(limit),
+     sampleRng(std::uint64_t(seed)+0x9e3779b97f4a7c15ULL){}
+  void Add(double u,double v,double w,double t) {
+    counts.Add(u-std::round(u/pitch)*pitch,v);
+    ++total;
+    const std::array<double,4> birth{{u,v,w,t}};
+    const std::size_t limit=reservoirLimit;
+    if(sample.size()<limit)sample.push_back(birth);
+    else if(limit>0) {
+      std::uniform_int_distribution<std::uint64_t> choose(0,total-1);
+      const auto j=choose(sampleRng);
+      if(j<limit)sample[static_cast<std::size_t>(j)]=birth;
+    }
+  }
+};
+BirthAccumulator* gBirth=nullptr;
+// Garfield stores a process-wide RNG pointer. Keep the current engine alive
+// across every field/sensor allocation, not just inside a function scope.
+std::unique_ptr<Garfield::RandomEngineRoot> gEngine;
+void SeedGarfield(unsigned int n){
+  gEngine=std::make_unique<Garfield::RandomEngineRoot>(n);
+  Garfield::Random::SetEngine(*gEngine);
+}
+void OnIonisation(const double x,const double y,const double z,
+                  const double t,const int,const int,Garfield::Medium*) {
+  if(gBirth)gBirth->Add(x,y,z,t);
+}
+double Numeric(const std::string& s) {
+  if(s.empty())throw std::runtime_error("Empty numeric column in native input");
+  const double x=std::stod(s);
+  if(!std::isfinite(x))throw std::runtime_error("Non-finite native input");
+  return x;
+}
+int Integer(const std::string& s){return std::stoi(s);}
+std::vector<std::string> Split(const std::string& line) {
+  std::vector<std::string> out;
+  std::stringstream ss(line);
+  std::string item;
+  while(std::getline(ss,item,','))out.push_back(item);
+  return out;
+}
+std::vector<Crossing> ReadCrossings(const std::string& file) {
+  std::ifstream in(file);
+  if(!in)throw std::runtime_error("Cannot open immutable native selection: "+file);
+  const std::string expected=
+   "source,chunk,event,hit_index,track_id,station,det_id,pdg,"
+   "u_in_mm,v_in_mm,w_in_mm,u_out_mm,v_out_mm,w_out_mm,"
+   "theta_u_in_deg,theta_w_in_deg,path_length_mm,edep_eV,"
+   "pu_in_GeV,pv_in_GeV,pw_in_GeV,momentum_GeV,heed_seed";
+  std::string header;
+  if(!std::getline(in,header))
+    throw std::runtime_error("Empty native Geant4 muon CSV header");
+  // Python's csv.DictWriter uses CRLF by default, even on Linux.
+  // std::getline removes LF but retains CR. Accept CRLF and LF.
+  if(!header.empty() && header.back()=='\r')header.pop_back();
+  if(header!=expected)
+    throw std::runtime_error("Wrong real Geant4 muon input column schema; got ["+
+                             header+"], expected ["+expected+"]");
+  std::vector<Crossing> out;
+  std::string line;
+  while(std::getline(in,line)){
+    if(!line.empty() && line.back()=='\r')line.pop_back();
+    if(line.empty())continue;
+    const auto f=Split(line);
+    if(f.size()!=23)throw std::runtime_error("Malformed native crossing CSV row");
+    Crossing h;
+    h.source=f[0];h.chunk=Integer(f[1]);h.event=Integer(f[2]);h.hit=Integer(f[3]);
+    h.track=Integer(f[4]);h.station=Integer(f[5]);h.det=Integer(f[6]);
+    h.pdg=Integer(f[7]);
+    for(int j=0;j<3;++j){h.a[j]=Numeric(f[8+j]);h.b[j]=Numeric(f[11+j]);}
+    h.thetaU=Numeric(f[14]);h.thetaW=Numeric(f[15]);
+    h.length=Numeric(f[16]);h.edep=Numeric(f[17]);
+    for(int j=0;j<3;++j)h.p[j]=Numeric(f[18+j]);
+    h.momentum=Numeric(f[21]);h.heedSeed=std::stoul(f[22]);
+    const auto p=std::hypot(h.p[0],h.p[1],h.p[2]);
+    const double chord=std::hypot(h.b[0]-h.a[0],
+                                 h.b[1]-h.a[1],h.b[2]-h.a[2]);
+    double dot=0.;
+    for(int j=0;j<3;++j)dot+=(h.b[j]-h.a[j])*h.p[j];
+    if(std::abs(h.pdg)!=13 || h.station<0 || h.station>5 ||
+       h.momentum<=.11 || std::abs(h.momentum-p)>1.e-5*p ||
+       h.length<=.05 || std::abs(h.length-chord)>.005*chord+.02 ||
+       dot/(chord*p)<.999 || h.heedSeed<1 ||
+       std::max(std::abs(h.a[1]),std::abs(h.b[1]))>3.05)
+      throw std::runtime_error("Unphysical native muon or direction mismatch");
+    out.push_back(h);
+  }
+  if(out.empty()||out.size()>24)
+    throw std::runtime_error("B1 accepts 1..24 real verified muon crossings only");
+  return out;
+}
+struct Geometry {std::string label;double pitchMm;double fwUm;};
+const std::array<Geometry,4> GEOMS{{{"p3_noFW",3.,0.},{"p3_FW75",3.,75.},
+                                    {"p4_noFW",4.,0.},{"p4_FW75",4.,75.}}};
+int NAnodes(int st,double pitch) {
+  const double width=st==0?307.2:512.;
+  return int(std::floor(width/pitch+.5)); // EXACT existing frozen map rule
+}
+double EntrancePhase(double uMm,int station,double pitch) {
+  const int n=NAnodes(station,pitch);
+  const double phase=n%2==0?pitch*.5:0.;
+  const double nearest=std::round((uMm-phase)/pitch)*pitch+phase;
+  return uMm-nearest;
+}
+// The primary-ionisation source is an independent, gas-filled box.
+ // Do NOT model it using two identical-potential ComponentAnalyticField
+ // planes: Garfield's CellCheck rejects a cell with no field solution,
+ // then TrackHeed cannot find an ionisable medium at the start position.
+struct HeedSourceVolume {
+  Garfield::ComponentConstant field;
+  Garfield::Sensor sensor;
+  std::array<double,3> start{}, direction{};
+  explicit HeedSourceVolume(Garfield::MediumMagboltz& gas,
+                            const Crossing& c) {
+    const double du=c.b[0]-c.a[0],dv=c.b[1]-c.a[1],dw=c.b[2]-c.a[2];
+    const double maxU=std::max(1.,std::abs(du)*.1+.2);
+    const double maxW=std::max(1.,std::abs(dw)*.1+.2);
+    // The component AND the sensor require their own active bounds.
+    field.SetArea(-maxU,-.3,-maxW,maxU,+.3,+maxW);
+    field.SetMedium(&gas);
+    field.SetElectricField(0.,1.,0.);
+    sensor.AddComponent(&field);
+    sensor.SetArea(-maxU,-.3,-maxW,maxU,+.3,+maxW);
+    direction={{c.p[0]/c.momentum,c.p[1]/c.momentum,
+                c.p[2]/c.momentum}};
+    // Define gas in local u around zero so we can use the original
+    // muon entry with only a *translation*, never a random angle.
+    constexpr double inwardCm=1.e-4; // 1 micron inside gas
+    start={{inwardCm*direction[0], .1*c.a[1]+inwardCm*direction[1],
+            inwardCm*direction[2]}};
+    // Sensor.hh in the user's installed Garfield version declares
+    // Medium* GetMedium(double x, double y, double z), not a 4-argument
+    // bool-plus-output-pointer API.
+    Garfield::Medium* medium=sensor.GetMedium(start[0],start[1],start[2]);
+    if(!medium || !medium->IsIonisable()) {
+      std::ostringstream details;
+      details<<"Heed primary source is not ionisable at muon start: "
+             <<"y="<<start[1]<<"cm (cathodes ±0.3cm), "
+             <<"native v_in="<<c.a[1]<<"mm, direction v="<<direction[1];
+      throw std::runtime_error(details.str());
+    }
+  }
+};
+std::vector<Primary> HeedPrimaries(Garfield::MediumMagboltz& gas,
+                                  const Crossing& c,int& nClusters,
+                                  int& nDiscarded,int& nFailed,
+                                  std::vector<HeedCluster>* clusterArchive=nullptr){
+  // A geometry-independent HEED PRIMARY source is generated ONCE per
+  // original crossing, inside a valid ionisable gas volume. This weak
+  // placeholder uniform field defines medium lookup ONLY; it is NOT
+  // used for Garfield avalanche transport, which uses each chamber's
+  // actual 1800V analytic wire field.
+  HeedSourceVolume volume(gas,c);
+  Garfield::TrackHeed heed;
+  heed.SetSensor(&volume.sensor);
+  heed.SetParticle(c.pdg==13?"mu-":"mu+");
+  heed.SetMomentum(c.momentum*1.e9);
+  heed.EnableDeltaElectronTransport();
+
+  SeedGarfield(c.heedSeed);
+  // Use the actual Geant4 muon momentum and the verified start location.
+  const auto& d=volume.direction;
+  const auto& start=volume.start;
+  if(!heed.NewTrack(start[0],start[1],start[2],0.,d[0],d[1],d[2]))
+    throw std::runtime_error("TrackHeed::NewTrack returned false for verified native muon");
+
+  std::vector<Primary> primaries;
+  double xc=0,yc=0,zc=0,tc=0,ec=0,extra=0;
+  int nc=0;
+  nClusters=nDiscarded=nFailed=0;
+  while(heed.GetCluster(xc,yc,zc,tc,nc,ec,extra)){
+    // TrackHeed propagates to the SENSOR boundary, not necessarily the
+    // original gas-hit OUT point. Clip along actual native Geant4 chord.
+    const double along=10.*(xc*d[0]+(yc-.1*c.a[1])*d[1]+zc*d[2]);
+    if(along<-.005||along>c.length+.005){++nDiscarded;continue;}
+    ++nClusters;
+    HeedCluster record{xc,yc,zc,tc,nc,0};
+    for(int i=0;i<nc;++i){
+      Primary x;
+      if(!heed.GetElectron(i,x.u,x.v,x.w,x.t,x.energy,x.dx,x.dy,x.dz)){
+        ++nFailed;continue;
+      }
+      if(x.v<=-.3||x.v>=.3){++nDiscarded;continue;}
+      x.clusterIndex=nClusters-1;
+      primaries.push_back(x);
+      ++record.nKept;
+    }
+    if(clusterArchive)clusterArchive->push_back(record);
+  }
+  return primaries;
+}
+struct Response {
+  Counts ions,electrons;
+  std::uint64_t births=0,ionized=0, eCollected=0, attached=0,other=0;
+  int zero=0,capped=0,failed=0;
+};
+void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
+                 const Crossing& h,const std::vector<Primary>& primaries,
+                 const std::string& crossingLabel,
+                 std::ostream& seedOut,std::ostream& birthOut,
+                 std::ostream& hitOut,int clusters,int dropped,int heedFailed,
+                 const std::vector<std::size_t>* onlyIndices=nullptr,
+                 std::ostream* timingOut=nullptr,
+                 const bool exactLutCellStart=false,
+                 const std::size_t birthReservoirLimit=100) {
+  const double p=.1*geom.pitchMm;
+  const double wireRadius=.0015; // 30 um diameter = 0.0015 cm radius
+  // For the finite centered anode grid, translate the Geant4 physical
+  // entrance u to a central periodic 9-anode patch without changing the
+  // electron's offset from its nearest actual wire.
+  // The native-muon path uses the physical station/anode phase, while
+  // frozen LUT20/500 starts are ALREADY in a nearest-anode local cell
+  // (-pitch/2,+pitch/2). Never add a station parity offset to LUT starts.
+  const double phaseCm=exactLutCellStart?0.:
+      .1*EntrancePhase(h.a[0],h.station,geom.pitchMm);
+  const double fw=geom.fwUm*1.e-4;
+  Garfield::ComponentAnalyticField field;
+  field.SetMedium(&gas);
+  constexpr int half=4;
+  for(int i=-half;i<=half;++i)field.AddWire(i*p,0.,.003,1800.,"anode");
+  if(fw>0)for(int i=-half;i<half;++i)
+    field.AddWire((i+.5)*p,0.,fw,0.,"field_wire");
+  field.AddPlaneY(-.3,0.,"cathode_minus");
+  field.AddPlaneY(+.3,0.,"cathode_plus");
+  field.SetMagneticField(0.,0.,0.);
+  Garfield::Sensor sensor;
+  sensor.AddComponent(&field);
+  sensor.SetArea(-(half+.5)*p,-.3,-5.,(half+.5)*p,.3,5.);
+  Response tot;
+  const std::size_t nToRun=onlyIndices?onlyIndices->size():primaries.size();
+  for(std::size_t iPos=0;iPos<nToRun;++iPos) {
+    const std::size_t i=onlyIndices?(*onlyIndices)[iPos]:iPos;
+    if(i>=primaries.size())
+      throw std::runtime_error("Invalid indexed Heed seed for timing benchmark");
+    const auto& e=primaries[i];
+    const double u=e.u+phaseCm;
+    if(std::abs(u)>4.2*p||std::abs(e.w)>4.8)
+      throw std::runtime_error("True Heed electron exceeds validated analytic periodic wire patch");
+    const std::uint64_t raw=std::uint64_t(h.heedSeed)+
+                            std::uint64_t(i+1)*104729u;
+    const unsigned int rngSeed=1+unsigned(raw%2'000'000'000ULL);
+    SeedGarfield(rngSeed);
+    Garfield::AvalancheMicroscopic avalanche(&sensor);
+    constexpr unsigned int cap=200000;
+    avalanche.EnableAvalancheSizeLimit(cap);
+    BirthAccumulator births(rngSeed,p,birthReservoirLimit);gBirth=&births;
+    avalanche.SetUserHandleIonisation(OnIonisation);
+    // With TrackHeed::EnableDeltaElectronTransport(), GetElectron gives
+    // low-energy conduction electron POSITIONS and times. Its returned
+    // energy and direction are NOT physically meaningful (Garfield guide
+    // section 5.1.1). Give these thermalized seeds 0.1eV with isotropic
+    // initial direction, consistently across all four candidate fields.
+    constexpr double startEnergy=0.1;
+    const auto seedClockStart=std::chrono::steady_clock::now();
+    const bool ok=avalanche.AvalancheElectron(u,e.v,e.w,e.t,startEnergy,
+                                             0.,0.,0.);
+    gBirth=nullptr;
+    int ne=0,ni=0;
+    avalanche.GetAvalancheSize(ne,ni);
+    Counts eCounts;
+    std::uint64_t collected=0,attached=0,other=0;
+    const auto nEnd=avalanche.GetNumberOfElectronEndpoints();
+    for(std::size_t j=0;j<nEnd;++j){
+      double x0,y0,z0,t0,E0,x1,y1,z1,t1,E1;int status=0;
+      avalanche.GetElectronEndpoint(j,x0,y0,z0,t0,E0,
+                                   x1,y1,z1,t1,E1,status);
+      const double du=x1-std::round(x1/p)*p;
+      if(std::hypot(du,y1)<wireRadius*1.5) {
+        ++collected;eCounts.Add(du,y1);
+      } else if(status==-7)++attached;
+      else ++other;
+    }
+    const bool capped=ne>=int(cap)||nEnd>=cap;
+    const bool zero=collected==0;
+    if(ni>0 && births.total==0)
+      throw std::runtime_error("Garfield reports avalanche ions but ionization callback recorded none");
+    const double seedWallSeconds=
+        std::chrono::duration<double>(std::chrono::steady_clock::now()-
+                                      seedClockStart).count();
+    if(timingOut) {
+      // Timed block includes avalanche, callback, electron endpoints and
+      // angular classification, but NOT per-seed CSV writes or Heed.
+      (*timingOut)<<crossingLabel<<","<<h.station<<","
+          <<h.thetaU<<","<<h.thetaW<<","<<geom.label<<","
+          <<i<<","<<primaries.size()<<","<<(10.*u)<<","<<(10.*e.v)<<","
+          <<rngSeed<<","<<std::setprecision(12)<<seedWallSeconds<<","
+          <<ne<<","<<ni<<","<<births.total<<","<<collected<<","
+          <<(ok?1:0)<<","<<(capped?1:0)<<"\n";
+      timingOut->flush(); // retain completed samples if a later seed fails
+    }
+    tot.ions.Merge(births.counts);
+    tot.electrons.Merge(eCounts);
+    tot.births+=births.total;
+    tot.ionized+=std::max(ni,0);
+    tot.eCollected+=collected;tot.attached+=attached;tot.other+=other;
+    tot.zero+=zero;tot.capped+=capped;tot.failed+=!ok;
+    seedOut<<crossingLabel<<","<<geom.label<<","<<i<<","<<rngSeed<<","
+           <<(10.*u)<<","<<(10.*e.v)<<","<<(10.*e.w)<<","
+           <<startEnergy<<","<<ne<<","<<ni<<","<<births.total<<","
+           <<collected<<","<<attached<<","<<other<<","<<ok<<","
+           <<capped<<","<<births.counts.up<<","<<births.counts.down<<","
+           <<births.counts.top<<","<<births.counts.bottom<<","
+           <<Asym(births.counts.up,births.counts.down)<<","
+           <<Asym(births.counts.top,births.counts.bottom)<<"\n";
+    // The full birth census is used for A; this bounded independent-RNG
+    // reservoir gives unbiased spatial draws WITHIN each seed avalanche.
+    // Weight by N_birth / sample_size for pooling different-sized avalanches.
+    const double reservoirWeight=births.sample.empty()?0.:
+        double(births.total)/births.sample.size();
+    for(const auto& v:births.sample)
+      birthOut<<crossingLabel<<","<<geom.label<<","<<i<<","
+              <<(10.*v[0])<<","<<(10.*v[1])<<","<<(10.*v[2])<<","
+              <<v[3]<<","<<births.total<<","<<reservoirWeight<<"\n";
+  }
+  hitOut<<crossingLabel<<","<<geom.label<<","<<h.station<<","<<h.det<<","
+        <<h.thetaU<<","<<h.thetaW<<","<<h.length<<","<<h.momentum<<","
+        <<clusters<<","<<primaries.size()<<","<<dropped<<","<<heedFailed<<","
+        <<tot.eCollected<<","<<tot.births<<","<<tot.ionized<<","
+        <<tot.zero<<","<<tot.capped<<","<<tot.failed<<","
+        <<tot.ions.up<<","<<tot.ions.down<<","<<tot.ions.boundary<<","
+        <<tot.ions.top<<","<<tot.ions.bottom<<","<<tot.ions.side<<","
+        <<Asym(tot.ions.up,tot.ions.down)<<","
+        <<Asym(tot.ions.top,tot.ions.bottom)<<","
+        <<tot.electrons.up<<","<<tot.electrons.down<<","
+        <<tot.electrons.top<<","<<tot.electrons.bottom<<","
+        <<Asym(tot.electrons.up,tot.electrons.down)<<","
+        <<Asym(tot.electrons.top,tot.electrons.bottom)<<",";
+  if(!primaries.empty())hitOut<<double(tot.eCollected)/primaries.size();
+  hitOut<<"\n";
+  std::cout<<crossingLabel<<" "<<geom.label
+           <<(onlyIndices?" BENCH_PARTIAL_NO_PHYSICS":" PHYSICS")
+           <<" Heed_e="<<primaries.size()
+           <<" sampled_seeds="<<nToRun
+           <<" ionBirth="<<tot.births
+           <<" collected_e="<<tot.eCollected
+           <<" capped="<<tot.capped<<"\n";
+}
+} // namespace
+
+struct LutSeedRow {
+  int trials=0,box=0,iu=0,iv=0,sample=0,originalSeed=0;
+  std::string label,sha,originalCollected,originalFWCollected;
+  std::string originalWire,originalPhi,originalTime,originalEnergy;
+  double u=0,v=0,w=0;
+};
+std::vector<LutSeedRow> ReadLutExactStarts(const std::string& input) {
+  std::ifstream in(input);
+  if(!in)throw std::runtime_error("Cannot open original LUT exact-start subset: "+input);
+  const std::string headerExpected=
+    "lut_trials,geometry,original_lut_sha256,box_id,iu,iv,sample,"
+    "random_seed,u_start_mm,v_start_mm,w_start_mm,"
+    "old_drift_ok,old_collected,old_field_wire_collected,"
+    "old_wire_index,old_phi_hit_deg,old_drift_time_ns,old_last_step_energy_eV";
+  std::string header;
+  if(!std::getline(in,header))throw std::runtime_error("Empty LUT exact-start index");
+  if(!header.empty()&&header.back()=='\r')header.pop_back();
+  if(header!=headerExpected)
+    throw std::runtime_error("Wrong frozen exact-start CSV index header: "+header);
+  std::vector<LutSeedRow> out;
+  std::string line;
+  while(std::getline(in,line)) {
+    if(!line.empty()&&line.back()=='\r')line.pop_back();
+    if(line.empty())continue;
+    const auto f=Split(line);
+    if(f.size()!=18)throw std::runtime_error("LUT exact-start CSV row: expected 18 columns");
+    LutSeedRow q;
+    q.trials=Integer(f[0]);q.label=f[1];q.sha=f[2];
+    q.box=Integer(f[3]);q.iu=Integer(f[4]);q.iv=Integer(f[5]);
+    q.sample=Integer(f[6]);q.originalSeed=Integer(f[7]);
+    q.u=Numeric(f[8]);q.v=Numeric(f[9]);q.w=Numeric(f[10]);
+    q.originalCollected=f[12];q.originalFWCollected=f[13];
+    q.originalWire=f[14];q.originalPhi=f[15];q.originalTime=f[16];
+    q.originalEnergy=f[17];
+    const auto it=std::find_if(GEOMS.begin(),GEOMS.end(),
+      [&](const Geometry& g){return g.label==q.label;});
+    if(it==GEOMS.end())throw std::runtime_error("Unknown LUT geometry: "+q.label);
+    const auto pitch=it->pitchMm;
+    const int nu=static_cast<int>(std::lround(pitch/.1));
+    if((q.trials!=20&&q.trials!=500)||q.sha.size()!=64||
+       !std::all_of(q.sha.begin(),q.sha.end(),[](char x){
+           return (x>='0'&&x<='9')||(x>='a'&&x<='f');})||
+       q.iu<0||q.iu>=nu||q.iv<0||q.iv>=30||
+       q.sample<0||q.sample>=q.trials||q.box!=q.iu*30+q.iv||
+       q.originalSeed<0||std::abs(q.w)>1.e-8||
+       q.u<-.5*pitch+q.iu*.1-1.e-6||
+       q.u>-.5*pitch+(q.iu+1)*.1+1.e-6||
+       q.v< -3.+q.iv*.2-1.e-6||
+       q.v> -3.+(q.iv+1)*.2+1.e-6||
+       (q.originalCollected!="0"&&q.originalCollected!="1")||
+       (q.originalFWCollected!="0"&&q.originalFWCollected!="1"))
+      throw std::runtime_error("Invalid exact saved LUT start/physics identity");
+    out.push_back(q);
+  }
+  if(out.empty()||out.size()>432)
+    throw std::runtime_error("Exact-start pilot input must contain 1..432 rows");
+  return out;
+}
+void RunLutSidecar(const std::string& input,const std::string& prefix,
+                   const std::size_t birthReservoirLimit=100) {
+  const auto starts=ReadLutExactStarts(input);
+  Garfield::MediumMagboltz gas;
+  gas.SetComposition("ar",70.,"co2",30.);
+  gas.SetTemperature(293.15);gas.SetPressure(760.);
+  gas.SetMaxElectronEnergy(200.);
+  gas.Initialise(false);
+  std::ofstream trialOut(prefix+"_trials.csv"),
+                birthsOut(prefix+"_birth_reservoir.csv"),
+                timingOut(prefix+"_timing.csv");
+  if(!trialOut||!birthsOut||!timingOut)
+    throw std::runtime_error("Cannot create new LUT avalanche sidecar outputs");
+  trialOut << "lut_trials,original_geometry,original_lut_sha256,box_id,"
+              "iu,iv,sample,original_random_seed,original_u_start_mm,"
+              "original_v_start_mm,original_w_start_mm,old_collected,"
+              "old_field_wire_collected,old_wire_index,old_phi_hit_deg,"
+              "old_drift_time_ns,old_last_step_energy_eV,"
+              "crossing_id,configuration,primary_index,garfield_seed,"
+              "seed_u_mm,seed_v_mm,seed_w_mm,seed_energy_eV,"
+              "garfield_ne,garfield_ni,ion_births,collected_e,"
+              "attached,other,successful,capped,ion_up,ion_down,"
+              "ion_top,ion_bottom,A_ion_hemi,A_ion_TB\n";
+  birthsOut << "crossing_id,configuration,primary_index,u_mm,v_mm,w_mm,"
+               "t_ns,seed_ion_births_total,reservoir_weight\n";
+  timingOut << "crossing_id,station,theta_u_deg,theta_w_deg,configuration,"
+               "primary_index,n_true_heed_primaries,u_seed_mm,v_seed_mm,"
+               "garfield_seed,wall_seconds,avalanche_electrons,"
+               "avalanche_ions,ion_births,collected_e,success,capped\n";
+  for(std::size_t i=0;i<starts.size();++i){
+    const auto& q=starts[i];
+    const auto it=std::find_if(GEOMS.begin(),GEOMS.end(),
+       [&](const Geometry& g){return g.label==q.label;});
+    // Pseudo-Crossing holds the *RNG namespace* for one original LUT
+    // electron. It is NOT a Geant4 track and must never be used as one.
+    Crossing h;
+    h.source="original-LUT-exact-start-NOT-muon";
+    h.station=0;h.det=0;h.thetaU=0;h.thetaW=0;
+    h.length=0;h.momentum=0;
+    const std::uint64_t raw=static_cast<std::uint64_t>(q.originalSeed)+
+         1000003ULL*static_cast<unsigned>(q.trials)+
+         1009ULL*static_cast<unsigned>(q.box)+
+         1048583ULL*static_cast<unsigned>(it-GEOMS.begin());
+    h.heedSeed=static_cast<unsigned>(1+raw%1900000000ULL);
+    const std::string identity="LUT"+std::to_string(q.trials)+"|"+
+         q.label+"|"+std::to_string(q.box)+"|"+std::to_string(q.sample);
+    Primary electron;
+    electron.u=.1*q.u;electron.v=.1*q.v;electron.w=.1*q.w;
+    electron.t=0.;
+    std::vector<Primary> primaries{electron};
+    std::ostringstream oneSeed,oneBirth,oneHit;
+    // Save FULL exact original-start precision; default iostream(6) would
+    // shift the stored position by micrometres and fail SHA-paired checks.
+    oneSeed<<std::setprecision(15);
+    oneBirth<<std::setprecision(15);
+    oneHit<<std::setprecision(15);
+    RunGeometry(gas,*it,h,primaries,identity,oneSeed,oneBirth,oneHit,
+                0,0,0,nullptr,&timingOut,true,birthReservoirLimit);
+    std::string record=oneSeed.str();
+    if(record.empty()||record.back()!='\n')
+      throw std::runtime_error("Missing single-electron avalanche result");
+    record.pop_back();
+    if(record.find('\n')!=std::string::npos)
+      throw std::runtime_error("More than one seed row in exact-start sidecar");
+    trialOut << q.trials << "," << q.label << "," << q.sha << ","
+             << q.box << "," << q.iu << "," << q.iv << "," << q.sample << ","
+             << q.originalSeed << "," << std::setprecision(12)
+             << q.u << "," << q.v << "," << q.w << ","
+             << q.originalCollected << "," << q.originalFWCollected << ","
+             << q.originalWire << "," << q.originalPhi << ","
+             << q.originalTime << "," << q.originalEnergy << ","
+             << record << "\n";
+    birthsOut << oneBirth.str();
+    trialOut.flush();birthsOut.flush();
+    if((i+1)%16==0||i+1==starts.size()) {
+      std::cout<<"LUT avalanche sidecar "<<i+1<<"/"<<starts.size()
+               <<" original exact starts; NO Geant4-muon aggregate\n"<<std::flush;
+    }
+  }
+  std::cout<<"PASS: independent full-start microscopic avalanche sidecar "
+           <<starts.size()<<" frozen LUT trials; NOT a continuation "
+           "of old drift endpoints, NOT a real-muon measurement\n";
+}
+int main(int argc,char**argv) {
+  try{
+    if(argc==3 && std::string(argv[1])=="--validate-input") {
+      const auto crossings=ReadCrossings(argv[2]);
+      // The former --validate-input checked only CSV syntax. Also check
+      // that the ACTUAL Heed source volume has a valid ionisable medium
+      // at every selected original muon's start position.
+      Garfield::MediumMagboltz preflightGas;
+      preflightGas.SetComposition("ar",70.,"co2",30.);
+      preflightGas.SetTemperature(293.15);preflightGas.SetPressure(760.);
+      for(const auto& h:crossings){
+        HeedSourceVolume preflightVolume(preflightGas,h);
+      }
+      std::cout<<"PASS: parsed "<<crossings.size()
+               <<" original Geant4 muon crossings (CSV CRLF/LF supported)\n"
+               <<"PASS: Heed gas source medium is ionisable at all "
+               <<crossings.size()<<" muon starts (±3 mm)\n";
+      return 0; // No Heed ionisation or Garfield avalanche physics.
+    }
+    if(argc==3 && std::string(argv[1])=="--validate-heed") {
+      const auto crossings=ReadCrossings(argv[2]);
+      Garfield::MediumMagboltz gas;
+      gas.SetComposition("ar",70.,"co2",30.);
+      gas.SetTemperature(293.15);gas.SetPressure(760.);
+      int totalClusters=0,totalElectrons=0;
+      for(const auto& h:crossings) {
+        int clusters=0,discarded=0,failed=0;
+        const auto electrons=HeedPrimaries(gas,h,clusters,discarded,failed);
+        if(failed)
+          throw std::runtime_error("Heed GetElectron failed for native muon "+
+                                   std::to_string(h.event)+
+                                   "; failed="+std::to_string(failed));
+        totalClusters+=clusters;
+        totalElectrons+=static_cast<int>(electrons.size());
+        std::cout<<"Heed native crossing event="<<h.event
+                 <<" station="<<h.station
+                 <<" thetaU_deg="<<h.thetaU
+                 <<" thetaW_deg="<<h.thetaW
+                 <<" p_GeV="<<h.momentum
+                 <<" clusters="<<clusters
+                 <<" electrons="<<electrons.size()
+                 <<" discarded="<<discarded<<"\n";
+      }
+      if(totalClusters==0||totalElectrons==0)
+        throw std::runtime_error("Heed-only native muon preflight yielded no ionisation");
+      std::cout<<"PASS: true TrackHeed source generated "<<totalClusters
+               <<" clusters and "<<totalElectrons
+               <<" low-energy electrons from "<<crossings.size()
+               <<" physical Geant4 muon crossings; NO avalanches run\n";
+      return 0;
+    }
+    if(argc==5 && std::string(argv[1])=="--benchmark") {
+      const auto crossings=ReadCrossings(argv[2]);
+      const std::string csvPath=argv[3];
+      const int k=std::stoi(argv[4]);
+      if(k<1 || k>8)throw std::runtime_error("Benchmark limits: 1..8 primaries per crossing/geometry");
+      // Identical gas and microscopic configuration to production B1.
+      Garfield::MediumMagboltz gas;
+      gas.SetComposition("ar",70.,"co2",30.);
+      gas.SetTemperature(293.15);gas.SetPressure(760.);
+      gas.SetMaxElectronEnergy(200.);
+      const auto initStart=std::chrono::steady_clock::now();
+      gas.Initialise(false);
+      const double initSeconds=std::chrono::duration<double>(
+        std::chrono::steady_clock::now()-initStart).count();
+      std::ofstream timing(csvPath);
+      if(!timing)throw std::runtime_error("Cannot open timing CSV "+csvPath);
+      timing<<"crossing_id,station,theta_u_deg,theta_w_deg,configuration,"
+               "primary_index,n_true_heed_primaries,u_seed_mm,v_seed_mm,garfield_seed,wall_seconds,"
+               "avalanche_electrons,avalanche_ions,ion_births,collected_e,"
+               "success,capped\n";
+      timing.flush();
+      int totalSeeds=0;
+      double totalHeedSeconds=0.;
+      for(const auto& h:crossings){
+        const auto heedStart=std::chrono::steady_clock::now();
+        int nCl=0,discarded=0,failed=0;
+        const auto primaries=HeedPrimaries(gas,h,nCl,discarded,failed);
+        totalHeedSeconds+=std::chrono::duration<double>(
+          std::chrono::steady_clock::now()-heedStart).count();
+        if(failed)throw std::runtime_error("Heed benchmark GetElectron failure");
+        if(primaries.empty()) {
+          std::cerr<<"BENCH WARNING: no Heed primaries for event "<<h.event<<"\n";
+          continue;
+        }
+        const std::size_t n=primaries.size();
+        const std::size_t take=std::min(n,static_cast<std::size_t>(k));
+        std::vector<std::size_t> indices;
+        // Uniform spread over the TRUE ordered Heed primaries, rather
+        // than the first k from the earliest cluster/track segment.
+        for(std::size_t j=0;j<take;++j)
+          indices.push_back(((2*j+1)*n)/(2*take));
+        const std::string id=h.source+"|"+std::to_string(h.chunk)+"|"+
+           std::to_string(h.event)+"|"+std::to_string(h.hit)+"|"+
+           std::to_string(h.track)+"|"+std::to_string(h.station)+"|"+
+           std::to_string(h.det);
+        std::ostringstream discardSeed,discardBirth,discardHit;
+        for(const auto& geom:GEOMS) {
+          RunGeometry(gas,geom,h,primaries,id,
+                      discardSeed,discardBirth,discardHit,
+                      nCl,discarded,failed,&indices,&timing);
+          // Nothing from discard* is used for physics! Only per-seed
+          // timing and census results are recorded in BENCHMARK CSV.
+          discardSeed.str("");discardSeed.clear();
+          discardBirth.str("");discardBirth.clear();
+          discardHit.str("");discardHit.clear();
+          totalSeeds+=static_cast<int>(indices.size());
+        }
+      }
+      timing.flush();
+      std::cout<<"PASS: BENCHMARK_ONLY timed "<<totalSeeds
+               <<" microscopic avalanches across four geometries\n"
+               <<"BENCH_GAS_INIT_SECONDS="<<initSeconds<<"\n"
+               <<"BENCH_HEED_TOTAL_SECONDS="<<totalHeedSeconds<<"\n"
+               <<"BENCH_SEEDS="<<totalSeeds<<"\n"
+               <<"BENCH_CSV="<<csvPath<<"\n"
+               <<"WARNING: benchmark uses only selected seed electrons;"
+               " partial crossing totals MUST NOT be treated as A_ion(mu)\n";
+      return 0;
+    }
+    if(argc==3 && std::string(argv[1])=="--validate-lut-input") {
+      const auto exact=ReadLutExactStarts(argv[2]);
+      std::cout<<"PASS parsed "<<exact.size()
+               <<" ORIGINAL frozen LUT20/500 exact-start rows in C++; "
+               "no Heed/avalanches run\n";
+      return 0;
+    }
+    if(argc==4 && std::string(argv[1])=="--lut-sidecar"){
+      RunLutSidecar(argv[2],argv[3]);
+      return 0;
+    }
+    if(argc==4 && std::string(argv[1])=="--lut-sidecar-compact5"){
+      // Pure OUTPUT reduction. Ionization and the full ion-sector census
+      // are identical to the full sidecar; reservoir RNG is independent
+      // of Garfield's microscopic electron collision RNG.
+      RunLutSidecar(argv[2],argv[3],5);
+      return 0;
+    }
+    const bool cacheMuonPhysics=(argc==4 &&
+                               std::string(argv[1])=="--muon-cache-physics-p3-noFW");
+    if(argc!=4)throw std::runtime_error(
+      "Usage: mwpc_phase_b_native_muon_3p3 INPUT_NATIVE_CSV OUTPUT_PREFIX MAX_PRIMARY_ELECTRONS | --muon-cache-physics-p3-noFW REAL_MUON_INPUT_CSV PREFIX | --validate-input INPUT_NATIVE_CSV | --validate-heed INPUT_NATIVE_CSV | --lut-sidecar FROZEN_EXACT_START_INDEX_CSV OUTPUT_PREFIX");
+    const std::string input=argv[cacheMuonPhysics?2:1],
+                      prefix=argv[cacheMuonPhysics?3:2];
+    const int maxPrimary=cacheMuonPhysics?50000:std::stoi(argv[3]);
+    if(maxPrimary<1||maxPrimary>50000)throw std::runtime_error("max primaries must be 1..50000");
+    const auto crossings=ReadCrossings(input);
+    Garfield::MediumMagboltz gas;
+    gas.SetComposition("ar",70.,"co2",30.);
+    gas.SetTemperature(293.15);gas.SetPressure(760.);
+    gas.SetMaxElectronEnergy(200.);gas.Initialise(false);
+    // CRITICAL PHYSICS TEST: Ar(70)/CO2(30) Penning excitation transfer.
+    // Garfield++ Ar/CO2 standard r=0.57, lambda=0cm; unlike the frozen
+    // reference 11k campaign, which intentionally remains UNCHANGED.
+    gas.EnablePenningTransfer(0.57, 0., "ar");
+    std::cout<<"PHYSICS_PENNING_AR_CO2_70_30_R=0.57 LAMBDA_CM=0\n";
+    std::ofstream hitOut(prefix+"_crossing.csv");
+    std::ofstream seedOut(prefix+"_seed.csv");
+    std::ofstream birthOut(prefix+"_ion_birth_sample.csv");
+    std::ofstream primaryOut,clusterOut,timingOut,muonTimingOut;
+    if(cacheMuonPhysics){
+      timingOut.open(prefix+"_timing.csv");
+      muonTimingOut.open(prefix+"_muon_timing.csv");
+      if(!timingOut||!muonTimingOut)
+        throw std::runtime_error("Cannot create per-seed/per-muon physical timing files");
+      timingOut<<"crossing_id,station,theta_u_deg,theta_w_deg,configuration,"
+                 "primary_index,n_true_heed_primaries,u_seed_mm,v_seed_mm,"
+                 "garfield_seed,wall_seconds,avalanche_electrons,avalanche_ions,"
+                 "ion_births,collected_e,success,capped\n";
+      muonTimingOut<<"crossing_id,station,n_Heed_clusters,n_Heed_primaries,"
+                      "heed_wall_seconds,garfield_and_output_wall_seconds,"
+                      "muon_total_wall_seconds\n";
+      primaryOut.open(prefix+"_heed_primaries.csv");
+      clusterOut.open(prefix+"_heed_clusters.csv");
+      if(!primaryOut||!clusterOut)
+        throw std::runtime_error("Cannot create real Heed primary/cluster cache");
+      primaryOut<<std::setprecision(17);
+      clusterOut<<std::setprecision(17);
+      primaryOut<<"crossing_id,primary_index,cluster_index,u_rel_cm,v_abs_cm,"
+                   "w_rel_cm,t_ns,raw_heed_energy_eV,raw_dx,raw_dy,raw_dz\n";
+      clusterOut<<"crossing_id,cluster_index,u_rel_cm,v_abs_cm,w_rel_cm,"
+                   "t_ns,n_original,n_accepted\n";
+    }
+    if(!hitOut||!seedOut||!birthOut)
+      throw std::runtime_error("Cannot open new B1 output CSVs");
+    if(cacheMuonPhysics){
+      // The muon-vs-LUT benchmark checks the ORIGINAL Geant4 direction
+      // and EXACT Heed seed phases at 1e-6 precision. The original B1
+      // output's default iostream(6) would round those quantities.
+      hitOut<<std::setprecision(15);
+      seedOut<<std::setprecision(15);
+      birthOut<<std::setprecision(15);
+    }
+    hitOut<<"source|chunk|event|hit_index|track_id|station|det_id,configuration,"
+             "station,det_id,theta_u_in_deg,theta_w_in_deg,path_mm,momentum_GeV,"
+             "heed_clusters,heed_primaries,heed_discarded,heed_failed,"
+             "collected_avalanche_electrons,ion_births,garfield_ion_count,"
+             "zero_seeds,capped_seeds,failed_seeds,"
+             "ion_up,ion_down,ion_boundary,ion_top,ion_bottom,ion_side,"
+             "A_ion_hemi,A_ion_TB,e_up,e_down,e_top,e_bottom,"
+             "A_e_hemi,A_e_TB,G_eff_per_Heed_primary\n";
+    seedOut<<"crossing_id,configuration,primary_index,garfield_seed,"
+             "seed_u_mm,seed_v_mm,seed_w_mm,seed_energy_eV,"
+             "garfield_ne,garfield_ni,ion_births,collected_e,"
+             "attached,other,successful,capped,"
+             "ion_up,ion_down,ion_top,ion_bottom,A_ion_hemi,A_ion_TB\n";
+    birthOut<<"crossing_id,configuration,primary_index,u_mm,v_mm,w_mm,t_ns,"
+               "seed_ion_births_total,reservoir_weight\n";
+    for(const auto& h:crossings){
+      const auto muonStart=std::chrono::steady_clock::now();
+      const std::string id=h.source+"|"+std::to_string(h.chunk)+"|"+
+         std::to_string(h.event)+"|"+std::to_string(h.hit)+"|"+
+         std::to_string(h.track)+"|"+std::to_string(h.station)+"|"+
+         std::to_string(h.det);
+      int nCl=0,discarded=0,failed=0;
+      std::vector<HeedCluster> clusters;
+      const auto electrons=HeedPrimaries(gas,h,nCl,discarded,failed,
+                                       cacheMuonPhysics?&clusters:nullptr);
+      const double heedWallSeconds=std::chrono::duration<double>(
+          std::chrono::steady_clock::now()-muonStart).count();
+      if(failed)
+        throw std::runtime_error("TrackHeed GetElectron failed in native muon cache: "+id);
+      if(static_cast<int>(electrons.size())>maxPrimary)
+        throw std::runtime_error("Heed primary budget exceeded, preserve partial outputs and use a different pilot: "+id);
+      if(cacheMuonPhysics){
+        if(clusters.size()!=static_cast<std::size_t>(nCl))
+          throw std::runtime_error("TrackHeed accepted cluster bookkeeping changed");
+        for(std::size_t j=0;j<clusters.size();++j){
+          const auto& cl=clusters[j];
+          clusterOut<<id<<","<<j<<","<<cl.u<<","<<cl.v<<","
+                    <<cl.w<<","<<cl.t<<","<<cl.nOriginal<<","
+                    <<cl.nKept<<"\n";
+        }
+        for(std::size_t j=0;j<electrons.size();++j){
+          const auto& e=electrons[j];
+          primaryOut<<id<<","<<j<<","<<e.clusterIndex<<","
+                    <<e.u<<","<<e.v<<","<<e.w<<","<<e.t<<","
+                    <<e.energy<<","<<e.dx<<","<<e.dy<<","<<e.dz<<"\n";
+        }
+        primaryOut.flush();
+        clusterOut.flush();
+      }
+      // PHYSICS: exactly the FIRST GEOMETRY p3_noFW (no field wires).
+      // Unlike the original 4-field reference, no other field is simulated.
+      const auto avalancheStart=std::chrono::steady_clock::now();
+      RunGeometry(gas,GEOMS.front(),h,electrons,id,seedOut,birthOut,
+                  hitOut,nCl,discarded,failed,nullptr,
+                  cacheMuonPhysics?&timingOut:nullptr,false,
+                  cacheMuonPhysics?128:100);
+      if(cacheMuonPhysics){
+        const double avalWall=std::chrono::duration<double>(
+            std::chrono::steady_clock::now()-avalancheStart).count();
+        const double muonWall=std::chrono::duration<double>(
+            std::chrono::steady_clock::now()-muonStart).count();
+        muonTimingOut<<id<<","<<h.station<<","<<nCl<<","
+                     <<electrons.size()<<","<<std::setprecision(12)
+                     <<heedWallSeconds<<","<<avalWall<<","<<muonWall<<"\n";
+        muonTimingOut.flush();
+      }
+      std::cout<<"PASS genuine native muon "<<id
+               <<" p3_noFW Heed primaries="<<electrons.size()<<"\n";
+    }
+    std::cout<<"PASS: muon-driven B1 all crossing/geometry rows written\n";
+    if(cacheMuonPhysics)
+      std::cout<<"PASS: immutable same-Heed primary/cluster cache and full "
+                 "Garfield microscopic reference emitted; p3_noFW ONLY\n";
+    return 0;
+  }catch(const std::exception& e){
+    std::cerr<<"B1 FAILURE: "<<e.what()<<"\n";
+    return 2;
+  }
+}
