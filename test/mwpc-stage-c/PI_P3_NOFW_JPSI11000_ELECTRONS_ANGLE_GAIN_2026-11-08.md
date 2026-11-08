@@ -93,3 +93,40 @@ distinct output directory
 `test_runs/mwpc_stage_c/pi_p3_noFW_jpsi11000_gain_angle_linear_v2/`.
 This full mode must read all 60.8M source birth-reservoir rows and is
 much slower, but still runs no Garfield simulations.
+
+## Zero-gain conditional mean check
+
+For all original 588560 full-Garfield calls, the recorded summary shows:
+- Collected electron mean over ALL primary seeds = 566.6484436591002
+- Zero collected-electron outcomes = 91708
+- Active collected-electron outcomes = 496852
+- Conditional mean collected_e GIVEN collected_e>0 =
+  566.6484436591002 * 588560 / 496852 = **671.2393388775732**
+- Garfield ne mean over ALL seeds = 566.3984385619138
+- Zero Garfield ne outcomes = 91699
+- Conditional mean ne GIVEN ne>0 = **670.9310350379684**
+
+These are mathematically exact consequences of the already-available
+sample means and event counts, up to printed floating point precision.
+The unconditional mean is the physically correct effective average
+gain per genuine TrackHeed starting electron when modeling actual
+charge response; conditional mean only describes successful avalanches.
+
+To verify numerically from every original SHA-sealed seed CSV and
+regenerate the linear plot with both means in the legend (without
+rehashing 60M ion births or running Garfield):
+
+~~~bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git pull --ff-only
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+SCRIPT=test/mwpc-stage-c/pi_p3_noFW_jpsi11000_gain_angle_plots_v1.py
+"$PY" -m py_compile "$SCRIPT"
+"$PY" "$SCRIPT" selftest
+"$PY" -u "$SCRIPT" electrons-linear
+~~~
+
+New, nonoverwriting output
+`test_runs/mwpc_stage_c/pi_p3_noFW_jpsi11000_electrons_linear_v3_nonzero_mean/`
+has `statistics.json` containing both all-inclusive and conditional
+means/RMSs, plus their zero fractions.
