@@ -168,3 +168,45 @@ to update the dirty tracked file. First back up the existing local
 script outside the Git checkout, then fetch the GitHub branch and
 extract the exact reviewed file from `FETCH_HEAD` (see chat commands).
 No original Garfield data or existing previous plot outputs are touched.
+
+## v6: one orange gain distribution only, with population-correct labels
+
+The requested histogram variant now plots **ONLY anode-collected electron count**;
+`garfield_ne` remains in `statistics.json` for comparison but is NOT drawn.
+
+Two PNG files, each with a LINEAR Y and a LOG Y panel (linear X, no CDF):
+
+- `01_electrons_per_avalanche_with_zero_bin.png`: the **N=0 bin [0,1)** is
+  explicitly separate from fixed **50 electrons/bin** for positive electron
+  counts. Full 588560-avalanche normalization. Legend shows **mean(all)**
+  and **RMS(all)**, NOT the positive-conditioned statistics.
+- `01_electrons_per_avalanche_with_zero_bin_without_zero_bin.png`: excludes
+  [0,1), uses fixed **50 electrons/bin**, normalized over collected_e>0 only.
+  Legend shows **mean(N>0)** and **RMS(N>0)**, NOT all-event statistics.
+
+The zero bin is highlighted with a circular marker because its 1-electron
+width is visually subpixel when displaying the full gain range on a linear
+X-axis. Histogram vertical axis is probability per bin, not probability
+density, because the first zero-only bin is 1 electron wide and all other
+bins are 50 electrons wide. Per-figure bin width and zero fraction are
+annotated in the figure subtitle.
+
+Safe, fast regeneration uses the SHA-checking seed-only reader; NO
+Garfield or 60M saved ion-birth coordinate rescans:
+
+~~~bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git fetch origin feature/mwpc-stage-c
+SCRIPT=test/mwpc-stage-c/pi_p3_noFW_jpsi11000_gain_angle_plots_v1.py
+mkdir -p ~/na6p/script_backups
+cp -p "$SCRIPT" ~/na6p/script_backups/gain_angle_local_before_v6.py
+git show "FETCH_HEAD:$SCRIPT" > "${SCRIPT}.github_new"
+mv "${SCRIPT}.github_new" "$SCRIPT"
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+"$PY" -m py_compile "$SCRIPT"
+"$PY" "$SCRIPT" selftest
+"$PY" -u "$SCRIPT" electrons-hist
+~~~
+
+v6 output folder (separate from v5, never overwrite):
+`test_runs/mwpc_stage_c/pi_p3_noFW_jpsi11000_electrons_hist_v6_collected/`.
