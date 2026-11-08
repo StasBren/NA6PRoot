@@ -33,8 +33,8 @@ REPO=Path(__file__).resolve().parents[2]
 DATA=REPO/"test_runs/mwpc_stage_c"
 OLD=DATA/"pi_p3_noFW_jpsi1000_native_v1"
 NEW=DATA/"pi_p3_noFW_jpsi_extra10000_native_v1"
-OUT=DATA/"pi_p3_noFW_jpsi11000_gain_angle_linear_v2"
-ELECTRONS_ONLY_OUT=DATA/"pi_p3_noFW_jpsi11000_electrons_linear_v3_nonzero_mean"
+OUT=DATA/"pi_p3_noFW_jpsi11000_gain_angle_hist_v5"
+ELECTRONS_ONLY_OUT=DATA/"pi_p3_noFW_jpsi11000_electrons_hist_v5"
 GNAME="p3_noFW"
 NR=72
 PHI_EDGES=np.linspace(-180.,180.,NR+1)
@@ -133,80 +133,103 @@ def physics_files(*, verify_births=True):
 
 
 def plot_electron_counts_linear(raw_ne, coll, filename, num_muons=11000):
-    """Full-range, linear X and Y; ROOT-style RMS is std around mean.
+    """Two independent PNGs; NO CDF, two y-scales in EACH PNG.
 
-    Zeros are INCLUDED in both the linear-bin probability histogram and
-    empirical CDF. Means and RMSs use ALL avalanche calls, never a clipped
-    or positive-only subset. Values in x data are actual integer electrons.
+    First PNG includes explicit zero-electron bin [0, 1).
+    Second PNG removes that bin and conditionally renormalizes on >0.
+    Both panels: x linear; first y linear, second y logarithmic.
+    All/positive means and ROOT-style RMS are computed on raw unbinned
+    counts. Nonuniform first-bin width is intentional and disclosed;
+    compare BIN PROBABILITIES, not probability densities.
     """
     raw_ne=np.asarray(raw_ne,dtype=np.float64)
     coll=np.asarray(coll,dtype=np.float64)
-    must(len(raw_ne)==len(coll)>0,"Electron populations must match")
-    must(np.all(np.isfinite(raw_ne)) and np.all(np.isfinite(coll))
+    must(len(raw_ne)==len(coll)>0, "Unequal source avalanche counts")
+    must(np.isfinite(raw_ne).all() and np.isfinite(coll).all()
          and np.min(raw_ne)>=0 and np.min(coll)>=0,
-         "Bad original Garfield electron multiplicity")
-    N=len(raw_ne)
-    xmax=max(float(np.max(raw_ne)),float(np.max(coll)),1.)
-    # Fixed linear bins across the ENTIRE physical range, including tails;
-    # no percentile truncation and no hidden logarithmic normalization.
-    edges=np.linspace(0.,xmax+1.,121)
-    fig,axs=plt.subplots(1,2,figsize=(13.5,5.1))
-    info=[
-        (raw_ne,"Garfield ne","-"),
-        (coll,"Anode-collected e","--"),
-    ]
-    statistics={}
-    for x,label,linestyle in info:
-        mu=float(np.mean(x))
-        rms=float(np.std(x,ddof=0))
-        zeros=int(np.sum(x==0))
-        name="garfield_ne" if label=="Garfield ne" else "collected_e"
-        active=x[x>0]
-        must(len(active)>0,"No nonzero Garfield electrons to estimate conditional mean")
-        positive_mean=float(np.mean(active))
-        positive_rms=float(np.std(active,ddof=0))
-        active_count=int(len(active))
-        statistics[name]={
-            "mean":mu,"RMS":rms,
-            "mean_given_positive":positive_mean,
-            "RMS_given_positive":positive_rms,
-            "zeros":zeros,"n_positive":active_count,
-            "p_zero":zeros/N,"n_avalanche_calls":N
+         "Invalid original Garfield electron multiplicities")
+    n=len(raw_ne)
+    xmax=max(float(np.max(raw_ne)),float(np.max(coll)),1.0)
+    # [0,1) is ONLY the zero-electron count, since N is an integer.
+    # Positive region uses 120 equally spaced, full-range bins.
+    # No percentile clipping, no log x-axis, no ignored high-gain tail.
+    positive_edges=np.linspace(1.0,xmax+1.0,121)
+    edges=np.r_[0.,positive_edges]
+    stats={}
+    for label,values in (("garfield_ne",raw_ne),("collected_e",coll)):
+        active=values[values>0]
+        must(active.size>0,"No positive avalanches in "+label)
+        n0=int(np.sum(values==0))
+        stats[label]={
+            "mean":float(np.mean(values)),
+            "RMS":float(np.std(values,ddof=0)),
+            "mean_given_positive":float(np.mean(active)),
+            "RMS_given_positive":float(np.std(active,ddof=0)),
+            "zeros":n0,
+            "n_positive":int(active.size),
+            "p_zero":n0/n,
+            "n_avalanche_calls":n
         }
-        legend=(f"{label}: mean(all)={mu:,.2f}, "
-                f"mean(>0)={positive_mean:,.2f}, "
-                f"RMS(all)={rms:,.2f}; zeros={zeros:,}")
-        # Probability per linear bin sums to 1, including zero-G avalanches.
-        axs[0].hist(x,bins=edges,histtype="step",
-                    weights=np.full(N,1./N),linewidth=1.7,
-                    linestyle=linestyle,label=legend)
-        values,counts=np.unique(x,return_counts=True)
-        cdf=np.cumsum(counts)/N
-        axs[1].step(values,cdf,where="post",linewidth=1.7,
-                    linestyle=linestyle,
-                    label=(f"{label}: mean(all)={mu:,.2f}, "
-                           f"mean(>0)={positive_mean:,.2f}, RMS(all)={rms:,.2f}"))
-    axs[0].set_xlim(0,xmax+1)
-    axs[0].set_ylim(bottom=0)
-    axs[0].set_xlabel("Electrons in a single Garfield avalanche")
-    axs[0].set_ylabel("Probability per linear-width bin (zero included)")
-    axs[0].set_title("Electron multiplicity — full linear range")
-    axs[1].set_xlim(0,xmax+1)
-    axs[1].set_ylim(0,1.02)
-    axs[1].set_xlabel("Electrons in a single Garfield avalanche")
-    axs[1].set_ylabel("Empirical cumulative probability")
-    axs[1].set_title("CDF — full linear range")
-    for ax in axs:
-        ax.legend(fontsize=8)
-        ax.grid(alpha=.13)
-    fig.suptitle(
-        f"Real Garfield p3_noFW: {N:,} avalanches from {num_muons:,} J/psi muons\n"
-        "Both axes linear; mean and RMS include zero avalanches")
-    fig.tight_layout()
-    fig.savefig(filename,dpi=190)
-    plt.close(fig)
-    return statistics
+    hist_ne=np.histogram(raw_ne,bins=edges)[0]
+    hist_coll=np.histogram(coll,bins=edges)[0]
+    must(int(np.sum(hist_ne))==n and int(np.sum(hist_coll))==n,
+         "Histogram did not cover all original Garfield electron counts")
+    series=[
+        ("garfield_ne","Garfield ne",hist_ne,"-"),
+        ("collected_e","Anode-collected e",hist_coll,"--")
+    ]
 
+    # The two plotted variants address two different probability spaces:
+    # with-zero: P(N in bin) for ALL initial TrackHeed electrons;
+    # no-zero:   P(N in bin | N>0), normalized to active avalanches.
+    def make_variant(out_path,exclude_zero):
+        plotted_edges=edges[1:] if exclude_zero else edges
+        fig,axes=plt.subplots(1,2,figsize=(14.4,5.7),sharex=True)
+        for name,label,counts,linestyle in series:
+            info=stats[name]
+            counts_plot=counts[1:] if exclude_zero else counts
+            denominator=(info["n_positive"] if exclude_zero else n)
+            prob=counts_plot/denominator
+            must(abs(float(np.sum(prob))-1.)<1e-12,
+                 "Histogram probabilities failed exact normalization")
+            legend=(f"{label}: mean(all)={info['mean']:,.2f}, "
+                    f"mean(>0)={info['mean_given_positive']:,.2f}, "
+                    f"RMS(all)={info['RMS']:,.2f}; zero={info['zeros']:,}")
+            for ax in axes:
+                # A step graph emphasizes the narrow [0,1) zero bin
+                # without treating it as a very wide density bin.
+                vals=np.r_[prob,prob[-1]]
+                if ax is axes[1]:
+                    vals=np.where(vals>0,vals,np.nan)
+                ax.step(plotted_edges,vals,where="post",lw=1.65,
+                        linestyle=linestyle,label=legend)
+        for ax in axes:
+            ax.set_xlim(plotted_edges[0],plotted_edges[-1])
+            ax.set_xlabel("Electrons per microscopic Garfield avalanche")
+            ax.set_ylabel("Probability per bin")
+            ax.grid(alpha=.15)
+            ax.legend(fontsize=7.5,loc="upper right")
+        axes[0].set_ylim(bottom=0)
+        axes[0].set_title("Linear Y scale")
+        axes[1].set_yscale("log")
+        axes[1].set_title("Logarithmic Y scale")
+        if exclude_zero:
+            fig.suptitle(
+                f"p3_noFW — {n:,} Garfield avalanches / {num_muons:,} J/psi muons\n"
+                "ZERO BIN OMITTED; probability renormalized over N>0")
+        else:
+            fig.suptitle(
+                f"p3_noFW — {n:,} Garfield avalanches / {num_muons:,} J/psi muons\n"
+                "ZERO BIN [0,1) included as separate N=0 bin; full-population probability")
+        fig.tight_layout()
+        fig.savefig(out_path,dpi=190)
+        plt.close(fig)
+
+    make_variant(filename,False)
+    other=filename.with_name(filename.stem+"_without_zero_bin.png")
+    must(not other.exists(),"Refusing to overwrite companion PNG: "+str(other))
+    make_variant(other,True)
+    return stats
 
 def plot_electrons_only():
     """Fast: verify source SHA and read true seed counters, not 60M ion points."""
@@ -233,25 +256,28 @@ def plot_electrons_only():
     must(n_muons==11000 and len(raw_ne)==588560,
          "11k full Garfield source/electron sample changed unexpectedly")
     ELECTRONS_ONLY_OUT.mkdir(parents=True,exist_ok=False)
-    png=ELECTRONS_ONLY_OUT/"01_electrons_per_avalanche_linear.png"
+    png=ELECTRONS_ONLY_OUT/"01_electrons_per_avalanche_with_zero_bin.png"
     stats=plot_electron_counts_linear(raw_ne,collected,png,n_muons)
     record={
-        "schema":"P3_NOFW_JPSI11000_LINEAR_ELECTRON_MULTIPLICITY_V2",
+        "schema":"P3_NOFW_JPSI11000_2PANEL_LINEAR_LOG_ELECTRON_HIST_V5",
         "physics":"Original true full Garfield + Heed; no new simulations",
         "n_true_Jpsi_muon_parents":n_muons,
         "n_full_Garfield_avalanche_calls":len(raw_ne),
         "RMS_definition":"np.std(ddof=0), ROOT-style population standard deviation; calculated separately for all and positive-only",
         "conditional_mean_definition":"E[electron count | electron count > 0], excluding all exactly-zero events; unconditional mean remains E[count]",
         "source_checks":"SHA of original selected inputs and all consumed seed/crossing CSVs; full birth-reservoir hashes omitted in fast electron-only mode",
-        "range":"All nonnegative values (no clipping), zeros included",
+        "range":"Full physical integer range (no clipping); first bin [0,1), others linear width",
+        "plot_variants":"With N=0 bin: all-trial normalization. Without N=0 bin: conditioned on count > 0 and separately renormalized",
+        "cdf":"omitted",
+        "scales":"Linear X in both; linear Y and logarithmic Y in separate panels",
         "statistics":stats,
-        "plot_sha256":sha(png),
+        "plot_sha256":{p.name:sha(p) for p in sorted(ELECTRONS_ONLY_OUT.glob("*.png"))},
         "script_sha256":sha(Path(__file__))
     }
     with (ELECTRONS_ONLY_OUT/"statistics.json").open("x") as f:
         json.dump(record,f,indent=2)
         f.write("\n")
-    print("PASS LINEAR electron avalanche figure, no microscopic Garfield calls")
+    print("PASS TWO linear/log avalanche histograms (with/without first zero bin); no Garfield calls")
     for name,z in stats.items():
         print(f"{name}: mean_all={z['mean']:.4f}, "
               f"mean_gain_given_nonzero={z['mean_given_positive']:.4f}, "
@@ -366,7 +392,7 @@ def analyze():
     # Figure 1: true full-range linear electron multiplicity, including
     # conditional mean given gain > 0 in legend.
     electron_stats=plot_electron_counts_linear(
-        raw_ne,coll,OUT/"01_electrons_per_avalanche.png",passed_muons)
+        raw_ne,coll,OUT/"01_electrons_per_avalanche_with_zero_bin.png",passed_muons)
 
     # Figure 2: correct per-ION vs per-avalanche angular comparisons.
     # Both angles are of ion creation around nearest physical anode.
@@ -450,7 +476,7 @@ def analyze():
         "rms_Garfield_ne_per_seed":float(raw_ne.std(ddof=0)),
         "rms_collected_e_per_Heed_seed":float(coll.std(ddof=0)),
         "RMS_definition":"Population standard deviation (ddof=0), including zeros",
-        "electron_histogram_axes":"linear x and linear y; all counts including zero",
+        "electron_histogram_axes":"linear x, both linear and logarithmic y, two PNGs; zero bin isolated/omitted; no CDF",
         "mean_collected_e_per_Heed_seed_effective_gas_gain":mean_overall,
         "mean_created_e_ion_pairs_per_Heed_seed":mean_ion,
         "total_collected_e_div_total_created_pairs_NOT_a_gain":balance,
@@ -506,8 +532,8 @@ def selftest():
 
 if __name__=="__main__":
     a=argparse.ArgumentParser(description=__doc__)
-    a.add_argument("mode",choices=("selftest","plot","electrons-linear"))
+    a.add_argument("mode",choices=("selftest","plot","electrons-linear","electrons-hist"))
     z=a.parse_args()
     if z.mode=="selftest":selftest()
-    elif z.mode=="electrons-linear":plot_electrons_only()
+    elif z.mode in ("electrons-linear","electrons-hist"):plot_electrons_only()
     else:analyze()
