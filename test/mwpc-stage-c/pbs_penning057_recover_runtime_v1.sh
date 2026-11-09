@@ -7,7 +7,7 @@
 #PBS -l io=0.1
 
 # Independent full-microscopic recovery, no original result overwritten.
-set -euo pipefail
+set -eo pipefail
 CHANNEL=${CHANNEL:?Set CHANNEL=Jpsi/Phi/Omega}
 INDEX=${CHUNK_INDEX:?Set CHUNK_INDEX=0..499}
 case "$CHANNEL" in Jpsi|Phi|Omega) ;; *) echo "Bad CHANNEL" >&2; exit 2;; esac
@@ -50,6 +50,7 @@ trap finalize EXIT
 echo "START recovery $CHANNEL:$FOUR on $(hostname), job $PBS_JOBID, $(date -u)"
 export GARFIELD_INSTALL=/cvmfs/sft-nightlies.cern.ch/lcg/nightlies/dev3/Mon/Garfield++/HEAD/x86_64-el9-gcc13-opt
 source "$GARFIELD_INSTALL/Garfield++-env.sh"
+set -u
 ROOT_LIB="$(root-config --libdir)"
 export LD_LIBRARY_PATH="$ROOT_LIB${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 echo "ROOT $(root-config --version), ROOT_LIB=$ROOT_LIB"
