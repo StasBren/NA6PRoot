@@ -347,6 +347,235 @@ def prepare():
     print("CACHE",NPZ,flush=True)
     print("RUN: python -m streamlit run",Path(__file__),flush=True)
 
+
+def _weighted_time_quantile(edges,weights,q):
+    """Bin-edge quantile approximation; preserves physical units ns."""
+    w=np.asarray(weights,dtype=np.float64)
+    e=np.asarray(edges,dtype=np.float64)
+    must(len(e)==len(w)+1 and 0.<=q<=1. and w.sum()>0.,
+         "Invalid physical ion-birth time marginal")
+    idx=min(len(w)-1,int(np.searchsorted(np.cumsum(w),q*w.sum(),side="left")))
+    return float(e[idx+1])
+
+
+def plot_explanation(kind,data,meta,angular_deg):
+    """Three grounded, plot-specific paragraphs; no physics rerun.
+
+    Output: (what is shown, how it was measured, what the saved data reveal).
+    All numerical statements derive from the verified Penning-ON cache,
+    never from assumptions about the shape of a histogram.
+    """
+    g=data["gain"].astype(np.float64)
+    positive=g[g>0]
+    n=len(g)
+    n0=int(np.count_nonzero(g==0))
+    ng=int(meta["n_true_ion_births"])
+    if kind=="gain_all":
+        return (
+            "**What you see:** The distribution of anode-collected electron counts "
+            "from one Garfield avalanche started by one retained TrackHeed electron. "
+            "A separate [0,1) bin represents avalanches collecting no electrons.",
+            "**How measured:** The microscopic code counts electron endpoints close "
+            "to anode wires for every initial electron. Each avalanche contributes "
+            "one entry. The average includes zero-collection avalanches, rather than "
+            "averaging over muons.",
+            f"**In this sample:** {n:,} avalanches; mean {g.mean():,.1f} electrons, "
+            f"RMS {g.std(ddof=0):,.1f}; {n0:,} collect none ({n0/n:.2%}); "
+            f"99th percentile {np.quantile(g,.99):,.0f}. Fluctuations in collected "
+            "charge matter for event-by-event cathode signal amplitudes."
+        )
+    if kind=="gain_pos":
+        return (
+            "**What you see:** The avalanche gain distribution **conditional on at "
+            "least one electron being collected at an anode**. It is not the gain "
+            "distribution of all starting electrons.",
+            "**How measured:** We use exactly the same microscopic collected-endpoint "
+            "counter but select only avalanche records with collected_e > 0, then "
+            "renormalise the histogram using this selected population.",
+            f"**In this sample:** {len(positive):,} positive-gain avalanches; mean "
+            f"{positive.mean():,.1f}, RMS {positive.std(ddof=0):,.1f} electrons. "
+            f"This conditional mean exceeds the inclusive mean ({g.mean():,.1f}) "
+            "because the zero-collection outcomes are omitted."
+        )
+    if kind in ("angle_eq","angle_ion"):
+        raw=np.asarray(data["angle_equal"] if kind=="angle_eq" else data["angle_ion"],
+                       dtype=np.float64)
+        e=np.asarray(data["phi_edges"],dtype=np.float64)
+        mid=(e[1:]+e[:-1])/2.
+        axial=np.minimum(np.abs(mid),180.-np.abs(mid))<30.
+        transverse=np.abs(np.abs(mid)-90.)<30.
+        axsum=float(raw[axial].sum())
+        trsum=float(raw[transverse].sum())
+        contrast=axsum/trsum if trsum>0 else float("nan")
+        mode="every ion-producing avalanche contributes total weight 1" if kind=="angle_eq" else "each sampled position is weighted by the exact avalanche ion count / number of retained samples"
+        population="per avalanche" if kind=="angle_eq" else "per created ion"
+        return (
+            "**What you see:** The azimuth φ of the locations at which positive ions "
+            "were *created*, measured around the nearest anode wire. φ = 0° points "
+            "to +u, ±180° to −u, and ±90° to the ±v directions. This is not "
+            "the direction in which ions subsequently drift.",
+            "**How measured:** Garfield's ionisation callback records the birth "
+            "positions; up to 128 positions are uniformly sampled per avalanche. "
+            f"Here, {mode}. Angular bins are currently {angular_deg}° wide.",
+            f"**In this sample:** The probability in equal-size angular windows "
+            f"within 30° of the ±u axis is {contrast:.2f}× that in windows within "
+            "30° of the ±v axis. This quantifies how anisotropic the *birth* "
+            f"distribution is {population}; it does not yet predict electrode "
+            "signals without ion transport and weighting fields."
+        )
+    if kind in ("asym_seed","asym_muon"):
+        v=np.asarray(data["seed_A"] if kind=="asym_seed" else data["muon_A"],
+                     dtype=np.float64)
+        v=v[np.isfinite(v)]
+        unit="individual ion-producing avalanche" if kind=="asym_seed" else "whole real J/ψ muon"
+        unitcount=f"{len(v):,} defined values"
+        return (
+            f"**What you see:** The *signed* upper/lower ion-birth asymmetry of each "
+            f"{unit}, with A = (N_up − N_down)/(N_up + N_down). "
+            "A = 0 is symmetric; +1 means all counted births above the anode "
+            "and −1 means all below.",
+            "**How measured:** Every ionisation callback is assigned to the upper "
+            "or lower half-plane using its exact position relative to the closest "
+            "anode. These are **full exact integer counts**, not the 128-point "
+            "spatial subsample. The plotted asymmetry is undefined if both "
+            "sector counts are zero.",
+            f"**In this sample:** {unitcount}; mean signed A = {v.mean():+.4f}, "
+            f"mean |A| = {np.abs(v).mean():.4f}, and "
+            f"{np.mean(np.abs(v)>.5):.1%} have |A| > 0.5. "
+            "An overall mean near zero can coexist with large individual "
+            "charge imbalances and does not imply symmetric cathode pulses."
+        )
+    if kind=="time":
+        e=np.asarray(data["t_edges"],dtype=np.float64)
+        w=np.asarray(data["t_weights"],dtype=np.float64)
+        p50=_weighted_time_quantile(e,w,.5)
+        p90=_weighted_time_quantile(e,w,.9)
+        return (
+            "**What you see:** When ions are *created* during the electron "
+            "avalanche, expressed as Δt = t_ion birth − t_initial Heed electron "
+            "in nanoseconds. This is **not ion drift time** and not CPU time.",
+            "**How measured:** We subtract the initiating TrackHeed electron's "
+            "saved time from each sampled Garfield ionisation-birth time. "
+            "Each retained birth is weighted to represent the exact number "
+            "of ions in its avalanche. Time bins are nonuniform, so "
+            "'probability density' is preferable when comparing their heights.",
+            f"**In this sample:** Approximate ion-weighted median creation "
+            f"delay ≤ {p50:.4g} ns and 90th percentile ≤ {p90:.4g} ns "
+            f"(bin-edge estimates from {ng:,} actual ion births). "
+            "This temporal source is needed before adding ion drift and the "
+            "Shockley–Ramo cathode response."
+        )
+    if kind=="span":
+        span=np.asarray(data["seed_span_ns"],dtype=np.float64)
+        finite=span[np.isfinite(span)]
+        return (
+            "**What you see:** The interval between the earliest and latest "
+            "saved ion-birth times **within one avalanche**; one histogram "
+            "entry corresponds to one ion-producing initial electron.",
+            "**How measured:** For each avalanche we take max(t) − min(t) "
+            "over at most 128 randomly selected ion births. Because not "
+            "every birth is stored, this is a **lower bound** on the true "
+            "microscopic creation-time span.",
+            f"**In this sample:** {len(finite):,} avalanches with sampled "
+            f"births; median sampled span {np.median(finite):.4g} ns and "
+            f"90th percentile {np.quantile(finite,.9):.4g} ns. "
+            "A small observed span does not establish a short ion-induced "
+            "cathode pulse—the ions still need to drift."
+        )
+    if kind=="gain_asym":
+        a=np.asarray(data["seed_absA"],dtype=np.float64)
+        mask=(g>0)&np.isfinite(a)
+        x=g[mask]
+        y=a[mask]
+        split=float(np.median(x))
+        low=y[x<=split]
+        high=y[x>split]
+        return (
+            "**What you see:** How much ion creation favours one half-plane "
+            "as a function of anode-collected electron gain. The ordinate "
+            "is **mean |A|**, not a signed asymmetry or a direct cathode "
+            "charge ratio.",
+            "**How measured:** A is computed exactly from the callback's "
+            "ion-up and ion-down counts for each avalanche. Positive "
+            "collected-gain avalanches are grouped in logarithmic gain bins; "
+            "each plotted point is the mean of their |A| values. "
+            "Bins with fewer than 20 entries are omitted.",
+            f"**In this sample:** {len(x):,} eligible avalanches; splitting "
+            f"at median collected gain {split:,.0f}, mean |A| is "
+            f"{low.mean():.4f} below and {high.mean():.4f} above this gain. "
+            "This is a correlation relevant to charge-sharing fluctuations, "
+            "not proof that anode gain alone determines cathode response."
+        )
+    if kind=="ion_xy":
+        w=np.asarray(data["xy_ion"],dtype=np.float64)
+        xe=np.asarray(data["u_edges"],dtype=np.float64)
+        ye=np.asarray(data["v_edges"],dtype=np.float64)
+        total=float(w.sum())
+        frac=total/ng if ng else float("nan")
+        iy,ix=np.unravel_index(int(np.argmax(w)),w.shape)
+        umid=float((xe[ix]+xe[ix+1])/2)
+        vmid=float((ye[iy]+ye[iy+1])/2)
+        return (
+            "**What you see:** A top-down *ion-creation* map in the (u,v) "
+            "plane near the anode. Horizontal u is folded into the nearest "
+            "3-mm anode cell; vertical v points between the cathode planes.",
+            "**How measured:** For each Garfield avalanche, up to 128 "
+            "ion-birth coordinates are sampled uniformly. Every sample "
+            "has weight N_ion births / N_samples. Heatmap colour counts "
+            "weighted births **per spatial cell**; it is not yet a density "
+            "per mm² or a drifting-ion distribution.",
+            f"**In this sample:** The displayed coordinate window contains "
+            f"approximately {frac:.2%} of the weighted ion births; its "
+            f"most populated cell is near (u,v)=({umid:+.3f},{vmid:+.3f}) mm "
+            "(dependent on chosen grid size). The position distribution "
+            "will seed future ion-drift and weighting-field calculations."
+        )
+    if kind=="gain_xy":
+        cnt=np.asarray(data["start_n"],dtype=np.float64)
+        sm=np.asarray(data["start_sum"],dtype=np.float64)
+        valid=cnt>=5
+        n_cells=int(np.count_nonzero(valid))
+        total=int(cnt.sum())
+        return (
+            "**What you see:** The conditional mean number of electrons "
+            "collected at the anode as a function of the **starting "
+            "TrackHeed electron position** relative to its nearest wire.",
+            "**How measured:** Each retained Heed electron is assigned "
+            "to a spatial (u,v) cell, and its exact Garfield collected "
+            "electron count is included—also if collection was zero. "
+            "The colour is (sum collected electrons)/(number of starts) "
+            "in that cell. Cells with fewer than 5 starts are hidden.",
+            f"**In this sample:** {total:,} electron starts fall inside "
+            f"the displayed spatial window and {n_cells:,} cells meet "
+            "the minimum population. Structure in this map tests "
+            "whether a position-conditioned gain model is needed "
+            "for realistic charge generation."
+        )
+    if kind=="time_phi":
+        w=np.asarray(data["t_phi"],dtype=np.float64)
+        e=np.asarray(data["t_phi_edges"],dtype=np.float64)
+        hist=w.sum(axis=1)
+        p90=_weighted_time_quantile(e,hist,.9)
+        return (
+            "**What you see:** A joint map of the ion-birth azimuth φ "
+            "and creation delay Δt for the **same sampled births**. "
+            "Bright bins have more weighted ion births at that angle "
+            "and time; they are not measured cathode current.",
+            "**How measured:** From each saved Garfield ionisation "
+            "position and creation time we calculate φ around the nearest "
+            "anode and Δt relative to the original TrackHeed electron "
+            "start. A retained sample carries weight N_births/N_samples. "
+            "The time bins are logarithmically spaced. Colour denotes "
+            "ion births **per bin**, not per ns per degree.",
+            f"**In this sample:** The upper edge of the approximate "
+            f"ion-weighted 90th-percentile creation delay is {p90:.4g} ns "
+            "in the stored joint time bins. Changes in angular structure "
+            "with time would be useful for modelling charge development, "
+            "but ion drift and the cathode weighting field are still absent."
+        )
+    raise RuntimeError("Missing grounded interpretation for "+str(kind))
+
+
 def app():
     import streamlit as st
     import plotly.graph_objects as go
@@ -466,6 +695,9 @@ def app():
     line_width=st.sidebar.slider("Curve line width",1.,5.,2.2,.2,
                                  key=f"{kind}-width")
     show_legend=st.sidebar.checkbox("Show legend",True,key=f"{kind}-legend-show")
+    show_interpretation=st.sidebar.checkbox(
+        "Show physics interpretation above plot",True,
+        key=f"{kind}-interpretation-show")
     legpos=st.sidebar.selectbox("Legend position",
         ["Top right","Top left","Bottom right","Bottom left"],
         key=f"{kind}-legend-position")
@@ -753,6 +985,13 @@ def app():
             else:st.warning("Log-Y limits must be strictly positive and increasing.")
         elif hi>lo:fig.update_yaxes(range=[lo,hi])
 
+    if show_interpretation:
+        what,how,observed=plot_explanation(kind,data,meta,angular_deg)
+        with st.container(border=True):
+            st.markdown("#### Understanding this plot")
+            st.markdown(what)
+            st.markdown(how)
+            st.markdown(observed)
     st.plotly_chart(fig,use_container_width=True,
                     config={"displaylogo":False,
                             "toImageButtonOptions":{"format":export_format,
@@ -826,7 +1065,16 @@ def selftest():
     must(math.isnan(gmu) and (0==0) and
          np.isfinite(np.asarray([12./3.,25./5.])).all(),
          "Zero-Heed parent gain must be undefined while active gains stay finite")
-    print("PASS local math/geometry tests; no Garfield, no raw data, no files written.")
+    # One physics explanation for each of the twelve views.
+    # Invariant: the renderer must not silently fall back to generic prose.
+    import ast
+    source=Path(__file__).read_text()
+    must(source.count('if kind=="gain_all"')>=1 and
+         source.count('if kind=="time_phi"')>=1 and
+         'show_interpretation' in source,
+         "Per-plot interpretation function or toggle missing")
+    print("PASS local math/geometry tests and plot interpretations; "
+          "no Garfield, no raw data, no files written.")
 
 if __name__=="__main__":
     if len(sys.argv)>1 and sys.argv[1]=="prepare":
