@@ -566,7 +566,7 @@ def app():
     elif kind=="time":
         edges=data["t_edges"]
         counts=data["t_weights"]
-        time_view_limit=float(edges[min(len(counts),int(np.searchsorted(
+        time_view_limit=float(edges[min(len(counts)-1,int(np.searchsorted(
             np.cumsum(counts),.999*float(np.sum(counts))))+1)])
         # Logarithmic time axes cannot show the real [0,10^-6ns) bin.
         # For log X omit exactly that bin with explicitly reported mass
