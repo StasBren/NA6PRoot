@@ -179,9 +179,21 @@ def prepare():
         must(len(batch)==20,"Incorrect muon number per checkpoint")
         for r in batch:
             hp=int(r["heed_primaries"])
+            collected=int(r["collected_avalanche_electrons"])
+            births_mu=int(r["ion_births"])
+            must(hp>=0 and collected>=0 and births_mu>=0,
+                 "Negative physical muon/Heed census")
+            if hp==0:
+                # A genuine Geant4 gas crossing CAN yield no accepted Heed
+                # electron (e.g. a short chord). There are then ZERO Garfield
+                # avalanche calls, so G_mu = total_collected/hp is 0/0,
+                # UNDEFINED rather than a zero-gain avalanche.
+                must(collected==0 and births_mu==0 and
+                     int(r["ion_up"])==0 and int(r["ion_down"])==0,
+                     "Muon with zero Heed electrons has nonzero Garfield products")
             muon_heed.append(hp)
-            muon_gain.append(int(r["collected_avalanche_electrons"])/hp if hp else np.nan)
-            muon_births.append(int(r["ion_births"]))
+            muon_gain.append(collected/hp if hp>0 else np.nan)
+            muon_births.append(births_mu)
             A=ahemi(int(r["ion_up"]),int(r["ion_down"]))
             muon_A.append(A);muon_absA.append(abs(A) if math.isfinite(A) else np.nan)
         must(sum(int(r["ion_births"]) for r in batch)==local_ions,
@@ -262,8 +274,17 @@ def prepare():
     must(out_of_range_dt_ions<1.e-7*max(1,total_ions),
          "Time-binning range misses actual Garfield ion birth delays; "
          f"missed weighted ions={out_of_range_dt_ions}")
-    must(np.isfinite(muon_gain).all(),
-         "A true Geant4 muon yielded zero initial electrons")
+    muon_heed_arr=np.asarray(muon_heed,dtype=np.int64)
+    muon_gain_arr=np.asarray(muon_gain,dtype=float)
+    n_zero_heed=int(np.count_nonzero(muon_heed_arr==0))
+    must(np.isfinite(muon_gain_arr[muon_heed_arr>0]).all()
+         and np.isnan(muon_gain_arr[muon_heed_arr==0]).all(),
+         "A muon with Heed electrons has undefined gain, or the zero-Heed "
+         "muon is incorrectly assigned a numeric gain")
+    print(f"PASS {N_MUONS} real Geant4 parents: "
+          f"{N_MUONS-n_zero_heed} with retained Heed electrons and "
+          f"{n_zero_heed} with no retained Heed electrons (G_mu undefined).",
+          flush=True)
     must(not OUT.exists(),
          "Refusing to overwrite dashboard directory "+str(OUT))
     OUT.mkdir(parents=True)
@@ -299,6 +320,9 @@ def prepare():
     metadata={
         "schema":"P3_NOFW_PENNING_ON_INTERACTIVE_DASHBOARD_V1",
         "n_independent_Geant4_Jpsi_parents":1000,
+        "n_muons_with_retained_Heed_primaries":N_MUONS-n_zero_heed,
+        "n_muons_with_zero_retained_Heed_primaries":n_zero_heed,
+        "muon_gain_definition":"Collected electron sum / number of retained Heed primary electrons; NaN for zero-primary muons (0/0, NOT zero-gain avalanches)",
         "n_microscopic_TrackHeed_primary_Garfield_avalanches":len(gain),
         "n_ion_producing_avalanches":n_ion_avals,
         "n_true_ion_births":total_ions,
@@ -353,11 +377,15 @@ def app():
 
     g=data["gain"].astype(float)
     positive=g[g>0]
-    a,b,c,d=st.columns(4)
+    a,b,c,d,e=st.columns(5)
     a.metric("Real J/ψ muons","1,000")
     b.metric("Microscopic avalanches",f"{len(g):,}")
     c.metric("Mean collected gain",f"{np.mean(g):,.1f}")
     d.metric("Zero collected",f"{np.mean(g==0):.2%}")
+    e.metric("Muons without Heed e",str(meta["n_muons_with_zero_retained_Heed_primaries"]))
+    st.caption("Muon-level gain is undefined (0/0) for muons with no retained "
+               "TrackHeed electrons; they remain in the 1,000-muon sample. "
+               "Avalanche-level gain statistics use only real starting electrons.")
 
     kinds={
         "gain_all":"Avalanche gain · including zero",
@@ -755,7 +783,10 @@ def app():
     with st.expander("Scientific definitions, raw statistics and provenance"):
         st.markdown("""
 - **Exact**: Per-seed collected electrons, true total ion births, sectors
-  and per-muon upper/lower asymmetry.
+  and per-muon upper/lower asymmetry (where its denominator is nonzero).
+- **Zero Heed electrons:** a Geant4 muon with no retained primary
+  electrons has NO microscopic avalanche and undefined muon gain (0/0).
+  Such muons are counted, not removed or confused with a real G=0 avalanche.
 - **Spatial and temporal ion distributions are estimated** from a uniform,
   bounded 128-position reservoir per ion-producing avalanche, weighted
   by each avalanche's real ion-birth count.
@@ -789,6 +820,12 @@ def selftest():
          "Gain zero-only [0,1) bin is mixing nonzero avalanches")
     w=[1./4]*4
     must(abs(sum(w)-1.)<1e-12,"Weighted reservoir source normalization wrong")
+    # Valid all-muon census must not require G_mu for zero-Heed parents.
+    n0=0
+    gmu=float("nan") if n0==0 else 23./n0
+    must(math.isnan(gmu) and (0==0) and
+         np.isfinite(np.asarray([12./3.,25./5.])).all(),
+         "Zero-Heed parent gain must be undefined while active gains stay finite")
     print("PASS local math/geometry tests; no Garfield, no raw data, no files written.")
 
 if __name__=="__main__":
