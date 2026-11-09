@@ -110,3 +110,32 @@ intentionally rejects missing SHA seals, capped avalanches, unpaired
 starting electrons, inconsistent ion-birth reservoir sizes/weights,
 and impossible negative creation-time offsets. Any such failure needs
 investigation rather than hiding bad data in a graph.
+
+
+## New: physics interpretation above every plot
+
+The dashboard now displays an expanded "Understanding this plot" panel
+**immediately above** the selected figure (all 12 modes). Each panel
+gives:
+- What the axes and the source distribution actually represent.
+- How Garfield, TrackHeed, exact sector counters or the 128-per-avalanche
+  random ion-birth reservoir generated those numbers.
+- A derived observation from the loaded, verified Penning-ON cache
+  (e.g. mean/RMS/zero fraction, signed asymmetry/mean |A|, angular
+  axial-to-transverse contrast or approximate ion-weighted time
+  percentiles), with limitations stated explicitly.
+
+These paragraphs use the physical cached data; they do not claim to
+have reconstructed the induced cathode waveform or individual drift
+trajectories. The interpretation is outside the downloadable figure,
+so slide-quality PNG/SVG exports remain uncluttered. Uncheck
+"Show physics interpretation above plot" in the sidebar to hide it.
+
+**No need to re-run 'prepare'.** This addition changes ONLY the
+local Streamlit presentation. Re-fetch the one dashboard Python file,
+run selftest and restart Streamlit. To force a white browser theme:
+
+```bash
+"$PY" -m streamlit run "$SCRIPT" --server.address localhost --server.port 8501 --theme.base light
+```
+
