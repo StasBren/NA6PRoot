@@ -1065,14 +1065,36 @@ def selftest():
     must(math.isnan(gmu) and (0==0) and
          np.isfinite(np.asarray([12./3.,25./5.])).all(),
          "Zero-Heed parent gain must be undefined while active gains stay finite")
-    # One physics explanation for each of the twelve views.
-    # Invariant: the renderer must not silently fall back to generic prose.
-    import ast
-    source=Path(__file__).read_text()
-    must(source.count('if kind=="gain_all"')>=1 and
-         source.count('if kind=="time_phi"')>=1 and
-         'show_interpretation' in source,
-         "Per-plot interpretation function or toggle missing")
+    # Exercise each dynamic explanation with a deliberately tiny synthetic
+    # cache, so UI documentation cannot silently break a specific plot.
+    synthetic={
+        "gain":np.array([0,2,10,22],dtype=float),
+        "angle_equal":np.ones(72,dtype=float),
+        "angle_ion":np.ones(72,dtype=float),
+        "phi_edges":PHI_EDGES,
+        "seed_A":np.array([np.nan,-.3,0.,1.]),
+        "muon_A":np.array([0.,-.1,np.nan,1.]),
+        "t_edges":T_EDGES,
+        "t_weights":np.ones(len(T_EDGES)-1),
+        "seed_span_ns":np.array([np.nan,0.,.5,2.]),
+        "seed_absA":np.array([np.nan,.3,0.,1.]),
+        "xy_ion":np.ones((len(V_EDGES)-1,len(U_EDGES)-1)),
+        "u_edges":U_EDGES,
+        "v_edges":V_EDGES,
+        "start_n":np.full((len(V_EDGES)-1,len(U_EDGES)-1),5),
+        "start_sum":np.ones((len(V_EDGES)-1,len(U_EDGES)-1))*300.,
+        "t_phi":np.ones((len(T_PHI_EDGES)-1,72)),
+        "t_phi_edges":T_PHI_EDGES,
+    }
+    descriptions=("gain_all","gain_pos","angle_eq","angle_ion",
+                  "asym_seed","asym_muon","time","span","gain_asym",
+                  "ion_xy","gain_xy","time_phi")
+    for kind in descriptions:
+        description=plot_explanation(
+            kind,synthetic,{"n_true_ion_births":720},5)
+        must(len(description)==3 and
+             all(isinstance(d,str) and len(d)>80 for d in description),
+             "Plot-specific scientific interpretation failed: "+kind)
     print("PASS local math/geometry tests and plot interpretations; "
           "no Garfield, no raw data, no files written.")
 
