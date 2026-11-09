@@ -429,6 +429,8 @@ def app():
     xscale=c1.selectbox("X scale",["Linear","Log"],key=f"{kind}-xscale")
     yscale=c2.selectbox("Y scale",["Linear","Log"],key=f"{kind}-yscale")
     color=st.sidebar.color_picker("Curve colour","#E46B08",key=f"{kind}-color")
+    export_format=st.sidebar.selectbox("Camera export",["png","svg","jpeg"],
+                                        key=f"{kind}-export")
     show_legend=st.sidebar.checkbox("Show legend",True,key=f"{kind}-legend-show")
     add_stats=st.sidebar.checkbox("Append mean / RMS to legend",
                                   kind.startswith("gain"),key=f"{kind}-stats")
@@ -668,9 +670,9 @@ def app():
 
     st.plotly_chart(fig,use_container_width=True,
                     config={"displaylogo":False,
-                            "toImageButtonOptions":{"format":"png",
+                            "toImageButtonOptions":{"format":export_format,
                                 "filename":kind+"_penning_on","scale":3}})
-    st.caption("Use the camera icon above the plot to download PNG; "
+    st.caption("Use the camera icon to export the selected PNG / SVG / JPEG; "
                "scroll to zoom, or drag to select a range. No simulated "
                "cathode waveform is implied by ion-birth distributions.")
     left,right=st.columns(2)
@@ -713,8 +715,29 @@ def app():
 """)
         st.json(meta)
 
+def selftest():
+    # Cheap mathematical test: no original physics, no output, no Streamlit.
+    must(phi_idx(0.,1.)==54 and phi_idx(0.,-1.)==18,
+         "Angular quadrant convention wrong")
+    must(phi_idx(3.,1.)==54 and phi_idx(-3.,1.)==54,
+         "Nearest 3-mm wire angular folding wrong")
+    must(abs(nearest_wire_offset(3.2)-.2)<1e-12,
+         "3-mm nearest anode folding is wrong")
+    must(binned(0.,T_EDGES)==0 and binned(1.e-4,T_EDGES)>0,
+         "Physical time-bin boundary wrong")
+    a=np.array([0,0,1,2,100],dtype=float)
+    bins=np.r_[0.,np.arange(1.,102.,50.)]
+    h=np.histogram(a,bins=bins)[0]
+    must(int(h.sum())==len(a) and int(h[0])==2,
+         "Gain zero-only [0,1) bin is mixing nonzero avalanches")
+    w=[1./4]*4
+    must(abs(sum(w)-1.)<1e-12,"Weighted reservoir source normalization wrong")
+    print("PASS local math/geometry tests; no Garfield, no raw data, no files written.")
+
 if __name__=="__main__":
     if len(sys.argv)>1 and sys.argv[1]=="prepare":
         prepare()
+    elif len(sys.argv)>1 and sys.argv[1]=="selftest":
+        selftest()
     else:
         app()
