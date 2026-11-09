@@ -427,7 +427,9 @@ def app():
     st.sidebar.divider()
     c1,c2=st.sidebar.columns(2)
     xscale=c1.selectbox("X scale",["Linear","Log"],key=f"{kind}-xscale")
-    yscale=c2.selectbox("Y scale",["Linear","Log"],key=f"{kind}-yscale")
+    yscale=c2.selectbox("Y scale",["Linear","Log"],
+                         index=1 if kind=="time_phi" else 0,
+                         key=f"{kind}-yscale")
     color=st.sidebar.color_picker("Curve colour","#E46B08",key=f"{kind}-color")
     export_format=st.sidebar.selectbox("Camera export",["png","svg","jpeg"],
                                         key=f"{kind}-export")
@@ -453,6 +455,9 @@ def app():
     asym_bins=st.sidebar.slider("Asymmetry bins",20,120,50,10,key=f"{kind}-asymbin")
     time_group=st.sidebar.select_slider("Time-bin grouping",
         options=[1,2,3,4,6,8,12],value=4,key=f"{kind}-tgroup")
+    time_range=st.sidebar.selectbox("Time view window",
+        ["Central 99.9% of ion births","All ion-birth delays"],
+        key=f"{kind}-trange")
     norm=st.sidebar.selectbox("Histogram normalization",
         ["Probability per bin","Probability density","Raw counts / weighted counts"],
         index=1 if kind=="time" else 0,
@@ -513,6 +518,7 @@ def app():
     yallowlog=True
     heatmap=False
     displayed_csv=None
+    time_view_limit=None
 
     if kind in ("gain_all","gain_pos"):
         yy=g[g>0] if kind=="gain_pos" else g
@@ -560,6 +566,20 @@ def app():
     elif kind=="time":
         edges=data["t_edges"]
         counts=data["t_weights"]
+        time_view_limit=float(edges[min(len(counts),int(np.searchsorted(
+            np.cumsum(counts),.999*float(np.sum(counts))))+1)])
+        # Logarithmic time axes cannot show the real [0,10^-6ns) bin.
+        # For log X omit exactly that bin with explicitly reported mass
+        # and renormalize. All other birth times stay intact.
+        if xscale=="Log":
+            excluded=float(counts[0])
+            fraction=excluded/max(1.,float(np.sum(counts)))
+            counts=counts[1:]
+            edges=edges[1:]
+            xallowlog=True
+            st.info(f"Log-time view excludes the [0,10⁻⁶ ns) bin "
+                    f"({fraction:.3%} of weighted ion births); remaining "
+                    "histogram is renormalized.")
         # Group original logarithmic-resolved bins; avoid changing physics weights.
         gbin=time_group
         cuts=list(range(0,len(counts),gbin))
@@ -568,7 +588,6 @@ def app():
         counts=np.add.reduceat(counts,cuts[:-1])
         edges=edges[cuts]
         xs,ys=trace_hist(edges,counts,label)
-        xallowlog=False # zero-delay bin [0,1e-6) is physically real
         original_note="Physical birth delay relative to each initial Heed electron"
         st.caption(f"{original_note}; 128 randomly retained ion-birth points/avalanche, "
                    "correctly weighted by exact number of ion births. Bins are "
@@ -681,6 +700,13 @@ def app():
         except ValueError:return None
     xl=[parse_lim(xmin),parse_lim(xmax)]
     yl=[parse_lim(ymin),parse_lim(ymax)]
+    if (kind=="time" and xscale=="Linear"
+        and time_range=="Central 99.9% of ion births"
+        and not any(v is not None for v in xl)):
+        fig.update_xaxes(range=[0.,time_view_limit])
+        st.caption("Time X-axis shows the central 99.9% of weighted ion births "
+                   "for readability; all time bins remain present in the "
+                   "download and cache. Choose 'All ion-birth delays' to show the tail.")
     if any(v is not None for v in xl):
         existing=fig.layout.xaxis.range
         fallback=(0.,1.) if existing is None else tuple(existing)
