@@ -248,7 +248,9 @@ def prepare():
         print(f"PASS Penning ON SHA/ion-census chunk {i+1:02d}/50: "
               f"20 muons, {len(rows)} Garfield seeds, {local_ions:,} ion births",
               flush=True)
-    must(len(muon_gain)==N_MUONS and len(gain)==len(seed_span)==len(tmap)*0+len(gain),
+    must(len(muon_gain)==N_MUONS and
+         len(gain)==len(seed_span)==len(raw_ne)==len(ion_births)==len(seed_A)
+         and len(gain)>20000,
          "Missing Penning ON parents or Garfield avalanches")
     must(abs(sampled_ion.sum()-total_ions)<1.e-5*max(1,total_ions) and
          abs(sampled_equal.sum()-n_ion_avals)<1.e-5*max(1,n_ion_avals),
@@ -411,6 +413,11 @@ def app():
     }
     st.sidebar.header("Edit the plot")
     kind=st.sidebar.selectbox("Plot",list(kinds),format_func=lambda x:kinds[x])
+    if st.sidebar.button("Reset this plot to defaults"):
+        for k in list(st.session_state):
+            if k.startswith(kind+"-"):
+                del st.session_state[k]
+        st.rerun()
     title0,x0,y0,legend0=defaults[kind]
     # Each view has its own independent saved editable controls.
     title=st.sidebar.text_input("Title",value=title0,key=f"{kind}-title")
@@ -435,6 +442,7 @@ def app():
         options=[1,2,3,4,6,8,12],value=4,key=f"{kind}-tgroup")
     norm=st.sidebar.selectbox("Histogram normalization",
         ["Probability per bin","Probability density","Raw counts / weighted counts"],
+        index=1 if kind=="time" else 0,
         key=f"{kind}-normalization")
     zscale=st.sidebar.selectbox("Heatmap colour scale",["Linear","Log"],key=f"{kind}-zscale")
     st.sidebar.divider()
@@ -544,9 +552,7 @@ def app():
     elif kind=="span":
         x=data["seed_span_ns"]
         x=x[np.isfinite(x)]
-        q=np.quantile(x,.999)
-        binwidth=max(float(q)/100,1.e-6)
-        edges=np.arange(0,float(x.max())+binwidth*1.01,binwidth)
+        edges=np.linspace(0.,max(1.e-6,float(x.max())),201)
         counts=np.histogram(x,bins=edges)[0]
         xs,ys=trace_hist(edges,counts,label)
         st.caption("These spans are based on at most 128 sampled birth positions "
