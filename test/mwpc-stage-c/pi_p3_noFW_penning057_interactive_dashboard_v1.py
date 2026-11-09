@@ -431,7 +431,18 @@ def app():
     color=st.sidebar.color_picker("Curve colour","#E46B08",key=f"{kind}-color")
     export_format=st.sidebar.selectbox("Camera export",["png","svg","jpeg"],
                                         key=f"{kind}-export")
+    plot_style=st.sidebar.selectbox("1D histogram style",["Stepped line","Bars"],
+                                    key=f"{kind}-style")
+    line_width=st.sidebar.slider("Curve line width",1.,5.,2.2,.2,
+                                 key=f"{kind}-width")
     show_legend=st.sidebar.checkbox("Show legend",True,key=f"{kind}-legend-show")
+    legpos=st.sidebar.selectbox("Legend position",
+        ["Top right","Top left","Bottom right","Bottom left"],
+        key=f"{kind}-legend-position")
+    title_font=st.sidebar.slider("Title font size",14,34,22,
+                                 key=f"{kind}-title-font")
+    label_font=st.sidebar.slider("Axes font size",10,24,15,
+                                 key=f"{kind}-axes-font")
     add_stats=st.sidebar.checkbox("Append mean / RMS to legend",
                                   kind.startswith("gain"),key=f"{kind}-stats")
     st.sidebar.divider()
@@ -470,11 +481,24 @@ def app():
     def trace_hist(edges,counts,name,include_zero_marker=False):
         values=hnorm(counts.astype(float),edges)
         mids=(edges[:-1]+edges[1:])/2
-        # Use bars for correct nonuniform bin widths and honest density interpretation.
-        fig.add_trace(go.Bar(
-            x=mids,y=values,width=np.diff(edges),
-            marker=dict(color=color),opacity=.75,
-            name=name,hovertemplate="x: %{x:,.4g}<br>height: %{y:,.5g}<extra></extra>"))
+        if plot_style=="Bars":
+            # Exact nonuniform bin widths: zero [0,1), then gain bins.
+            fig.add_trace(go.Bar(
+                x=mids,y=values,width=np.diff(edges),
+                marker=dict(color=color),opacity=.78,
+                name=name,hovertemplate="x: %{x:,.4g}<br>height: %{y:,.5g}<extra></extra>"))
+        else:
+            # Explicit step edges, without smoothing or connecting empty
+            # log-y bins (which would create a false high-gain tail).
+            xe=np.repeat(edges,2)[1:-1]
+            ye=np.repeat(values,2).astype(float)
+            if yscale=="Log":
+                ye[ye<=0]=np.nan
+            fig.add_trace(go.Scatter(
+                x=xe,y=ye,mode="lines",name=name,
+                line=dict(color=color,width=line_width),
+                hovertemplate="Collected bin x: %{x:,.4g}"
+                              "<br>height: %{y:,.5g}<extra></extra>"))
         if include_zero_marker:
             fig.add_trace(go.Scatter(
                 x=[0.5],y=[values[0]],mode="markers",
@@ -622,14 +646,21 @@ def app():
             yallowlog=True
 
     # Apply all user-controlled presentation options without reloading data.
+    legend_xy={
+        "Top right":(.99,.99,"right","top"),
+        "Top left":(.01,.99,"left","top"),
+        "Bottom right":(.99,.01,"right","bottom"),
+        "Bottom left":(.01,.01,"left","bottom"),
+    }[legpos]
     fig.update_layout(
-        title=dict(text=title,font=dict(size=22)),
+        title=dict(text=title,font=dict(size=title_font)),
         xaxis_title=xlab,yaxis_title=ylab,
         template="plotly_white",height=650,
-        font=dict(family="Arial, Helvetica, sans-serif",size=14),
+        font=dict(family="Arial, Helvetica, sans-serif",size=label_font),
         margin=dict(l=80,r=45,t=80,b=76),
         showlegend=show_legend,hovermode="closest",
-        legend=dict(x=.99,y=.99,xanchor="right",yanchor="top",
+        legend=dict(x=legend_xy[0],y=legend_xy[1],
+                    xanchor=legend_xy[2],yanchor=legend_xy[3],
                     bgcolor="rgba(255,255,255,.85)",
                     bordercolor="rgba(120,130,140,.30)",borderwidth=1),
         bargap=0.02
