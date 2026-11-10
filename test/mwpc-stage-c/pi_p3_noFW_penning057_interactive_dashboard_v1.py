@@ -751,8 +751,10 @@ def app():
         time_controls={
             "reliable_only":reliable,"color":color,"line_width":line_width,
             "legend":label,"angular_deg":angular_deg,
-            "mode":"Quantile groups","early_centre":25.,
-            "late_centre":100.,"window_half_width":15.,
+            "add_stats":add_stats,
+            "mode":"Quantile groups",
+            "early_min":10.,"early_max":40.,
+            "late_min":85.,"late_max":115.,
             "legend_early":"Earlier birth times",
             "legend_late":"Later birth times",
             "muon_index":0
@@ -760,7 +762,7 @@ def app():
         if kind=="t10_angles":
             grouping=st.sidebar.selectbox(
                 "Early/late comparison",
-                ["Quantile groups","Time windows (ns)"],
+                ["Quantile groups","Custom time intervals (ns)"],
                 key=f"{kind}-grouping")
             time_controls["mode"]=grouping
             time_controls["legend_early"]=st.sidebar.text_input(
@@ -769,16 +771,35 @@ def app():
             time_controls["legend_late"]=st.sidebar.text_input(
                 "Late curve legend","Later birth times",
                 key=f"{kind}-late-label")
-            if grouping=="Time windows (ns)":
-                time_controls["early_centre"]=st.sidebar.number_input(
-                    "Early window centre [ns]",min_value=0.,value=25.,
-                    step=5.,key=f"{kind}-early-centre")
-                time_controls["late_centre"]=st.sidebar.number_input(
-                    "Late window centre [ns]",min_value=0.,value=100.,
-                    step=5.,key=f"{kind}-late-centre")
-                time_controls["window_half_width"]=st.sidebar.number_input(
-                    "Half-width of each window [ns]",min_value=.1,value=15.,
-                    step=5.,key=f"{kind}-time-width")
+            if grouping=="Custom time intervals (ns)":
+                st.sidebar.caption(
+                    "Enter two independent birth-time intervals in ns "
+                    "relative to the muon entry (t10 proxy). "
+                    "From is included, To is excluded.")
+                st.sidebar.markdown("**Earlier birth-time group**")
+                early_start,early_end=st.sidebar.columns(2)
+                time_controls["early_min"]=early_start.number_input(
+                    "From [ns]",min_value=0.,value=10.,step=5.,
+                    key=f"{kind}-early-min")
+                time_controls["early_max"]=early_end.number_input(
+                    "To [ns]",min_value=0.,value=40.,step=5.,
+                    key=f"{kind}-early-max")
+                st.sidebar.markdown("**Later birth-time group**")
+                late_start,late_end=st.sidebar.columns(2)
+                time_controls["late_min"]=late_start.number_input(
+                    "From [ns]",min_value=0.,value=85.,step=5.,
+                    key=f"{kind}-late-min")
+                time_controls["late_max"]=late_end.number_input(
+                    "To [ns]",min_value=0.,value=115.,step=5.,
+                    key=f"{kind}-late-max")
+                if (time_controls["early_min"]>=time_controls["early_max"]
+                    or time_controls["late_min"]>=time_controls["late_max"]):
+                    st.sidebar.error("Each group needs From < To.")
+                    st.stop()
+                if time_controls["early_max"]>time_controls["late_min"]:
+                    st.sidebar.warning("These intervals overlap or are not "
+                                       "ordered chronologically; some "
+                                       "avalanches may appear in both groups.")
         if kind=="t10_timeline":
             time_controls["muon_index"]=st.sidebar.selectbox(
                 "Real J/psi muon to inspect",
