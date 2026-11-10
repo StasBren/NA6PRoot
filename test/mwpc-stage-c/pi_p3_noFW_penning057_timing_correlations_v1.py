@@ -362,6 +362,13 @@ def selftest():
         must(len(fig.data)>0 and
              all("mean=" in tr.name and "RMS=" in tr.name for tr in fig.data),
              "Mean/RMS legend missing or incorrect: "+check)
+    for check in ("t10_start","t10_gain_position"):
+        settings["zscale"]="Log"
+        fig=go.Figure()
+        render(check,fig,synth,fake_meta,settings,StubStreamlit())
+        must(fig.data[0].colorbar.title.text.startswith("log10("),
+             "Log colorbar control is not functional: "+check)
+    settings["zscale"]="Linear"
     # Check a zero-ion event does not corrupt the source's time estimator.
     print("PASS six temporal plot+interpretation selftests, nearest-anode "
           "physics and sampled timing quantiles; NO Garfield/raw data writes.")
@@ -622,9 +629,15 @@ def render(kind,fig,data,meta,controls,st):
         n=np.histogram2d(tt,vv,bins=(edges_t,edges_v))[0]
         cen_t=(edges_t[:-1]+edges_t[1:])/2
         cen_v=(edges_v[:-1]+edges_v[1:])/2
+        z=n
+        cb="Number of Heed electrons"
+        if controls.get("zscale")=="Log":
+            with np.errstate(divide="ignore"):
+                z=np.where(n>0,np.log10(n),np.nan)
+            cb="log10(number of Heed electrons)"
         fig.add_trace(go.Heatmap(
-            x=cen_v,y=cen_t,z=n,
-            colorscale="YlOrBr",colorbar=dict(title="Number of Heed electrons"),
+            x=cen_v,y=cen_t,z=z,
+            colorscale="YlOrBr",colorbar=dict(title=cb),
             hovertemplate="|v0| %{x:.3g} mm<br>early time %{y:.3g} ns"
                           "<br>Heed electrons %{z:.0f}<extra></extra>"))
         return None,("Cell occupancy is a count, not a probability density; "
@@ -641,9 +654,15 @@ def render(kind,fig,data,meta,controls,st):
                        where=cnt>=20)
         xc=(edget[:-1]+edget[1:])/2
         yc=(edgev[:-1]+edgev[1:])/2
+        z=mean
+        cb=controls["legend"]
+        if controls.get("zscale")=="Log":
+            with np.errstate(divide="ignore",invalid="ignore"):
+                z=np.where(mean>0,np.log10(mean),np.nan)
+            cb="log10("+cb+")"
         fig.add_trace(go.Heatmap(
-            x=xc,y=yc,z=mean,
-            colorscale="YlOrBr",colorbar=dict(title=controls["legend"]),
+            x=xc,y=yc,z=z,
+            colorscale="YlOrBr",colorbar=dict(title=cb),
             customdata=cnt,
             hovertemplate="early birth time %{x:.3g} ns<br>"
                           "start |v0| %{y:.3g} mm<br>"
