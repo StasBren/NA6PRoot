@@ -591,7 +591,7 @@ def plot_features(kind):
         "curve_color":kind in hist|curves,
         "line_width":kind in hist|curves,
         "legend_controls":kind in hist|curves or timeline,
-        "legend_text":kind not in {"t10_start","ion_xy","time_phi"},
+        "legend_text":kind not in {"t10_start","t10_angles"},
         "gain_bin":kind in {"gain_all","gain_pos"},
         "angular_bin":kind in {"angle_eq","angle_ion","t10_angles"},
         "asym_bin":kind in {"asym_seed","asym_muon"},
@@ -869,9 +869,12 @@ def app():
     if kind in temporal.KINDS:
         st.sidebar.divider()
         st.sidebar.subheader("Early-birth correlation settings")
-        reliable=st.sidebar.checkbox(
-            "Only 128-sample ion avalanches",True,
-            key=f"{kind}-reliable")
+        if kind!="t10_timeline":
+            reliable=st.sidebar.checkbox(
+                "Only 128-sample ion avalanches",True,
+                key=f"{kind}-reliable")
+        else:
+            reliable=True
         time_controls={
             "reliable_only":reliable,"color":color,"line_width":line_width,
             "legend":label,"angular_deg":angular_deg,
@@ -1309,7 +1312,10 @@ def selftest():
          and not plot_features("gain_all")["angular_bin"]
          and not plot_features("t10_angles")["gain_bin"]
          and not plot_features("time")["angular_bin"]
-         and not plot_features("t10_timeline")["mean_rms"],
+         and not plot_features("t10_timeline")["mean_rms"]
+         and not plot_features("t10_angles")["legend_text"]
+         and plot_features("ion_xy")["legend_text"]
+         and not plot_features("t10_start")["legend_controls"],
          "Unrelated sidebar controls exposed")
     must("mean=" in legend_stats("gain",np.array([0.,2.,4.]),True)
          and "RMS=" in legend_stats("A",np.array([0.,.5,1.]),True),
