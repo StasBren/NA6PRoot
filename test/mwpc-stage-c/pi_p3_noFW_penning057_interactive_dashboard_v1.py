@@ -576,6 +576,62 @@ def plot_explanation(kind,data,meta,angular_deg):
     raise RuntimeError("Missing grounded interpretation for "+str(kind))
 
 
+
+def plot_features(kind):
+    """Sidebar capabilities: never display controls that cannot affect a plot."""
+    hist={"gain_all","gain_pos","angle_eq","angle_ion",
+          "asym_seed","asym_muon","time","span"}
+    heat={"ion_xy","gain_xy","time_phi","t10_start","t10_gain_position"}
+    curves={"gain_asym","t10_gain","t10_asym","t10_angles"}
+    timeline=kind=="t10_timeline"
+    must(kind in hist|heat|curves|{"t10_timeline"},
+         "No capability definitions for plot "+kind)
+    return {
+        "histogram_style":kind in hist,
+        "curve_color":kind in hist|curves,
+        "line_width":kind in hist|curves,
+        "legend_controls":kind in hist|curves or timeline,
+        "legend_text":kind not in {"t10_start","ion_xy","time_phi"},
+        "gain_bin":kind in {"gain_all","gain_pos"},
+        "angular_bin":kind in {"angle_eq","angle_ion","t10_angles"},
+        "asym_bin":kind in {"asym_seed","asym_muon"},
+        "time_group":kind=="time",
+        "time_window":kind=="time",
+        "histogram_normalization":kind in hist,
+        "heatmap_colorscale":kind in heat,
+        "mean_rms":kind in {"gain_all","gain_pos","asym_seed","asym_muon",
+                            "time","span","gain_asym","t10_gain","t10_asym",
+                            "t10_angles"},
+        "x_log":kind not in {"gain_all","angle_eq","angle_ion",
+                             "asym_seed","asym_muon","ion_xy","gain_xy",
+                             "time_phi","t10_angles","t10_start",
+                             "t10_timeline"},
+        "y_log":kind in hist|curves|{"time_phi","t10_start"},
+    }
+
+
+def legend_stats(label,values,enabled,quantity="",weights=None,approx=False):
+    """Add meaningful and reproducible mean + population RMS to legend."""
+    if not enabled:return label
+    a=np.asarray(values,dtype=np.float64)
+    valid=np.isfinite(a)
+    if weights is not None:
+        w=np.asarray(weights,dtype=np.float64)
+        valid &= np.isfinite(w)&(w>=0)
+        a=a[valid];w=w[valid]
+        if a.size==0 or w.sum()<=0:return label
+        mean=float(np.average(a,weights=w))
+        rms=float(np.sqrt(np.average((a-mean)**2,weights=w)))
+    else:
+        a=a[valid]
+        if a.size==0:return label
+        mean=float(np.mean(a))
+        rms=float(np.std(a,ddof=0))
+    prefix="≈" if approx else ""
+    units=(" "+quantity) if quantity else ""
+    return f"{label} · {prefix}mean={mean:,.2f}{units}, {prefix}RMS={rms:,.2f}{units}"
+
+
 def app():
     import streamlit as st
     import plotly.graph_objects as go
@@ -693,54 +749,122 @@ def app():
             if k.startswith(kind+"-"):
                 del st.session_state[k]
         st.rerun()
+    caps=plot_features(kind)
     title0,x0,y0,legend0=defaults[kind]
     # Each view has its own independent saved editable controls.
     title=st.sidebar.text_input("Title",value=title0,key=f"{kind}-title")
-    label=st.sidebar.text_input("Legend text / colourbar title",value=legend0,key=f"{kind}-legend")
     xlab=st.sidebar.text_input("X-axis title",value=x0,key=f"{kind}-xlab")
     ylab=st.sidebar.text_input("Y-axis title",value=y0,key=f"{kind}-ylab")
+    if caps["legend_text"]:
+        label=st.sidebar.text_input(
+            "Legend text / colourbar title",value=legend0,
+            key=f"{kind}-legend")
+    else:
+        label=legend0
     st.sidebar.divider()
     c1,c2=st.sidebar.columns(2)
-    xscale=c1.selectbox("X scale",["Linear","Log"],key=f"{kind}-xscale")
-    yscale=c2.selectbox("Y scale",["Linear","Log"],
-                         index=1 if kind=="time_phi" else 0,
-                         key=f"{kind}-yscale")
-    color=st.sidebar.color_picker("Curve colour","#E46B08",key=f"{kind}-color")
-    export_format=st.sidebar.selectbox("Camera export",["png","svg","jpeg"],
-                                        key=f"{kind}-export")
-    plot_style=st.sidebar.selectbox("1D histogram style",["Stepped line","Bars"],
-                                    key=f"{kind}-style")
-    line_width=st.sidebar.slider("Curve line width",1.,5.,2.2,.2,
-                                 key=f"{kind}-width")
-    show_legend=st.sidebar.checkbox("Show legend",True,key=f"{kind}-legend-show")
+    if caps["x_log"]:
+        xscale=c1.selectbox("X scale",["Linear","Log"],
+                            key=f"{kind}-xscale")
+    else:
+        xscale="Linear"
+    if caps["y_log"]:
+        yscale=c2.selectbox("Y scale",["Linear","Log"],
+                            index=1 if kind=="time_phi" else 0,
+                            key=f"{kind}-yscale")
+    else:
+        yscale="Linear"
+    if caps["curve_color"]:
+        color=st.sidebar.color_picker("Curve colour","#E46B08",
+                                      key=f"{kind}-color")
+    else:
+        color="#E46B08"
+    if caps["histogram_style"]:
+        plot_style=st.sidebar.selectbox(
+            "Histogram style",["Stepped line","Bars"],key=f"{kind}-style")
+    else:
+        plot_style="Stepped line"
+    if caps["line_width"]:
+        line_width=st.sidebar.slider("Curve line width",1.,5.,2.2,.2,
+                                     key=f"{kind}-width")
+    else:
+        line_width=2.2
+    if caps["legend_controls"]:
+        show_legend=st.sidebar.checkbox("Show legend",True,
+                                         key=f"{kind}-legend-show")
+        legpos=st.sidebar.selectbox(
+            "Legend position",
+            ["Top right","Top left","Bottom right","Bottom left"],
+            key=f"{kind}-legend-position")
+    else:
+        show_legend=False
+        legpos="Top right"
+    if caps["mean_rms"]:
+        add_stats=st.sidebar.checkbox(
+            "Append mean and RMS to legend",
+            value=kind in {"gain_all","gain_pos"},
+            key=f"{kind}-stats")
+        st.sidebar.caption(
+            "Statistics use the underlying observations, not the heights "
+            "of the displayed histogram bins.")
+    else:
+        add_stats=False
     show_interpretation=st.sidebar.checkbox(
         "Show physics interpretation above plot",True,
         key=f"{kind}-interpretation-show")
-    legpos=st.sidebar.selectbox("Legend position",
-        ["Top right","Top left","Bottom right","Bottom left"],
-        key=f"{kind}-legend-position")
     title_font=st.sidebar.slider("Title font size",14,34,22,
                                  key=f"{kind}-title-font")
     label_font=st.sidebar.slider("Axes font size",10,24,15,
                                  key=f"{kind}-axes-font")
-    add_stats=st.sidebar.checkbox("Append mean / RMS to legend",
-                                  kind.startswith("gain"),key=f"{kind}-stats")
     st.sidebar.divider()
-    gain_width=st.sidebar.select_slider("Gain histogram bin width [electrons]",
-        options=[10,20,25,50,100,200,500],value=50,key=f"{kind}-gainbin")
-    angular_deg=st.sidebar.select_slider("Angular bin width [degrees]",
-        options=[5,10,15,20,30],value=5,key=f"{kind}-angbin")
-    asym_bins=st.sidebar.slider("Asymmetry bins",20,120,50,10,key=f"{kind}-asymbin")
-    time_group=st.sidebar.select_slider("Time-bin grouping",
-        options=[1,2,3,4,6,8,12],value=4,key=f"{kind}-tgroup")
-    time_range=st.sidebar.selectbox("Time view window",
-        ["Central 99.9% of ion births","All ion-birth delays"],
-        key=f"{kind}-trange")
-    norm=st.sidebar.selectbox("Histogram normalization",
-        ["Probability per bin","Probability density","Raw counts / weighted counts"],
-        index=1 if kind=="time" else 0,
-        key=f"{kind}-normalization")
-    zscale=st.sidebar.selectbox("Heatmap colour scale",["Linear","Log"],key=f"{kind}-zscale")
+    # Plot-specific scientific controls. Unused parameters are not shown.
+    if caps["gain_bin"]:
+        gain_width=st.sidebar.select_slider(
+            "Gain histogram bin width [electrons]",
+            options=[10,20,25,50,100,200,500],value=50,
+            key=f"{kind}-gainbin")
+    else:
+        gain_width=50
+    if caps["angular_bin"]:
+        angular_deg=st.sidebar.select_slider(
+            "Angular bin width [degrees]",
+            options=[5,10,15,20,30],value=5,
+            key=f"{kind}-angbin")
+    else:
+        angular_deg=5
+    if caps["asym_bin"]:
+        asym_bins=st.sidebar.slider("Asymmetry bins",20,120,50,10,
+                                    key=f"{kind}-asymbin")
+    else:
+        asym_bins=50
+    if caps["time_group"]:
+        time_group=st.sidebar.select_slider(
+            "Time-bin grouping",options=[1,2,3,4,6,8,12],value=4,
+            key=f"{kind}-tgroup")
+    else:
+        time_group=4
+    if caps["time_window"]:
+        time_range=st.sidebar.selectbox(
+            "Time view window",
+            ["Central 99.9% of ion births","All ion-birth delays"],
+            key=f"{kind}-trange")
+    else:
+        time_range="All ion-birth delays"
+    if caps["histogram_normalization"]:
+        norm=st.sidebar.selectbox(
+            "Histogram normalization",
+            ["Probability per bin","Probability density",
+             "Raw counts / weighted counts"],
+            index=1 if kind=="time" else 0,
+            key=f"{kind}-normalization")
+    else:
+        norm="Probability per bin"
+    if caps["heatmap_colorscale"]:
+        zscale=st.sidebar.selectbox(
+            "Heatmap colour scale",["Linear","Log"],
+            key=f"{kind}-zscale")
+    else:
+        zscale="Linear"
     time_controls={}
     if kind in temporal.KINDS:
         st.sidebar.divider()
@@ -752,6 +876,7 @@ def app():
             "reliable_only":reliable,"color":color,"line_width":line_width,
             "legend":label,"angular_deg":angular_deg,
             "add_stats":add_stats,
+            "zscale":zscale,
             "mode":"Quantile groups",
             "early_min":10.,"early_max":40.,
             "late_min":85.,"late_max":115.,
@@ -762,7 +887,7 @@ def app():
         if kind=="t10_angles":
             grouping=st.sidebar.selectbox(
                 "Early/late comparison",
-                ["Quantile groups","Custom time intervals (ns)"],
+                ["Custom time intervals (ns)","Quantile groups"],
                 key=f"{kind}-grouping")
             time_controls["mode"]=grouping
             time_controls["legend_early"]=st.sidebar.text_input(
@@ -875,8 +1000,7 @@ def app():
         counts=np.histogram(yy,bins=edges)[0]
         must(counts.sum()==len(yy),"Gain histogram dropped original Garfield avalanches")
         mean=np.mean(yy);rms=np.std(yy,ddof=0)
-        name=(f"{label} — mean={mean:,.2f}, RMS={rms:,.2f}"
-              if add_stats else label)
+        name=legend_stats(label,yy,add_stats,"e")
         xs,ys=trace_hist(edges,counts,name,kind=="gain_all")
         xallowlog=(kind=="gain_pos")
         original_note=(f"Zero-only bin [0,1); remaining bins {gain_width} collected e"
@@ -904,7 +1028,8 @@ def app():
         a=v[np.isfinite(v)]
         edges=np.linspace(-1.,1.,asym_bins+1)
         counts=np.histogram(a,bins=edges)[0]
-        xs,ys=trace_hist(edges,counts,label)
+        xs,ys=trace_hist(
+            edges,counts,legend_stats(label,a,add_stats))
         xallowlog=False
         st.caption(f"Exact unsampled ion-sector counters; N defined = {len(a):,}; "
                    f"undefined because N_up+N_down=0: {np.sum(~np.isfinite(v)):,}.")
@@ -934,7 +1059,10 @@ def app():
         cuts=np.asarray(cuts,dtype=int)
         counts=np.add.reduceat(counts,cuts[:-1])
         edges=edges[cuts]
-        xs,ys=trace_hist(edges,counts,label)
+        xs,ys=trace_hist(
+            edges,counts,legend_stats(
+                label,(edges[:-1]+edges[1:])/2.,add_stats,"ns",
+                weights=counts,approx=True))
         original_note="Physical birth delay relative to each initial Heed electron"
         st.caption(f"{original_note}; 128 randomly retained ion-birth points/avalanche, "
                    "correctly weighted by exact number of ion births. Bins are "
@@ -946,7 +1074,8 @@ def app():
         x=x[np.isfinite(x)]
         edges=np.linspace(0.,max(1.e-6,float(x.max())),201)
         counts=np.histogram(x,bins=edges)[0]
-        xs,ys=trace_hist(edges,counts,label)
+        xs,ys=trace_hist(
+            edges,counts,legend_stats(label,x,add_stats,"ns"))
         st.caption("These spans are based on at most 128 sampled birth positions "
                    "per avalanche, so they systematically underestimate the "
                    "true earliest-to-latest ion-birth span.")
@@ -963,8 +1092,9 @@ def app():
         edges=10.**bins
         fig.add_trace(go.Scatter(
             x=(edges[:-1]*edges[1:])**.5,y=y,
-            mode="lines+markers",name=label,
-            line=dict(color=color,width=2.5),
+            mode="lines+markers",
+            name=legend_stats(label,a[mask],add_stats),
+            line=dict(color=color,width=line_width),
             marker=dict(color=color,size=6),
             customdata=n,
             hovertemplate="Gain %{x:,.2f}<br>Mean |A| %{y:.4f}"
@@ -1164,6 +1294,26 @@ def selftest():
     must(math.isnan(gmu) and (0==0) and
          np.isfinite(np.asarray([12./3.,25./5.])).all(),
          "Zero-Heed parent gain must be undefined while active gains stay finite")
+    expected={
+        "gain_all":{"gain_bin","mean_rms","histogram_style"},
+        "angle_ion":{"angular_bin","histogram_style"},
+        "time":{"time_group","time_window","histogram_normalization"},
+        "t10_angles":{"angular_bin","mean_rms","line_width"},
+        "t10_gain_position":{"heatmap_colorscale"},
+        "asym_muon":{"asym_bin","mean_rms"},
+    }
+    for name,required in expected.items():
+        c=plot_features(name)
+        must(all(c[k] for k in required),"Missing sidebar control for "+name)
+    must(not plot_features("ion_xy")["time_group"]
+         and not plot_features("gain_all")["angular_bin"]
+         and not plot_features("t10_angles")["gain_bin"]
+         and not plot_features("time")["angular_bin"]
+         and not plot_features("t10_timeline")["mean_rms"],
+         "Unrelated sidebar controls exposed")
+    must("mean=" in legend_stats("gain",np.array([0.,2.,4.]),True)
+         and "RMS=" in legend_stats("A",np.array([0.,.5,1.]),True),
+         "Statistics cannot be appended to Plotly trace legend")
     # Exercise each dynamic explanation with a deliberately tiny synthetic
     # cache, so UI documentation cannot silently break a specific plot.
     synthetic={
