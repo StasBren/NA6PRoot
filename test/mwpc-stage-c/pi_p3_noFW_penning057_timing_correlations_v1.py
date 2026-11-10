@@ -308,7 +308,9 @@ def selftest():
     class StubStreamlit:
         def warning(self,message):
             pass
-    n=240
+    # 20 equal-occupancy time bins require at least 400 test avalanches.
+    # Exercise the real plotting minima instead of using a too-small fixture.
+    n=600
     starts=np.linspace(2.,160.,n)
     synth={
         "gain":np.linspace(300.,900.,n),
