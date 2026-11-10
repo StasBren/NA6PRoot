@@ -579,6 +579,25 @@ def plot_explanation(kind,data,meta,angular_deg):
 
 def plot_features(kind):
     """Sidebar capabilities: never display controls that cannot affect a plot."""
+    # The single-avalanche physical viewer and new v0-conditioned studies
+    # have their own scientifically meaningful controls.
+    if kind in {"wrap_v0_A","wrap_v0_opposite",
+                "wrap_v0_angle","wrap_dispersion","wrap_single"}:
+        curve=kind in {"wrap_v0_A","wrap_v0_opposite","wrap_dispersion"}
+        heat=kind=="wrap_v0_angle"
+        return {
+            "histogram_style":False,
+            "curve_color":curve,
+            "line_width":curve,
+            "legend_controls":curve or kind=="wrap_single",
+            "legend_text":True,
+            "gain_bin":False,"angular_bin":False,"asym_bin":False,
+            "time_group":False,"time_window":False,
+            "histogram_normalization":False,
+            "heatmap_colorscale":heat,"mean_rms":False,
+            "x_log":kind=="wrap_dispersion",
+            "y_log":False,
+        }
     hist={"gain_all","gain_pos","angle_eq","angle_ion",
           "asym_seed","asym_muon","time","span"}
     heat={"ion_xy","gain_xy","time_phi","t10_start","t10_gain_position"}
@@ -636,6 +655,7 @@ def app():
     import streamlit as st
     import plotly.graph_objects as go
     import pi_p3_noFW_penning057_timing_correlations_v1 as temporal
+    import pi_p3_noFW_penning057_anode_wrapping_v1 as wrapping
     from plotly.colors import sequential
     from io import StringIO
 
@@ -688,6 +708,7 @@ def app():
         "time_phi":"Birth time versus azimuth",
     }
     kinds.update(temporal.KINDS)
+    kinds.update(wrapping.KINDS)
     defaults={
         "gain_all":("Collected-electron gain — all avalanches",
                     "Anode-collected electrons per initial Heed electron",
@@ -727,10 +748,11 @@ def app():
                     "Birth delay [ns]","Ion-weighted birth density")
     }
     defaults.update(temporal.DEFAULTS)
+    defaults.update(wrapping.DEFAULTS)
     st.sidebar.header("Edit the plot")
     kind=st.sidebar.selectbox("Plot",list(kinds),format_func=lambda x:kinds[x])
     temporal_data=temporal_meta=None
-    if kind in temporal.KINDS:
+    if kind in temporal.KINDS or kind in wrapping.KINDS:
         if not temporal.CACHE.is_file() or not temporal.META.is_file():
             st.warning("Temporal correlations are a separate derived cache. "
                        "Run the new read-only temporal script with 'prepare' "
@@ -870,6 +892,7 @@ def app():
             key=f"{kind}-zscale")
     else:
         zscale="Linear"
+    wrap_controls={}
     time_controls={}
     if kind in temporal.KINDS:
         st.sidebar.divider()
@@ -943,6 +966,15 @@ def app():
                     f"{temporal_meta['muons'][i]['n_clusters']} clusters, "
                     f"{temporal_meta['muons'][i]['n_Heed']} initial e"),
                 key=f"{kind}-selected-muon")
+    if kind in wrapping.KINDS:
+        st.sidebar.divider()
+        st.sidebar.subheader("Avalanche birth geometry")
+        wrap_controls=wrapping.options(
+            st,kind,temporal_data,temporal_meta)
+        wrap_controls.update({
+            "color":color,"line_width":line_width,
+            "legend":label,"zscale":zscale
+        })
     st.sidebar.divider()
     with st.sidebar.expander("Axes limits (optional)",expanded=False):
         xmin=st.text_input("X minimum",key=f"{kind}-xmin",placeholder="Automatic")
@@ -998,6 +1030,7 @@ def app():
     yallowlog=True
     heatmap=False
     displayed_csv=None
+    auxiliary_fig=None
     time_view_limit=None
 
     if kind in ("gain_all","gain_pos"):
@@ -1112,6 +1145,10 @@ def app():
         displayed_csv={"gain_bin_lo":edges[:-1],"gain_bin_hi":edges[1:],
                        "mean_absA":y,"n_avalanches":n}
 
+    elif kind in wrapping.KINDS:
+        displayed_csv,note,auxiliary_fig=wrapping.render(
+            kind,fig,temporal_data,temporal_meta,wrap_controls,st)
+        st.caption(note)
     elif kind in temporal.KINDS:
         if kind=="t10_timeline":
             import pi_p3_noFW_penning057_muon_geometry_v1 as geomviz
@@ -1228,7 +1265,10 @@ def app():
         elif hi>lo:fig.update_yaxes(range=[lo,hi])
 
     if show_interpretation:
-        if kind in temporal.KINDS:
+        if kind in wrapping.KINDS:
+            what,how,observed=wrapping.describe(
+                kind,temporal_data,temporal_meta,wrap_controls)
+        elif kind in temporal.KINDS:
             what,how,observed=temporal.describe(
                 kind,temporal_data,temporal_meta,time_controls)
         else:
@@ -1242,6 +1282,13 @@ def app():
                     config={"displaylogo":False,
                             "toImageButtonOptions":{"format":export_format,
                                 "filename":kind+"_penning_on","scale":3}})
+    if auxiliary_fig is not None:
+        st.plotly_chart(auxiliary_fig,use_container_width=True,
+                        config={"displaylogo":False,
+                                "toImageButtonOptions":{
+                                    "format":export_format,
+                                    "filename":"single_ion_cloud_3D_penning_on",
+                                    "scale":3}})
     st.caption("Use the camera icon to export the selected PNG / SVG / JPEG; "
                "scroll to zoom, or drag to select a range. No simulated "
                "cathode waveform is implied by ion-birth distributions.")
@@ -1350,6 +1397,15 @@ def selftest():
          and "export_format=st.sidebar.selectbox" in
              Path(__file__).read_text(),
          "Camera export format is used without a sidebar assignment")
+    for kind in ("wrap_v0_A","wrap_v0_opposite","wrap_v0_angle",
+                 "wrap_dispersion","wrap_single"):
+        c=plot_features(kind)
+        must(not c["time_group"] and not c["gain_bin"]
+             and not c["angular_bin"] and not c["mean_rms"],
+             "Wire-wrapping view is showing irrelevant controls: "+kind)
+    must(plot_features("wrap_v0_angle")["heatmap_colorscale"] and
+         plot_features("wrap_dispersion")["x_log"],
+         "Wire-wrapping plot-specific physics controls missing")
     # Exercise each dynamic explanation with a deliberately tiny synthetic
     # cache, so UI documentation cannot silently break a specific plot.
     synthetic={
