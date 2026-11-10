@@ -129,7 +129,7 @@ def circular_dispersion(fractions):
     must(f.ndim==2 and f.shape[1]==72,"Need per-avalanche 5-degree angles")
     theta=np.deg2rad(THETA)
     z=f@np.exp(1j*theta)
-    return 1.-np.abs(z)
+    return np.clip(1.-np.abs(z),0.,1.)
 
 def plot_binned(fig,x,y,p,edges,label,color,line_width):
     import plotly.graph_objects as go
@@ -384,6 +384,12 @@ def render(kind,fig,d,meta,controls,st):
             return one_seed(muon_idx,primary_idx,meta)
         src=ROOT/"native_chunks"/f"chunk_{mi//20:04d}"/"complete.json"
         obs=cached_single(mi,seed,src.stat().st_mtime_ns)
+        matches=(d["parent"]==mi)&(d["primary"]==seed)
+        must(int(matches.sum())==1 and
+             int(d["gain"][matches][0])==obs["collected_e"] and
+             int(d["ions"][matches][0])==obs["ion_births"],
+             "The selected microscopic Garfield avalanche no longer "
+             "matches the verified temporal cache")
         pts=obs["points"];half=controls["zoom"]
         wirecol="#555555"
         fig.add_shape(type="circle",xref="x",yref="y",
@@ -568,9 +574,18 @@ def selftest():
         fig=go.Figure()
         chart,note,aux=render(mode,fig,synthetic,{},options,Mock())
         assert len(fig.data)>0 and aux is None and note
+    # Test true wire radius, 3D cylindrical surface and physical axes
+    # without opening any real muon or needing a Streamlit runtime.
+    obs={"points":np.array([[.02,.03,.001,21.],[.04,-.02,.003,22.]]),
+         "t_heed":19.}
+    cylinder=three_d_view(obs,.1)
+    assert len(cylinder.data)==2 and cylinder.data[0].type=="surface"
+    assert np.allclose(
+        np.sqrt(cylinder.data[0].x**2+cylinder.data[0].y**2),
+        WIRE_RADIUS_MM,atol=1.e-12)
     print("PASS exact vs sampled geometry semantics, 1000-parent "
-          "confidence bands, circular spread, population chart renderers; "
-          "NO Garfield and no files modified.")
+          "confidence bands, true 30-um wire cylinder, circular spread, "
+          "population chart renderers; NO Garfield and no files modified.")
 
 if __name__=="__main__":
     selftest()
