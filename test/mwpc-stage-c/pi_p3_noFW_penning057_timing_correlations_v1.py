@@ -315,6 +315,317 @@ def load():
     with np.load(CACHE,allow_pickle=False) as z:
         return {k:z[k] for k in z.files},m
 
+
+def eligible(data,require128=True,need_A=False):
+    """Fixed >=128-sample population avoids gain-dependent min-time bias."""
+    size=data["sample_count"]
+    mask=np.isfinite(data["t10"]) & (data["ions"]>0)
+    if require128:mask&=size==128
+    if need_A:mask&=np.isfinite(data["A"])
+    return mask
+
+def quantile_edges(x,n=12):
+    x=np.asarray(x,dtype=float)
+    must(x.size>=max(100,n*20),"Too few avalanches in timing study")
+    return np.unique(np.quantile(x,np.linspace(0.,1.,n+1)))
+
+def group_masks(data,setting):
+    x=data["t10"]
+    valid=eligible(data,require128=setting["reliable_only"])
+    if setting["mode"]=="Quantile groups":
+        q25,q75=np.quantile(x[valid],[.25,.75])
+        early=valid&(x<=q25)
+        late=valid&(x>=q75)
+        description=(f"Earliest quartile (≤{q25:.2f} ns)",
+                     f"Latest quartile (≥{q75:.2f} ns)")
+    else:
+        c1=float(setting["early_centre"])
+        c2=float(setting["late_centre"])
+        width=float(setting["window_half_width"])
+        early=valid&(np.abs(x-c1)<=width)
+        late=valid&(np.abs(x-c2)<=width)
+        description=(f"{c1:g}±{width:g} ns",f"{c2:g}±{width:g} ns")
+    return early,late,description
+
+def typical_muon(meta):
+    n=np.array([x["n_Heed"] for x in meta["muons"]],dtype=int)
+    eligible_mu=np.flatnonzero(n>=10)
+    must(len(eligible_mu)>0,"No muons available for timeline")
+    typical=np.median(n[eligible_mu])
+    return int(eligible_mu[np.argmin(np.abs(n[eligible_mu]-typical))])
+
+def describe(kind,data,meta,settings):
+    n_total=len(data["gain"])
+    selected=eligible(data,require128=settings["reliable_only"])
+    n=int(np.count_nonzero(selected))
+    require_text=("Only avalanches with all 128 sampled ion-birth positions are "
+                  "included to reduce sample-count-dependent time-estimator bias."
+                  if settings["reliable_only"] else
+                  "All ion-producing avalanches are included; low-ion-count "
+                  "avalanches have less stable sampled time percentiles.")
+    if kind=="t10_gain":
+        x=data["t10"][selected]
+        y=data["gain"][selected]
+        q25,q75=np.quantile(x,[.25,.75])
+        lo=float(y[x<=q25].mean())
+        hi=float(y[x>=q75].mean())
+        return (
+            "**What you see:** Mean collected-electron gain, grouped by the "
+            "sampled 10th-percentile *ion-birth* time relative to muon entry.",
+            "**How measured:** Each avalanche's exact collected electron count "
+            "comes from Garfield endpoints; its early-time proxy comes from "
+            "up to 128 randomly retained ionisation timestamps. Time-bin "
+            "averages include zero collected gain where ion births occurred. "
+            +require_text,
+            f"**Penning-ON observations:** {n:,}/{n_total:,} avalanches enter "
+            f"the analysis. Mean gain in earliest/latest timing quartiles is "
+            f"{lo:,.1f} / {hi:,.1f}. This correlation alone does not establish "
+            "that drift time causes the gain difference."
+        )
+    if kind=="t10_asym":
+        good=selected&np.isfinite(data["A"])
+        x=data["t10"][good];a=np.abs(data["A"][good])
+        q25,q75=np.quantile(x,[.25,.75])
+        return (
+            "**What you see:** Mean magnitude of the microscopic ion-birth "
+            "hemisphere asymmetry |A| versus early sampled birth time.",
+            "**How measured:** A = (N_up−N_down)/(N_up+N_down) uses **all** "
+            "ion-birth callback counts, not the sampled cloud. "
+            "Timing is estimated from 128 or fewer saved ion-birth "
+            "timestamps, with t=0 at muon entry. "+require_text,
+            f"**Penning-ON observations:** {len(x):,} valid avalanches; "
+            f"mean |A| earliest/latest quartiles "
+            f"{a[x<=q25].mean():.4f} / {a[x>=q75].mean():.4f}. "
+            "This is birth-sector imbalance, not the induced cathode charge ratio."
+        )
+    if kind=="t10_angles":
+        early,late,descriptions=group_masks(data,settings)
+        return (
+            "**What you see:** Two ion-weighted azimuthal distributions "
+            "for avalanches with early versus late sampled ion-birth times. "
+            "φ is the *birth position angle* around the anode, "
+            "**not the incoming electron's arrival angle**.",
+            "**How measured:** Each selected avalanche contributes its "
+            "uniformly sampled birth azimuth histogram multiplied by "
+            "its **exact** ion-birth count. Time groups come from its "
+            "sampled early (10th percentile) birth time. "+require_text,
+            f"**Penning-ON observations:** {descriptions[0]} — "
+            f"{int(early.sum()):,} avalanches; {descriptions[1]} — "
+            f"{int(late.sum()):,}. Compare the angular *shapes*, rather than "
+            "their absolute ion yields; each curve is normalised separately."
+        )
+    if kind=="t10_start":
+        x=np.abs(data["v0"][selected]);t=data["t10"][selected]
+        rho=float(np.corrcoef(x,t)[0,1]) if np.std(x)>0 and np.std(t)>0 else float("nan")
+        return (
+            "**What you see:** Early sampled ion-birth time versus the "
+            "distance |v₀| of the starting TrackHeed electron from the "
+            "anode-wire plane (v=0). This is not a measured arrival position.",
+            "**How measured:** v₀ is the original exact Heed electron "
+            "position; the timestamp is the sampled 10th-percentile "
+            "Garfield ion-creation time since muon entry. "
+            "Each cell counts starting electrons. "+require_text,
+            f"**Penning-ON observations:** {n:,} avalanches; Pearson "
+            f"correlation between |v₀| and the time proxy = {rho:+.3f}. "
+            "Position dependence can confound an apparent "
+            "'late avalanche' effect."
+        )
+    if kind=="t10_gain_position":
+        return (
+            "**What you see:** Mean collected-electron gain at each "
+            "combination of starting |v₀| and sampled early "
+            "ion-birth time (two conditioned variables).",
+            "**How measured:** The anode-collected gain is exact for each "
+            "initial Heed electron; |v₀| is its saved start position; "
+            "early-time is inferred from the saved 128-point birth "
+            "reservoir. Cells with fewer than 20 avalanches are masked. "
+            +require_text,
+            f"**Penning-ON observations:** {n:,} eligible avalanches. "
+            "If gain changes mainly with |v₀| at fixed time, or with "
+            "time at fixed |v₀|, a one-variable LUT may be insufficient. "
+            "This descriptive comparison is not a causal test."
+        )
+    if kind=="t10_timeline":
+        mi=int(settings["muon_index"])
+        m=meta["muons"][mi]
+        selected_mu=data["parent"]==mi
+        x=data["t10"][selected_mu]
+        observed=int(np.isfinite(x).sum())
+        return (
+            f"**What you see:** A timeline of individual avalanches "
+            f"created by real J/ψ muon #{mi}, grouped by their "
+            "original TrackHeed cluster indices.",
+            "**How measured:** Small grey marks are the exact TrackHeed "
+            "electron creation times. Larger circles mark the sampled "
+            "10th-percentile ion-birth times; their area approximately "
+            "represents collected gain, and colour represents exact "
+            "signed ion-birth asymmetry A. No separate electron "
+            "arrival time or incoming angle is stored.",
+            f"**This muon:** {m['n_clusters']} original clusters, "
+            f"{m['n_Heed']} starting electrons, {observed} avalanches "
+            f"with sampled ion births; path {m['path_mm']:.2f} mm, "
+            f"incidence angles (θu,θw)=({m['theta_u_deg']:.2f}°, "
+            f"{m['theta_w_deg']:.2f}°). The timeline is a diagnostic "
+            "ion-creation chronology, not a reconstructed cathode waveform."
+        )
+    raise RuntimeError("Unknown temporal plot interpretation "+kind)
+
+def render(kind,fig,data,meta,controls,st):
+    """Add one of six physical plots to a caller-owned editable Plotly figure.
+
+    Returns (plotted CSV data or None, short graph-specific note).
+    """
+    import plotly.graph_objects as go
+    mask=eligible(data,controls["reliable_only"])
+    x=data["t10"]
+    y=data["gain"].astype(float)
+    color=controls["color"]
+    width=controls["line_width"]
+    min_entries=20
+    if kind in ("t10_gain","t10_asym"):
+        good=mask.copy()
+        if kind=="t10_asym":good&=np.isfinite(data["A"])
+        ab=x[good]
+        v=(y[good] if kind=="t10_gain" else np.abs(data["A"][good]))
+        edges=quantile_edges(ab,14)
+        mids=(edges[:-1]+edges[1:])/2
+        n=np.histogram(ab,bins=edges)[0]
+        summed=np.histogram(ab,bins=edges,weights=v)[0]
+        avg=np.divide(summed,n,out=np.full(len(n),np.nan),
+                      where=n>=min_entries)
+        fig.add_trace(go.Scatter(
+            x=mids,y=avg,mode="lines+markers",
+            line=dict(color=color,width=width),
+            marker=dict(size=7,color=color),name=controls["legend"],
+            customdata=n,hovertemplate="Early birth time: %{x:.3f} ns"
+              "<br>Bin mean: %{y:.5g}<br>Avalanches: %{customdata}"
+              "<extra></extra>"))
+        return ({"bin_start_ns":edges[:-1],"bin_end_ns":edges[1:],
+                 "mean":avg,"n_avalanches":n},
+                "Time bins contain approximately equal numbers of "
+                "eligible avalanches; plot values are arithmetic means, "
+                "not probability densities.")
+    if kind=="t10_angles":
+        early,late,labels=group_masks(data,controls)
+        out={}
+        edges=np.asarray(PHI_EDGES,dtype=float)
+        factor=int(controls["angular_deg"]//5)
+        need=int(early.sum())+int(late.sum())
+        if min(int(early.sum()),int(late.sum()))<30:
+            st.warning("Too few avalanches in at least one time group. "
+                       "Broaden time windows or choose quantile groups.")
+            return None,"Insufficient avalanche counts for reliable angular contrast."
+        for name,selection,col,title in (
+            ("early",early,color,controls["legend_early"]),
+            ("late",late,"#1F77B4",controls["legend_late"])
+        ):
+            m=data["ions"][selection].astype(float)
+            frac=data["angle_fraction"][selection]
+            count=np.sum(frac*m[:,None],axis=0)
+            reb=count.reshape(-1,factor).sum(axis=1)
+            reb_edges=edges[::factor]
+            must(len(reb_edges)==len(reb)+1,"Angular widths inconsistent")
+            prob=reb/reb.sum()
+            centers=(reb_edges[:-1]+reb_edges[1:])/2.
+            xx=np.repeat(reb_edges,2)[1:-1]
+            yy=np.repeat(prob,2)
+            fig.add_trace(go.Scatter(
+                x=xx,y=yy,mode="lines",line=dict(color=col,width=width),
+                name=title+" ("+labels[0 if name=="early" else 1]+")"))
+            out[name+"_probability"]=prob
+        centers=(edges[::factor][:-1]+edges[::factor][1:])/2.
+        return ({"phi_bin_center_deg":centers,
+                 "early_probability":out["early_probability"],
+                 "late_probability":out["late_probability"]},
+                f"Groups contain {int(early.sum()):,} (early) and "
+                f"{int(late.sum()):,} (late) avalanches. Both curves "
+                "normalised by their own ion-weighted totals; "
+                "blue is late, orange is early.")
+    if kind=="t10_start":
+        vv=np.abs(data["v0"][mask])
+        tt=x[mask]
+        edges_v=np.linspace(0.,3.,19)
+        edges_t=quantile_edges(tt,20)
+        n=np.histogram2d(tt,vv,bins=(edges_t,edges_v))[0]
+        cen_t=(edges_t[:-1]+edges_t[1:])/2
+        cen_v=(edges_v[:-1]+edges_v[1:])/2
+        fig.add_trace(go.Heatmap(
+            x=cen_v,y=cen_t,z=n,
+            colorscale="YlOrBr",colorbar=dict(title="Number of Heed electrons"),
+            hovertemplate="|v0| %{x:.3g} mm<br>early time %{y:.3g} ns"
+                          "<br>Heed electrons %{z:.0f}<extra></extra>"))
+        return None,"Cell occupancy is a count, not a probability density; "
+                   "time bins are chosen for equal global occupancy."
+    if kind=="t10_gain_position":
+        tt=x[mask]
+        vv=np.abs(data["v0"][mask])
+        gain=y[mask]
+        edget=quantile_edges(tt,15)
+        edgev=np.linspace(0.,3.,17)
+        cnt=np.histogram2d(vv,tt,bins=(edgev,edget))[0]
+        total=np.histogram2d(vv,tt,bins=(edgev,edget),weights=gain)[0]
+        mean=np.divide(total,cnt,out=np.full(cnt.shape,np.nan),
+                       where=cnt>=20)
+        xc=(edget[:-1]+edget[1:])/2
+        yc=(edgev[:-1]+edgev[1:])/2
+        fig.add_trace(go.Heatmap(
+            x=xc,y=yc,z=mean,
+            colorscale="YlOrBr",colorbar=dict(title=controls["legend"]),
+            customdata=cnt,
+            hovertemplate="early birth time %{x:.3g} ns<br>"
+                          "start |v0| %{y:.3g} mm<br>"
+                          "mean gain %{z:.2f}<br>"
+                          "N avalanches %{customdata:.0f}<extra></extra>"))
+        return None,"Only 2D bins with at least 20 true starting "
+                   "electrons are shown. Mean gain includes collected_e=0."
+    if kind=="t10_timeline":
+        idx=int(controls["muon_index"])
+        good=(data["parent"]==idx)
+        if not np.any(good):
+            st.warning("Selected muon has no retained TrackHeed electrons.")
+            return None,"This real muon has zero retained electron primaries."
+        clusters=data["cluster"][good].astype(float)
+        th=data["t_heed"][good]
+        t=x[good]
+        gain=y[good]
+        asym=data["A"][good]
+        valid=np.isfinite(t)
+        # Exact Heed creation precedes avalanche (grey crosses), and
+        # approximate onset from sampled ion births is a coloured circle.
+        fig.add_trace(go.Scatter(
+            x=th,y=clusters,mode="markers",
+            marker=dict(symbol="x",size=6,color="#888888",opacity=.65),
+            name="TrackHeed start time (exact)",
+            hovertemplate="Heed creation t %{x:.3f} ns<br>"
+                          "Cluster %{y:.0f}<extra></extra>"))
+        if np.any(valid):
+            size=np.clip(6+3*np.sqrt(np.maximum(gain[valid],0.)/100.),
+                         6,36)
+            cd=np.column_stack((gain[valid],data["primary"][good][valid],
+                                th[valid],data["ions"][good][valid],
+                                data["sample_count"][good][valid]))
+            fig.add_trace(go.Scatter(
+                x=t[valid],y=clusters[valid],mode="markers",
+                marker=dict(size=size,color=asym[valid],cmin=-1,cmax=1,
+                    colorscale="RdBu_r",showscale=True,
+                    colorbar=dict(title="Exact A_ion")),
+                customdata=cd,
+                name=controls["legend"],
+                hovertemplate="Early 10% ion-birth time %{x:.3f} ns"
+                              "<br>Cluster %{y:.0f}"
+                              "<br>Collected gain %{customdata[0]:.0f}"
+                              "<br>Heed primary index %{customdata[1]:.0f}"
+                              "<br>Heed creation t %{customdata[2]:.3f} ns"
+                              "<br>Ion births %{customdata[3]:.0f}"
+                              "<br>Sampled positions %{customdata[4]:.0f}"
+                              "<extra></extra>"))
+        return None,("Circles depict sampled early ion-birth times; grey "
+                     "crosses show original Heed creation times. "
+                     "Marker area varies approximately with gain; "
+                     "colour is exact signed ion-birth asymmetry.")
+    raise RuntimeError("No temporal plot renderer for "+kind)
+
+
 if __name__=="__main__":
     mode=sys.argv[1] if len(sys.argv)>1 else "selftest"
     if mode=="selftest":selftest()
