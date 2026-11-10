@@ -308,6 +308,24 @@ def export():
              "Avalanche count differs from cached original ion birth census")
         must(selected_exported==len(chosen),
              "Selected avalanche cloud sample is missing a source seed")
+        # Complete exact reference includes zero-ion/zero-collected
+        # original primary electrons omitted from spatial-shape tables.
+        complete_fields=(
+            "muon","primary","cluster","initial_u_wire_mm",
+            "initial_v0_mm","original_Heed_t_ns",
+            "collected_gain_exact","ion_births_exact",
+            "A_exact_or_blank","saved_birth_points","sampled_t10_ns_or_blank")
+        full_rows=(
+            (int(cache["parent"][j]),int(cache["primary"][j]),
+             int(cache["cluster"][j]),float(cache["u0"][j]),
+             float(cache["v0"][j]),float(cache["t_heed"][j]),
+             int(cache["gain"][j]),int(cache["ions"][j]),
+             (float(cache["A"][j]) if np.isfinite(cache["A"][j]) else ""),
+             int(cache["sample_count"][j]),
+             (float(cache["t10"][j]) if np.isfinite(cache["t10"][j]) else ""))
+            for j in range(n)
+        )
+        add_csv(temp/"all_avalanche_exact_index.csv",complete_fields,full_rows)
         add_hist_1(temp/"radial_ion_weighted.csv",R,r_hist,"mm","weighted_ion_births")
         add_hist_1(temp/"dw_from_seed_ion_weighted.csv",W,w_hist,
                    "mm","weighted_ion_births")
@@ -330,6 +348,7 @@ def export():
             "number_of_real_Geant4_muons":1000,
             "number_of_original_Garfield_avalanches":n,
             "ion_producing_avalanches":n_ion_avalanches,
+            "zero_ion_avalanches":n-n_ion_avalanches,
             "full_128_sample_avalanches":full_128,
             "exact_original_ion_births":ion_total_seen,
             "uniform_reservoir_points_saved":saved_points_total,
@@ -349,7 +368,7 @@ def export():
             "sum_ion_births_in_dw_seed_grid":float(w_hist.sum()),
             "sum_ion_births_in_dw_centred_grid":float(wc_hist.sum()),
             "sha256_source_temporal_npz":sha(temporal.CACHE),
-            "version_notes":"Representative avalanches sampled deterministically across signed v0, gain strata, upper ion-count tail, time-span tail, and random draws.",
+            "version_notes":"Representative avalanches sampled deterministically across signed v0, gain strata, upper ion-count tail, time-span tail, and random draws. The all_avalanche_exact_index.csv includes zero-ion and zero-collected records; avalanche_geometry_summary.csv contains only ion-producing avalanches.",
         }
         (temp/"README.json").write_text(json.dumps(details,indent=2,allow_nan=False)+"\n")
         sha_map={p.name:sha(p) for p in sorted(temp.iterdir())}
