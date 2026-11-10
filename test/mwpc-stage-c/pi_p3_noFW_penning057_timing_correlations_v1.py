@@ -630,11 +630,11 @@ def render(kind,fig,data,meta,controls,st):
         cen_t=(edges_t[:-1]+edges_t[1:])/2
         cen_v=(edges_v[:-1]+edges_v[1:])/2
         z=n
-        cb="Number of Heed electrons"
+        cb=controls["legend"]
         if controls.get("zscale")=="Log":
             with np.errstate(divide="ignore"):
                 z=np.where(n>0,np.log10(n),np.nan)
-            cb="log10(number of Heed electrons)"
+            cb="log10("+cb+")"
         fig.add_trace(go.Heatmap(
             x=cen_v,y=cen_t,z=z,
             colorscale="YlOrBr",colorbar=dict(title=cb),
