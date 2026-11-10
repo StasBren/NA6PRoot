@@ -636,6 +636,7 @@ def app():
     import streamlit as st
     import plotly.graph_objects as go
     import pi_p3_noFW_penning057_timing_correlations_v1 as temporal
+    import pi_p3_noFW_penning057_muon_geometry_v1 as geomviz
     from plotly.colors import sequential
     from io import StringIO
 
@@ -1113,8 +1114,16 @@ def app():
                        "mean_absA":y,"n_avalanches":n}
 
     elif kind in temporal.KINDS:
+        if kind=="t10_timeline":
+            # Interactive REAL geometry is the first plot. The selected
+            # ORIGINAL Heed cluster index is forwarded to the existing
+            # full-muon chronology; no Garfield re-simulation.
+            time_controls["selected_cluster"]=geomviz.render(
+                st,int(time_controls["muon_index"]),temporal_meta)
         displayed_csv,note=temporal.render(
             kind,fig,temporal_data,temporal_meta,time_controls,st)
+        if kind=="t10_timeline":
+            st.markdown("#### Matching chronology — selected cluster highlighted")
         st.caption(note)
         if kind in ("t10_angles","t10_start","t10_timeline"):
             xallowlog=False
