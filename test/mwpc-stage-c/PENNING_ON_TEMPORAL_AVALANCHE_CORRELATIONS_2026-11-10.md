@@ -65,3 +65,38 @@ The first tests use a full-size sample of all 1,000 muons, not a handpicked
 single example. The one-muon timeline then illustrates the behaviour.
 Exact electron arrival timing and velocity-angle would require a new
 isolated, small Garfield diagnostic rather than falsifying these fields.
+
+## Plot Studio update: custom time ranges, working legend stats, relevant options
+
+Angular comparison (`t10_angles`) now defaults to **Custom time intervals (ns)**.
+Earlier and later curves each have independent FROM and TO fields.
+The selection is `From <= t10 < To`, and t10 is the 10th percentile
+of sampled ion-birth creation times **relative to original muon entry**.
+Windows can have different widths. Empty or underpopulated (<30)
+groups display a warning rather than inventing a signal.
+Quantile groups remain available for equal-population comparisons.
+Each curve has its own editable text; optional legend statistics
+refer to that group's sample `t10` **mean and population RMS** in ns.
+
+Mean/RMS legend text is now actually constructed for relevant views:
+- collected gain (inclusive and positive only): exact electron gains
+- avalanche / muon asymmetry: exact signed A values
+- physical ion-creation delay: weighted binned approximation, marked ≈
+- per-avalanche sampled time span: sampled time spans in ns
+- mean |A| vs gain: underlying |A| population
+- time-correlation mean gain / mean |A|: eligible original observables
+- early/late angular comparison: separately selected group t10 in ns.
+
+No meaningless linear angular mean is shown for 0/±180-degree periodic
+azimuths; the mean/RMS checkbox is omitted from those non-time angular views.
+
+Sidebar: gain bin width appears only for gain histograms; angular
+bin width only for angular histograms; asymmetry bin count only for
+asymmetry histograms; time-bin grouping only for the ion-delay histogram;
+heatmap colour-scale controls only for heatmaps; 128-point reliability
+filter omitted from the one-muon timeline. 2D temporal heatmaps now
+respect the logarithmic colour scale control too.
+
+No new data preparation needed. Refresh BOTH updated Python scripts
+using the file-specific git-show commands documented above, run both
+selftests and restart Streamlit. Cache NPZ files stay unchanged.
