@@ -76,8 +76,9 @@ def get_real_muon(index,meta):
         for j,r in enumerate(rs):
             if j==index:native=r;break
     need(native is not None,"Selected Geant4 muon not in 1000 frozen input")
-    identifier="|".join(native[f] for f in
-        ("source","chunk","event","hit_index","track_id","station","det_id"))
+    identifier="|".join([native["source"]]+[
+        str(int(native[f])) for f in
+        ("chunk","event","hit_index","track_id","station","det_id")])
     need(identifier==expected["id"],
          "Native Geant4 spatial input does not match timing-cache muon identity")
     station=int(native["station"])
