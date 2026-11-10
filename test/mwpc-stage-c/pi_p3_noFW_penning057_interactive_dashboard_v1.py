@@ -591,7 +591,7 @@ def plot_features(kind):
         "curve_color":kind in hist|curves,
         "line_width":kind in hist|curves,
         "legend_controls":kind in hist|curves or timeline,
-        "legend_text":kind not in {"t10_start","t10_angles"},
+        "legend_text":kind!="t10_angles",
         "gain_bin":kind in {"gain_all","gain_pos"},
         "angular_bin":kind in {"angle_eq","angle_ion","t10_angles"},
         "asym_bin":kind in {"asym_seed","asym_muon"},
