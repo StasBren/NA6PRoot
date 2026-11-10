@@ -812,6 +812,11 @@ def app():
     show_interpretation=st.sidebar.checkbox(
         "Show physics interpretation above plot",True,
         key=f"{kind}-interpretation-show")
+    # Export applies to every plot; keep it independent of plot-specific
+    # physics controls and defined on every Streamlit rerun.
+    export_format=st.sidebar.selectbox(
+        "Camera export format",["png","svg","jpeg"],
+        key=f"{kind}-export")
     title_font=st.sidebar.slider("Title font size",14,34,22,
                                  key=f"{kind}-title-font")
     label_font=st.sidebar.slider("Axes font size",10,24,15,
@@ -1320,6 +1325,22 @@ def selftest():
     must("mean=" in legend_stats("gain",np.array([0.,2.,4.]),True)
          and "RMS=" in legend_stats("A",np.array([0.,.5,1.]),True),
          "Statistics cannot be appended to Plotly trace legend")
+    # Catch the regression in which the format was referenced by the
+    # Plotly camera button but never initialized by the Streamlit sidebar.
+    import ast
+    tree=ast.parse(Path(__file__).read_text())
+    app_node=next(n for n in tree.body
+                  if isinstance(n,ast.FunctionDef) and n.name=="app")
+    export_assignments=[
+        n for n in ast.walk(app_node)
+        if isinstance(n,ast.Assign) and any(
+            isinstance(t,ast.Name) and t.id=="export_format"
+            for t in n.targets)
+    ]
+    must(len(export_assignments)==1
+         and "export_format=st.sidebar.selectbox" in
+             Path(__file__).read_text(),
+         "Camera export format is used without a sidebar assignment")
     # Exercise each dynamic explanation with a deliberately tiny synthetic
     # cache, so UI documentation cannot silently break a specific plot.
     synthetic={
