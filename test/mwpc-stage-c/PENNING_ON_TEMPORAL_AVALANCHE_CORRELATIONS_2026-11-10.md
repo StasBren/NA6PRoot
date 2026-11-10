@@ -100,3 +100,56 @@ respect the logarithmic colour scale control too.
 No new data preparation needed. Refresh BOTH updated Python scripts
 using the file-specific git-show commands documented above, run both
 selftests and restart Streamlit. Cache NPZ files stay unchanged.
+
+
+## Added: clickable real muon chamber geometry linked to chronology
+
+The existing one-muon timeline now displays a clickable physical u-v
+cross-section ABOVE the original per-cluster avalanche chronology.
+The map uses the frozen Geant4 entrance/exit points, every original
+TrackHeed cluster centroid, actual 3mm-pitch wire positions with
+station-dependent EntrancePhase parity, and cathodes at v=+/-3mm.
+The drawn 30um anode wire markers are intentionally enlarged.
+Closest-anode midpoints are shown as guides, NOT electron drift paths.
+
+Click one orange TrackHeed cluster point to highlight its chronology
+row and the avalanches with the SAME original cluster index. The
+selection panel shows global 3D cluster coordinates, original and
+accepted electron counts and geometrically nearest anode. Clusters
+with zero accepted electrons can still be selected but have no
+microscopic Garfield avalanche. A manual index picker helps when
+physical points overlap in the u-v projection.
+
+The application does NOT invent anode electron arrival coordinates,
+microscopic drift trajectories, ion drift, cathode induced signals
+or electrode weighting fields. The latter remain future stages.
+
+The geometry is sourced from the small existing, SHA-verified Geant4
+input and 20-muon TrackHeed cluster CSVs. No new prepare step, no
+Garfield simulation, no modification of cached or 30k muon data.
+
+## Update 3 scripts in WSL (avoid git pull conflicts)
+
+    set -e
+    cd ~/na6p/src/NA6PRoot-mwpc
+    git fetch origin feature/mwpc-stage-c
+    PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+    DASH=test/mwpc-stage-c/pi_p3_noFW_penning057_interactive_dashboard_v1.py
+    TIME=test/mwpc-stage-c/pi_p3_noFW_penning057_timing_correlations_v1.py
+    GEO=test/mwpc-stage-c/pi_p3_noFW_penning057_muon_geometry_v1.py
+    mkdir -p ~/na6p/script_backups
+    for f in "$DASH" "$TIME" "$GEO"; do
+      if [ -f "$f" ]; then
+        cp -p "$f" ~/na6p/script_backups/"$(basename "$f").before_clickmap"
+      fi
+      git show "FETCH_HEAD:$f" > "${f}.new" && mv "${f}.new" "$f"
+    done
+    "$PY" -m py_compile "$DASH" "$TIME" "$GEO"
+    "$PY" "$DASH" selftest
+    "$PY" "$TIME" selftest
+    "$PY" "$GEO"
+    "$PY" -m streamlit run "$DASH" --server.address localhost --server.port 8501 --theme.base light
+
+Open http://localhost:8501 and select the one-muon chronology plot.
+Click-to-highlight uses Streamlit's built-in Plotly point selection
+(on_select=rerun, selection_mode=points), no extra plugin required.
