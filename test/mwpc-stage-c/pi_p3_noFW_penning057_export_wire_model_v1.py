@@ -286,7 +286,8 @@ def export():
         files=("muon_reference_seed.csv",
                "muon_reference_heed_primaries.csv",
                "muon_reference_ion_birth_sample.csv",
-               "muon_reference_crossing.csv")
+               "muon_reference_crossing.csv",
+               "physics.log")
         for filename in files:
             need(rec["file_sha256"].get(filename)==checksum(folder/filename),
                  "Source-file SHA altered; refusing export: "+str(folder/filename))
@@ -574,8 +575,11 @@ def export():
         [r["collected_gain_e"] for r in rows_all]))
     # Construct outputs in a private sibling directory, then publish once.
     # Preexisting experiment files and previous dashboard cache are untouched.
-    ROOT_OUT.mkdir(parents=False,exist_ok=False)
-    temp=Path(tempfile.mkdtemp(prefix="assembling_",dir=ROOT_OUT))
+    # Build everything in an isolated temporary directory UNDER the
+    # established physics campaign root. No final output directory
+    # appears until every CSV/NPZ/PNG and its SHA has been produced.
+    # A failed export can be retried without deleting physics or artifacts.
+    temp=Path(tempfile.mkdtemp(prefix=".assembling_wire_model_v1_",dir=ROOT))
     try:
         with (temp/"per_avalanche_morphology.csv").open("x",newline="") as f:
             writer=csv.DictWriter(f,fieldnames=COLUMNS)
@@ -630,7 +634,8 @@ def export():
                 if p.is_file()}
         (temp/"file_sha256.json").write_text(
             json.dumps(hashes,indent=2,sort_keys=True)+"\n")
-        need(not OUTPUT.exists(),"An earlier ZIP already exists")
+        need(not ROOT_OUT.exists(),"An earlier export directory already exists")
+        ROOT_OUT.mkdir(parents=False,exist_ok=False)
         with zipfile.ZipFile(OUTPUT,"x",compression=zipfile.ZIP_DEFLATED,
                              compresslevel=6,allowZip64=True) as z:
             for p in sorted(temp.iterdir()):
@@ -650,6 +655,8 @@ def export():
     except Exception:
         if OUTPUT.exists():
             OUTPUT.unlink()
+        if ROOT_OUT.exists() and not any(ROOT_OUT.iterdir()):
+            ROOT_OUT.rmdir()
         raise
     finally:
         shutil.rmtree(temp,ignore_errors=True)
