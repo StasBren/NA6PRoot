@@ -302,8 +302,53 @@ def selftest():
     # A zero-ion avalanche has no birth samples and no defined onset.
     ions=0; onset=float("nan") if ions==0 else 0.
     must(np.isnan(onset),"Zero-ion onset must remain undefined")
-    print("PASS nearest-anode, sampled onset, zero-ion selftests; "
-          "NO Garfield/raw data writes.")
+    # All six live views and three-part scientific explanations must render
+    # using synthetic data BEFORE any expensive sealed-CSV preparation.
+    import plotly.graph_objects as go
+    class StubStreamlit:
+        def warning(self,message):
+            pass
+    n=240
+    starts=np.linspace(2.,160.,n)
+    synth={
+        "gain":np.linspace(300.,900.,n),
+        "ions":np.full(n,750,dtype=int),
+        "A":np.linspace(-.8,.8,n),
+        "t10":starts,
+        "sample_count":np.full(n,128,dtype=int),
+        "v0":np.linspace(-3.,3.,n),
+        "angle_fraction":np.tile(np.ones((1,72))/72.,(n,1)),
+        "parent":np.zeros(n,dtype=int),
+        "primary":np.arange(n,dtype=int),
+        "cluster":np.arange(n,dtype=int)%7,
+        "t_heed":np.zeros(n),
+    }
+    fake_meta={"muons":[{
+       "id":"synthetic","n_Heed":n,"n_clusters":7,
+       "path_mm":6.,"theta_u_deg":5.,"theta_w_deg":-2.
+    }]}
+    settings={
+        "reliable_only":True,"mode":"Quantile groups",
+        "early_centre":25.,"late_centre":100.,"window_half_width":15.,
+        "muon_index":0,"color":"#E46B08","line_width":2.,
+        "legend":"synthetic","legend_early":"Early","legend_late":"Late",
+        "angular_deg":5
+    }
+    for plot in KINDS:
+        explanation=describe(plot,synth,fake_meta,settings)
+        must(len(explanation)==3 and
+             all(len(line)>80 for line in explanation),
+             "Invalid science explanation for "+plot)
+        output,note=render(plot,go.Figure(),synth,fake_meta,settings,
+                           StubStreamlit())
+        must(isinstance(note,str),"No user-visible plot annotation "+plot)
+        if output is not None:
+            must(all(len(np.asarray(v))==len(next(iter(output.values())))
+                     for v in output.values()),
+                 "Plotted CSV curves have mismatched lengths: "+plot)
+    # Check a zero-ion event does not corrupt the source's time estimator.
+    print("PASS six temporal plot+interpretation selftests, nearest-anode "
+          "physics and sampled timing quantiles; NO Garfield/raw data writes.")
 
 def load():
     must(CACHE.is_file() and META.is_file(),
