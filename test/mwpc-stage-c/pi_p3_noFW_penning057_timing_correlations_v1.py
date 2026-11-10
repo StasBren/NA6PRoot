@@ -677,6 +677,13 @@ def render(kind,fig,data,meta,controls,st):
             st.warning("Selected muon has no retained TrackHeed electrons.")
             return None,"This real muon has zero retained electron primaries."
         clusters=data["cluster"][good].astype(float)
+        selected_cluster=controls.get("selected_cluster",None)
+        if selected_cluster is not None:
+            selected_cluster=int(selected_cluster)
+            fig.add_hrect(
+                y0=selected_cluster-.42,y1=selected_cluster+.42,
+                fillcolor="rgba(255,184,57,0.20)",
+                line_width=0,layer="below")
         th=data["t_heed"][good]
         t=x[good]
         gain=y[good]
@@ -711,10 +718,34 @@ def render(kind,fig,data,meta,controls,st):
                               "<br>Ion births %{customdata[3]:.0f}"
                               "<br>Sampled positions %{customdata[4]:.0f}"
                               "<extra></extra>"))
+        if selected_cluster is not None:
+            selected_points=(clusters==selected_cluster)&valid
+            if np.any(selected_points):
+                selected_sizes=np.clip(
+                    10.+3.1*np.sqrt(np.maximum(gain[selected_points],0.)/100.),
+                    10.,42.)
+                fig.add_trace(go.Scatter(
+                    x=t[selected_points],y=clusters[selected_points],
+                    mode="markers",
+                    marker=dict(symbol="circle-open",size=selected_sizes,
+                                color="#FFC43D",line=dict(width=3,
+                                                         color="#B05B00")),
+                    name=f"Selected cluster #{selected_cluster}",
+                    hovertemplate=f"Selected cluster #{selected_cluster}"
+                                  "<br>Early birth time %{x:.3f} ns"
+                                  "<extra></extra>"))
+            else:
+                # E.g. cluster has 0 accepted electrons, or none created ions.
+                fig.add_annotation(x=.5,y=1.02,xref="paper",yref="paper",
+                    text=f"Cluster #{selected_cluster}: no sampled ion-birth "
+                         "chronology circles",showarrow=False,
+                    font=dict(color="#A25A0D",size=12))
         return None,("Circles depict sampled early ion-birth times; grey "
                      "crosses show original Heed creation times. "
                      "Marker area varies approximately with gain; "
-                     "colour is exact signed ion-birth asymmetry.")
+                     "colour is exact signed ion-birth asymmetry. "
+                     "A selected physical cluster is highlighted by a "
+                     "horizontal band and amber outlines.")
     raise RuntimeError("No temporal plot renderer for "+kind)
 
 
