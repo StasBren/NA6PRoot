@@ -599,8 +599,8 @@ def render(kind,fig,data,meta,controls,st):
             colorscale="YlOrBr",colorbar=dict(title="Number of Heed electrons"),
             hovertemplate="|v0| %{x:.3g} mm<br>early time %{y:.3g} ns"
                           "<br>Heed electrons %{z:.0f}<extra></extra>"))
-        return None,"Cell occupancy is a count, not a probability density; "
-                   "time bins are chosen for equal global occupancy."
+        return None,("Cell occupancy is a count, not a probability density; "
+                     "time bins are chosen for equal global occupancy.")
     if kind=="t10_gain_position":
         tt=x[mask]
         vv=np.abs(data["v0"][mask])
@@ -621,8 +621,8 @@ def render(kind,fig,data,meta,controls,st):
                           "start |v0| %{y:.3g} mm<br>"
                           "mean gain %{z:.2f}<br>"
                           "N avalanches %{customdata:.0f}<extra></extra>"))
-        return None,"Only 2D bins with at least 20 true starting "
-                   "electrons are shown. Mean gain includes collected_e=0."
+        return None,("Only 2D bins with at least 20 true starting "
+                     "electrons are shown. Mean gain includes collected_e=0.")
     if kind=="t10_timeline":
         idx=int(controls["muon_index"])
         good=(data["parent"]==idx)
