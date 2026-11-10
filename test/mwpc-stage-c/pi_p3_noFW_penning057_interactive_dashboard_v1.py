@@ -579,6 +579,7 @@ def plot_explanation(kind,data,meta,angular_deg):
 def app():
     import streamlit as st
     import plotly.graph_objects as go
+    import pi_p3_noFW_penning057_timing_correlations_v1 as temporal
     from plotly.colors import sequential
     from io import StringIO
 
@@ -630,6 +631,7 @@ def app():
         "gain_xy":"Mean gain versus initial electron position",
         "time_phi":"Birth time versus azimuth",
     }
+    kinds.update(temporal.KINDS)
     defaults={
         "gain_all":("Collected-electron gain — all avalanches",
                     "Anode-collected electrons per initial Heed electron",
@@ -668,8 +670,24 @@ def app():
                     "Birth azimuth around nearest anode [deg]",
                     "Birth delay [ns]","Ion-weighted birth density")
     }
+    defaults.update(temporal.DEFAULTS)
     st.sidebar.header("Edit the plot")
     kind=st.sidebar.selectbox("Plot",list(kinds),format_func=lambda x:kinds[x])
+    temporal_data=temporal_meta=None
+    if kind in temporal.KINDS:
+        if not temporal.CACHE.is_file() or not temporal.META.is_file():
+            st.warning("Temporal correlations are a separate derived cache. "
+                       "Run the new read-only temporal script with 'prepare' "
+                       "once, then restart the dashboard.")
+            st.code("python test/mwpc-stage-c/"
+                    "pi_p3_noFW_penning057_timing_correlations_v1.py prepare",
+                    language="bash")
+            st.stop()
+        @st.cache_data(show_spinner="Loading the 1000-muon temporal cache...")
+        def load_temporal(path,mtime):
+            return temporal.load()
+        temporal_data,temporal_meta=load_temporal(
+            str(temporal.CACHE),temporal.CACHE.stat().st_mtime_ns)
     if st.sidebar.button("Reset this plot to defaults"):
         for k in list(st.session_state):
             if k.startswith(kind+"-"):
@@ -723,6 +741,54 @@ def app():
         index=1 if kind=="time" else 0,
         key=f"{kind}-normalization")
     zscale=st.sidebar.selectbox("Heatmap colour scale",["Linear","Log"],key=f"{kind}-zscale")
+    time_controls={}
+    if kind in temporal.KINDS:
+        st.sidebar.divider()
+        st.sidebar.subheader("Early-birth correlation settings")
+        reliable=st.sidebar.checkbox(
+            "Only 128-sample ion avalanches",True,
+            key=f"{kind}-reliable")
+        time_controls={
+            "reliable_only":reliable,"color":color,"line_width":line_width,
+            "legend":label,"angular_deg":angular_deg,
+            "mode":"Quantile groups","early_centre":25.,
+            "late_centre":100.,"window_half_width":15.,
+            "legend_early":"Earlier birth times",
+            "legend_late":"Later birth times",
+            "muon_index":0
+        }
+        if kind=="t10_angles":
+            grouping=st.sidebar.selectbox(
+                "Early/late comparison",
+                ["Quantile groups","Time windows (ns)"],
+                key=f"{kind}-grouping")
+            time_controls["mode"]=grouping
+            time_controls["legend_early"]=st.sidebar.text_input(
+                "Early curve legend","Earlier birth times",
+                key=f"{kind}-early-label")
+            time_controls["legend_late"]=st.sidebar.text_input(
+                "Late curve legend","Later birth times",
+                key=f"{kind}-late-label")
+            if grouping=="Time windows (ns)":
+                time_controls["early_centre"]=st.sidebar.number_input(
+                    "Early window centre [ns]",min_value=0.,value=25.,
+                    step=5.,key=f"{kind}-early-centre")
+                time_controls["late_centre"]=st.sidebar.number_input(
+                    "Late window centre [ns]",min_value=0.,value=100.,
+                    step=5.,key=f"{kind}-late-centre")
+                time_controls["window_half_width"]=st.sidebar.number_input(
+                    "Half-width of each window [ns]",min_value=.1,value=15.,
+                    step=5.,key=f"{kind}-time-width")
+        if kind=="t10_timeline":
+            time_controls["muon_index"]=st.sidebar.selectbox(
+                "Real J/psi muon to inspect",
+                options=list(range(1000)),
+                index=temporal.typical_muon(temporal_meta),
+                format_func=lambda i:(
+                    f"Muon {i:03d} | "
+                    f"{temporal_meta['muons'][i]['n_clusters']} clusters, "
+                    f"{temporal_meta['muons'][i]['n_Heed']} initial e"),
+                key=f"{kind}-selected-muon")
     st.sidebar.divider()
     with st.sidebar.expander("Axes limits (optional)",expanded=False):
         xmin=st.text_input("X minimum",key=f"{kind}-xmin",placeholder="Automatic")
@@ -887,6 +953,14 @@ def app():
         displayed_csv={"gain_bin_lo":edges[:-1],"gain_bin_hi":edges[1:],
                        "mean_absA":y,"n_avalanches":n}
 
+    elif kind in temporal.KINDS:
+        displayed_csv,note=temporal.render(
+            kind,fig,temporal_data,temporal_meta,time_controls,st)
+        st.caption(note)
+        if kind in ("t10_angles","t10_start","t10_timeline"):
+            xallowlog=False
+        if kind in ("t10_gain_position","t10_timeline"):
+            yallowlog=False
     elif kind in ("ion_xy","gain_xy","time_phi"):
         heatmap=True
         if kind=="ion_xy":
@@ -986,7 +1060,11 @@ def app():
         elif hi>lo:fig.update_yaxes(range=[lo,hi])
 
     if show_interpretation:
-        what,how,observed=plot_explanation(kind,data,meta,angular_deg)
+        if kind in temporal.KINDS:
+            what,how,observed=temporal.describe(
+                kind,temporal_data,temporal_meta,time_controls)
+        else:
+            what,how,observed=plot_explanation(kind,data,meta,angular_deg)
         with st.container(border=True):
             st.markdown("#### Understanding this plot")
             st.markdown(what)
