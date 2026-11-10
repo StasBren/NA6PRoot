@@ -331,7 +331,9 @@ def selftest():
     }]}
     settings={
         "reliable_only":True,"mode":"Quantile groups",
-        "early_centre":25.,"late_centre":100.,"window_half_width":15.,
+        "early_min":10.,"early_max":40.,
+        "late_min":85.,"late_max":115.,
+        "add_stats":True,
         "muon_index":0,"color":"#E46B08","line_width":2.,
         "legend":"synthetic","legend_early":"Early","legend_late":"Late",
         "angular_deg":5
@@ -348,6 +350,18 @@ def selftest():
             must(all(len(np.asarray(v))==len(next(iter(output.values())))
                      for v in output.values()),
                  "Plotted CSV curves have mismatched lengths: "+plot)
+    # Verify independent selected ns windows and both legend statistics.
+    settings["mode"]="Custom time intervals (ns)"
+    early,late,names=group_masks(synth,settings)
+    must(np.array_equal(early,(starts>=10.)&(starts<40.)) and
+         np.array_equal(late,(starts>=85.)&(starts<115.)),
+         "Independent time interval selection failed")
+    for check in ("t10_angles","t10_gain","t10_asym"):
+        fig=go.Figure()
+        render(check,fig,synth,fake_meta,settings,StubStreamlit())
+        must(len(fig.data)>0 and
+             all("mean=" in tr.name and "RMS=" in tr.name for tr in fig.data),
+             "Mean/RMS legend missing or incorrect: "+check)
     # Check a zero-ion event does not corrupt the source's time estimator.
     print("PASS six temporal plot+interpretation selftests, nearest-anode "
           "physics and sampled timing quantiles; NO Garfield/raw data writes.")
@@ -379,6 +393,7 @@ def quantile_edges(x,n=12):
 def group_masks(data,setting):
     x=data["t10"]
     valid=eligible(data,require128=setting["reliable_only"])
+    must(bool(np.any(valid)),"No eligible ion-producing avalanches")
     if setting["mode"]=="Quantile groups":
         q25,q75=np.quantile(x[valid],[.25,.75])
         early=valid&(x<=q25)
@@ -386,12 +401,14 @@ def group_masks(data,setting):
         description=(f"Earliest quartile (≤{q25:.2f} ns)",
                      f"Latest quartile (≥{q75:.2f} ns)")
     else:
-        c1=float(setting["early_centre"])
-        c2=float(setting["late_centre"])
-        width=float(setting["window_half_width"])
-        early=valid&(np.abs(x-c1)<=width)
-        late=valid&(np.abs(x-c2)<=width)
-        description=(f"{c1:g}±{width:g} ns",f"{c2:g}±{width:g} ns")
+        a,b=float(setting["early_min"]),float(setting["early_max"])
+        c,d=float(setting["late_min"]),float(setting["late_max"])
+        must(all(math.isfinite(z) for z in (a,b,c,d)) and
+             0.<=a<b and 0.<=c<d,
+             "Early and late windows must each have min < max, in ns")
+        early=valid&(x>=a)&(x<b)
+        late=valid&(x>=c)&(x<d)
+        description=(f"{a:g}–{b:g} ns",f"{c:g}–{d:g} ns")
     return early,late,description
 
 def typical_muon(meta):
@@ -543,7 +560,10 @@ def render(kind,fig,data,meta,controls,st):
         fig.add_trace(go.Scatter(
             x=mids,y=avg,mode="lines+markers",
             line=dict(color=color,width=width),
-            marker=dict(size=7,color=color),name=controls["legend"],
+            marker=dict(size=7,color=color),
+            name=(controls["legend"]+
+                  (f" · mean={np.mean(v):,.2f}, RMS={np.std(v,ddof=0):,.2f}"
+                   if controls.get("add_stats",False) else "")),
             customdata=n,hovertemplate="Early birth time: %{x:.3f} ns"
               "<br>Bin mean: %{y:.5g}<br>Avalanches: %{customdata}"
               "<extra></extra>"))
@@ -557,7 +577,6 @@ def render(kind,fig,data,meta,controls,st):
         out={}
         edges=np.asarray(PHI_EDGES,dtype=float)
         factor=int(controls["angular_deg"]//5)
-        need=int(early.sum())+int(late.sum())
         if min(int(early.sum()),int(late.sum()))<30:
             st.warning("Too few avalanches in at least one time group. "
                        "Broaden time windows or choose quantile groups.")
@@ -576,9 +595,16 @@ def render(kind,fig,data,meta,controls,st):
             centers=(reb_edges[:-1]+reb_edges[1:])/2.
             xx=np.repeat(reb_edges,2)[1:-1]
             yy=np.repeat(prob,2)
+            caption=title+" ("+labels[0 if name=="early" else 1]+")"
+            if controls.get("add_stats",False):
+                # Time means/RMS apply to selected t10 group, never the
+                # periodic birth azimuth itself.
+                group_t10=np.asarray(x[selection],dtype=float)
+                caption+=(f" · t10 mean={group_t10.mean():.2f} ns, "
+                          f"RMS={group_t10.std(ddof=0):.2f} ns")
             fig.add_trace(go.Scatter(
                 x=xx,y=yy,mode="lines",line=dict(color=col,width=width),
-                name=title+" ("+labels[0 if name=="early" else 1]+")"))
+                name=caption))
             out[name+"_probability"]=prob
         centers=(edges[::factor][:-1]+edges[::factor][1:])/2.
         return ({"phi_bin_center_deg":centers,
