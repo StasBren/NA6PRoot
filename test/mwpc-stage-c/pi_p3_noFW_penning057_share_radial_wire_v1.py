@@ -369,7 +369,7 @@ def selftest():
     assert rnd(-.5)==-1 and rnd(.5)==1
     assert abs(wire(3.2)-3.)<1e-12
     assert np.allclose(np.hypot([0.,.03],[.015,0.]),[.015,.03])
-    assert len(SEED_ROWS)==30 and len(CLOUD_ROWS)==17
+    assert len(SEED_ROWS)==31 and len(CLOUD_ROWS)==17
     assert len(R)==162 and len(W)==201 and len(PHI)==73
     assert abs(hist1([1.,2.],[3.,4.],[0,1.5,3.]).sum()-7.)<1e-8
     x=np.array([1.,2.])
