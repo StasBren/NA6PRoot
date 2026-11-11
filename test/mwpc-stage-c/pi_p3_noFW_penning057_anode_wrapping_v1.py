@@ -23,6 +23,7 @@ import numpy as np
 import pi_p3_noFW_penning057_timing_correlations_v1 as temporal
 
 ROOT=temporal.ROOT
+N_BOOTSTRAP_PARENTS=1000
 PITCH_MM=3.
 WIRE_RADIUS_MM=.015
 V_EDGES=np.linspace(-3.,3.,25)
@@ -82,22 +83,23 @@ def exact_eligible(d):
     return np.isfinite(d["A"])&np.isfinite(d["v0"])&(d["ions"]>0)
 
 def grouped_parent_bootstrap(x,y,parent,edges,minimum=40,boot=350):
-    """Confidence bands resample 1000 independent real Geant4 muons.
+    """Confidence bands resample independent real Geant4 muon parents.
 
     One electron is NOT one independent parent: each real muon generates
     many correlated ionisation electrons/avalanches.
     """
     x=np.asarray(x,float);y=np.asarray(y,float);parent=np.asarray(parent,int)
     edges=np.asarray(edges,float)
-    valid=np.isfinite(x)&np.isfinite(y)&(parent>=0)&(parent<1000)
+    nparents=N_BOOTSTRAP_PARENTS
+    valid=np.isfinite(x)&np.isfinite(y)&(parent>=0)&(parent<nparents)
     xi=np.searchsorted(edges,x[valid],side="right")-1
     xi=np.where(x[valid]==edges[-1],len(edges)-2,xi)
     p=parent[valid];v=y[valid]
     good=(xi>=0)&(xi<len(edges)-1)
     xi=xi[good];p=p[good];v=v[good]
     nbin=len(edges)-1
-    cnt=np.zeros((1000,nbin),dtype=np.float64)
-    summ=np.zeros((1000,nbin),dtype=np.float64)
+    cnt=np.zeros((nparents,nbin),dtype=np.float64)
+    summ=np.zeros((nparents,nbin),dtype=np.float64)
     np.add.at(cnt,(p,xi),1.)
     np.add.at(summ,(p,xi),v)
     counts=cnt.sum(axis=0)
@@ -106,7 +108,8 @@ def grouped_parent_bootstrap(x,y,parent,edges,minimum=40,boot=350):
                    where=counts>=minimum)
     rng=np.random.default_rng(20261110)
     # Each bootstrap resamples complete real-muon parents, not electrons.
-    draws=rng.multinomial(1000,np.full(1000,.001),size=boot)
+    draws=rng.multinomial(nparents,
+                          np.full(nparents,1./nparents),size=boot)
     bcnt=draws@cnt
     bsum=draws@summ
     with np.errstate(divide="ignore",invalid="ignore"):
@@ -156,8 +159,8 @@ def options(st,kind,d,meta):
     """Only physically relevant controls for each specific view."""
     out={"min_entries":40,"ion_weighted":True,"reliable":True}
     if kind in {"wrap_v0_A","wrap_v0_opposite"}:
-        st.sidebar.caption("Shaded band: 95% bootstrap CI from "
-                           "1000 independent Geant4 muon parents.")
+        st.sidebar.caption(f"Shaded band: 95% bootstrap CI from "
+                           f"{N_BOOTSTRAP_PARENTS:,} independent Geant4 muon parents.")
         st.sidebar.caption("Every avalanche with defined exact A is included; "
                            "no 128-point sampling requirement.")
     if kind=="wrap_v0_angle":
@@ -310,7 +313,8 @@ def render(kind,fig,d,meta,controls,st):
         return out,(
             f"Exact ion-sector asymmetry; {int(mask.sum()):,} valid individual "
             "avalanches (all ion multiplicities), each given equal weight. "
-            "Shaded interval resamples 1,000 complete muons, not electrons."),None
+            f"Shaded interval resamples {N_BOOTSTRAP_PARENTS:,} complete "
+            "muons, not electrons."),None
     if kind=="wrap_v0_opposite":
         good=mask&(np.abs(x)>=.025)
         # Exact fractions relative to UP/DOWN BIRTHS (boundary excluded).
