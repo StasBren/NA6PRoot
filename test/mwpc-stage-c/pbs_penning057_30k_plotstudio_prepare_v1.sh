@@ -17,7 +17,12 @@ LOG="$LOGDIR/prepare_${CHANNEL}_${PBS_JOBID:-manual}.log"
 exec >"$LOG" 2>&1
 START=$(date +%s)
 echo "START Plot Studio 30k cache $CHANNEL on $(hostname) $(date -u)"
-if python3 "$HOME/NA6PRoot-mwpc/test/mwpc-stage-c/pi_penning057_30k_plotstudio_cache_v1.py" prepare --channel "$CHANNEL"; then
+PYTHON="$BASE/plotstudio_venv/bin/python"
+if ! "$PYTHON" -c 'import numpy; print("Worker NumPy", numpy.__version__)'; then
+  echo "ERROR: NumPy unavailable in cluster plotstudio_venv" >&2
+  exit 10
+fi
+if "$PYTHON" "$HOME/NA6PRoot-mwpc/test/mwpc-stage-c/pi_penning057_30k_plotstudio_cache_v1.py" prepare --channel "$CHANNEL"; then
   rc=0
 else
   rc=$?
