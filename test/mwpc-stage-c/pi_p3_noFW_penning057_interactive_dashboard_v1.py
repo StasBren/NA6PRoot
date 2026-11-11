@@ -666,29 +666,69 @@ def app():
     div[data-testid="stMetric"] {border:1px solid #DEE5EB;border-radius:10px;padding:12px;}
     .stDownloadButton button {width:100%}
     </style>""",unsafe_allow_html=True)
-    st.title("MWPC Plot Studio")
-    st.caption("Real 1,000 J/ψ muons · Garfield++ Penning ON · Ar/CO₂ 70:30 · "
-               "p3_noFW 3 mm pitch · 1,800 V")
-    if not NPZ.is_file() or not MANIFEST.is_file():
+    base30=os.environ.get("MWPC_PENNING_30K_STUDIO_ROOT")
+    npz_path,manifest_path=NPZ,MANIFEST
+    scope="legacy"
+    if base30:
+        choices={"J/ψ · 10,000":"jpsi","φ · 10,000":"phi",
+                 "ω · 10,000":"omega","All · 30,000":"all"}
+        scope_label=st.sidebar.selectbox("Geant4 muon dataset",list(choices),
+                                         index=3,key="dataset30k-choice")
+        scope=choices[scope_label]
+        location=Path(base30).expanduser()/scope
+        npz_path=location/"dashboard_data.npz"
+        manifest_path=location/"provenance.json"
+    st.title("MWPC Plot Studio"+(" · 30k campaign" if base30 else ""))
+    if base30:
+        st.caption(f"Selected: {scope_label} · independent original Geant4 parents "
+                   "· Garfield++ Penning ON · Ar/CO₂ 70:30 · p3_noFW 3 mm · 1,800 V")
+    else:
+        st.caption("Real 1,000 J/ψ muons · Garfield++ Penning ON · Ar/CO₂ 70:30 · "
+                   "p3_noFW 3 mm pitch · 1,800 V")
+    if not npz_path.is_file() or not manifest_path.is_file():
         st.error("No verified dashboard cache exists. First run:\n\n"
                  "python test/mwpc-stage-c/pi_p3_noFW_penning057_interactive_dashboard_v1.py prepare")
         st.stop()
 
     @st.cache_data(show_spinner="Loading verified Penning-ON data cache…")
-    def load_cache(path,mtime):
+    def load_cache(path,mtime,manifest_file,manifest_mtime):
         with np.load(path,allow_pickle=False) as z:
             arrays={k:z[k] for k in z.files}
-        return arrays,json.loads(MANIFEST.read_text())
-    data,meta=load_cache(str(NPZ),NPZ.stat().st_mtime_ns)
+        return arrays,json.loads(Path(manifest_file).read_text())
+    data,meta=load_cache(str(npz_path),npz_path.stat().st_mtime_ns,
+                         str(manifest_path),manifest_path.stat().st_mtime_ns)
 
     g=data["gain"].astype(float)
     positive=g[g>0]
     a,b,c,d,e=st.columns(5)
-    a.metric("Real J/ψ muons","1,000")
+    a.metric("Real Geant4 muons",f"{int(meta.get('n_muons',1000)):,}")
     b.metric("Microscopic avalanches",f"{len(g):,}")
     c.metric("Mean collected gain",f"{np.mean(g):,.1f}")
     d.metric("Zero collected",f"{np.mean(g==0):.2%}")
     e.metric("Muons without Heed e",str(meta["n_muons_with_zero_retained_Heed_primaries"]))
+    if base30:
+        summary=[]
+        for code in ("jpsi","phi","omega","all"):
+            p=Path(base30).expanduser()/code/"provenance.json"
+            if p.is_file():
+                q=json.loads(p.read_text())
+                summary.append({
+                    "Dataset":code.upper() if code!="all" else "ALL",
+                    "Muons":q["n_muons"],
+                    "Full avalanches":q["n_microscopic_TrackHeed_primary_Garfield_avalanches"],
+                    "Mean collected gain":round(q["mean_collected_electrons_per_aval"],2),
+                    "Zero collected (%)":round(100*q["n_zero_collected_avalanche_seeds"]/
+                                             q["n_microscopic_TrackHeed_primary_Garfield_avalanches"],2),
+                    "Ion births":q["n_true_ion_births"],
+                    "Zero-Heed muons":q["n_muons_with_zero_retained_Heed_primaries"],
+                })
+        if summary:
+            st.markdown("#### Grouped statistics")
+            st.dataframe(summary,use_container_width=True,hide_index=True)
+            st.caption("The ALL gain is calculated over actual Heed electrons, "
+                       "not the arithmetic mean of the three channel means. "
+                       "The combined 30k sample is an equal-muon-count mixture, "
+                       "not a physics-weighted resonance production mixture.")
     st.caption("Muon-level gain is undefined (0/0) for muons with no retained "
                "TrackHeed electrons; they remain in the 1,000-muon sample. "
                "Avalanche-level gain statistics use only real starting electrons.")
@@ -707,8 +747,20 @@ def app():
         "gain_xy":"Mean gain versus initial electron position",
         "time_phi":"Birth time versus azimuth",
     }
-    kinds.update(temporal.KINDS)
-    kinds.update(wrapping.KINDS)
+    if base30:
+        temporal.CACHE=Path(base30).expanduser()/scope/"temporal_correlations_v1.npz"
+        temporal.META=Path(base30).expanduser()/scope/"temporal_correlations_v1.json"
+        wrapping.N_BOOTSTRAP_PARENTS=int(meta["n_muons"])
+        # The two single-muon inspection views require raw individual ion
+        # birth CSVs; they are not aggregate statistics and are intentionally
+        # not offered when only the compact 30k caches are on this machine.
+        kinds.update({k:v for k,v in temporal.KINDS.items()
+                      if k!="t10_timeline"})
+        kinds.update({k:v for k,v in wrapping.KINDS.items()
+                      if k!="wrap_single"})
+    else:
+        kinds.update(temporal.KINDS)
+        kinds.update(wrapping.KINDS)
     defaults={
         "gain_all":("Collected-electron gain — all avalanches",
                     "Anode-collected electrons per initial Heed electron",
@@ -749,6 +801,10 @@ def app():
     }
     defaults.update(temporal.DEFAULTS)
     defaults.update(wrapping.DEFAULTS)
+    if base30:
+        old=defaults["asym_muon"]
+        defaults["asym_muon"]=(f"Exact upper/lower ion-birth asymmetry — per {scope_label} muon",
+                               old[1],old[2],old[3])
     st.sidebar.header("Edit the plot")
     kind=st.sidebar.selectbox("Plot",list(kinds),format_func=lambda x:kinds[x])
     temporal_data=temporal_meta=None
