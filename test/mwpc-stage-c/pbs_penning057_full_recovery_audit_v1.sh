@@ -17,7 +17,10 @@ LOG="$LOGDIR/full_sha_${CHANNEL}_${PBS_JOBID:-manual}.log"
 exec >"$LOG" 2>&1
 START=$(date +%s)
 echo "START full SHA-256 audit channel=$CHANNEL job=$PBS_JOBID node=$(hostname) date=$(date -u)"
-python3 "$HOME/NA6PRoot-mwpc/test/mwpc-stage-c/pi_penning057_original2m_full_recovery_audit_v1.py" --channel "$CHANNEL" --report-every 25
-rc=$?
+if python3 "$HOME/NA6PRoot-mwpc/test/mwpc-stage-c/pi_penning057_original2m_full_recovery_audit_v1.py" --channel "$CHANNEL" --report-every 25; then
+    rc=0
+else
+    rc=$?
+fi
 echo "FINISH channel=$CHANNEL rc=$rc wall=$(( $(date +%s)-START )) seconds at $(date -u)"
 exit "$rc"
