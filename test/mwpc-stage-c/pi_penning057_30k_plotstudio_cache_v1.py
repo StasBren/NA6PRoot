@@ -500,9 +500,34 @@ def combine(output_root):
     print("CACHE:",folder,flush=True)
 
 
+def probe(base,channel,index):
+    """Small read-only SSHFS speed/integrity test, NO output written."""
+    import time
+    start=time.monotonic()
+    camp=base/f"original2m_{channel.lower()}_10000_v1"
+    meta,source=check_input(camp,index)
+    d,recovery=chunk_dir(camp,index)
+    count=sealed_files(d)
+    report=json.loads((d/"verified_report.json").read_text())
+    require(report["chunk_index"]==index
+            and report["n_muons"]==20
+            and report["input_sha256"]==meta["chunks"][f"{index:04d}"]["sha256"]
+            and report["binary_sha256"]==meta["binary_sha256"]
+            and report["n_capped_avalanches"]==0,
+            "Invalid verified physics report from remote archive")
+    require(len(source)==20 and count==len(OUTPUTS)+1,
+            "Read-only pilot chunk incomplete")
+    elapsed=time.monotonic()-start
+    print(f"PASS SSHFS probe {channel} chunk {index:04d}: "
+          f"{len(source)} authentic Geant4 muons, "
+          f"{report['n_true_heed_primaries']} microscopic avalanches, "
+          f"8 full native/report SHA seals, recovery={recovery}, "
+          f"elapsed={elapsed:.1f} seconds.",flush=True)
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument("command",choices=("prepare","combine"))
+    p.add_argument("command",choices=("probe","prepare","combine"))
     p.add_argument("--base",type=Path,default=DEFAULT_BASE,
                    help="Read-only original native Garfield campaign archive")
     p.add_argument("--output-root",type=Path,
@@ -513,10 +538,16 @@ def main():
                         "cross-check its SHA from frozen manifest in every chunk report")
     p.add_argument("--channel",choices=CHANNELS)
     p.add_argument("--report-every",type=int,default=25)
+    p.add_argument("--chunk-index",type=int,default=0,
+                   help="For probe only: test one frozen 20-muon chunk")
     a=p.parse_args()
     require(a.report_every>0,"Invalid reporting interval")
     output_root=a.output_root or (a.base/"plotstudio_30k_v1")
-    if a.command=="prepare":
+    if a.command=="probe":
+        require(a.channel is not None and 0<=a.chunk_index<500,
+                "--channel and valid --chunk-index required for probe")
+        probe(a.base,a.channel,a.chunk_index)
+    elif a.command=="prepare":
         require(a.channel is not None,"--channel required for prepare")
         prepare(a.base,a.channel,a.report_every,output_root,a.skip_binary_check)
     else:
