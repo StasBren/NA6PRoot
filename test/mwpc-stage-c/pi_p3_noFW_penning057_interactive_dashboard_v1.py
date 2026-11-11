@@ -427,7 +427,8 @@ def plot_explanation(kind,data,meta,angular_deg):
         v=np.asarray(data["seed_A"] if kind=="asym_seed" else data["muon_A"],
                      dtype=np.float64)
         v=v[np.isfinite(v)]
-        unit="individual ion-producing avalanche" if kind=="asym_seed" else "whole real J/ψ muon"
+        unit=("individual ion-producing avalanche" if kind=="asym_seed" else
+              "whole real "+meta.get("dataset_label","J/ψ")+" muon")
         unitcount=f"{len(v):,} defined values"
         return (
             f"**What you see:** The *signed* upper/lower ion-birth asymmetry of each "
@@ -730,7 +731,7 @@ def app():
                        "The combined 30k sample is an equal-muon-count mixture, "
                        "not a physics-weighted resonance production mixture.")
     st.caption("Muon-level gain is undefined (0/0) for muons with no retained "
-               "TrackHeed electrons; they remain in the 1,000-muon sample. "
+               "TrackHeed electrons; they remain in the selected muon sample. "
                "Avalanche-level gain statistics use only real starting electrons.")
 
     kinds={
@@ -1337,7 +1338,7 @@ def app():
     st.plotly_chart(fig,use_container_width=True,
                     config={"displaylogo":False,
                             "toImageButtonOptions":{"format":export_format,
-                                "filename":kind+"_penning_on","scale":3}})
+                                "filename":(scope+"_"+kind if base30 else kind)+"_penning_on","scale":3}})
     if auxiliary_fig is not None:
         st.plotly_chart(auxiliary_fig,use_container_width=True,
                         config={"displaylogo":False,
@@ -1352,7 +1353,7 @@ def app():
     with left:
         html=fig.to_html(full_html=True,include_plotlyjs=True)
         st.download_button("Download interactive figure (.html)",
-                           html,file_name=f"{kind}_penning_on.html",
+                           html,file_name=f"{scope+'_' if base30 else ''}{kind}_penning_on.html",
                            mime="text/html",use_container_width=True)
     with right:
         if displayed_csv is not None:
@@ -1363,7 +1364,7 @@ def app():
             for row in zip(*(displayed_csv[k] for k in cols)):
                 writer.writerow(row)
             st.download_button("Download plotted data (.csv)",buf.getvalue(),
-                               file_name=f"{kind}_penning_on.csv",
+                               file_name=f"{scope+'_' if base30 else ''}{kind}_penning_on.csv",
                                mime="text/csv",use_container_width=True)
         else:
             st.info("For 2D heatmaps, inspect the underlying grid in the cached NPZ.")
