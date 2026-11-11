@@ -68,6 +68,17 @@ def rows(path, required):
     return values
 
 
+def stream_rows(path, required):
+    """Never materialise a potentially multi-GB ion birth CSV in RAM."""
+    with Path(path).open(newline="") as file:
+        reader=csv.DictReader(file)
+        require(reader.fieldnames is not None and
+                len(reader.fieldnames)==len(set(reader.fieldnames)) and
+                set(required).issubset(reader.fieldnames),
+                f"Missing/duplicated native CSV columns: {path}")
+        yield from reader
+
+
 def successful(d):
     return (d.is_dir() and (d/"exit_status.txt").is_file()
             and (d/"exit_status.txt").read_text().strip()=="0"
@@ -213,7 +224,7 @@ def prepare(base, channel, report_every):
         delay_max=np.full(nseed,-np.inf,dtype=float)
         delay_sum=np.zeros(nseed,dtype=np.float64)
         weighted_sum=0.
-        for r in rows(outchunk/"penning_ion_birth_sample.csv",
+        for r in stream_rows(outchunk/"penning_ion_birth_sample.csv",
                       ("crossing_id","primary_index","u_mm","v_mm","t_ns",
                        "seed_ion_births_total","reservoir_weight")):
             k=(r["crossing_id"],int(r["primary_index"]))
