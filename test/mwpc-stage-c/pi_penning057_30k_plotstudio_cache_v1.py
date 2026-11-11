@@ -105,7 +105,7 @@ def write_cache(path,arrays):
             f"Cache write did not complete: {path}")
 
 
-def prepare(base, channel, report_every):
+def prepare(base, channel, report_every, output_root, skip_binary_check):
     camp=base/f"original2m_{channel.lower()}_10000_v1"
     meta=metadata(camp)
     require(meta["channel"]==channel and meta["n_chunks"]==500
@@ -116,10 +116,18 @@ def prepare(base, channel, report_every):
     require(digest(camp/"selection_manifest.json")==
             meta["original_2m_selection_manifest_sha256"],
             "Original 2M selection manifest changed")
-    require(digest(Path(meta["binary_path"]))==meta["binary_sha256"],
-            "Native Penning-on executable changed")
+    if not skip_binary_check:
+        require(digest(Path(meta["binary_path"]))==meta["binary_sha256"],
+                "Native Penning-on executable changed")
+    else:
+        # Off-cluster read-only analysis: absolute binary path exists only on
+        # remote host. Every SHA-sealed chunk report still must carry the
+        # exact frozen binary_sha256 from the physics campaign manifest.
+        print("NOTE: skipping local executable-file SHA; checking frozen "
+              "manifest binary SHA against EVERY signed per-chunk report.",
+              flush=True)
 
-    out=base/"plotstudio_30k_v1"/channel.lower()
+    out=output_root/channel.lower()
     require(not out.exists(), f"Refusing overwrite existing plot cache: {out}")
 
     m={k:[] for k in MAIN_SEED_FIELDS+MAIN_MUON_FIELDS}
@@ -394,8 +402,8 @@ def prepare(base, channel, report_every):
     print("CACHE:",out,flush=True)
 
 
-def combine(base):
-    folder=base/"plotstudio_30k_v1"
+def combine(output_root):
+    folder=output_root
     target=folder/"all"
     require(not target.exists(),"Refusing overwrite of pooled 30k cache")
     metas=[];tmetas=[];data=[];temps=[]
@@ -495,16 +503,24 @@ def combine(base):
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("command",choices=("prepare","combine"))
-    p.add_argument("--base",type=Path,default=DEFAULT_BASE)
+    p.add_argument("--base",type=Path,default=DEFAULT_BASE,
+                   help="Read-only original native Garfield campaign archive")
+    p.add_argument("--output-root",type=Path,
+                   help="Separate WRITEABLE output location for derived caches; "
+                        "defaults to BASE/plotstudio_30k_v1 on cluster")
+    p.add_argument("--skip-binary-check",action="store_true",
+                   help="Off-cluster only: native executable is unavailable; "
+                        "cross-check its SHA from frozen manifest in every chunk report")
     p.add_argument("--channel",choices=CHANNELS)
     p.add_argument("--report-every",type=int,default=25)
     a=p.parse_args()
     require(a.report_every>0,"Invalid reporting interval")
+    output_root=a.output_root or (a.base/"plotstudio_30k_v1")
     if a.command=="prepare":
         require(a.channel is not None,"--channel required for prepare")
-        prepare(a.base,a.channel,a.report_every)
+        prepare(a.base,a.channel,a.report_every,output_root,a.skip_binary_check)
     else:
-        combine(a.base)
+        combine(output_root)
 
 
 if __name__=="__main__":
