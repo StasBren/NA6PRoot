@@ -168,8 +168,7 @@ def show(st, cache_root, selected, kind, opts, load_cache, temporal, wrapping,
     st.caption("Independent 10,000-muon samples · curves are not averaged "
                "across channels · ALL is not plotted as a fourth sample. "
                "Probability and density normalise each channel separately.")
-    a, b, c = st.columns(3)
-    for box, code in zip((a, b, c), codes):
+    for box, code in zip(st.columns(len(codes)), codes):
         g = datasets[code]["gain"]
         box.metric(f"{LABELS[code]} · full avalanches", f"{len(g):,}",
                    f"mean gain {np.mean(g):,.1f}", delta_color="off")
