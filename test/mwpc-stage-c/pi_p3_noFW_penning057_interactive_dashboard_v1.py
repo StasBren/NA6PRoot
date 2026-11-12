@@ -782,7 +782,8 @@ def app():
     if base30:
         temporal.CACHE=Path(base30).expanduser()/scope/"temporal_correlations_v1.npz"
         temporal.META=Path(base30).expanduser()/scope/"temporal_correlations_v1.json"
-        wrapping.N_BOOTSTRAP_PARENTS=int(meta["n_muons"])
+        wrapping.N_BOOTSTRAP_PARENTS=(
+            10000 if compare_mode else int(meta["n_muons"]))
         # The two single-muon inspection views require raw individual ion
         # birth CSVs; they are not aggregate statistics and are intentionally
         # not offered when only the compact 30k caches are on this machine.
