@@ -43,7 +43,26 @@ from pi_penning057_original2m_cluster10k_v1 import (
     OUTPUTS, SCHEMA as PHYSICS_SCHEMA, check_input, crossing_id, digest,
     metadata, require,
 )
-from pi_penning057_30k_plotstudio_cache_v1 import chunk_dir
+
+
+def _success(d):
+    return (d.is_dir() and (d/"exit_status.txt").is_file()
+            and (d/"exit_status.txt").read_text().strip()=="0"
+            and (d/"verified_report.json").is_file())
+
+
+def chunk_dir(campaign,index):
+    token=f"{index:04d}"
+    original=campaign/"results"/f"chunk_{token}"
+    repaired=campaign/"recovery_runtime_v1"/f"chunk_{token}"
+    oo,rr=_success(original),_success(repaired)
+    require(not (oo and rr),"Duplicate completed original and recovery")
+    if repaired.exists():
+        require(rr and not oo,"Unfinished or invalid recovery chunk")
+        return repaired,True
+    require(oo,"Incomplete/missing native chunk without recovery")
+    return original,False
+
 
 SCHEMA="NA60_PENNING057_ORIGINAL2M_30K_ADDITIONAL_SUMMARIES_V1"
 CHANNELS=("Jpsi","Phi","Omega")
