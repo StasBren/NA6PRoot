@@ -794,6 +794,11 @@ def app():
     else:
         kinds.update(temporal.KINDS)
         kinds.update(wrapping.KINDS)
+    if base30 and not compare_mode:
+        kinds.update({
+            "detail_clusters":"Real muon · ALL clusters + avalanche-size heatmap",
+            "detail_avalanche":"One avalanche · 2D / 3D w / angular cloud",
+        })
     defaults={
         "gain_all":("Collected-electron gain — all avalanches",
                     "Anode-collected electrons per initial Heed electron",
@@ -844,14 +849,19 @@ def app():
         # anode/wrapping plots discoverable rather than burying them in a
         # long alphabetically unrelated dropdown.
         families={
-            "All aggregate plots · 21":list(kinds),
+            "All aggregate plots · 21":[k for k in kinds
+                if not k.startswith("detail_")],
             "Original distributions · 12":[k for k in kinds
-                if k not in temporal.KINDS and k not in wrapping.KINDS],
+                if k not in temporal.KINDS and k not in wrapping.KINDS
+                and not k.startswith("detail_")],
             "Early-birth correlations · 5":[k for k in kinds
                 if k in temporal.KINDS],
             "Anode position & ion wrapping · 4":[k for k in kinds
                 if k in wrapping.KINDS],
         }
+        if not compare_mode:
+            families["Detailed real events · 2 pages"]=[
+                k for k in kinds if k.startswith("detail_")]
         family=st.sidebar.selectbox(
             "Plot family",list(families),index=0,
             key="plotstudio-30k-family")
@@ -867,6 +877,23 @@ def app():
     else:
         kind=st.sidebar.selectbox(
             "Plot",list(kinds),format_func=lambda x:kinds[x])
+    if kind in {"detail_clusters","detail_avalanche"}:
+        raw_base=Path(os.environ.get(
+            "MWPC_PENNING_30K_RAW_ROOT",
+            str(Path.home()/"na6p/cluster_mwpc"))).expanduser()
+        if not os.path.ismount(raw_base):
+            st.warning("These detailed plots require the read-only SSHFS "
+                       "mount of the 30k Garfield originals.")
+            st.code(
+                "mkdir -p ~/na6p/cluster_mwpc\n"
+                "sshfs -o ro,reconnect,ServerAliveInterval=15 "
+                "wipp-an1:/storage/cgrp/stanis/mwpc_penning057 "
+                "~/na6p/cluster_mwpc",
+                language="bash")
+            st.stop()
+        from pi_penning057_individual_views_30k_v1 import render as render_details
+        render_details(st,Path(base30).expanduser(),raw_base,scope,kind)
+        return
     temporal_data=temporal_meta=None
     if kind in temporal.KINDS or kind in wrapping.KINDS:
         if not temporal.CACHE.is_file() or not temporal.META.is_file():
