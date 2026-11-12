@@ -84,7 +84,12 @@ After `git pull --ff-only`, leave the existing
 subdirectories and run the usual Streamlit dashboard (using its existing
 `.venv_pi_slides` environment). Check **Overlay separate J/ψ, φ, ω
 channels** at the very top of the sidebar, then select **any one, two or all
-three channels** in **Channels on the same graph (1–3)**.
+three channels** in **Channels on the same graph (1–3)**. The sidebar also
+has a **Plot family** selector: original distributions (12), early-birth
+correlations (5), and **Anode position & ion wrapping (4)**. Set the latter
+to find the four later-added anode studies, both in single-dataset and
+multi-channel comparison modes. All 21 are available under **All aggregate
+plots** by default.
 
 - 1D histograms and correlations: overlaid on ONE Plotly graph, with fixed
   colours (J/ψ orange, φ blue, ω green), channel-specific legends and
