@@ -22,10 +22,16 @@ number of ion births. The sample time span is a *lower bound* on the full
 ion-birth time span.
 
 The original 12 plots plus the 5 aggregate temporal-correlation views and
-4 aggregate anode-wrapping views are exposed in 30k mode. The original
-single-muon timeline and single-avalanche 2D/3D ion cloud require raw
-individual CSVs and are disabled for the compact aggregate caches; both
-remain available in the original 1000-muon Plot Studio.
+4 aggregate anode-wrapping views are exposed in 30k mode. In addition,
+two **real-event inspector** pages are available through the user's local
+read-only SSHFS mount: (1) the original Geant4 muon path and all TrackHeed
+clusters side by side with an exact per-cluster/per-primary avalanche-size
+heatmap, and (2) one genuine microscopic Garfield ion cloud viewed in 2D,
+rotatable 3D including longitudinal w, and angular distribution around the
+nearest anode. The old 1000-muon native raw-file schema and names differ
+from the original-2M 30k campaign, so the latter has its own strict source
+adapter. The 30k individual-event pages do not load all 45 GB and are not
+part of the aggregate multi-channel overlay.
 
 ## Cluster: Prepare (three PBS jobs)
 
@@ -76,6 +82,52 @@ Select **Geant4 muon dataset** at the top of the sidebar. Settings for
 histogram bin width, angular bins, axis scales, colours, legend text/position,
 early-vs-late windows and camera/HTML/CSV exports are inherited from the
 original Plot Studio. All four selectable datasets use the same bin definitions.
+
+### Real single-muon / single-avalanche details through SSHFS
+
+With the Weizmann F5 VPN connected, mount the original **read-only** archive
+in local WSL and launch the existing dashboard:
+
+```bash
+mkdir -p ~/na6p/cluster_mwpc
+if ! mountpoint -q ~/na6p/cluster_mwpc; then
+  sshfs -o ro,reconnect,ServerAliveInterval=15 \
+    wipp-an1:/storage/cgrp/stanis/mwpc_penning057 \
+    ~/na6p/cluster_mwpc
+fi
+cd ~/na6p/src/NA6PRoot-mwpc
+source test_runs/mwpc_stage_c/.venv_pi_slides/bin/activate
+export MWPC_PENNING_30K_STUDIO_ROOT="$PWD/test_runs/mwpc_stage_c/plotstudio_30k_v1"
+export MWPC_PENNING_30K_RAW_ROOT="$HOME/na6p/cluster_mwpc"
+python -m streamlit run test/mwpc-stage-c/pi_p3_noFW_penning057_interactive_dashboard_v1.py
+```
+
+Turn **off** channel overlay and choose **Plot family → Detailed real
+events · 2 pages**. The two pages are **Real muon · ALL clusters +
+avalanche-size heatmap** and **One avalanche · 2D / 3D w / angular cloud**.
+Each viewer selects a genuine `jpsi`, `phi` or `omega` event and local
+channel muon index `0..9999`. The native event is mapped to the original
+20-muon chunk, including the three successful repaired chunks. Raw files are
+SHA-256 verified against `outputs.sha256` and original Geant4 input chunk
+against its frozen manifest.
+
+- In the first page, left plot shows actual muon entry/exit and individual
+  Heed cluster centres in their original u,v geometry, including anode
+  lattice/cathodes; right heatmap shows per-Heed-electron **exact** Garfield
+  collected gain (or true ion births) within each cluster. Empty heatmap cells
+  mean no accepted Heed electron, and zero values mean a true zero-gain
+  microscopic avalanche.
+- In the second page choose a real Heed electron/avalanche. The XY panel
+  shows sampled ion-creation positions, an angular histogram uses
+  `atan2(v,u-u_anode)`, and rotatable 3D shows the full sampled longitudinal
+  w coordinate. A seed retains at most 128 uniform original ion birth
+  coordinates; all exact ion/gain/sector counters are preserved.
+- These are ion **births**, not ion drift or cathode pulses. Reading an
+  individual large native reservoir through VPN may have some latency.
+
+```bash
+python test/mwpc-stage-c/pi_penning057_individual_views_30k_v1.py
+```
 
 ### Overlay / comparison of 1–3 independent channels
 
