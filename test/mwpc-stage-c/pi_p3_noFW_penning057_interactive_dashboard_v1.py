@@ -839,7 +839,34 @@ def app():
         defaults["asym_muon"]=(f"Exact upper/lower ion-birth asymmetry — per {scope_label} muon",
                                old[1],old[2],old[3])
     st.sidebar.header("Edit the plot")
-    kind=st.sidebar.selectbox("Plot",list(kinds),format_func=lambda x:kinds[x])
+    if base30:
+        # Keep all 21 aggregate views accessible, but make the four late
+        # anode/wrapping plots discoverable rather than burying them in a
+        # long alphabetically unrelated dropdown.
+        families={
+            "All aggregate plots · 21":list(kinds),
+            "Original distributions · 12":[k for k in kinds
+                if k not in temporal.KINDS and k not in wrapping.KINDS],
+            "Early-birth correlations · 5":[k for k in kinds
+                if k in temporal.KINDS],
+            "Anode position & ion wrapping · 4":[k for k in kinds
+                if k in wrapping.KINDS],
+        }
+        family=st.sidebar.selectbox(
+            "Plot family",list(families),index=0,
+            key="plotstudio-30k-family")
+        visible= {k:kinds[k] for k in families[family]}
+        kind=st.sidebar.selectbox(
+            "Plot",list(visible),format_func=lambda x:visible[x],
+            key="plotstudio-30k-plot")
+        if family.startswith("Anode"):
+            st.sidebar.caption(
+                "Four later studies: signed ion asymmetry vs initial v₀; "
+                "opposite-side ion fraction vs |v₀|; ion azimuth vs v₀; "
+                "azimuth spread vs collected electron gain.")
+    else:
+        kind=st.sidebar.selectbox(
+            "Plot",list(kinds),format_func=lambda x:kinds[x])
     temporal_data=temporal_meta=None
     if kind in temporal.KINDS or kind in wrapping.KINDS:
         if not temporal.CACHE.is_file() or not temporal.META.is_file():
