@@ -670,19 +670,48 @@ def app():
     base30=os.environ.get("MWPC_PENNING_30K_STUDIO_ROOT")
     npz_path,manifest_path=NPZ,MANIFEST
     scope="legacy"
+    compare_mode=False
+    compare_channels=[]
     if base30:
         choices={"J/ψ · 10,000":"jpsi","φ · 10,000":"phi",
                  "ω · 10,000":"omega","All · 30,000":"all"}
-        scope_label=st.sidebar.selectbox("Geant4 muon dataset",list(choices),
-                                         index=3,key="dataset30k-choice")
-        scope=choices[scope_label]
+        compare_mode=st.sidebar.checkbox(
+            "Overlay separate J/ψ, φ, ω channels",False,
+            key="plotstudio-30k-compare-enabled")
+        if compare_mode:
+            compare_channels=st.sidebar.multiselect(
+                "Channels on the same graph (1–3)",
+                ["jpsi","phi","omega"],
+                default=["jpsi","phi","omega"],
+                format_func=lambda x:{"jpsi":"J/ψ","phi":"φ","omega":"ω"}[x],
+                key="plotstudio-30k-compare-channels")
+            if not compare_channels:
+                st.sidebar.warning("Choose at least one channel.")
+                st.stop()
+            st.sidebar.caption("J/ψ orange · φ blue · ω green. "
+                               "2D heatmaps use adjacent panels with a "
+                               "shared colour scale.")
+            scope_label="All · 30,000"
+            scope="all"
+        else:
+            scope_label=st.sidebar.selectbox(
+                "Geant4 muon dataset",list(choices),
+                index=3,key="dataset30k-choice")
+            scope=choices[scope_label]
         location=Path(base30).expanduser()/scope
         npz_path=location/"dashboard_data.npz"
         manifest_path=location/"provenance.json"
     st.title("MWPC Plot Studio"+(" · 30k campaign" if base30 else ""))
     if base30:
-        st.caption(f"Selected: {scope_label} · independent original Geant4 parents "
-                   "· Garfield++ Penning ON · Ar/CO₂ 70:30 · p3_noFW 3 mm · 1,800 V")
+        if compare_mode:
+            channels=", ".join({"jpsi":"J/ψ","phi":"φ","omega":"ω"}[ch]
+                               for ch in compare_channels)
+            st.caption(f"Channel comparison: {channels} · independent 10,000-muon "
+                       "samples per channel · Garfield++ Penning ON · "
+                       "Ar/CO₂ 70:30 · p3_noFW 3 mm · 1,800 V")
+        else:
+            st.caption(f"Selected: {scope_label} · independent original Geant4 parents "
+                       "· Garfield++ Penning ON · Ar/CO₂ 70:30 · p3_noFW 3 mm · 1,800 V")
     else:
         st.caption("Real 1,000 J/ψ muons · Garfield++ Penning ON · Ar/CO₂ 70:30 · "
                    "p3_noFW 3 mm pitch · 1,800 V")
@@ -701,12 +730,14 @@ def app():
 
     g=data["gain"].astype(float)
     positive=g[g>0]
-    a,b,c,d,e=st.columns(5)
-    a.metric("Real Geant4 muons",f"{int(meta.get('n_muons',1000)):,}")
-    b.metric("Microscopic avalanches",f"{len(g):,}")
-    c.metric("Mean collected gain",f"{np.mean(g):,.1f}")
-    d.metric("Zero collected",f"{np.mean(g==0):.2%}")
-    e.metric("Muons without Heed e",str(meta["n_muons_with_zero_retained_Heed_primaries"]))
+    if not compare_mode:
+        a,b,c,d,e=st.columns(5)
+        a.metric("Real Geant4 muons",f"{int(meta.get('n_muons',1000)):,}")
+        b.metric("Microscopic avalanches",f"{len(g):,}")
+        c.metric("Mean collected gain",f"{np.mean(g):,.1f}")
+        d.metric("Zero collected",f"{np.mean(g==0):.2%}")
+        e.metric("Muons without Heed e",
+                 str(meta["n_muons_with_zero_retained_Heed_primaries"]))
     if base30:
         summary=[]
         for code in ("jpsi","phi","omega","all"):
@@ -1040,6 +1071,23 @@ def app():
         ymax=st.text_input("Y maximum",key=f"{kind}-ymax",placeholder="Automatic")
     st.sidebar.caption("All controls apply immediately. They never trigger Garfield "
                        "or reread original ion CSVs.")
+
+    if compare_mode:
+        from pi_penning057_channel_compare_v1 import show as show_comparison
+        setting_names=(
+            "title","xlab","ylab","label","xscale","yscale","color",
+            "plot_style","line_width","show_legend","legpos","add_stats",
+            "show_interpretation","export_format","title_font","label_font",
+            "gain_width","angular_deg","asym_bins","time_group","time_range",
+            "norm","zscale","wrap_controls","time_controls",
+            "xmin","xmax","ymin","ymax"
+        )
+        current=locals()
+        settings={name:current[name] for name in setting_names}
+        show_comparison(
+            st,base30,compare_channels,kind,settings,load_cache,
+            temporal,wrapping,plot_explanation)
+        return
 
     def hnorm(y,edges):
         w=np.diff(edges)
