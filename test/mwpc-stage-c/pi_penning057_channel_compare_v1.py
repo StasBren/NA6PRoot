@@ -229,7 +229,11 @@ def show(st, cache_root, selected, kind, opts, load_cache, temporal, wrapping,
 
         # Shared colour limits are essential for meaningful side-by-side maps.
         finite = [z[np.isfinite(z)] for _, _, _, z in panels]
-        values = np.concatenate([v for v in finite if v.size])
+        nonempty=[v for v in finite if v.size]
+        if not nonempty:
+            st.warning("All selected heatmaps are empty under these cuts.")
+            return
+        values = np.concatenate(nonempty)
         zmin, zmax = float(values.min()), float(values.max())
         fig = make_subplots(rows=1, cols=len(codes),
                             subplot_titles=[LABELS[c] for c in codes],
@@ -275,9 +279,14 @@ def show(st, cache_root, selected, kind, opts, load_cache, temporal, wrapping,
                         y=values, width=np.diff(use_edges), name=LABELS[code],
                         marker_color=color, opacity=.43))
                 else:
+                    yy=np.repeat(values,2).astype(float)
+                    if opts["yscale"] == "Log":
+                        # Missing/empty bins must not be joined by misleading
+                        # lines on a logarithmic probability axis.
+                        yy[yy<=0]=np.nan
                     fig.add_trace(go.Scatter(
                         x=np.repeat(use_edges,2)[1:-1],
-                        y=np.repeat(values,2),
+                        y=yy,
                         mode="lines", name=LABELS[code],
                         line=dict(color=color, width=opts["line_width"]),
                         hovertemplate=f"{LABELS[code]}<br>x=%{{x:.4g}}"
