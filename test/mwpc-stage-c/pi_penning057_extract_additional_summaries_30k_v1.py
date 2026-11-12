@@ -579,7 +579,7 @@ def combine(out):
             "Matched electron pre-multiplication arrival states were not recorded",
         ],
         "sha256":{
-            name+".gz":digest(folder/(name+".gz")) for name in OUTPUT_TABLES,
+            name+".gz":digest(folder/(name+".gz")) for name in OUTPUT_TABLES
         }
     }
     (folder/"provenance.json").write_text(json.dumps(manifest,indent=2)+"\n")
