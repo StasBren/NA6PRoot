@@ -104,7 +104,7 @@ REQUIRED_NATIVE={
     "heed_primaries","ion_births","collected_avalanche_electrons"),
  "penning_seed.csv":(
     "crossing_id","primary_index","seed_w_mm","ion_births","collected_e",
-    "capped"),
+    "garfield_ne","garfield_ni","successful","capped"),
  "penning_ion_birth_sample.csv":(
     "crossing_id","primary_index","w_mm","seed_ion_births_total",
     "reservoir_weight"),
@@ -318,7 +318,8 @@ def _rows_for_chunk(campaign,channel,index):
         require(int(row["avalanche_electrons"])==int(seed["garfield_ne"])
                 and int(row["avalanche_ions"])==int(seed["garfield_ni"])
                 and int(row["ion_births"])==int(seed["ion_births"])
-                and int(row["collected_e"])==int(seed["collected_e"]),
+                and int(row["collected_e"])==int(seed["collected_e"])
+                and success==int(seed["successful"]),
                 f"Original Garfield physics/timing census mismatch: "
                 f"{channel} chunk={index:04d} primary={key[1]}")
         not_successful+=int(success==0)
