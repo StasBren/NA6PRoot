@@ -295,13 +295,33 @@ def _rows_for_chunk(campaign,channel,index):
                 "Missing sampled longitudinal birth coordinates")
 
     timings={}
+    not_successful=0
     for row in _native(folder,signed,"penning_timing.csv"):
         key=(row["crossing_id"],int(row["primary_index"]))
         require(key in seeds and key not in timings,
-                "Duplicate/missing per-avalanche WALL timing")
-        require(int(row["capped"])==0 and int(row["success"])==1
-                and float(row["wall_seconds"])>=0.,
-                "Invalid native avalanche time or status")
+                f"Duplicate/missing per-avalanche WALL timing: {channel} "
+                f"chunk={index:04d} seed={key}")
+        elapsed=float(row["wall_seconds"])
+        success,capped=int(row["success"]),int(row["capped"])
+        # 'success' is the return value of Garfield's AvalancheElectron().
+        # The ORIGINAL 30k campaign validator required zero capped seeds,
+        # but did NOT require that this return value be 1 for every seed.
+        # Retain these flagged seed records rather than silently censoring
+        # their physical populations or discarding their wall timings.
+        require(success in (0,1) and capped==0 and
+                math.isfinite(elapsed) and elapsed>=0.,
+                f"Invalid native avalanche timing: channel={channel} "
+                f"chunk={index:04d} crossing={key[0]} "
+                f"primary={key[1]} success={success} capped={capped} "
+                f"wall_seconds={row['wall_seconds']!r}")
+        seed=seeds[key]
+        require(int(row["avalanche_electrons"])==int(seed["garfield_ne"])
+                and int(row["avalanche_ions"])==int(seed["garfield_ni"])
+                and int(row["ion_births"])==int(seed["ion_births"])
+                and int(row["collected_e"])==int(seed["collected_e"]),
+                f"Original Garfield physics/timing census mismatch: "
+                f"{channel} chunk={index:04d} primary={key[1]}")
+        not_successful+=int(success==0)
         timings[key]=row
     require(len(timings)==len(seeds),"Native per-seed timing sample missing")
 
@@ -413,6 +433,7 @@ def _rows_for_chunk(campaign,channel,index):
         "counts":totals,
         "n_sampled_ion_birth_points":seen_births,
         "n_ion_births_exact":sum(int(s["ion_births"]) for s in seeds.values()),
+        "n_garfield_avalancheelectron_false":not_successful,
         "interpretation":{
             "w0":"Exact original TrackHeed electron start w, mm, not arrival w",
             "w_statistics":"Uniform reservoir sample, max 128 per avalanche",
@@ -522,7 +543,7 @@ def combine(out):
     require(not any((folder/(name+".gz")).exists() for name in OUTPUT_TABLES),
             "Final summary already exists. Refusing to overwrite outputs.")
     overall={k:0 for k in OUTPUT_TABLES}
-    births=sampled=recovered=0
+    births=sampled=recovered=garfield_false=0
     for k,name in enumerate(OUTPUT_TABLES):
         destination=folder/(name+".gz")
         temp=destination.with_name(destination.name+f".{os.getpid()}.partial")
@@ -548,6 +569,7 @@ def combine(out):
                             births+=m["n_ion_births_exact"]
                             sampled+=m["n_sampled_ion_birth_points"]
                             recovered+=int(m["recovered"])
+                            garfield_false+=m["n_garfield_avalancheelectron_false"]
             require(not destination.exists(),"Refusing overwrite while combining")
             os.replace(temp,destination)
         finally:
@@ -569,6 +591,7 @@ def combine(out):
         "total_exact_positive_ion_births":births,
         "sampled_ion_birth_positions":sampled,
         "recovered_20_muon_chunks":recovered,
+        "n_garfield_avalancheelectron_false":garfield_false,
         "tables":overall,
         "limitations":[
             "128 uniformly sampled spatial births at most per avalanche",
@@ -585,6 +608,7 @@ def combine(out):
     (folder/"provenance.json").write_text(json.dumps(manifest,indent=2)+"\n")
     print("PASS 30,000 real parent muons; 1,554,258 exact native avalanches; "
           f"{births:,} ion births; {recovered} repaired chunks; "
+          f"{garfield_false:,} Garfield AvalancheElectron false returns; "
           "five independent compact tables + provenance",flush=True)
     print("SUMMARY DIRECTORY:",folder.resolve(),flush=True)
 
