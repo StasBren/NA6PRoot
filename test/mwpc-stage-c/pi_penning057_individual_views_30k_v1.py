@@ -476,5 +476,41 @@ def selftest():
           "(read-only; run through Streamlit for real SSHFS chunk verification)")
 
 
+def main():
+    import argparse
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command",nargs="?",choices=("selftest","probe"),
+                        default="selftest")
+    parser.add_argument("--raw-root",type=Path,
+                        default=Path.home()/"na6p/cluster_mwpc")
+    parser.add_argument("--cache-root",type=Path)
+    parser.add_argument("--channel",choices=tuple(CHANNELS),default="jpsi")
+    parser.add_argument("--muon",type=int,default=0)
+    opts=parser.parse_args()
+    if opts.command=="selftest":
+        selftest()
+        return
+    require(opts.cache_root is not None,
+            "probe needs --cache-root containing the four compact caches")
+    require(0<=opts.muon<10000,"Muon index outside original 10k channel")
+    m=_channel_cache(opts.cache_root,opts.channel)
+    expect=m["muons"][opts.muon]
+    event=read_event(opts.raw_root,opts.channel,opts.muon,
+                     expect["id"],expect["n_Heed"],expect["n_clusters"])
+    print(f"PASS original {CHANNELS[opts.channel]} Geant4 muon "
+          f"#{opts.muon}: {len(event['clusters'])} TrackHeed clusters, "
+          f"{len(event['seeds'])} microscopic Garfield avalanches; "
+          f"native geometry/primaries/seeds SHA verified; "
+          f"recovered={event['recovered']}.",flush=True)
+    if event["seeds"]:
+        chosen=max(event["seeds"],key=lambda s:s["ions"])
+        cloud=read_cloud(opts.raw_root,opts.channel,opts.muon,
+                         chosen["primary"],event)
+        print(f"PASS native single avalanche #{chosen['primary']}: "
+              f"{cloud['ion_births']:,} exact ion births, "
+              f"{len(cloud['points'])} authentic u/v/w/t samples; "
+              "SHA-sealed 20-muon reservoir verified.",flush=True)
+
+
 if __name__=="__main__":
-    selftest()
+    main()
