@@ -339,15 +339,21 @@ def render(st, cache_root, raw_root, scope, kind):
                f"{len(evt['seeds'])} Heed electrons")
 
     if kind=="detail_clusters":
+        options=["All clusters"]+[cl["index"] for cl in evt["clusters"]]
+        manual=st.selectbox("Inspect cluster (or click an orange cluster)",
+                            options,key=f"mwpc-30k-cluster-select-{sel}-{mu}")
         left,right=st.columns([1.12,1],gap="medium")
         picture,curve=geom.build_figure(evt)
+        if curve is not None:
+            picture.data[curve].name="TrackHeed cluster — click to inspect"
         with left:
             st.markdown("#### Geant4 track and all ionisation clusters")
             event=st.plotly_chart(picture,use_container_width=True,
                                   key=f"mwpc-30k-geom-{sel}-{mu}",
                                   on_select="rerun",selection_mode="points",
                                   config={"displaylogo":False})
-        selected=geom.select_cluster(event,curve,evt["clusters"])
+        clicked=geom.select_cluster(event,curve,evt["clusters"])
+        selected=manual if isinstance(manual,int) else clicked
         with right:
             st.markdown("#### Exact Garfield avalanche-size heatmap")
             metric=st.radio("Cell values",
@@ -360,14 +366,10 @@ def render(st, cache_root, raw_root, scope, kind):
                                  fillcolor="rgba(217,95,2,.10)")
             st.plotly_chart(matrix,use_container_width=True,
                             config={"displaylogo":False})
-        options=["All clusters"]+[c["index"] for c in evt["clusters"]]
         if selected is not None:
-            st.caption(f"Clicked TrackHeed cluster #{selected}; orange band in "
-                       "the right-hand avalanche heatmap.")
-        manual=st.selectbox("Inspect cluster",options,
-                            key=f"mwpc-30k-cluster-select-{sel}-{mu}")
-        if isinstance(manual,int):
-            selected=manual
+            st.caption(f"TrackHeed cluster #{selected} is highlighted in the "
+                       "avalanche-size heatmap; use the selector or click "
+                       "an orange cluster on the track.")
         if selected is not None:
             c=evt["clusters"][selected]
             seeds=[s for s in evt["seeds"] if s["cluster"]==selected]
