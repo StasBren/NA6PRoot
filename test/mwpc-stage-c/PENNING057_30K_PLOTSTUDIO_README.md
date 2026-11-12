@@ -77,6 +77,41 @@ histogram bin width, angular bins, axis scales, colours, legend text/position,
 early-vs-late windows and camera/HTML/CSV exports are inherited from the
 original Plot Studio. All four selectable datasets use the same bin definitions.
 
+### Overlay / comparison of 1–3 independent channels
+
+After `git pull --ff-only`, leave the existing
+`MWPC_PENNING_30K_STUDIO_ROOT` pointing at the four locally prepared
+subdirectories and run the usual Streamlit dashboard (using its existing
+`.venv_pi_slides` environment). Check **Overlay separate J/ψ, φ, ω
+channels** at the very top of the sidebar, then select **any one, two or all
+three channels** in **Channels on the same graph (1–3)**.
+
+- 1D histograms and correlations: overlaid on ONE Plotly graph, with fixed
+  colours (J/ψ orange, φ blue, ω green), channel-specific legends and
+  single-file HTML/camera/CSV comparison exports.
+- 2D heatmaps: 1–3 side-by-side panels in ONE figure with the same numerical
+  colour scale; overlaying coloured images would conceal spatial structure.
+- Per-channel probability or density curves normalise **independently**
+  using shared physical histogram edges. Raw counts are available but
+  represent different retained-electron/ion populations, not cross sections.
+  Gain zero is a separate [0,1) bin, and zero-Heed muons do not contribute
+  fictitious gain entries.
+- Gain-versus-asymmetry uses common gain bins; bootstrapped 95% intervals
+  for wire wrapping resample independent real parent muons **within each
+  channel**, not the 1.55 million starting electrons. The early/late
+  comparison's quantile groups are independently calculated by channel.
+- The original **single dataset** selector (including descriptive `All`
+  30,000-muon mixture) is preserved when the overlay checkbox is off.
+  The individual raw-muon timelines/3D clouds still require separate
+  original files and are not enabled by comparison mode.
+
+No reprocessing or recombination of the physics caches is required.
+The comparison helper can be sanity-checked without Garfield or Streamlit:
+
+```bash
+python3 test/mwpc-stage-c/pi_penning057_channel_compare_v1.py
+```
+
 All source metadata and SHA checksums remain in each dataset's
 `provenance.json` and `temporal_correlations_v1.json`. Grouped statistics
 are shown for all four datasets, regardless of which is selected.
