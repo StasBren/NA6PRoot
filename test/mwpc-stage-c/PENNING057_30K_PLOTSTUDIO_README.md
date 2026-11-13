@@ -264,3 +264,59 @@ microscopic drift CSV and `frozen_config.json`. It cannot run with
 only the compact 30k Plot Studio ZIP. To open both detailed-event
 pages, the existing read-only SSHFS mount of the native Garfield
 chunks is still required.
+
+## 13 November 2026 — true Geant4 muon and parent Heed cluster in 3D
+
+The **One avalanche · 2D / 3D w / angular cloud** page now overlays
+three authentic objects in its rotatable 3D Plotly scene:
+1. True frozen Geant4 muon line, from gas entry to exit (teal).
+2. The actual original TrackHeed cluster which produced the selected
+   avalanche's retained starting electron (orange diamond).
+3. Authentic archived Garfield ion-birth sample (coloured by birth time)
+   near its selected 30-μm anode wire, plus a clearly labelled
+   **enlarged visual marker** for the sample's spatial centre.
+
+The ion sample is already in the local p3_noFW anode patch. The
+original global track/cluster are mapped into this SAME frame using
+the saved original gas entry \(u_{in},w_{in}\), the original
+\(\mathrm{phase\_offset}\), and the authentic source wire:
+\(u_{wire}=u_{global}-u_{in}+\mathrm{phase\_offset}-u_{selected\ wire}\),
+\(v_{wire}=v_{global}\), \(w_{local}=w_{global}-w_{in}\).
+No position is fitted, artificially shifted for appearance, or
+rescaled; only the camera/axis ranges change.
+
+The default **Muon and cluster context** shows the whole mm-scale
+crossing and labels the parent cluster. Switch to **Avalanche close-up**
+to resolve the micrometre-scale ion births around the wire. The selected
+muon's read-only, SHA-verified native files remain the only 3D source.
+No new Garfield, ion drift, cathode calculations or farm exports are needed.
+
+To update only the 3D implementation with local backups (do not use
+a broad git pull if unrelated changes exist):
+
+```bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git fetch origin feature/mwpc-stage-c
+BACKUP="$HOME/na6p/mwpc_dashboard_backup_$(date +%Y%m%d_%H%M%S)"
+for p in \
+  test/mwpc-stage-c/pi_p3_noFW_penning057_anode_wrapping_v1.py \
+  test/mwpc-stage-c/pi_penning057_individual_views_30k_v1.py
+do
+  mkdir -p "$BACKUP/$(dirname "$p")"
+  cp -p "$p" "$BACKUP/$p"
+  git show "FETCH_HEAD:$p" > "$p.new" &&
+    mv "$p.new" "$p"
+done
+
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+"$PY" -m py_compile \
+  test/mwpc-stage-c/pi_p3_noFW_penning057_anode_wrapping_v1.py \
+  test/mwpc-stage-c/pi_penning057_individual_views_30k_v1.py
+"$PY" test/mwpc-stage-c/pi_p3_noFW_penning057_anode_wrapping_v1.py
+"$PY" test/mwpc-stage-c/pi_penning057_individual_views_30k_v1.py selftest
+```
+
+The 3D changes have an additional synthetic mathematical regression
+test checking exact coordinate conversion, matching cluster identity,
+and both framing ranges. The real native 3D scene still needs to be
+opened and visually checked in your Streamlit/SSHFS environment.
