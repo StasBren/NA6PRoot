@@ -487,12 +487,30 @@ def render(st, cache_root, raw_root, scope, kind):
         st.caption("−180° and +180° refer to the same physical azimuth "
                    "(a cloud straddling that direction appears at both ends).")
         st.divider()
-        st.markdown("### 3. Rotatable 3D ion-birth cloud along wire w")
+        st.markdown("### 3. Geant4 muon, parent cluster and 3D ion-birth cloud")
+        framing=st.radio(
+            "3D view framing",
+            ("Muon and cluster context","Avalanche close-up"),
+            horizontal=True,index=0,
+            key="mwpc-30k-detail-3d-framing")
+        st.caption("The teal line is the actual Geant4 muon crossing; the "
+                   "orange diamond is the matching TrackHeed cluster; "
+                   "the coloured points are the sampled Garfield ion births. "
+                   "All coordinates use one physical scale and the same "
+                   "anode-centred frame. The red cloud-centre symbol is "
+                   "enlarged for visibility, not a true physical bubble.")
         colour_mode=("first" if colour_by=="Time since first ion birth"
                      else "heed")
-        st.plotly_chart(wrapping.three_d_view(obs,half,colour_mode=colour_mode),
-                        use_container_width=True,theme=None,
-                        config={"displaylogo":False})
+        st.plotly_chart(
+            wrapping.three_d_view(
+                obs,half,colour_mode=colour_mode,
+                event=evt,framing=framing),
+            use_container_width=True,theme=None,
+            config={"displaylogo":False,
+                    "toImageButtonOptions":{
+                        "format":"png",
+                        "filename":f"muon_cluster_avalanche_3D_{sel}_{mu}_{primary}",
+                        "scale":3}})
         if len(points) < obs["ion_births"]:
             st.caption(f"Angular and 3D views retain {len(points)} uniformly "
                        f"sampled births representing {obs['ion_births']:,} "
