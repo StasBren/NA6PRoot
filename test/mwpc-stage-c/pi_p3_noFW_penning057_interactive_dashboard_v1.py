@@ -583,9 +583,9 @@ def plot_features(kind):
     # The single-avalanche physical viewer and new v0-conditioned studies
     # have their own scientifically meaningful controls.
     if kind in {"wrap_v0_A","wrap_v0_opposite",
-                "wrap_v0_angle","wrap_dispersion","wrap_single"}:
+                "wrap_v0_angle","wrap_u0_angle","wrap_dispersion","wrap_single"}:
         curve=kind in {"wrap_v0_A","wrap_v0_opposite","wrap_dispersion"}
-        heat=kind=="wrap_v0_angle"
+        heat=kind in {"wrap_v0_angle","wrap_u0_angle"}
         return {
             "histogram_style":False,
             "curve_color":curve,
@@ -768,16 +768,12 @@ def app():
     kinds={
         "gain_all":"Avalanche gain · including zero",
         "gain_pos":"Avalanche gain · positive only",
-        "angle_eq":"Ion-birth angle · equal avalanche",
         "angle_ion":"Ion-birth angle · ion weighted",
         "asym_seed":"Exact asymmetry · each avalanche",
         "asym_muon":"Exact asymmetry · each muon",
         "time":"Ion-birth delay · ion weighted",
         "span":"Avalanche ion-birth time span · sampled",
         "gain_asym":"Mean |asymmetry| versus gain",
-        "ion_xy":"Ion-birth spatial density (u, v)",
-        "gain_xy":"Mean gain versus initial electron position",
-        "time_phi":"Birth time versus azimuth",
     }
     if base30:
         temporal.CACHE=Path(base30).expanduser()/scope/"temporal_correlations_v1.npz"
@@ -845,18 +841,17 @@ def app():
                                old[1],old[2],old[3])
     st.sidebar.header("Edit the plot")
     if base30:
-        # Keep all 21 aggregate views accessible, but make the four late
-        # anode/wrapping plots discoverable rather than burying them in a
-        # long alphabetically unrelated dropdown.
+        # Presentation shortlist: hide redundant maps without removing the
+        # original immutable caches, scientific computations or exports.
         families={
-            "All aggregate plots · 21":[k for k in kinds
+            "All aggregate plots":[k for k in kinds
                 if not k.startswith("detail_")],
-            "Original distributions · 12":[k for k in kinds
+            "Original distributions":[k for k in kinds
                 if k not in temporal.KINDS and k not in wrapping.KINDS
                 and not k.startswith("detail_")],
             "Early-birth correlations · 5":[k for k in kinds
                 if k in temporal.KINDS],
-            "Anode position & ion wrapping · 4":[k for k in kinds
+            "Anode position & ion wrapping":[k for k in kinds
                 if k in wrapping.KINDS],
         }
         if not compare_mode:
@@ -871,9 +866,10 @@ def app():
             key="plotstudio-30k-plot")
         if family.startswith("Anode"):
             st.sidebar.caption(
-                "Four later studies: signed ion asymmetry vs initial v₀; "
-                "opposite-side ion fraction vs |v₀|; ion azimuth vs v₀; "
-                "azimuth spread vs collected electron gain.")
+                "Five studies: signed ion asymmetry vs v₀; opposite-side "
+                "births vs |v₀|; ion azimuth vs initial u₀ or v₀; "
+                "and angular dispersion vs collected gain. The heatmaps "
+                "can be compared with the frozen electron drift LUT500.")
     else:
         kind=st.sidebar.selectbox(
             "Plot",list(kinds),format_func=lambda x:kinds[x])
@@ -1113,7 +1109,8 @@ def app():
         st.sidebar.divider()
         st.sidebar.subheader("Avalanche birth geometry")
         wrap_controls=wrapping.options(
-            st,kind,temporal_data,temporal_meta)
+            st,kind,temporal_data,temporal_meta,
+            allow_lut=not compare_mode)
         wrap_controls.update({
             "color":color,"line_width":line_width,
             "legend":label,"zscale":zscale
@@ -1447,7 +1444,9 @@ def app():
                         config={"displaylogo":False,
                                 "toImageButtonOptions":{
                                     "format":export_format,
-                                    "filename":"single_ion_cloud_3D_penning_on",
+                                    "filename":("electron_arrival_azimuth_LUT500_penning_on" if
+                                                kind in {"wrap_v0_angle","wrap_u0_angle"} else
+                                                "single_ion_cloud_3D_penning_on"),
                                     "scale":3}})
     st.caption("Use the camera icon to export the selected PNG / SVG / JPEG; "
                "scroll to zoom, or drag to select a range. No simulated "
@@ -1558,12 +1557,13 @@ def selftest():
              Path(__file__).read_text(),
          "Camera export format is used without a sidebar assignment")
     for kind in ("wrap_v0_A","wrap_v0_opposite","wrap_v0_angle",
-                 "wrap_dispersion","wrap_single"):
+                 "wrap_u0_angle","wrap_dispersion","wrap_single"):
         c=plot_features(kind)
         must(not c["time_group"] and not c["gain_bin"]
              and not c["angular_bin"] and not c["mean_rms"],
              "Wire-wrapping view is showing irrelevant controls: "+kind)
     must(plot_features("wrap_v0_angle")["heatmap_colorscale"] and
+         plot_features("wrap_u0_angle")["heatmap_colorscale"] and
          plot_features("wrap_dispersion")["x_log"],
          "Wire-wrapping plot-specific physics controls missing")
     # Exercise each dynamic explanation with a deliberately tiny synthetic
