@@ -898,6 +898,26 @@ def selftest():
     assert np.allclose(
         np.sqrt(cylinder.data[0].x**2+cylinder.data[0].y**2),
         WIRE_RADIUS_MM,atol=1.e-12)
+    # A real original muon near global u=110 mm is translated into
+    # the SAME local wire frame as the microscopic ion-birth points.
+    original_event={
+        "a":[110.,-3.,50.],"b":[110.2,3.,50.6],
+        "phase_offset_mm":.5,
+        "clusters":[{"index":7,"u":110.1,"v":0.,"w":50.3}]}
+    native_observation=dict(obs,cluster=7,wire_u_local_mm=0.)
+    track,cluster=muon_context_in_wire_frame(original_event,native_observation)
+    assert np.allclose(track,[[.5,-3.,0.],[.7,3.,.6]])
+    assert np.allclose(cluster,[.6,0.,.3])
+    context=three_d_view(native_observation,.1,colour_mode="first",
+                         event=original_event,framing="Muon and cluster context")
+    assert len(context.data)==5
+    assert np.allclose(context.data[1].x,track[:,0])
+    assert np.allclose(context.data[2].z,[cluster[2]])
+    assert context.layout.scene.xaxis.range[0] < .02
+    assert context.layout.scene.xaxis.range[1] > .7
+    closeup=three_d_view(native_observation,.1,event=original_event,
+                         framing="Avalanche close-up")
+    assert np.allclose(closeup.layout.scene.xaxis.range,[-.1,.1])
     print("PASS exact vs sampled geometry semantics, 1000-parent "
           "confidence bands, true 30-um wire cylinder, circular spread, "
           "population chart renderers; NO Garfield and no files modified.")
