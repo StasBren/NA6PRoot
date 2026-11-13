@@ -24,7 +24,7 @@ HISTOGRAMS = {
 }
 HEATMAPS = {
     "ion_xy", "gain_xy", "time_phi", "t10_start",
-    "t10_gain_position", "wrap_v0_angle",
+    "t10_gain_position", "wrap_v0_angle", "wrap_u0_angle",
 }
 CORRELATIONS = {
     "gain_asym", "t10_gain", "t10_asym", "t10_angles",
