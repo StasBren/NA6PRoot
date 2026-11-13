@@ -292,20 +292,103 @@ def one_seed(index,seed,meta):
         "points":pts,
     }
 
-def three_d_view(observation,halfwidth,colour_mode="heed"):
+def muon_context_in_wire_frame(event, observation):
+    """Put original global Geant4/Heed (u,v,w) in the ion-cloud wire frame.
+
+    Native Garfield starts in the local entrance-u, global-v, entrance-w
+    coordinate system. RunGeometry adds the exact nearest-anode phase:
+      u_local = u_global - u_entry + phase_offset
+      w_local = w_global - w_entry
+    The archived ion sample already has its selected local wire subtracted.
+    This is NOT an arbitrary alignment, fitted rotation or an assumed
+    drift trajectory. The original event and cluster were independently
+    verified against the source Geant4/TrackHeed files.
+    """
+    if event is None:
+        raise ValueError("Muon context requires original verified event")
+    a=np.asarray(event["a"],dtype=float)
+    b=np.asarray(event["b"],dtype=float)
+    if a.shape!=(3,) or b.shape!=(3,) or not np.isfinite(a).all() or not np.isfinite(b).all():
+        raise ValueError("Invalid Geant4 crossing endpoints")
+    wire=float(observation["wire_u_local_mm"])
+    phase=float(event["phase_offset_mm"])
+    if not np.isfinite(phase) or not np.isfinite(wire):
+        raise ValueError("Missing authentic anode phase or wire identity")
+    def convert(global_xyz):
+        arr=np.asarray(global_xyz,dtype=float)
+        if arr.shape[-1]!=3 or not np.isfinite(arr).all():
+            raise ValueError("Invalid native 3D coordinate")
+        result=arr.copy()
+        result[...,0]=arr[...,0]-a[0]+phase-wire
+        result[...,2]=arr[...,2]-a[2]
+        return result
+    # The selected avalanche belongs to one real Heed cluster. Never
+    # substitute a nearby cluster solely to make the picture look plausible.
+    selected=[c for c in event["clusters"]
+              if int(c["index"])==int(observation["cluster"])]
+    if len(selected)!=1:
+        raise ValueError("Selected avalanche's TrackHeed cluster not found")
+    c=selected[0]
+    cluster=convert([c["u"],c["v"],c["w"]])
+    track=convert(np.vstack([a,b]))
+    # Parent cluster should be within the original measured gas chord.
+    delta=track[1]-track[0]
+    fraction=float(np.dot(cluster-track[0],delta)/np.dot(delta,delta))
+    distance=float(np.linalg.norm(cluster-(track[0]+fraction*delta)))
+    if not (-.02<=fraction<=1.02 and distance<1.):
+        raise ValueError("TrackHeed cluster disagrees with original muon trajectory")
+    return track,cluster
+
+
+def three_d_view(observation,halfwidth,colour_mode="heed",
+                 event=None,framing="Avalanche close-up"):
+    """Real sampled ion cloud, optional true parent track/cluster in ONE frame.
+
+    'Muon and cluster context' intentionally uses mm-scale axes, while the
+    close-up uses um-scale local structure. No ion/track coordinate is scaled
+    or shifted independently: only the camera axis ranges change.
+    """
     import plotly.graph_objects as go
-    pts=observation["points"]
+    pts=np.asarray(observation["points"],dtype=float)
+    if pts.ndim!=2 or pts.shape[1]!=4 or not len(pts):
+        raise ValueError("Selected avalanche has no valid ion-birth points")
+    if not np.isfinite(pts).all():
+        raise ValueError("Ion-birth positions/times must be finite")
+    if colour_mode not in {"heed","first"}:
+        raise ValueError("Unknown 3D time-colour mode")
+    if framing not in {"Avalanche close-up","Muon and cluster context"}:
+        raise ValueError("Unknown 3D camera framing")
     zmin,zmax=float(pts[:,2].min()),float(pts[:,2].max())
     extension=max(.05,.2*(zmax-zmin))
     z0=zmin-extension;z1=zmax+extension
+    track=cluster=None
+    if event is not None:
+        track,cluster=muon_context_in_wire_frame(event,observation)
+        if framing=="Muon and cluster context":
+            limits=np.vstack([track,cluster[None,:],pts[:,:3],
+                              np.array([[0.,0.,zmin],[0.,0.,zmax]])])
+            lo=np.min(limits,axis=0)
+            hi=np.max(limits,axis=0)
+            pad=np.maximum(.08*(hi-lo),np.array([.12,.12,.12]))
+            xlim=[float(lo[0]-pad[0]),float(hi[0]+pad[0])]
+            ylim=[float(lo[1]-pad[1]),float(hi[1]+pad[1])]
+            zlim=[float(lo[2]-pad[2]),float(hi[2]+pad[2])]
+            z0,z1=zlim
+        else:
+            xlim=[-halfwidth,halfwidth]
+            ylim=[-halfwidth,halfwidth]
+            zlim=[z0,z1]
+    else:
+        xlim=[-halfwidth,halfwidth]
+        ylim=[-halfwidth,halfwidth]
+        zlim=[z0,z1]
+
     phi=np.linspace(0.,2*np.pi,45)
     cylinder_u=np.tile(WIRE_RADIUS_MM*np.cos(phi),(2,1))
     cylinder_v=np.tile(WIRE_RADIUS_MM*np.sin(phi),(2,1))
-    cylinder_w=np.tile(np.linspace(z0,z1,2)[:,None],(1,len(phi)))
-    if colour_mode not in {"heed","first"}:
-        raise ValueError("Unknown 3D time-colour mode")
+    cylinder_w=np.tile(np.array([z0,z1])[:,None],(1,len(phi)))
     t0=(float(np.min(pts[:,3])) if colour_mode=="first"
-        else observation["t_heed"])
+        else float(observation["t_heed"]))
     dt=pts[:,3]-t0
     label=("Time from first ion [ns]" if colour_mode=="first"
            else "Birth delay [ns]")
@@ -314,24 +397,65 @@ def three_d_view(observation,halfwidth,colour_mode="heed"):
         x=cylinder_u,y=cylinder_v,z=cylinder_w,
         surfacecolor=np.zeros_like(cylinder_u),
         colorscale=[[0,"#666666"],[1,"#666666"]],
-        opacity=.65,showscale=False,name="Real 30-μm wire",
+        opacity=.55,showscale=False,name="Real 30-μm anode wire",
         hoverinfo="skip"))
+    if track is not None:
+        fig.add_trace(go.Scatter3d(
+            x=track[:,0],y=track[:,1],z=track[:,2],
+            mode="lines+markers",
+            line=dict(color="#147D95",width=8),
+            marker=dict(size=5,color=["#147D95","#147D95"]),
+            name="True Geant4 muon: entry → exit",
+            text=["Muon enters gas","Muon leaves gas"],
+            hovertemplate="%{text}<br>u−wire=%{x:.4f} mm"
+                          "<br>v=%{y:.4f} mm<br>w−entry=%{z:.4f} mm"
+                          "<extra></extra>"))
+        fig.add_trace(go.Scatter3d(
+            x=[cluster[0]],y=[cluster[1]],z=[cluster[2]],
+            mode="markers+text",
+            marker=dict(color="#E67916",size=10,symbol="diamond",
+                        line=dict(color="#713707",width=2)),
+            text=[f"Cluster {int(observation['cluster'])}"],
+            textposition="top center",
+            name="Actual parent TrackHeed cluster",
+            hovertemplate=f"Parent TrackHeed cluster #{int(observation['cluster'])}"
+                          "<br>u−wire=%{x:.5f} mm<br>v=%{y:.5f} mm"
+                          "<br>w−entry=%{z:.5f} mm<extra></extra>"))
     fig.add_trace(go.Scatter3d(
         x=pts[:,0],y=pts[:,1],z=pts[:,2],
-        mode="markers",marker=dict(size=4,color=dt,
-                                colorscale="YlOrRd",showscale=True,
-                                colorbar=dict(title=label)),
-        name="Saved Garfield ion births",
-        hovertemplate="Δu=%{x:.4g} mm<br>v=%{y:.4g} mm"
-                      "<br>w=%{z:.4g} mm<extra></extra>"))
+        mode="markers",
+        marker=dict(size=5,color=dt,
+                    colorscale="YlOrRd",showscale=True,
+                    colorbar=dict(title=label,len=.7,x=1.03)),
+        name="Sampled ion-birth positions (true coordinates)",
+        hovertemplate="u−wire=%{x:.5f} mm<br>v=%{y:.5f} mm"
+                      "<br>w−entry=%{z:.5f} mm<extra></extra>"))
+    if track is not None:
+        # Context label is NOT a physical enlargement of the cloud:
+        # it only indicates the real arithmetic centre at mm-scale zoom.
+        centre=pts[:,:3].mean(axis=0)
+        fig.add_trace(go.Scatter3d(
+            x=[centre[0]],y=[centre[1]],z=[centre[2]],
+            mode="markers",
+            marker=dict(size=9,color="#B71C1C",symbol="circle",
+                        line=dict(color="white",width=2)),
+            name="Ion-cloud centre (visual marker enlarged)",
+            hovertemplate="Sampled ion-cloud centre"
+                          "<br>u−wire=%{x:.5f} mm<br>v=%{y:.5f} mm"
+                          "<br>w−entry=%{z:.5f} mm<extra></extra>"))
     fig.update_layout(
-        title="3D sampled ion-birth cloud around anode wire",
-        template="plotly_white",height=690,
-        scene=dict(xaxis=dict(title="Δu [mm]",range=[-halfwidth,halfwidth]),
-                   yaxis=dict(title="v [mm]",range=[-halfwidth,halfwidth]),
-                   zaxis=dict(title="w [mm]",range=[z0,z1]),
-                   aspectmode="data"),
-        margin=dict(l=0,r=0,t=70,b=0))
+        title=("Muon, parent cluster and ion-birth cloud — common 3D coordinates"
+               if track is not None else
+               "3D sampled ion-birth cloud around anode wire"),
+        template="plotly_white",height=740,
+        scene=dict(
+            xaxis=dict(title="u − selected anode [mm]",range=xlim),
+            yaxis=dict(title="v [mm]",range=ylim),
+            zaxis=dict(title="w − muon entry [mm]",range=zlim),
+            aspectmode="data"),
+        legend=dict(orientation="h",x=.0,y=-.05,
+                    bgcolor="rgba(255,255,255,.75)"),
+        margin=dict(l=0,r=15,t=70,b=85))
     return fig
 
 
