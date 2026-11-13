@@ -27,6 +27,7 @@ N_BOOTSTRAP_PARENTS=1000
 PITCH_MM=3.
 WIRE_RADIUS_MM=.015
 V_EDGES=np.linspace(-3.,3.,25)
+U_START_EDGES=np.linspace(-1.5,1.5,25)
 ABS_V_EDGES=np.linspace(0.,3.,13)
 THETA=(np.asarray(temporal.PHI_EDGES[:-1])+np.asarray(temporal.PHI_EDGES[1:]))/2.
 
@@ -34,6 +35,7 @@ KINDS={
     "wrap_v0_A":"Signed exact ion asymmetry vs Heed starting v₀",
     "wrap_v0_opposite":"Ion births on opposite side vs |v₀|",
     "wrap_v0_angle":"Ion-birth azimuth vs starting v₀ (heatmap)",
+    "wrap_u0_angle":"Ion-birth azimuth vs starting u₀ (heatmap)",
     "wrap_dispersion":"Avalanche azimuth spread vs collected gain",
     "wrap_single":"Individual avalanche: ion cloud around anode (2D + 3D)",
 }
@@ -48,6 +50,10 @@ DEFAULTS={
     "wrap_v0_angle":("Ion-birth angle conditioned on initial electron v₀",
                      "Ion-birth azimuth φ around closest wire [degrees]",
                      "Initial Heed electron v₀ [mm]",
+                     "Ion-weighted probability per angular bin"),
+    "wrap_u0_angle":("Ion-birth angle conditioned on initial electron u₀",
+                     "Ion-birth azimuth φ around closest wire [degrees]",
+                     "Initial Heed electron u₀ [mm]",
                      "Ion-weighted probability per angular bin"),
     "wrap_dispersion":("Sampled angular spread vs avalanche collected gain",
                        "Collected gain per initial Heed electron [electrons]",
@@ -155,7 +161,7 @@ def plot_binned(fig,x,y,p,edges,label,color,line_width):
     return {"bin_centre":centres,"mean":means,"ci95_low":low,
             "ci95_high":hi,"n_avalanches":count}
 
-def options(st,kind,d,meta):
+def options(st,kind,d,meta,allow_lut=True):
     """Only physically relevant controls for each specific view."""
     out={"min_entries":40,"ion_weighted":True,"reliable":True}
     if kind in {"wrap_v0_A","wrap_v0_opposite"}:
@@ -163,13 +169,38 @@ def options(st,kind,d,meta):
                            f"{N_BOOTSTRAP_PARENTS:,} independent Geant4 muon parents.")
         st.sidebar.caption("Every avalanche with defined exact A is included; "
                            "no 128-point sampling requirement.")
-    if kind=="wrap_v0_angle":
+    if kind in {"wrap_v0_angle","wrap_u0_angle"}:
         out["ion_weighted"]=st.sidebar.checkbox(
             "Weight by number of ion births",True,
-            key="wrap_v0_angle-ion-weighting")
+            key=f"{kind}-ion-weighting")
         out["reliable"]=st.sidebar.checkbox(
             "Require all 128 sampled ion births",True,
-            key="wrap_v0_angle-reliable")
+            key=f"{kind}-reliable")
+        if kind=="wrap_u0_angle":
+            other="v₀"
+            lo,hi,step=-3.,3.,.25
+        else:
+            other="u₀"
+            lo,hi,step=-1.5,1.5,.125
+        out["other_range"]=st.sidebar.slider(
+            f"Condition on initial {other} [mm]",
+            min_value=lo,max_value=hi,value=(lo,hi),step=step,
+            key=f"{kind}-other-range")
+        out["compare_drift"]=(allow_lut and st.sidebar.checkbox(
+            "Compare with electron drift LUT500",False,
+            key=f"{kind}-drift-compare"))
+        if out["compare_drift"]:
+            out["drift_file"]=st.sidebar.text_input(
+                "Original microscopic p3_noFW LUT500 CSV",
+                value=str(Path(__file__).resolve().parents[2]/
+                "test_runs/mwpc_stage_c/pi_pitch_fieldwire_500_p3_v1/"
+                "pilot/p3p0_anode_only/garfield_electrons.csv"),
+                key=f"{kind}-drift-path")
+            st.sidebar.caption(
+                "Both maps use the same initial-position bins and 5° angles. "
+                "Arrival angles refer to the collecting wire, but birth "
+                "angles to the nearest wire to the original electron. "
+                "These are independent microscopic populations, not paired trajectories.")
     if kind=="wrap_dispersion":
         st.sidebar.caption("1−R measures circular angular dispersion. "
                            "It is not proof of continuous wrapping.")
@@ -297,6 +328,144 @@ def three_d_view(observation,halfwidth):
         margin=dict(l=0,r=0,t=70,b=0))
     return fig
 
+
+def conditional_birth_angular_map(d,kind,controls):
+    """Row-conditional birth-angle probabilities, with optional orthogonal slice.
+
+    Efficient bounded chunks avoid a temporary N_avalanches x 72 float64
+    array when all 30,000 muons are selected.
+    """
+    axis="u0" if kind=="wrap_u0_angle" else "v0"
+    other="v0" if axis=="u0" else "u0"
+    edges=U_START_EDGES if axis=="u0" else V_EDGES
+    x=np.asarray(d[axis],float)
+    y=np.asarray(d[other],float)
+    ions=np.asarray(d["ions"])
+    lo,hi=controls.get("other_range",(-3.,3.) if axis=="u0" else (-1.5,1.5))
+    good=(ions>0)&np.isfinite(x)&np.isfinite(y)&(y>=lo)&(y<=hi)
+    if controls["reliable"]:
+        good &= np.asarray(d["sample_count"])==128
+    inds=np.flatnonzero(good)
+    nb=len(edges)-1
+    bins=np.zeros((nb,72),dtype=np.float64)
+    n=np.zeros(nb,dtype=np.int64)
+    angle_bins=np.arange(72,dtype=np.int64)[None,:]
+    for batch in np.array_split(inds,max(1,(len(inds)+8191)//8192)):
+        if not len(batch):continue
+        ix=np.searchsorted(edges,x[batch],side="right")-1
+        ix=np.where(x[batch]==edges[-1],nb-1,ix)
+        keep=(ix>=0)&(ix<nb)
+        if not np.any(keep):continue
+        idx=ix[keep]
+        rows=batch[keep]
+        np.add.at(n,idx,1)
+        weights=(np.asarray(d["angle_fraction"][rows],dtype=np.float64)*
+                 (ions[rows,None] if controls["ion_weighted"] else 1.))
+        flat=(idx[:,None]*72+angle_bins).ravel()
+        bins+=np.bincount(flat,weights=weights.ravel(),
+                          minlength=nb*72).reshape(nb,72)
+    denom=bins.sum(axis=1)
+    probs=np.divide(bins,denom[:,None],
+                    out=np.full_like(bins,np.nan),
+                    where=denom[:,None]>0)
+    return edges,probs,n,int(n.sum())
+
+
+DRIFT_LUT500_SHA="8b00c43680c8fb63abb0f83e1da6600d48c83cce211bd205bca8c9688740cdbf"
+
+
+def load_verified_drift_angles(path,mtime,size):
+    """Read-only raw frozen drift LUT. Different trajectory from full avalanches."""
+    import pandas as pd
+    file=Path(path)
+    if not file.is_file() or file.stat().st_mtime_ns!=mtime or file.stat().st_size!=size:
+        raise ValueError("Frozen drift LUT was removed or changed")
+    if sha(file)!=DRIFT_LUT500_SHA:
+        raise ValueError("Frozen p3_noFW drift LUT500 SHA mismatch; refusing comparison")
+    cfg=json.loads((file.parent/"frozen_config.json").read_text())
+    expected={"pitch_mm":3.,"field_wire_diam_um":0.,
+              "n_u":30,"n_v":30,"samples_per_box":500,
+              "gap_minus_mm":3.,"gap_plus_mm":3.,
+              "anode_voltage_v":1800.,"magnetic_field_t":0.}
+    for key,val in expected.items():
+        if cfg.get(key)!=val:
+            raise ValueError(f"Drift LUT geometry mismatch: {key}={cfg.get(key)!r}")
+    columns=["iu","iv","sample","u_start_mm","v_start_mm",
+             "collected","phi_hit_deg","wire_index"]
+    table=pd.read_csv(file,usecols=columns)
+    if len(table)!=450000:
+        raise ValueError("Frozen drift LUT500 must contain 450000 trials")
+    iu=table["iu"].to_numpy(dtype=np.int64)
+    iv=table["iv"].to_numpy(dtype=np.int64)
+    trial=table["sample"].to_numpy(dtype=np.int64)
+    if np.any((iu<0)|(iu>=30)|(iv<0)|(iv>=30)|
+              (trial<0)|(trial>=500)):
+        raise ValueError("Drift LUT cell/trial indices are invalid")
+    idx=(iu*30+iv)*500+trial
+    if len(np.unique(idx))!=450000:
+        raise ValueError("Drift LUT cell/trial identities are incomplete or duplicated")
+    u=table["u_start_mm"].to_numpy(dtype=float)
+    v=table["v_start_mm"].to_numpy(dtype=float)
+    if not np.all(np.isfinite(u)&np.isfinite(v)&
+                  (u>=-1.5+.1*iu-1e-8)&(u<=-1.5+.1*(iu+1)+1e-8)&
+                  (v>=-3.+.2*iv-1e-8)&(v<=-3.+.2*(iv+1)+1e-8)):
+        raise ValueError("Drift LUT starts do not match frozen 30x30 grid")
+    collected=table["collected"].to_numpy(dtype=np.int64)==1
+    phi=table["phi_hit_deg"].to_numpy(dtype=float)
+    if np.any(collected & (~np.isfinite(phi)|(phi < -180.)|(phi > 180.))):
+        raise ValueError("Collected drift electron without physical arrival azimuth")
+    return u[collected],v[collected],phi[collected],int(collected.sum())
+
+
+def drift_angle_comparison(st,kind,controls,birth_probs,birth_counts):
+    """Show original drift-arrival phi below Garfield ion-birth conditional phi."""
+    import plotly.graph_objects as go
+    file=Path(controls["drift_file"]).expanduser()
+    if not file.is_file():
+        st.warning("Original microscopic drift LUT not found: "+str(file))
+        return None
+    try:
+        u,v,phi,nall=st.cache_data(show_spinner="Verifying and loading the original LUT500…")(
+            load_verified_drift_angles)(str(file.resolve()),file.stat().st_mtime_ns,
+                                        file.stat().st_size)
+    except (OSError,ValueError,KeyError) as ex:
+        st.error("Drift comparison blocked: "+str(ex))
+        return None
+    axis="u0" if kind=="wrap_u0_angle" else "v0"
+    x=u if axis=="u0" else v
+    other=v if axis=="u0" else u
+    edges=U_START_EDGES if axis=="u0" else V_EDGES
+    lo,hi=controls.get("other_range",(-3.,3.) if axis=="u0" else (-1.5,1.5))
+    ok=(other>=lo)&(other<=hi)
+    hist,_,_=np.histogram2d(x[ok],phi[ok],bins=(edges,temporal.PHI_EDGES))
+    den=hist.sum(axis=1)
+    probs=np.divide(hist,den[:,None],out=np.full_like(hist,np.nan),
+                    where=den[:,None]>0)
+    comparable=(birth_counts>=40)&(den>=40)&np.isfinite(birth_probs).all(axis=1)
+    if np.any(comparable):
+        tv=.5*np.abs(birth_probs[comparable]-probs[comparable]).sum(axis=1)
+        st.caption(f"Start-coordinate bins with at least 40 full Garfield avalanches "
+                   f"and 40 drift endpoints: {int(comparable.sum())}. "
+                   f"Median conditional total-variation distance = {np.median(tv):.3f} "
+                   "(0 identical; 1 disjoint). These are NOT paired histories "
+                   "or a proof of exact drift→avalanche matching.")
+    fig=go.Figure(go.Heatmap(
+        x=THETA,y=(edges[:-1]+edges[1:])/2.,z=probs,colorscale="Blues",
+        zmin=0.,zmax=None,
+        colorbar=dict(title="P(arrival φ | start bin)"),
+        hovertemplate="Electron arrival φ=%{x:.1f}°<br>"
+                      f"initial {axis}=%{{y:.3f}} mm"
+                      "<br>conditional probability=%{z:.4g}<extra></extra>"))
+    fig.update_layout(
+        title="Electron arrival azimuth · frozen drift-only LUT500",
+        xaxis_title="Azimuth around collecting anode [degrees]",
+        yaxis_title=f"Initial electron {axis} [mm]",
+        template="plotly_white",height=640,
+        margin=dict(l=70,r=110,t=80,b=70),
+        font=dict(family="Arial,Helvetica,sans-serif",size=15))
+    fig.update_xaxes(range=[-180.,180.])
+    return fig
+
 def render(kind,fig,d,meta,controls,st):
     """Return (histogram columns or None, annotation, optional second Figure)."""
     import plotly.graph_objects as go
@@ -328,21 +497,9 @@ def render(kind,fig,d,meta,controls,st):
             "Opposite means the hemisphere opposite the INITIAL Heed "
             "electron position, not measured electron arrival side. "
             "Boundary births are excluded from exact A's denominator."),None
-    if kind=="wrap_v0_angle":
-        good=(d["ions"]>0)&np.isfinite(x)&np.isfinite(A)
-        if controls["reliable"]:good&=(d["sample_count"]==128)
-        v=x[good];fraction=d["angle_fraction"][good]
-        weight=d["ions"][good].astype(float) if controls["ion_weighted"] else np.ones(len(v))
-        ix=np.searchsorted(V_EDGES,v,side="right")-1
-        ix=np.where(v==V_EDGES[-1],len(V_EDGES)-2,ix)
-        valid=(ix>=0)&(ix<len(V_EDGES)-1)
-        bins=np.zeros((len(V_EDGES)-1,72))
-        np.add.at(bins,ix[valid],fraction[valid]*weight[valid,None])
-        # Condition on given INITIAL v0; rows sum to one.
-        denom=bins.sum(axis=1)
-        matrix=np.divide(bins,denom[:,None],
-                         out=np.full(bins.shape,np.nan),
-                         where=denom[:,None]>0)
+    if kind in {"wrap_v0_angle","wrap_u0_angle"}:
+        edges,matrix,n,total=conditional_birth_angular_map(d,kind,controls)
+        axis="u₀" if kind=="wrap_u0_angle" else "v₀"
         z=matrix
         title=controls["legend"]
         if controls.get("zscale")=="Log":
@@ -350,19 +507,26 @@ def render(kind,fig,d,meta,controls,st):
                 z=np.where(matrix>0,np.log10(matrix),np.nan)
             title="log10("+title+")"
         fig.add_trace(go.Heatmap(
-            x=THETA,y=(V_EDGES[:-1]+V_EDGES[1:])/2,
+            x=THETA,y=(edges[:-1]+edges[1:])/2.,
             z=z,colorscale="YlOrBr",
             colorbar=dict(title=title),
-            hovertemplate="φ=%{x:.1f}°<br>initial v₀=%{y:.2f} mm"
-                          "<br>conditional bin prob=%{z:.4g}"
-                          "<extra></extra>"))
+            hovertemplate=f"Ion birth φ=%{{x:.1f}}°<br>initial {axis}=%{{y:.3f}} mm"
+                          "<br>conditional probability=%{z:.4g}<extra></extra>"))
+        fig.update_xaxes(range=[-180.,180.])
+        other="v₀" if kind=="wrap_u0_angle" else "u₀"
+        lo,hi=controls.get("other_range",(np.nan,np.nan))
+        aux=None
+        if controls.get("compare_drift"):
+            aux=drift_angle_comparison(st,kind,controls,matrix,n)
         return None,(
-            f"{int(np.sum(good)):,} avalanches. Heatmap rows normalised "
-            "independently; estimates of **where ions were CREATED** "
-            "around a wire, conditioned on initial Heed v₀. "
+            f"{total:,} avalanche ion clouds. Each row normalised independently; "
+            f"ion CREATION azimuth conditioned on initial Heed {axis}, "
+            f"with {other} in [{lo:.3g},{hi:.3g}] mm. "
             +("Ion weighted." if controls["ion_weighted"] else
-              "Each ion-producing avalanche equally weighted.")+
-            " 128-point sampling is finite."),None
+              "Each avalanche equally weighted.")
+            +" Birth azimuth refers to the initial nearest wire; "
+            "drift LUT arrival azimuth refers to its collecting wire. "
+            "A different wire is a real but relatively rare exception."),aux
     if kind=="wrap_dispersion":
         good=(d["sample_count"]==128)&(d["ions"]>0)&(d["gain"]>0)
         spread=circular_dispersion(d["angle_fraction"][good])
@@ -493,10 +657,11 @@ def describe(kind,d,meta,settings):
             "Even a small opposite-side fraction does not prove that "
             "ions create a continuous shell wrapping the wire."
         )
-    if kind=="wrap_v0_angle":
+    if kind in {"wrap_v0_angle","wrap_u0_angle"}:
+        axis="u₀" if kind=="wrap_u0_angle" else "v₀"
         return (
             "**What you see:** A conditional angular map. Each horizontal "
-            "row fixes the starting electron v₀; horizontal position is "
+            f"row fixes the starting electron {axis}; horizontal position is "
             "where the avalanche's ions were born in azimuth around a wire.",
             "**How measured:** Up to 128 sampled ion-birth positions per "
             "avalanche become a 5° histogram. In ion-weighted mode, each "
@@ -571,8 +736,9 @@ def selftest():
         def warning(self,_):pass
     options={"color":"#E46B08","line_width":2.,"legend":"test",
              "ion_weighted":True,"reliable":True,"zscale":"Linear"}
+    synthetic["u0"]=xx/2.
     for mode in ("wrap_v0_A","wrap_v0_opposite",
-                 "wrap_v0_angle","wrap_dispersion"):
+                 "wrap_v0_angle","wrap_u0_angle","wrap_dispersion"):
         explanation=describe(mode,synthetic,{},options)
         assert len(explanation)==3
         fig=go.Figure()
