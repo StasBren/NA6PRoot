@@ -255,7 +255,7 @@ def cluster_heatmap(event, measure="Collected electrons"):
     z=np.log10(1.+values)
     fig=go.Figure(go.Heatmap(
         x=np.arange(width),y=np.arange(max(1,len(clusters))),
-        z=z,colorscale="Viridis",
+        z=z,colorscale="Viridis",xgap=1,ygap=2,
         customdata=np.dstack([ids,ion,values]),
         colorbar=dict(title="log₁₀(1 + N)"),
         hovertemplate="Cluster #%{y:.0f}<br>Electron within cluster %{x:.0f}"
@@ -264,11 +264,14 @@ def cluster_heatmap(event, measure="Collected electrons"):
                       "<br>Selected avalanche size %{customdata[2]:,.0f}"
                       "<extra></extra>"))
     fig.update_layout(
-        title="Every TrackHeed cluster × each original electron's avalanche",
-        xaxis_title="Electron index within its original cluster",
-        yaxis_title="TrackHeed cluster index",
-        template="plotly_white",height=520,
-        margin=dict(l=70,r=40,t=80,b=60))
+        title="Exact Garfield avalanche size for every primary electron",
+        xaxis_title="Primary-electron index within cluster (0-based)",
+        yaxis_title="TrackHeed cluster index (0-based)",
+        template="plotly_white",height=max(560,min(1000,310+23*len(clusters))),
+        font=dict(family="Arial,Helvetica,sans-serif",size=15),
+        margin=dict(l=90,r=115,t=75,b=85))
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(showgrid=False,dtick=1 if len(clusters)<=30 else 2)
     return fig
 
 
@@ -288,8 +291,10 @@ def angular_hist(points, collected_ions):
         title="Ion creation angle around selected anode wire",
         xaxis_title="φ = atan2(v, u − wire centre) [degrees]",
         yaxis_title="Fraction of retained births per 5° bin",
-        template="plotly_white",height=470,
-        xaxis=dict(range=[-180,180]),bargap=0)
+        template="plotly_white",height=550,
+        font=dict(family="Arial,Helvetica,sans-serif",size=15),
+        margin=dict(l=85,r=60,t=80,b=75),
+        xaxis=dict(range=[-180,180],dtick=45),bargap=0)
     return fig
 
 
@@ -342,20 +347,27 @@ def render(st, cache_root, raw_root, scope, kind):
         options=["All clusters"]+[cl["index"] for cl in evt["clusters"]]
         manual=st.selectbox("Inspect cluster (or click an orange cluster)",
                             options,key=f"mwpc-30k-cluster-select-{sel}-{mu}")
-        left,right=st.columns([1.12,1],gap="medium")
+        # Stacked full-width plots are more legible and export better.
         picture,curve=geom.build_figure(evt)
+        picture.update_layout(
+            height=680,font=dict(family="Arial,Helvetica,sans-serif",size=15),
+            margin=dict(l=85,r=55,t=85,b=110))
+        st.markdown("### 1. Geant4 track and TrackHeed clusters")
         if curve is not None:
             picture.data[curve].name="TrackHeed cluster — click to inspect"
-        with left:
-            st.markdown("#### Geant4 track and all ionisation clusters")
+        with st.container():
+            st.caption("Click an orange cluster marker to select its associated "
+                       "Garfield avalanches, or use the selector above.")
             event=st.plotly_chart(picture,use_container_width=True,
+                                  theme=None,
                                   key=f"mwpc-30k-geom-{sel}-{mu}",
                                   on_select="rerun",selection_mode="points",
                                   config={"displaylogo":False})
         clicked=geom.select_cluster(event,curve,evt["clusters"])
         selected=manual if isinstance(manual,int) else clicked
-        with right:
-            st.markdown("#### Exact Garfield avalanche-size heatmap")
+        st.divider()
+        with st.container():
+            st.markdown("### 2. Exact avalanche size per TrackHeed electron")
             metric=st.radio("Cell values",
                             ("Collected electrons","Positive ion births"),
                             horizontal=True,key="mwpc-30k-cluster-metric")
@@ -364,7 +376,7 @@ def render(st, cache_root, raw_root, scope, kind):
                 matrix.add_hrect(y0=selected-.47,y1=selected+.47,
                                  line_color="#D95F02",line_width=2,
                                  fillcolor="rgba(217,95,2,.10)")
-            st.plotly_chart(matrix,use_container_width=True,
+            st.plotly_chart(matrix,use_container_width=True,theme=None,
                             config={"displaylogo":False})
         if selected is not None:
             st.caption(f"TrackHeed cluster #{selected} is highlighted in the "
@@ -421,10 +433,19 @@ def render(st, cache_root, raw_root, scope, kind):
         half=st.select_slider(
             "Anode cross-section half-width [mm]",
             options=[.05,.1,.25,.5,1.5,3.],
-            value=.25,key="mwpc-30k-detail-halfwidth")
+            value=.1,key="mwpc-30k-detail-halfwidth")
+        colour_by=st.radio(
+            "Colour sampled ion births by",
+            ("Time since first ion birth","Delay since primary Heed electron"),
+            horizontal=True,key="mwpc-30k-detail-birth-colour")
         u,v,w,t=points.T
-        col1,col2=st.columns(2,gap="medium")
-        with col1:
+        time_origin=(float(np.min(t)) if
+                     colour_by=="Time since first ion birth" else obs["t_heed"])
+        colour_title=("Time since first birth [ns]" if
+                      colour_by=="Time since first ion birth" else
+                      "Delay since Heed electron [ns]")
+        st.markdown("### 1. Ion-birth cloud around the 30-μm anode")
+        with st.container():
             fig=go.Figure()
             radius=.015
             fig.add_shape(type="circle",x0=-radius,x1=radius,
@@ -432,9 +453,9 @@ def render(st, cache_root, raw_root, scope, kind):
                           fillcolor="#9A9A9A",line_color="#555555")
             fig.add_trace(go.Scatter(
                 x=u,y=v,mode="markers",
-                marker=dict(size=7,color=t-obs["t_heed"],
+                marker=dict(size=7,color=t-time_origin,
                             colorscale="YlOrRd",showscale=True,
-                            colorbar=dict(title="Birth delay [ns]")),
+                            colorbar=dict(title=colour_title)),
                 customdata=np.column_stack((w,t)),
                 name="Uniformly sampled ion births",
                 hovertemplate="u−wire=%{x:.5f} mm<br>v=%{y:.5f} mm"
@@ -447,18 +468,30 @@ def render(st, cache_root, raw_root, scope, kind):
             fig.update_layout(
                 title="Ion birth cloud around anode · u–v cross-section",
                 xaxis_title="u − anode wire centre [mm]",
-                yaxis_title="v [mm]",height=470,template="plotly_white")
-            fig.update_xaxes(range=[-half,half])
-            fig.update_yaxes(range=[-half,half],scaleanchor="x",scaleratio=1)
-            st.plotly_chart(fig,use_container_width=True,
+                yaxis_title="v [mm]",height=660,template="plotly_white",
+                font=dict(family="Arial,Helvetica,sans-serif",size=15),
+                margin=dict(l=90,r=105,t=80,b=75))
+            fig.update_xaxes(range=[-half,half],constrain="domain",showgrid=False)
+            fig.update_yaxes(range=[-half,half],scaleanchor="x",scaleratio=1,
+                             constrain="domain",showgrid=False)
+            st.plotly_chart(fig,use_container_width=True,theme=None,
                             config={"displaylogo":False})
-        with col2:
+        st.caption("The anode wire is drawn at its real 15-μm radius. "
+                   "The original Heed electron may lie outside the zoom.")
+        st.divider()
+        st.markdown("### 2. Angular distribution of ion births")
+        with st.container():
             st.plotly_chart(angular_hist(points,obs["ion_births"]),
-                            use_container_width=True,
+                            use_container_width=True,theme=None,
                             config={"displaylogo":False})
-        st.markdown("#### Rotatable 3D cloud — includes the wire-longitudinal w coordinate")
-        st.plotly_chart(wrapping.three_d_view(obs,half),
-                        use_container_width=True,
+        st.caption("−180° and +180° refer to the same physical azimuth "
+                   "(a cloud straddling that direction appears at both ends).")
+        st.divider()
+        st.markdown("### 3. Rotatable 3D ion-birth cloud along wire w")
+        colour_mode=("first" if colour_by=="Time since first ion birth"
+                     else "heed")
+        st.plotly_chart(wrapping.three_d_view(obs,half,colour_mode=colour_mode),
+                        use_container_width=True,theme=None,
                         config={"displaylogo":False})
         if len(points) < obs["ion_births"]:
             st.caption(f"Angular and 3D views retain {len(points)} uniformly "
