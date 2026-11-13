@@ -174,3 +174,93 @@ All source metadata and SHA checksums remain in each dataset's
 are shown for all four datasets, regardless of which is selected.
 
 *Do not run the original 1000-muon `prepare` command for this campaign.*
+
+
+## 13 November 2026 — presentation-oriented Plot Studio update
+
+The original pre-computed caches remain unchanged. This update only
+changes which views are offered in the dashboard, and changes presentation
+layout and read-only statistical plots.
+
+- Retained the ion-weighted aggregate ion-birth azimuth view; hid its
+  equal-avalanche-weighted duplicate from the menu (the data remain in NPZ).
+- Hid the aggregate (u,v) ion-birth density, mean gain vs (u0,v0) and
+  ion-birth delay vs azimuth. Their source data are preserved.
+- Added **Ion-birth azimuth vs starting u0** alongside the v0 map.
+  Both use 24 bins of their starting coordinate and 72 bins of
+  5 degrees around the anode. Rows are normalized independently.
+  128-point fully sampled avalanches are selected by default, and
+  optional Heed-start coordinate slicing is provided.
+- Both start-coordinate heatmaps offer **Compare with electron drift
+  LUT500**. This uses the unchanged
+  `test_runs/mwpc_stage_c/pi_pitch_fieldwire_500_p3_v1/pilot/p3p0_anode_only/garfield_electrons.csv`,
+  with 900 spatial cells x 500 independent microscopic drift trials.
+  Before use, the CSV SHA-256 and frozen geometry manifest are verified.
+  The LUT histogram includes only collected electron endpoints with
+  valid `phi_hit_deg`. For every same-coordinate start bin, it compares
+  the electron *arrival* angle with a full-Penning Garfield ion-*birth*
+  azimuth histogram. Each is normalized separately, and the displayed
+  median conditional total-variation distance uses only bins containing
+  at least 40 electron endpoints and 40 ion-producing avalanches.
+  **These datasets are independent microscopic histories**: they are not
+  paired trajectories, and they need not have the same population after
+  attachment/loss selection. Arrival phi is defined around the actual
+  collecting anode, while birth phi in this archived dataset is defined
+  around the original nearest anode. Some avalanches involve a different
+  wire. If birth histograms are ion-weighted, an additional gain-weighting
+  difference exists; disable that weighting for the closest per-primary
+  comparison. Do not report median TV as an isolated physical discrepancy
+  in intrinsic avalanche angle without accounting for these effects.
+- Added the u0 heatmap to the three-channel aggregate comparison.
+  In channel overlay mode the drift comparison checkbox is hidden so
+  the three independent-channel comparison remains unambiguous.
+- Real-event pages now stack full-width charts vertically: true Geant4
+  muon+clusters above its per-electron gain heatmap; one avalanche
+  (u,v) sample above its angular histogram, then rotatable 3D (u,v,w).
+  The local anode cross-section defaults to a tighter 0.1-mm zoom,
+  equal physical axes use `constrain="domain"`, and birth-time colours
+  may be relative to the earliest retained ion birth or the initiating
+  Heed electron.
+- All original full microscopic tracks, gain/ion counts and 128-position
+  spatial reservoirs are untouched. Plots remain scientific visualizations
+  of **ion creation**, not positive-ion drift or cathode induction.
+
+### Update only the four modified source files in a worktree with other work
+
+Avoid a broad `git pull` if there are local edits. Run the following
+commands only if none of these four files has uncommitted local changes:
+
+```bash
+cd ~/na6p/src/NA6PRoot-mwpc
+git fetch origin feature/mwpc-stage-c
+for p in \
+  test/mwpc-stage-c/pi_p3_noFW_penning057_interactive_dashboard_v1.py \
+  test/mwpc-stage-c/pi_p3_noFW_penning057_anode_wrapping_v1.py \
+  test/mwpc-stage-c/pi_penning057_individual_views_30k_v1.py \
+  test/mwpc-stage-c/pi_penning057_channel_compare_v1.py
+do
+  test -z "$(git status --porcelain -- "$p")" || {
+    echo "LOCAL EDIT: inspect before replacing $p"; break;
+  }
+  git show "FETCH_HEAD:$p" > "$p.fetched" &&
+    mv "$p.fetched" "$p"
+done
+
+PY=test_runs/mwpc_stage_c/.venv_pi_slides/bin/python
+"$PY" -m py_compile \
+  test/mwpc-stage-c/pi_p3_noFW_penning057_interactive_dashboard_v1.py \
+  test/mwpc-stage-c/pi_p3_noFW_penning057_anode_wrapping_v1.py \
+  test/mwpc-stage-c/pi_penning057_individual_views_30k_v1.py \
+  test/mwpc-stage-c/pi_penning057_channel_compare_v1.py
+
+"$PY" test/mwpc-stage-c/pi_p3_noFW_penning057_interactive_dashboard_v1.py selftest
+"$PY" test/mwpc-stage-c/pi_p3_noFW_penning057_anode_wrapping_v1.py
+"$PY" test/mwpc-stage-c/pi_penning057_individual_views_30k_v1.py selftest
+"$PY" test/mwpc-stage-c/pi_penning057_channel_compare_v1.py
+```
+
+The local drift-LUT comparison needs the original full 450k-row
+microscopic drift CSV and `frozen_config.json`. It cannot run with
+only the compact 30k Plot Studio ZIP. To open both detailed-event
+pages, the existing read-only SSHFS mount of the native Garfield
+chunks is still required.
