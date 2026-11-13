@@ -437,6 +437,11 @@ def drift_angle_comparison(st,kind,controls,birth_probs,birth_counts):
     except (OSError,ValueError,KeyError) as ex:
         st.error("Drift comparison blocked: "+str(ex))
         return None
+    if controls["ion_weighted"]:
+        st.warning("Ion births are currently weighted by avalanche ion count, "
+                   "but each drift-LUT arrival represents one electron. "
+                   "For a closer per-primary comparison, uncheck "
+                   "'Weight by number of ion births'.")
     axis="u0" if kind=="wrap_u0_angle" else "v0"
     x=u if axis=="u0" else v
     other=v if axis=="u0" else u
@@ -755,6 +760,16 @@ def selftest():
     obs={"points":np.array([[.02,.03,.001,21.],[.04,-.02,.003,22.]]),
          "t_heed":19.}
     cylinder=three_d_view(obs,.1)
+    birthclock=three_d_view(obs,.1,colour_mode="first")
+    assert np.allclose(birthclock.data[1].marker.color,[0.,1.])
+    assert np.allclose(cylinder.data[1].marker.color,[2.,3.])
+    ce,cp,cn,ct=conditional_birth_angular_map(
+        synthetic,"wrap_u0_angle",options)
+    assert ct==2000 and int(cn.sum())==2000 and cp.shape==(24,72)
+    assert np.allclose(cp.sum(axis=1)[np.isfinite(cp).all(axis=1)],1.)
+    ce2,cp2,cn2,ct2=conditional_birth_angular_map(
+        synthetic,"wrap_v0_angle",options)
+    assert ct2==2000 and cp2.shape==(24,72)
     assert len(cylinder.data)==2 and cylinder.data[0].type=="surface"
     assert np.allclose(
         np.sqrt(cylinder.data[0].x**2+cylinder.data[0].y**2),
