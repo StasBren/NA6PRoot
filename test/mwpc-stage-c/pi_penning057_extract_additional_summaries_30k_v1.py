@@ -545,6 +545,7 @@ def combine(out):
             "Final summary already exists. Refusing to overwrite outputs.")
     overall={k:0 for k in OUTPUT_TABLES}
     births=sampled=recovered=garfield_false=0
+    legacy_status_manifests=0
     for k,name in enumerate(OUTPUT_TABLES):
         destination=folder/(name+".gz")
         temp=destination.with_name(destination.name+f".{os.getpid()}.partial")
@@ -570,7 +571,39 @@ def combine(out):
                             births+=m["n_ion_births_exact"]
                             sampled+=m["n_sampled_ion_birth_points"]
                             recovered+=int(m["recovered"])
-                            garfield_false+=m["n_garfield_avalancheelectron_false"]
+                            if "n_garfield_avalancheelectron_false" in m:
+                                garfield_false+=int(
+                                    m["n_garfield_avalancheelectron_false"])
+                            else:
+                                # Early 30k checkpoints predate the status
+                                # counter, but still contain the original
+                                # per-avalanche success column. Recover it
+                                # exactly from the LOCAL checkpoint; do not
+                                # re-read SSHFS and do not treat missing
+                                # metadata as zero unsuccessful avalanches.
+                                legacy_status_manifests+=1
+                                with zf.open("avalanche_wall_times.csv") as raw:
+                                    with io.TextIOWrapper(
+                                            raw,encoding="utf-8",
+                                            newline="") as decoded:
+                                        rows=csv.DictReader(decoded)
+                                        require(rows.fieldnames is not None
+                                                and "success" in rows.fieldnames,
+                                                "Old checkpoint lacks saved "
+                                                f"Garfield success flags: {file}")
+                                        n_rows=n_false=0
+                                        for row in rows:
+                                            flag=int(row["success"])
+                                            require(flag in (0,1),
+                                                    "Non-binary Garfield "
+                                                    f"success in {file}")
+                                            n_false+=int(flag==0)
+                                            n_rows+=1
+                                require(n_rows==m["counts"][
+                                            "avalanche_wall_times.csv"],
+                                        "Checkpoint manifest count differs "
+                                        f"from timing rows: {file}")
+                                garfield_false+=n_false
             require(not destination.exists(),"Refusing overwrite while combining")
             os.replace(temp,destination)
         finally:
@@ -578,6 +611,9 @@ def combine(out):
                 temp.unlink()
         print(f"COMBINED {name} · {destination.stat().st_size/1024/1024:.1f} MiB",
               flush=True)
+    print(f"Recovered original Garfield success flags from "
+          f"{legacy_status_manifests:,} earlier local checkpoints.",
+          flush=True)
     require(overall["crossings_3d.csv"]==30000
             and overall["muon_wall_times.csv"]==30000
             and overall["avalanche_longitudinal.csv"]==
