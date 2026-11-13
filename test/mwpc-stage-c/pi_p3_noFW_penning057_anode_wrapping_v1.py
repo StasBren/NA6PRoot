@@ -292,7 +292,7 @@ def one_seed(index,seed,meta):
         "points":pts,
     }
 
-def three_d_view(observation,halfwidth):
+def three_d_view(observation,halfwidth,colour_mode="heed"):
     import plotly.graph_objects as go
     pts=observation["points"]
     zmin,zmax=float(pts[:,2].min()),float(pts[:,2].max())
@@ -302,7 +302,13 @@ def three_d_view(observation,halfwidth):
     cylinder_u=np.tile(WIRE_RADIUS_MM*np.cos(phi),(2,1))
     cylinder_v=np.tile(WIRE_RADIUS_MM*np.sin(phi),(2,1))
     cylinder_w=np.tile(np.linspace(z0,z1,2)[:,None],(1,len(phi)))
-    dt=pts[:,3]-observation["t_heed"]
+    if colour_mode not in {"heed","first"}:
+        raise ValueError("Unknown 3D time-colour mode")
+    t0=(float(np.min(pts[:,3])) if colour_mode=="first"
+        else observation["t_heed"])
+    dt=pts[:,3]-t0
+    label=("Time from first ion [ns]" if colour_mode=="first"
+           else "Birth delay [ns]")
     fig=go.Figure()
     fig.add_trace(go.Surface(
         x=cylinder_u,y=cylinder_v,z=cylinder_w,
@@ -314,13 +320,13 @@ def three_d_view(observation,halfwidth):
         x=pts[:,0],y=pts[:,1],z=pts[:,2],
         mode="markers",marker=dict(size=4,color=dt,
                                 colorscale="YlOrRd",showscale=True,
-                                colorbar=dict(title="Birth delay [ns]")),
+                                colorbar=dict(title=label)),
         name="Saved Garfield ion births",
         hovertemplate="Δu=%{x:.4g} mm<br>v=%{y:.4g} mm"
                       "<br>w=%{z:.4g} mm<extra></extra>"))
     fig.update_layout(
         title="3D sampled ion-birth cloud around anode wire",
-        template="plotly_white",height=540,
+        template="plotly_white",height=690,
         scene=dict(xaxis=dict(title="Δu [mm]",range=[-halfwidth,halfwidth]),
                    yaxis=dict(title="v [mm]",range=[-halfwidth,halfwidth]),
                    zaxis=dict(title="w [mm]",range=[z0,z1]),
