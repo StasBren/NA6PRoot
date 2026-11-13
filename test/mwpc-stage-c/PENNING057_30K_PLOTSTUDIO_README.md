@@ -240,7 +240,7 @@ for p in \
   test/mwpc-stage-c/pi_penning057_channel_compare_v1.py
 do
   test -z "$(git status --porcelain -- "$p")" || {
-    echo "LOCAL EDIT: inspect before replacing $p"; break;
+    echo "LOCAL EDIT: inspect before replacing $p"; exit 1;
   }
   git show "FETCH_HEAD:$p" > "$p.fetched" &&
     mv "$p.fetched" "$p"
