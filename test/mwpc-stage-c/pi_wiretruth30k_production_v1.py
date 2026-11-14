@@ -304,7 +304,7 @@ def _asym(row,a,b,key):
                 "Native signed ion-birth asymmetry definition changed")
 
 
-def _verify_wire_row(r,source,expected_primary,collection,ions):
+def _verify_wire_row(r,source):
     cid=r["crossing_id"]
     require(cid in source,"Wire row not in selected Geant4 crossings")
     h=source[cid]
@@ -435,7 +435,7 @@ def verify(work,root,old,channel,index,pbs_id="unknown"):
                 "Per-wire seed/cluster identity mismatch")
         wk=key+(int(r["wire_index_global"]),)
         require(wk not in seedwire,"Duplicate microscopic collecting/ion-region wire")
-        q,n=_verify_wire_row(r,source,key,0,0)
+        q,n=_verify_wire_row(r,source)
         seedwire[wk]=r;seedq[key]+=q;seedn[key]+=n
         for suffix in ("ion_up","ion_down","ion_top","ion_bottom"):
             seedsectors[key][suffix]+=int(r[suffix])
@@ -454,7 +454,7 @@ def verify(work,root,old,channel,index,pbs_id="unknown"):
                 "Muon-wire rows must be aggregated across seeds")
         wk=(cid,int(r["wire_index_global"]))
         require(wk not in muwire,"Duplicate physical wire for one muon")
-        q,n=_verify_wire_row(r,source,None,0,0)
+        q,n=_verify_wire_row(r,source)
         muwire[wk]=r;muq[cid]+=q;mun[cid]+=n
         # Verify the muon wire aggregates exactly equal the independent
         # original Heed seed totals on the SAME physical global anode.
@@ -463,6 +463,28 @@ def verify(work,root,old,channel,index,pbs_id="unknown"):
         require(q==sum(int(s["collected_e"]) for s in subtotal)
                 and n==sum(int(s["ion_births"]) for s in subtotal),
                 "Per-muon and per-seed wire census differ")
+        # Reconstruct full-population per-wire moments independently from
+        # each microscopic seed's exact moments (no ion sampling involved).
+        for nfield,meanfield,sigmafield in (
+            ("ion_births","mean_w_birth_global_mm","sigma_w_birth_mm"),
+            ("ion_births","mean_t_birth_ns","sigma_t_birth_ns"),
+            ("collected_e","mean_t_collected_ns","sigma_t_collected_ns")):
+            population=int(r[nfield])
+            if not population:
+                continue
+            mean=sum(int(s[nfield])*float(s[meanfield])
+                     for s in subtotal if int(s[nfield]))/population
+            moment2=sum(
+                int(s[nfield])*(float(s[sigmafield])**2+
+                                float(s[meanfield])**2)
+                for s in subtotal if int(s[nfield]))/population
+            sigma=math.sqrt(max(0.,moment2-mean*mean))
+            require(math.isclose(float(r[meanfield]),mean,
+                                 rel_tol=1e-7,abs_tol=1e-6) and
+                    math.isclose(float(r[sigmafield]),sigma,
+                                 rel_tol=1e-5,abs_tol=1e-5),
+                    "Original exact wire moments differ after per-muon "
+                    "weighted seed aggregation: "+meanfield)
     for cid,r in bymu.items():
         require(muq[cid]==int(r["collected_avalanche_electrons"])==
                 sum(int(s["collected_e"]) for (c,j),s in seeds.items() if c==cid)
