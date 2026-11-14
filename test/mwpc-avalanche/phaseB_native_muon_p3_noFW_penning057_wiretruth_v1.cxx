@@ -418,18 +418,27 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
     int ne=0,ni=0;
     avalanche.GetAvalancheSize(ne,ni);
     Counts eCounts;
+    std::array<std::uint64_t,9> seedCollected{};
+    std::array<double,9> seedEndT{},seedEndT2{};
     std::uint64_t collected=0,attached=0,other=0;
     const auto nEnd=avalanche.GetNumberOfElectronEndpoints();
     for(std::size_t j=0;j<nEnd;++j){
       double x0,y0,z0,t0,E0,x1,y1,z1,t1,E1;int status=0;
       avalanche.GetElectronEndpoint(j,x0,y0,z0,t0,E0,
                                    x1,y1,z1,t1,E1,status);
-      const double du=x1-std::round(x1/p)*p;
+      const int kEnd=static_cast<int>(std::llround(x1/p));
+      const double du=x1-double(kEnd)*p;
       if(std::hypot(du,y1)<wireRadius*1.5) {
+        if(kEnd<-4 || kEnd>4)
+          throw std::runtime_error("Anode endpoint outside 9-wire patch");
         ++collected;eCounts.Add(du,y1);
+        const auto k=static_cast<std::size_t>(kEnd+4);
+        ++seedCollected[k];seedEndT[k]+=t1;seedEndT2[k]+=t1*t1;
       } else if(status==-7)++attached;
       else ++other;
     }
+    if(births.birthsOutsidePatch)
+      throw std::runtime_error("Ion birth outside 9-wire analytic patch");
     const bool capped=ne>=int(cap)||nEnd>=cap;
     const bool zero=collected==0;
     if(ni>0 && births.total==0)
@@ -453,6 +462,22 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
     tot.births+=births.total;
     tot.ionized+=std::max(ni,0);
     tot.eCollected+=collected;tot.attached+=attached;tot.other+=other;
+    if(wireSeedOut || wireMuonOut) {
+      std::uint64_t eCheck=0,bCheck=0;
+      for(int local=-4;local<=4;++local) {
+        const auto k=static_cast<std::size_t>(local+4);
+        muCollected[k]+=seedCollected[k];
+        muEndT[k]+=seedEndT[k];muEndT2[k]+=seedEndT2[k];
+        muIon[k].Merge(births.byWire[k]);
+        eCheck+=seedCollected[k];bCheck+=births.byWire[k].births;
+        if(wireSeedOut && (seedCollected[k] || births.byWire[k].births))
+          writeWireRow(*wireSeedOut,static_cast<int>(i),e.clusterIndex,
+                       local,seedCollected[k],seedEndT[k],seedEndT2[k],
+                       births.byWire[k]);
+      }
+      if(eCheck!=collected || bCheck!=births.total)
+        throw std::runtime_error("Per-seed wire charge/ion census mismatch");
+    }
     tot.zero+=zero;tot.capped+=capped;tot.failed+=!ok;
     seedOut<<crossingLabel<<","<<geom.label<<","<<i<<","<<rngSeed<<","
            <<(10.*u)<<","<<(10.*e.v)<<","<<(10.*e.w)<<","
@@ -471,6 +496,18 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
       birthOut<<crossingLabel<<","<<geom.label<<","<<i<<","
               <<(10.*v[0])<<","<<(10.*v[1])<<","<<(10.*v[2])<<","
               <<v[3]<<","<<births.total<<","<<reservoirWeight<<"\n";
+  }
+  if(wireMuonOut) {
+    std::uint64_t eCheck=0,bCheck=0;
+    for(int local=-4;local<=4;++local) {
+      const auto k=static_cast<std::size_t>(local+4);
+      eCheck+=muCollected[k];bCheck+=muIon[k].births;
+      if(muCollected[k] || muIon[k].births)
+        writeWireRow(*wireMuonOut,-1,-1,local,muCollected[k],
+                     muEndT[k],muEndT2[k],muIon[k]);
+    }
+    if(eCheck!=tot.eCollected || bCheck!=tot.births)
+      throw std::runtime_error("Per-muon wire charge/ion census mismatch");
   }
   hitOut<<crossingLabel<<","<<geom.label<<","<<h.station<<","<<h.det<<","
         <<h.thetaU<<","<<h.thetaW<<","<<h.length<<","<<h.momentum<<","
