@@ -584,8 +584,8 @@ def verify_command(opts):
           f"{x['counts']['heed_primaries']} microscopic avalanches",flush=True)
 
 
-def audit_one(root,channel,index,hash_files=True):
-    dest=_path(root,channel,index)
+def audit_work(root,channel,index,dest,hash_files=True):
+    dest=Path(dest)
     receipt=dest/"verified_report.json"
     require(receipt.is_file(),f"Missing completed receipt: {receipt}")
     x=_load(receipt)
@@ -606,6 +606,11 @@ def audit_one(root,channel,index,hash_files=True):
                     and digest(file)==item["sha256"],
                     "Native full Garfield result checksum changed: "+str(file))
     return x
+
+
+def audit_one(root,channel,index,hash_files=True):
+    return audit_work(root,channel,index,
+                      _path(root,channel,index),hash_files)
 
 
 def status(root):
@@ -764,8 +769,8 @@ def export(root):
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("command",choices=("prepare","lock-binary","runtime-check",
-                                       "verify","audit-one","status","gate",
-                                       "report","export"))
+                                       "verify","audit-one","audit-work",
+                                       "status","gate","report","export"))
     p.add_argument("--root",type=Path,default=ROOT_DEFAULT)
     p.add_argument("--old-root",type=Path,default=OLD_DEFAULT)
     p.add_argument("--channel",choices=CHANNELS)
@@ -783,11 +788,16 @@ def main():
         require(x.work is not None and x.index is not None and x.channel,
                 "verify requires --work --index --channel")
         verify_command(x)
-    elif x.command=="audit-one":
+    elif x.command in ("audit-one","audit-work"):
         require(x.index is not None and x.channel,
-                "audit-one requires --index and --channel")
-        r=audit_one(x.root,x.channel,x.index,True)
-        print("PASS sealed chunk audit",r["channel"],r["chunk"])
+                "audit requires --index and --channel")
+        if x.command=="audit-work":
+            require(x.work is not None,"audit-work needs --work")
+            r=audit_work(x.root,x.channel,x.index,x.work,True)
+        else:
+            r=audit_one(x.root,x.channel,x.index,True)
+        print("PASS sealed chunk SHA/physics identity audit",
+              r["channel"],r["chunk"])
     elif x.command=="status":status(x.root)
     elif x.command=="gate":
         require(x.stage,"gate requires --stage 20/1000/full")
