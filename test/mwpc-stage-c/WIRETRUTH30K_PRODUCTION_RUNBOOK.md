@@ -54,13 +54,34 @@ bash -n "$SUBMIT"
 Selftest covers station-0 +1.5 mm anode phase, station-1..5 zero phase,
 negative global wire IDs, microscopic charge/ion census, and GNU time parser.
 
+## Recovery after stalled 2-hour and 4-hour input-staging attempts
+
+Before applying this version on the HPC worktree, confirm the old build job
+is no longer running, e.g. `qstat -t -u stanis`. If its state is still
+`R`, cancel the obsolete build attempt deliberately with
+`/opt/pbs/bin/qdel 5539124.pbs`, then verify it ended. Do NOT merge
+production changes into a worktree while its PBS build job is running.
+
+The 18 earlier partially copied files in the new campaign's `inputs/jpsi/`
+are not used by this direct-reference version. Keep them for forensic
+provenance or quarantine separately after review; never remove or modify
+any file in the original `mwpc_penning057/original2m_*` source archive.
+The old successful Garfield binary remains and will be SHA-locked by
+the new build. This is an orchestration/I/O change only, not a physics change.
+
 ## 2. Existing C++ target BUILD on a PBS compute node
 
 This uses exactly the same CVMFS Garfield environment and 1-core PBS
 settings as the earlier original2m campaign. No new physics C++ code.
-The build job stages all 1,500 original 20-muon input chunks, checks old
-manifest SHA-256, locks source commit, binary and Garfield dynamic libraries,
-ROOT and compiler versions. Original 30k results are read-only.
+The build job registers the **exact SHA-256 values of all 1,500 original
+20-muon input chunks from the three existing frozen old campaign manifests**;
+it does not bulk-copy the individual Geant4 CSVs. Every physics PBS worker
+reads its exact original CSV through the read-only old archive path, verifies
+its SHA-256 against the selection lock, and copies only that one 20-muon CSV
+into the worker's private `TMPDIR`. The build also locks the source commit,
+native binary, Garfield libraries, ROOT and compiler versions. Original
+30k results remain read-only. This avoids a measured multi-minute I/O delay
+per small staged input that exhausted the previous 2-hour PBS limit.
 
 ```bash
 bash "$SUBMIT" build
@@ -74,7 +95,13 @@ then wait for the build job to finish successfully. Only then:
 export GARFIELD_INSTALL=/cvmfs/sft-nightlies.cern.ch/lcg/nightlies/dev3/Mon/Garfield++/HEAD/x86_64-el9-gcc13-opt
 source "$GARFIELD_INSTALL/Garfield++-env.sh"
 python3 "$SCRIPT" runtime-check --root "$ROOT"
-find "$ROOT/inputs" -name 'chunk_*.csv' | wc -l
+python3 - "$ROOT" <<'PY'
+import json, sys
+from pathlib import Path
+m=json.loads((Path(sys.argv[1])/"locked/selection.json").read_text())
+print("Registered source chunks:",len(m["input_sha256"]))
+print("Read-only input strategy:",m["input_strategy"])
+PY
 cat "$ROOT/locked/binary.json"
 ```
 
