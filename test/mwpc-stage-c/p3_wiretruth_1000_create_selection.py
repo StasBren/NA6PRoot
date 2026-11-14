@@ -7,6 +7,12 @@ from collections import Counter
 from pathlib import Path
 
 NATIVE_HEADER=['source','chunk','event','hit_index','track_id','station','det_id','pdg','u_in_mm','v_in_mm','w_in_mm','u_out_mm','v_out_mm','w_out_mm','theta_u_in_deg','theta_w_in_deg','path_length_mm','edep_eV','pu_in_GeV','pv_in_GeV','pw_in_GeV','momentum_GeV','heed_seed']
+def file_sha256(path):
+ h=hashlib.sha256()
+ with open(path,'rb') as f:
+  for chunk in iter(lambda:f.read(4*1024*1024),b''):
+   h.update(chunk)
+ return h.hexdigest()
 COUNTS={'Jpsi':334,'Phi':333,'Omega':333}
 SALT='NA60-P3-FWTRUTH-20261114-v1;strict-1000-from-30k'
 
@@ -40,8 +46,8 @@ def main():
    assert r['crossing_id'] not in seen;seen.add(r['crossing_id'])
    d={k:r[k] for k in NATIVE_HEADER[:-1]};d['heed_seed']=str(seed);writer.writerow(d)
  meta={'protocol':'p3_noFW_penning057_wiretruth_1000_v1','salt':SALT,'source_archive_name':source.name,
-       'source_archive_sha256':hashlib.file_digest(source.open('rb'),'sha256').hexdigest(),
-       'selected_csv_sha256':hashlib.file_digest(out.open('rb'),'sha256').hexdigest(),
+       'source_archive_sha256':file_sha256(source),
+       'selected_csv_sha256':file_sha256(out),
        'count':len(ordered),'by_channel':dict(Counter(x[0] for x in ordered)),
        'source_input':'30k original Geant4 crossing metadata; new TrackHeed samples and Garfield avalanche runs; do not claim exact 30k Heed primary replay',
        'sampling':'SHA256 pseudo-random, equal channel allocation, no angle-based enrichment; 20 muons per chunk',
