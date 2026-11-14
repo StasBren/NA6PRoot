@@ -813,8 +813,11 @@ int main(int argc,char**argv) {
       RunLutSidecar(argv[2],argv[3],5);
       return 0;
     }
+    const bool wireTruthMode=(argc==4 &&
+                                std::string(argv[1])=="--wiretruth-p3-noFW");
     const bool cacheMuonPhysics=(argc==4 &&
-                               std::string(argv[1])=="--muon-cache-physics-p3-noFW");
+       (std::string(argv[1])=="--muon-cache-physics-p3-noFW" ||
+        wireTruthMode));
     if(argc!=4)throw std::runtime_error(
       "Usage: mwpc_phase_b_native_muon_3p3 INPUT_NATIVE_CSV OUTPUT_PREFIX MAX_PRIMARY_ELECTRONS | --muon-cache-physics-p3-noFW REAL_MUON_INPUT_CSV PREFIX | --validate-input INPUT_NATIVE_CSV | --validate-heed INPUT_NATIVE_CSV | --lut-sidecar FROZEN_EXACT_START_INDEX_CSV OUTPUT_PREFIX");
     const std::string input=argv[cacheMuonPhysics?2:1],
@@ -835,6 +838,21 @@ int main(int argc,char**argv) {
     std::ofstream seedOut(prefix+"_seed.csv");
     std::ofstream birthOut(prefix+"_ion_birth_sample.csv");
     std::ofstream primaryOut,clusterOut,timingOut,muonTimingOut;
+    std::ofstream wireSeedOut,wireMuonOut;
+    if(wireTruthMode) {
+      wireSeedOut.open(prefix+"_wire_seed.csv");
+      wireMuonOut.open(prefix+"_wire_muon.csv");
+      if(!wireSeedOut || !wireMuonOut)
+        throw std::runtime_error("Cannot create wire truth output CSVs");
+      const std::string hdr=
+        "crossing_id,station,theta_u_deg,theta_w_deg,primary_index,"
+        "cluster_index,wire_index_global,wire_u_global_mm,collected_e,"
+        "ion_births,ion_up,ion_down,ion_boundary,ion_top,ion_bottom,"
+        "ion_side,A_ion_hemi,A_ion_TB,mean_w_birth_global_mm,"
+        "sigma_w_birth_mm,mean_t_birth_ns,sigma_t_birth_ns,"
+        "mean_t_collected_ns,sigma_t_collected_ns\n";
+      wireSeedOut<<hdr;wireMuonOut<<hdr;
+    }
     if(cacheMuonPhysics){
       timingOut.open(prefix+"_timing.csv");
       muonTimingOut.open(prefix+"_muon_timing.csv");
@@ -923,7 +941,9 @@ int main(int argc,char**argv) {
       RunGeometry(gas,GEOMS.front(),h,electrons,id,seedOut,birthOut,
                   hitOut,nCl,discarded,failed,nullptr,
                   cacheMuonPhysics?&timingOut:nullptr,false,
-                  cacheMuonPhysics?128:100);
+                  cacheMuonPhysics?128:100,
+                  wireTruthMode?&wireSeedOut:nullptr,
+                  wireTruthMode?&wireMuonOut:nullptr);
       if(cacheMuonPhysics){
         const double avalWall=std::chrono::duration<double>(
             std::chrono::steady_clock::now()-avalancheStart).count();
@@ -936,6 +956,11 @@ int main(int argc,char**argv) {
       }
       std::cout<<"PASS genuine native muon "<<id
                <<" p3_noFW Heed primaries="<<electrons.size()<<"\n";
+    }
+    if(wireTruthMode) {
+      wireSeedOut.flush();wireMuonOut.flush();
+      std::cout<<"PASS: physical anode endpoint counts and exact per-wire "
+                  "ion-birth moments saved\n";
     }
     std::cout<<"PASS: muon-driven B1 all crossing/geometry rows written\n";
     if(cacheMuonPhysics)
