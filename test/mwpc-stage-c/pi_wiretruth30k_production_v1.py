@@ -755,7 +755,8 @@ def report(root,old_root):
     sums={c:Counter() for c in CHANNELS}
     bins=[0,5,10,15,20,30,60,180]
     hist=defaultdict(lambda:{"events":0,"charge_events":0,
-                            "second_gt_5pct":0,"q2_sum":0.})
+                            "second_gt_5pct":0,"q2_sum":0.,
+                            "n0":0,"n1":0,"n2":0,"n3plus":0})
     run_list=[]
     for c in CHANNELS:
         for i in range(500):
@@ -778,6 +779,11 @@ def report(root,old_root):
                     v["charge_events"]+=int(ev["Qtotal"]>0)
                     v["second_gt_5pct"]+=int(ev["Q2_over_Qtotal"]>0.05)
                     v["q2_sum"]+=ev["Q2_over_Qtotal"]
+                    active=int(ev["n_active_wires"])
+                    v["n0"]+=int(active==0)
+                    v["n1"]+=int(active==1)
+                    v["n2"]+=int(active==2)
+                    v["n3plus"]+=int(active>=3)
     require(sum(s["muons"] for s in sums.values())==30000,
             "Cannot report incomplete campaign")
     old_sums={ch:Counter() for ch in CHANNELS}
@@ -819,10 +825,14 @@ def report(root,old_root):
     with (folder/"wire_sharing_by_angle.csv").open("x",newline="") as f:
         w=csv.writer(f);w.writerow([
             "channel","abs_theta_u_bin_deg","muons","muons_with_charge",
-            "n_Q2_fraction_gt_0p05","mean_Q2_fraction_inclusive",
-            "muon_fraction_Q2_gt_0p05"])
+            "n0_active_wires","n1_active_wire","n2_active_wires",
+            "n3plus_active_wires","n_Q2_fraction_gt_0p05",
+            "mean_Q2_fraction_inclusive","muon_fraction_Q2_gt_0p05"])
         for (channel,angle),v in sorted(hist.items()):
+            require(v["n0"]+v["n1"]+v["n2"]+v["n3plus"]==
+                    v["events"],"Active-wire angle-bin census mismatch")
             w.writerow([channel,angle,v["events"],v["charge_events"],
+                       v["n0"],v["n1"],v["n2"],v["n3plus"],
                        v["second_gt_5pct"],v["q2_sum"]/v["events"],
                        v["second_gt_5pct"]/v["events"]])
     _json(folder/"run_manifest.json",{
