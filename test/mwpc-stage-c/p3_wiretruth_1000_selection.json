@@ -1,0 +1,41 @@
+{
+  "by_channel": {
+    "Jpsi": 334,
+    "Omega": 333,
+    "Phi": 333
+  },
+  "count": 1000,
+  "native_header": [
+    "source",
+    "chunk",
+    "event",
+    "hit_index",
+    "track_id",
+    "station",
+    "det_id",
+    "pdg",
+    "u_in_mm",
+    "v_in_mm",
+    "w_in_mm",
+    "u_out_mm",
+    "v_out_mm",
+    "w_out_mm",
+    "theta_u_in_deg",
+    "theta_w_in_deg",
+    "path_length_mm",
+    "edep_eV",
+    "pu_in_GeV",
+    "pv_in_GeV",
+    "pw_in_GeV",
+    "momentum_GeV",
+    "heed_seed"
+  ],
+  "protocol": "p3_noFW_penning057_wiretruth_1000_v1",
+  "salt": "NA60-P3-FWTRUTH-20261114-v1;strict-1000-from-30k",
+  "sampling": "SHA256 pseudo-random, equal channel allocation, no angle-based enrichment; 20 muons per chunk",
+  "seed_derivation": "SHA256 crossing_id+salt; independent new Heed streams",
+  "selected_csv_sha256": "e1de4ce0e58645cc833a9979bf6a2a21419adfd4d74a1fa11f78fe887ffb010c",
+  "source_archive_name": "NA60_30k_farm_five_raw_exports.zip",
+  "source_archive_sha256": "b2a269164f32ea4960653dfb63b532ae036fd762ac8cb92ba4cc4255234fa84d",
+  "source_input": "30k original Geant4 crossing metadata; new TrackHeed samples and Garfield avalanche runs; do not claim exact 30k Heed primary replay"
+}
