@@ -223,8 +223,8 @@ def prepare(root,old):
                 tmp=dst.with_name(dst.name+f".{os.getpid()}.part")
                 with tmp.open("xb") as f:
                     f.write(original_bytes)
-                    f.flush()
-                    os.fsync(f.fileno())
+                # Input bytes are SHA-verified on every restart; avoid
+                # thousands of expensive synchronous Lustre metadata ops.
                 os.rename(tmp,dst)
             manifest["input_sha256"][f"{channel}:{token}"]=sha
             if (index+1)%25==0:
