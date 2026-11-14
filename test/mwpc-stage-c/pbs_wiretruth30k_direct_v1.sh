@@ -117,7 +117,7 @@ cp "$INPUT" "$WORK/native_muons.csv"
 START=$(date +%s)
 echo "START Garfield++ full microscopic per-wire"
 if [[ ! -x /usr/bin/time ]]; then
-  echo "GNU /usr/bin/time required for hard 4GB/8h resource pilot gate" >&2
+  echo "GNU /usr/bin/time required for 4GB/8h per-chunk resource audit" >&2
   exit 6
 fi
 /usr/bin/time -v -o "$ATTEMPT/resource_time.txt" \
