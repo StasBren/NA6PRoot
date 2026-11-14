@@ -19,7 +19,11 @@ FILES=['crossing','seed','ion_birth_sample','heed_primaries','heed_clusters',
        'timing','muon_timing','wire_seed','wire_muon']
 
 def sha(path):
-    with open(path,'rb') as f:return hashlib.file_digest(f,'sha256').hexdigest()
+    h=hashlib.sha256()
+    with open(path,'rb') as f:
+        for chunk in iter(lambda:f.read(4*1024*1024),b''):
+            h.update(chunk)
+    return h.hexdigest()
 def readcsv(path):
     with open(path,newline='') as f:return list(csv.DictReader(f))
 def writejson(path,obj):
