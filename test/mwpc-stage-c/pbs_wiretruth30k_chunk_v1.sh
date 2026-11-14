@@ -35,7 +35,9 @@ ROOT=${WT_ROOT:-/storage/cgrp/stanis/mwpc_penning057_wiretruth30k_v1}
 OLD=/storage/cgrp/stanis/mwpc_penning057
 PROGRAM="$REPO/test/mwpc-stage-c/pi_wiretruth30k_production_v1.py"
 BIN="$REPO/test/mwpc-avalanche/build-wiretruth30k-cvmfs/mwpc_p3_noFW_penning057_wiretruth_v1"
-INPUT="$ROOT/inputs/${CHANNEL,,}/chunk_$FOUR.csv"
+# Point directly at the old, SHA-sealed Geant4 source selection.
+# Use read-only original inputs, never resimulate Geant4 and never bulk copy.
+INPUT="$OLD/original2m_${CHANNEL,,}_10000_v1/chunks/chunk_$FOUR.csv"
 FINAL="$ROOT/results/${CHANNEL,,}/chunk_$FOUR"
 JOB=${PBS_JOBID:-manual_$$}
 
