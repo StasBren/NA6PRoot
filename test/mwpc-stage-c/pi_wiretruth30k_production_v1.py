@@ -666,8 +666,9 @@ def gate(root,gate_name):
                     "Cannot read pilot peak memory from "+str(file))
             # Prefer measured PBS-native worker's resource file. elapsed may
             # also appear as h:mm:ss or m:ss; use external wall time if needed.
-            elapsed=re.search(r"Elapsed \(wall clock\) time .*?:\s*([^\n]+)",
-                              content)
+            elapsed=re.search(r"Elapsed \(wall clock\) time[^\n]*?:\s*"
+                              r"((?:\d+:){1,2}\d+(?:\.\d+)?)\s*$",
+                              content,re.MULTILINE)
             raw=elapsed.group(1).strip() if elapsed else ""
             seconds=0.
             if raw:
