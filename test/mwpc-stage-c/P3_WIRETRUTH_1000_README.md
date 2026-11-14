@@ -41,6 +41,8 @@ Results:
 
 `test_runs/mwpc_stage_c/p3_noFW_penning057_wiretruth_1000_v1/`
 
+The runner also creates `wiretruth_compact_1000_muons.zip` in its results folder: it includes the per-anode truth and actual Heed primaries for model replay, omitting the large ion-birth-reservoir CSV (which is retained locally). Upload this compact ZIP to ChatGPT for analysis.
+
 Reports after completion:
 
 - `reference_wire_summary.md`
