@@ -327,7 +327,9 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
                  const std::vector<std::size_t>* onlyIndices=nullptr,
                  std::ostream* timingOut=nullptr,
                  const bool exactLutCellStart=false,
-                 const std::size_t birthReservoirLimit=100) {
+                 const std::size_t birthReservoirLimit=100,
+                  std::ostream* wireSeedOut=nullptr,
+                  std::ostream* wireMuonOut=nullptr) {
   const double p=.1*geom.pitchMm;
   const double wireRadius=.0015; // 30 um diameter = 0.0015 cm radius
   // For the finite centered anode grid, translate the Geant4 physical
@@ -352,6 +354,39 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
   sensor.AddComponent(&field);
   sensor.SetArea(-(half+.5)*p,-.3,-5.,(half+.5)*p,.3,5.);
   Response tot;
+  std::array<std::uint64_t,9> muCollected{};
+  std::array<double,9> muEndT{},muEndT2{};
+  std::array<WireCensus,9> muIon{};
+  const double physicalPitchMm=geom.pitchMm;
+  const double stationPhaseMm=(NAnodes(h.station,physicalPitchMm)%2==0)
+                                 ?0.5*physicalPitchMm:0.;
+  const int baseWire=static_cast<int>(
+    std::llround((h.a[0]-stationPhaseMm)/physicalPitchMm));
+  const auto writeWireRow=[&](std::ostream& out,const int primary,
+     const int cluster,const int local,const std::uint64_t nCollected,
+     const double endT,const double endT2,const WireCensus& b) {
+    out<<std::setprecision(15)<<crossingLabel<<","<<h.station<<","
+       <<h.thetaU<<","<<h.thetaW<<","<<primary<<","<<cluster<<","
+       <<(baseWire+local)<<","
+       <<(stationPhaseMm+double(baseWire+local)*physicalPitchMm)<<","
+       <<nCollected<<","<<b.births<<","<<b.sectors.up<<","
+       <<b.sectors.down<<","<<b.sectors.boundary<<","
+       <<b.sectors.top<<","<<b.sectors.bottom<<","<<b.sectors.side<<","
+       <<Asym(b.sectors.up,b.sectors.down)<<","
+       <<Asym(b.sectors.top,b.sectors.bottom)<<",";
+    if(b.births) {
+      const double n=double(b.births),mw=b.sumW/n,mt=b.sumT/n;
+      out<<(h.a[2]+10.*mw)<<","
+         <<10.*std::sqrt(std::max(0.,b.sumW2/n-mw*mw))<<","
+         <<mt<<","<<std::sqrt(std::max(0.,b.sumT2/n-mt*mt));
+    } else out<<",,,";
+    out<<",";
+    if(nCollected) {
+      const double m=endT/double(nCollected);
+      out<<m<<","<<std::sqrt(std::max(0.,endT2/double(nCollected)-m*m));
+    } else out<<",";
+    out<<"\n";
+  };
   const std::size_t nToRun=onlyIndices?onlyIndices->size():primaries.size();
   for(std::size_t iPos=0;iPos<nToRun;++iPos) {
     const std::size_t i=onlyIndices?(*onlyIndices)[iPos]:iPos;
