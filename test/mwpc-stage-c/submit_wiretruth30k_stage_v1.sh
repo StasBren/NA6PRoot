@@ -36,11 +36,12 @@ submit_one(){
   if [[ "$stage" != build ]]; then
     vars="$vars,CHANNEL=$channel,WT_STAGE=$stage"
   fi
+  if [[ "$stage" == pilot20 ]]; then
+    vars="$vars,CHUNK_INDEX=0"
+  fi
   local args=(-N "$name" -v "$vars" -o "$ROOT/logs" -e "$ROOT/logs")
   if [[ -n "$range" ]]; then
     args+=(-J "$range")
-  elif [[ "$stage" == pilot20 ]]; then
-    args+=(-v "$vars,CHUNK_INDEX=0")
   fi
   local jobid
   jobid=$("$QSUB" "${args[@]}" "$script")
