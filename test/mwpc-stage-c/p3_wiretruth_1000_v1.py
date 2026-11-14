@@ -5,7 +5,7 @@ isolated clone of the 30k native engine. This script NEVER runs Garfield here;
 run it under WSL where Garfield++ is installed.
 """
 from __future__ import annotations
-import argparse,csv,hashlib,json,math,os,subprocess,sys,time
+import argparse,csv,hashlib,json,math,os,subprocess,sys,time,zipfile
 from collections import defaultdict,Counter
 from pathlib import Path
 
@@ -218,6 +218,36 @@ def analyse():
     (OUT/'reference_wire_summary.md').write_text('\n'.join(md)+'\n')
     print('WROTE',dest,OUT/'reference_wire_summary.md')
 
+def export_compact():
+    """Upload-friendly archive: wire truth + Heed primaries, but NOT the
+    potentially huge 128-point ion birth reservoir CSV; it stays on WSL.
+    """
+    n=status(quiet=True)['muons']
+    if n==0:raise RuntimeError('No completed full-Garfield chunks to export')
+    out=OUT/f'wiretruth_compact_{n}_muons.zip'
+    if out.exists():
+        print('Compact archive already present:',out);return
+    tmp=out.with_name(out.name+'.part')
+    selected=['wire_muon','wire_seed','heed_primaries','heed_clusters',
+              'crossing','seed','timing','muon_timing']
+    with zipfile.ZipFile(tmp,'w',compression=zipfile.ZIP_DEFLATED,compresslevel=6) as z:
+        z.write(SELECTION,'selection_1000.csv')
+        z.write(SEL_META,'selection_1000.json')
+        for f in ('locked_selection.json','reference_wire_sharing_by_angle.csv','reference_wire_summary.md'):
+            p=OUT/f
+            if p.exists():z.write(p,f)
+        for i in range(50):
+            d=chunk_output(i);receipt=d/'complete.json'
+            if not receipt.exists():continue
+            base=f'chunks/chunk_{i:04d}/'
+            z.write(chunk_input(i),base+'input.csv')
+            z.write(receipt,base+'complete.json')
+            for name in selected:
+                path=d/('microscopic_'+name+'.csv')
+                z.write(path,base+name+'.csv')
+    tmp.rename(out)
+    print('COMPACT WIRE TRUTH ARCHIVE:',out)
+
 def selftest():
     rows,_=selection();assert len(rows)==1000
     assert sum(1 for r in rows if abs(float(r['theta_u_in_deg']))>=10)>30
@@ -225,7 +255,7 @@ def selftest():
     print('SELFTEST PASS: 1000 frozen genuine crossings, all stations and elevated-angle events included')
 
 def main():
-    p=argparse.ArgumentParser();p.add_argument('command',choices=['selftest','prepare','run','status','audit','analyse']);p.add_argument('--max-chunks',type=int,default=50)
+    p=argparse.ArgumentParser();p.add_argument('command',choices=['selftest','prepare','run','status','audit','analyse','export']);p.add_argument('--max-chunks',type=int,default=50)
     a=p.parse_args()
     if a.command=='selftest':selftest()
     elif a.command=='prepare':prepare()
@@ -233,4 +263,5 @@ def main():
     elif a.command=='status':status()
     elif a.command=='audit':audit()
     elif a.command=='analyse':analyse()
+    elif a.command=='export':export_compact()
 if __name__=='__main__':main()
