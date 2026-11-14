@@ -30,7 +30,7 @@ BIN="$REPO/test/mwpc-avalanche/build-wiretruth30k-cvmfs/mwpc_p3_noFW_penning057_
 # Use read-only original inputs, never resimulate Geant4 and never bulk copy.
 INPUT="$OLD/original2m_${CHANNEL,,}_10000_v1/chunks/chunk_$FOUR.csv"
 FINAL="$ROOT/results/${CHANNEL,,}/chunk_$FOUR"
-JOB=${PBS_JOBID:-manual_$}
+JOB=${PBS_JOBID:-manual}
 
 CONTROL=${WT_CONTROL_REPO:?Set WT_CONTROL_REPO to separate direct-control worktree}
 CONTROL_SHA=${WT_CONTROL_SHA:?Set frozen control Git commit SHA}
