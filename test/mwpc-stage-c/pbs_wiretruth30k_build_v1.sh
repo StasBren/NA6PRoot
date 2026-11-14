@@ -29,7 +29,7 @@ cmake -S "$REPO/test/mwpc-avalanche" -B "$BUILD" -DCMAKE_BUILD_TYPE=Release
 cmake --build "$BUILD" --target "$TARGET" -j1
 python3 -m py_compile "$PROGRAM"
 python3 "$PROGRAM" selftest
-echo "BEGIN staging 1500 SHA-verified immutable Geant4 20-muon chunks"
+echo "BEGIN registering 1500 original Geant4 chunk SHA values from 3 immutable manifests (no individual copies)"
 python3 -u "$PROGRAM" prepare --root "$ROOT" \
   --old-root /storage/cgrp/stanis/mwpc_penning057
 python3 "$PROGRAM" lock-binary --root "$ROOT"
