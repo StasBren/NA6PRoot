@@ -756,8 +756,42 @@ def report(root,old_root):
                     v["q2_sum"]+=ev["Q2_over_Qtotal"]
     require(sum(s["muons"] for s in sums.values())==30000,
             "Cannot report incomplete campaign")
+    old_sums={ch:Counter() for ch in CHANNELS}
+    for ch in CHANNELS:
+        for index in range(500):
+            olddir,repaired=_original_dir(old_root,ch,index)
+            cross=olddir/"penning_crossing.csv"
+            seal=olddir/"outputs.sha256"
+            frozen={}
+            for line in seal.read_text().splitlines():
+                if len(line)>=67 and line[64:66]=="  ":
+                    frozen[line[66:]]=line[:64]
+            require(frozen.get("penning_crossing.csv")==digest(cross),
+                    "Original 30k crossing SHA mismatch: "+str(cross))
+            original=list(_read(cross,OUTPUT_COLUMNS["crossing"]))
+            require(len(original)==20,
+                    "Original 30k chunk no longer contains 20 real muons")
+            old_sums[ch]["muons"]+=len(original)
+            old_sums[ch]["heed_primaries"]+=sum(
+                int(x["heed_primaries"]) for x in original)
+            old_sums[ch]["ion_births"]+=sum(
+                int(x["ion_births"]) for x in original)
+            old_sums[ch]["collected_e"]+=sum(
+                int(x["collected_avalanche_electrons"]) for x in original)
     folder=root/"compact"
     folder.mkdir(parents=True,exist_ok=True)
+    with (folder/"previous_30k_sanity_comparison.csv").open(
+            "x",newline="") as f:
+        writer=csv.writer(f)
+        writer.writerow(("channel","metric","old_30k","new_wiretruth_30k",
+                         "difference","ratio_new_over_old"))
+        for ch in CHANNELS:
+            for field in ("muons","heed_primaries","collected_e","ion_births"):
+                oldn=old_sums[ch][field];newn=sums[ch][field]
+                writer.writerow((
+                    ch,field,oldn,newn,newn-oldn,
+                    newn/oldn if oldn else "",
+                ))
     with (folder/"wire_sharing_by_angle.csv").open("x",newline="") as f:
         w=csv.writer(f);w.writerow([
             "channel","abs_theta_u_bin_deg","muons","muons_with_charge",
@@ -771,6 +805,7 @@ def report(root,old_root):
         "schema":SCHEMA,"source_selection":_load(_metadata_campaign(root)),
         "compiled_binary":_load(root/"locked"/"binary.json"),
         "channels":{c:dict(s) for c,s in sums.items()},
+        "previous_30k_archived_counts":{c:dict(old_sums[c]) for c in CHANNELS},
         "completed_pbs_jobs_and_file_checksums":run_list,
         "n_jobs":len(run_list),"comparison_rule":
           "Jpsi calibration only; Phi/Omega holdout independent validation",
@@ -812,10 +847,30 @@ def export(root):
                         shutil.copyfileobj(src,f)
             os.rename(temp,dest)
             print("EXPORTED",dest,dest.stat().st_size,flush=True)
+    # Full authentic Geant4 entrance/exit geometry and native Heed seeds:
+    # include the frozen original selection inputs, not only C++ aggregate
+    # crossing outputs (which have less spatial information).
+    for ch in CHANNELS:
+        dst=folder/f"{ch.lower()}_geant4_crossings.csv.gz"
+        require(not dst.exists(),"Refusing to overwrite original G4 selection export")
+        with gzip.open(dst,"wt",newline="",compresslevel=5) as f:
+            first=True;header=None
+            for index in range(500):
+                src=_input(root,ch,index)
+                with src.open() as stream:
+                    h=stream.readline()
+                    if first:
+                        header=h;f.write(h);first=False
+                    else:
+                        require(h==header,
+                                "Original input column order changed")
+                    shutil.copyfileobj(stream,f)
+        print("EXPORTED frozen 3D Geant4 crossing rows",dst,flush=True)
     manifest=_load(folder/"run_manifest.json")
     table_hashes={p.name:digest(p) for p in folder.glob("*.csv.gz")}
     _json(folder/"export_sha256.json",table_hashes)
-    print("PASS 24 compact gzip physics tables, excluding full ion reservoirs")
+    print("PASS 27 compact gzip physics tables, including authentic Geant4 "
+          "inputs; excluding full ion reservoirs")
 
 
 def main():
