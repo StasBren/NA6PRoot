@@ -474,11 +474,13 @@ def verify(work,root,old,channel,index,pbs_id="unknown"):
                 continue
             mean=sum(int(s[nfield])*float(s[meanfield])
                      for s in subtotal if int(s[nfield]))/population
-            moment2=sum(
+            # Centre on the aggregate mean to avoid cancellation for
+            # a narrow ~micrometre cloud at large global w coordinate.
+            variance=sum(
                 int(s[nfield])*(float(s[sigmafield])**2+
-                                float(s[meanfield])**2)
+                                (float(s[meanfield])-mean)**2)
                 for s in subtotal if int(s[nfield]))/population
-            sigma=math.sqrt(max(0.,moment2-mean*mean))
+            sigma=math.sqrt(max(0.,variance))
             require(math.isclose(float(r[meanfield]),mean,
                                  rel_tol=1e-7,abs_tol=1e-6) and
                     math.isclose(float(r[sigmafield]),sigma,
