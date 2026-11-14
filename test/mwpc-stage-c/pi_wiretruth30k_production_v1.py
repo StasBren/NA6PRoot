@@ -924,6 +924,14 @@ def export(root):
 
 
 def selftest():
+    # Zero-copy frozen Geant4 input mapping: the existing source archive is
+    # never changed; the per-chunk worker SHA validates this exact path.
+    require(_input(ROOT_DEFAULT,"Jpsi",0)==
+            OLD_DEFAULT/"original2m_jpsi_10000_v1/chunks/chunk_0000.csv",
+            "Frozen original2m 30k input path mapping changed")
+    require(_input(ROOT_DEFAULT,"Omega",499)==
+            OLD_DEFAULT/"original2m_omega_10000_v1/chunks/chunk_0499.csv",
+            "Frozen original2m final channel/chunk path mapping changed")
     # Physical global anode map: station 0 has even N_anodes and a +1.5
     # mm phase; all other stations have odd N_anodes and zero phase.
     assert math.isclose(_wire_centre(0,0),1.5)
@@ -968,9 +976,9 @@ def selftest():
             parsed=parsed*60+number
         require(math.isclose(parsed,seconds,abs_tol=1e-6),
                 "GNU elapsed resource units self-test failed")
-    print("PASS physical station-0 half-pitch versus other-station anode "
-          "phase, global wire IDs, charge/ion census and elapsed resource "
-          "units, without starting Garfield++")
+    print("PASS immutable old-original2m direct input paths, physical "
+          "station-0 half-pitch and global anode IDs, charge/ion census "
+          "and GNU time parsing, without starting Garfield++")
 
 
 def main():
