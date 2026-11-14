@@ -3,7 +3,7 @@
 #PBS -q N
 #PBS -m n
 #PBS -l select=1:ncpus=1:mem=4gb
-#PBS -l walltime=02:00:00
+#PBS -l walltime=04:00:00
 #PBS -l io=0.1
 
 # Build existing dedicated Garfield CMake target on compute node,
@@ -28,7 +28,9 @@ echo "GCC_VERSION=$(g++ -dumpfullversion)"
 cmake -S "$REPO/test/mwpc-avalanche" -B "$BUILD" -DCMAKE_BUILD_TYPE=Release
 cmake --build "$BUILD" --target "$TARGET" -j1
 python3 -m py_compile "$PROGRAM"
-python3 "$PROGRAM" prepare --root "$ROOT" \
+python3 "$PROGRAM" selftest
+echo "BEGIN staging 1500 SHA-verified immutable Geant4 20-muon chunks"
+python3 -u "$PROGRAM" prepare --root "$ROOT" \
   --old-root /storage/cgrp/stanis/mwpc_penning057
 python3 "$PROGRAM" lock-binary --root "$ROOT"
 python3 "$PROGRAM" runtime-check --root "$ROOT"
