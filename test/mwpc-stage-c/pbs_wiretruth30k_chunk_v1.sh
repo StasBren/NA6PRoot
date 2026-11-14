@@ -100,12 +100,12 @@ if [[ "$STAGE" == "pilot20" ]]; then
   echo "PASS original first-20 Geant4 TrackHeed preflight"
 fi
 echo "START Garfield++ full microscopic per-wire"
-if command -v /usr/bin/time >/dev/null; then
-  /usr/bin/time -v -o "$ATTEMPT/resource_time.txt" \
-    "$BIN" --wiretruth-p3-noFW "$WORK/native_muons.csv" "$WORK/microscopic"
-else
-  "$BIN" --wiretruth-p3-noFW "$WORK/native_muons.csv" "$WORK/microscopic"
+if [[ ! -x /usr/bin/time ]]; then
+  echo "GNU /usr/bin/time required for hard 4GB/8h resource pilot gate" >&2
+  exit 6
 fi
+/usr/bin/time -v -o "$ATTEMPT/resource_time.txt" \
+  "$BIN" --wiretruth-p3-noFW "$WORK/native_muons.csv" "$WORK/microscopic"
 echo "GARFIELD_WALL_SECONDS=$(( $(date +%s) - START ))"
 
 # Inspect ALL independent original endpoints, ion birth censuses, wire map,
