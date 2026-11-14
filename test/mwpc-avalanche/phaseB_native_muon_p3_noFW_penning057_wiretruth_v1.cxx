@@ -71,7 +71,9 @@ struct HeedCluster {
 struct Counts {
   std::uint64_t up=0,down=0,boundary=0,top=0,bottom=0,side=0;
   void Add(double du,double v) {
-    const double phi=std::atan2(v,du)*180./PI;
+    AddPhi(std::atan2(v,du)*180./PI);
+  }
+  void AddPhi(const double phi) {
     if (phi>0 && phi<180.)++up;
     else if (phi<0 && phi>-180.)++down;
     else ++boundary;
@@ -90,8 +92,25 @@ std::string Asym(std::uint64_t a,std::uint64_t b) {
   s<<std::setprecision(12)<<(double(a)-double(b))/double(a+b);
   return s.str();
 }
+// Per-anode exact ion-birth census; each birth classified by nearest
+// physical wire in the original, fixed 9-anode analytic patch.
+struct WireCensus {
+  Counts sectors;
+  std::uint64_t births=0;
+  double sumW=0.,sumW2=0.,sumT=0.,sumT2=0.;
+  void Add(double phi,double w,double t) {
+    ++births;sectors.AddPhi(phi);
+    sumW+=w;sumW2+=w*w;sumT+=t;sumT2+=t*t;
+  }
+  void Merge(const WireCensus& b) {
+    sectors.Merge(b.sectors);births+=b.births;
+    sumW+=b.sumW;sumW2+=b.sumW2;sumT+=b.sumT;sumT2+=b.sumT2;
+  }
+};
 struct BirthAccumulator {
   Counts counts;
+  std::array<WireCensus,9> byWire{};
+  std::uint64_t birthsOutsidePatch=0;
   double pitch=0;
   std::size_t reservoirLimit=100;
   std::uint64_t total=0;
@@ -102,7 +121,12 @@ struct BirthAccumulator {
     :pitch(p),reservoirLimit(limit),
      sampleRng(std::uint64_t(seed)+0x9e3779b97f4a7c15ULL){}
   void Add(double u,double v,double w,double t) {
-    counts.Add(u-std::round(u/pitch)*pitch,v);
+    const int nearest=static_cast<int>(std::llround(u/pitch));
+    const double phi=std::atan2(v,u-double(nearest)*pitch)*180./PI;
+    counts.AddPhi(phi);
+    if(nearest>=-4 && nearest<=4)
+      byWire[static_cast<std::size_t>(nearest+4)].Add(phi,w,t);
+    else ++birthsOutsidePatch;
     ++total;
     const std::array<double,4> birth{{u,v,w,t}};
     const std::size_t limit=reservoirLimit;
