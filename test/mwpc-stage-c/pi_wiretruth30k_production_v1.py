@@ -92,7 +92,14 @@ def _path(root,channel,index):
 
 
 def _input(root,channel,index):
-    return Path(root)/"inputs"/channel.lower()/f"chunk_{index:04d}.csv"
+    # Use the exact immutable Geant4 chunks from the successful previous 30k
+    # production, rather than copying 1,500 files through a slow Lustre path.
+    # SHA-256 is frozen from the source manifest at prepare(), and the actual
+    # bytes are checked by _source_rows() before each new Garfield chunk.
+    require(channel in CHANNELS and 0 <= index < 500,
+            "Unknown original channel/chunk")
+    return (OLD_DEFAULT/f"original2m_{channel.lower()}_10000_v1"
+            /"chunks"/f"chunk_{index:04d}.csv")
 
 
 def _native(work,name):
@@ -177,11 +184,15 @@ def prepare(root,old):
         "source_campaigns":{}, "n_muons":30000,"chunks_per_channel":500,
         "input_sha256":{},
     }
+    # Register all 1,500 original crossing SHA-256 values directly from
+    # three existing frozen metadata manifests. No reading/copying 1,500
+    # individual files during preparation: under PBS io=0.1 this formerly
+    # took about six minutes *per small file* and timed out twice.
+    # Actual old input bytes are validated lazily by every PBS worker.
+    require(old.resolve()==OLD_DEFAULT.resolve(),
+            "Production frozen source root must remain "+str(OLD_DEFAULT))
     for channel in CHANNELS:
         oldc=old/f"original2m_{channel.lower()}_10000_v1"
-        # Load each large 500-chunk provenance manifest ONCE. The previous
-        # check_input() call re-read/deserialized it for every chunk, which
-        # was needlessly expensive on /storage under PBS io=0.1.
         m=metadata(oldc)
         require(m["schema"]==OLD_SCHEMA and m["channel"]==channel
                 and m["n_muons"]==10000 and m["n_chunks"]==500
@@ -192,51 +203,30 @@ def prepare(root,old):
             "source_selection_manifest_sha256":digest(oldc/"selection_manifest.json"),
             "source_frozen_input_sha256":m["frozen_source_sha256"],
             "previous_physics_binary_sha256":m["binary_sha256"],
+            "original_chunk_dir":str(oldc/"chunks"),
         }
         for index in range(500):
             token=f"{index:04d}"
-            src=oldc/"chunks"/f"chunk_{token}.csv"
-            dst=_input(root,channel,index)
-            # Each input chunk is small: a single read verifies SHA and
-            # preserves byte-identical Geant4 inputs, no repeat metadata I/O.
-            original_bytes=src.read_bytes()
-            sha=hashlib.sha256(original_bytes).hexdigest()
-            require(sha==m["chunks"][token]["sha256"],
-                    f"Original frozen Geant4 chunk checksum changed: {src}")
-            reader=csv.DictReader(io.StringIO(original_bytes.decode("utf-8")))
-            require(tuple(reader.fieldnames or ())==ORIGINAL_G4_HEADER,
-                    f"Original Geant4 C++ column order changed: {src}")
-            rows=list(reader)
-            require(len(rows)==20
-                    and [crossing_id(row) for row in rows]==
-                        m["chunks"][token]["crossing_ids"],
-                    f"20 genuine Geant4 crossing identities changed: {src}")
-            require(len({(row["source"],row["chunk"],row["event"])
-                         for row in rows})==20,
-                    "Duplicate original Geant4 parent in one chunk")
-            if dst.exists():
-                require(digest(dst)==sha,
-                        f"Existing staged original Geant4 crossing changed: {dst}")
-            else:
-                # Atomic local staging. A killed PBS attempt may leave a
-                # .part file, but cannot create a false completed chunk.
-                tmp=dst.with_name(dst.name+f".{os.getpid()}.part")
-                with tmp.open("xb") as f:
-                    f.write(original_bytes)
-                # Input bytes are SHA-verified on every restart; avoid
-                # thousands of expensive synchronous Lustre metadata ops.
-                os.rename(tmp,dst)
+            record=m["chunks"].get(token)
+            require(record is not None and
+                    len(record["crossing_ids"])==20 and
+                    len(record["parent_keys"])==20,
+                    f"Original frozen source manifest lost 20 muons: {channel}:{token}")
+            sha=record["sha256"]
+            require(len(sha)==64 and all(x in "0123456789abcdef" for x in sha),
+                    "Invalid original immutable input SHA")
             manifest["input_sha256"][f"{channel}:{token}"]=sha
-            if (index+1)%25==0:
-                print(f"STAGED {channel}: {index+1}/500 original "
-                      "SHA-verified 20-muon chunks",flush=True)
+        print(f"REGISTERED {channel}: 500 frozen original 20-muon "
+              "Geant4 chunk SHA values (no bulk input copying)",flush=True)
+    manifest["input_strategy"]="direct_read_original2m_source_chunk_lazy_sha256_verify"
+    manifest["copy_of_original_inputs"]=False
     lock=_metadata_campaign(root)
     if lock.exists():
         require(_load(lock)==manifest,
                 "Selection/source/git SHA lock mismatch. New campaign name needed.")
     else:
         _json(lock,manifest)
-    print("PASS prepared 1,500 old-identical Geant4 input chunks "
+    print("PASS registered 1,500 old-identical immutable Geant4 input chunks "
           "(10,000 Jpsi + 10,000 Phi + 10,000 Omega), locked to",
           manifest["git_commit"],flush=True)
 
