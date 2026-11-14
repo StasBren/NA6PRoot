@@ -7,7 +7,7 @@
 #PBS -l io=0.1
 
 # FULL native Garfield++ per-wire production, one immutable 20-muon chunk.
-set -Eeuo pipefail
+set -Eeo pipefail
 CHANNEL=${CHANNEL:?Set CHANNEL=Jpsi/Phi/Omega with qsub -v}
 case "$CHANNEL" in Jpsi|Phi|Omega) ;; *) echo "Invalid CHANNEL" >&2; exit 2;; esac
 IDX=${PBS_ARRAY_INDEX:-${CHUNK_INDEX:?PBS_ARRAY_INDEX or CHUNK_INDEX required}}
@@ -61,6 +61,9 @@ fi
 
 export GARFIELD_INSTALL=/cvmfs/sft-nightlies.cern.ch/lcg/nightlies/dev3/Mon/Garfield++/HEAD/x86_64-el9-gcc13-opt
 source "$GARFIELD_INSTALL/Garfield++-env.sh"
+# CVMFS initialization may reference an unset ZSH_NAME; activate nounset only
+# after sourcing the validated Garfield++ environment.
+set -u
 python3 "$PROGRAM" runtime-check --root "$ROOT"
 
 CLAIM="$ROOT/claims/${CHANNEL,,}/chunk_$FOUR"
