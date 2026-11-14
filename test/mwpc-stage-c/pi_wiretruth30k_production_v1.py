@@ -684,9 +684,9 @@ def gate(root,gate_name):
             require(file.is_file(),
                     "Missing /usr/bin/time -v resource measurement: "+str(file))
             content=file.read_text()
-            match=re.search(r"Maximum resident set size \(kbytes\):\s*(\d+)",
-                            content)
-            require(match is not None,
+        match=re.search(r"Elapsed \(wall clock\) time[^\n]*?:\s*"
+                        r"((?:\d+:){1,2}\d+(?:\.\d+)?)\s*$",
+                        text,re.MULTILINE)
                     "Cannot read pilot peak memory from "+str(file))
             # Prefer measured PBS-native worker's resource file. elapsed may
             # also appear as h:mm:ss or m:ss; use external wall time if needed.
