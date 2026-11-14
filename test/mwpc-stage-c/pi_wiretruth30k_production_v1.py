@@ -10,6 +10,7 @@ import argparse
 import csv
 import gzip
 import hashlib
+import io
 import json
 import math
 import os
@@ -22,7 +23,8 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from pi_penning057_original2m_cluster10k_v1 import (
-    SCHEMA as OLD_SCHEMA, check_input, crossing_id, digest, metadata, require,
+    SCHEMA as OLD_SCHEMA, HEADER as ORIGINAL_G4_HEADER,
+    crossing_id, digest, metadata, require,
 )
 
 CHANNELS=("Jpsi","Phi","Omega")
@@ -177,9 +179,13 @@ def prepare(root,old):
     }
     for channel in CHANNELS:
         oldc=old/f"original2m_{channel.lower()}_10000_v1"
+        # Load each large 500-chunk provenance manifest ONCE. The previous
+        # check_input() call re-read/deserialized it for every chunk, which
+        # was needlessly expensive on /storage under PBS io=0.1.
         m=metadata(oldc)
         require(m["schema"]==OLD_SCHEMA and m["channel"]==channel
-                and m["n_muons"]==10000 and m["n_chunks"]==500,
+                and m["n_muons"]==10000 and m["n_chunks"]==500
+                and len(m["chunks"])==500,
                 f"Old frozen 10k selection invalid: {channel}")
         manifest["source_campaigns"][channel]={
             "source_manifest_sha256":digest(oldc/"manifest.json"),
@@ -188,22 +194,42 @@ def prepare(root,old):
             "previous_physics_binary_sha256":m["binary_sha256"],
         }
         for index in range(500):
-            _,rows=check_input(oldc,index)
-            require(len(rows)==20,
-                    "Old original Geant4 input does not contain 20 tracks")
-            src=oldc/"chunks"/f"chunk_{index:04d}.csv"
+            token=f"{index:04d}"
+            src=oldc/"chunks"/f"chunk_{token}.csv"
             dst=_input(root,channel,index)
-            sha=digest(src)
+            # Each input chunk is small: a single read verifies SHA and
+            # preserves byte-identical Geant4 inputs, no repeat metadata I/O.
+            original_bytes=src.read_bytes()
+            sha=hashlib.sha256(original_bytes).hexdigest()
+            require(sha==m["chunks"][token]["sha256"],
+                    f"Original frozen Geant4 chunk checksum changed: {src}")
+            reader=csv.DictReader(io.StringIO(original_bytes.decode("utf-8")))
+            require(tuple(reader.fieldnames or ())==ORIGINAL_G4_HEADER,
+                    f"Original Geant4 C++ column order changed: {src}")
+            rows=list(reader)
+            require(len(rows)==20
+                    and [crossing_id(row) for row in rows]==
+                        m["chunks"][token]["crossing_ids"],
+                    f"20 genuine Geant4 crossing identities changed: {src}")
+            require(len({(row["source"],row["chunk"],row["event"])
+                         for row in rows})==20,
+                    "Duplicate original Geant4 parent in one chunk")
             if dst.exists():
                 require(digest(dst)==sha,
                         f"Existing staged original Geant4 crossing changed: {dst}")
             else:
-                # Original archive remains read-only. Atomic local copy.
+                # Atomic local staging. A killed PBS attempt may leave a
+                # .part file, but cannot create a false completed chunk.
                 tmp=dst.with_name(dst.name+f".{os.getpid()}.part")
-                shutil.copyfile(src,tmp)
-                require(digest(tmp)==sha,"Copied Geant4 crossing SHA differs")
+                with tmp.open("xb") as f:
+                    f.write(original_bytes)
+                    f.flush()
+                    os.fsync(f.fileno())
                 os.rename(tmp,dst)
-            manifest["input_sha256"][f"{channel}:{index:04d}"]=sha
+            manifest["input_sha256"][f"{channel}:{token}"]=sha
+            if (index+1)%25==0:
+                print(f"STAGED {channel}: {index+1}/500 original "
+                      "SHA-verified 20-muon chunks",flush=True)
     lock=_metadata_campaign(root)
     if lock.exists():
         require(_load(lock)==manifest,
