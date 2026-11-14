@@ -897,9 +897,59 @@ def export(root):
           "inputs; excluding full ion reservoirs")
 
 
+def selftest():
+    # Physical global anode map: station 0 has even N_anodes and a +1.5
+    # mm phase; all other stations have odd N_anodes and zero phase.
+    assert math.isclose(_wire_centre(0,0),1.5)
+    assert math.isclose(_wire_centre(0,1),0.)
+    assert math.isclose(_wire_centre(-1,0),-1.5)
+    assert _wire_base(1.0,0)==0
+    assert _wire_base(-1.6,0)==-1
+    assert _wire_base(1.0,1)==0
+    assert _round_cpp(-.5)==-1 and _round_cpp(.5)==1
+    crossing="synthetic|1|2|3|4|0|1"
+    src={crossing:{"station":"0","u_in_mm":"1.0"}}
+    row={
+        "crossing_id":crossing,"station":"0",
+        "wire_index_global":"0","wire_u_global_mm":"1.5",
+        "collected_e":"5","ion_births":"7",
+        "ion_up":"3","ion_down":"4","ion_boundary":"0",
+        "ion_top":"3","ion_bottom":"2","ion_side":"2",
+        "A_ion_hemi":str(-1/7),"A_ion_TB":str(1/5),
+        "mean_w_birth_global_mm":"2.","sigma_w_birth_mm":".5",
+        "mean_t_birth_ns":"1.5","sigma_t_birth_ns":".3",
+        "mean_t_collected_ns":"3.","sigma_t_collected_ns":".4",
+    }
+    assert _verify_wire_row(row,src)==(5,7)
+    bad={**row,"wire_index_global":"1"}
+    try:
+        _verify_wire_row(bad,src)
+    except RuntimeError:
+        pass
+    else:
+        raise RuntimeError("Global physical wire phase guard did not reject "
+                           "a mismapped anode")
+    for text,seconds in (
+        ("Elapsed (wall clock) time (h:mm:ss or m:ss): 0:10:00.32",600.32),
+        ("Elapsed (wall clock) time (h:mm:ss or m:ss): 12:34.5",754.5),
+    ):
+        match=re.search(r"Elapsed \\(wall clock\\) time[^\\n]*?:\\s*"
+                        r"((?:\\d+:){1,2}\\d+(?:\\.\\d+)?)\\s*$",
+                        text,re.MULTILINE)
+        require(match is not None,"GNU time -v elapsed parse self-test")
+        parsed=0.
+        for number in [float(n) for n in match.group(1).split(":")]:
+            parsed=parsed*60+number
+        require(math.isclose(parsed,seconds,abs_tol=1e-6),
+                "GNU elapsed resource units self-test failed")
+    print("PASS physical station-0 half-pitch versus other-station anode "
+          "phase, global wire IDs, charge/ion census and elapsed resource "
+          "units, without starting Garfield++")
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument("command",choices=("prepare","lock-binary","runtime-check",
+    p.add_argument("command",choices=("selftest","prepare","lock-binary","runtime-check",
                                        "verify","audit-one","audit-work",
                                        "status","gate","report","export"))
     p.add_argument("--root",type=Path,default=ROOT_DEFAULT)
@@ -909,10 +959,12 @@ def main():
     p.add_argument("--work",type=Path)
     p.add_argument("--stage",choices=("20","1000","full"))
     x=p.parse_args()
-    require(x.command in ("prepare","lock-binary","runtime-check","status",
-                           "report","export") or x.channel or x.stage,
+    require(x.command in ("selftest","prepare","lock-binary",
+                           "runtime-check","status","report","export")
+            or x.channel or x.stage,
             "Missing --channel or --stage")
-    if x.command=="prepare":prepare(x.root,x.old_root)
+    if x.command=="selftest":selftest()
+    elif x.command=="prepare":prepare(x.root,x.old_root)
     elif x.command=="lock-binary":lock_binary(x.root)
     elif x.command=="runtime-check":runtime_check(x.root)
     elif x.command=="verify":
