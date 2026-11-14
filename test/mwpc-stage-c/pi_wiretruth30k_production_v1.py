@@ -650,8 +650,59 @@ def gate(root,gate_name):
     for k in ("single_wire_muons","two_wire_muons",
               "three_or_more_wire_muons","no_charge_muons"):
         require(sums[k]>=0,"Negative active-wire census")
+    # HPC constraints are actual limits from the cluster's PBS script:
+    # 4 GB/job, 8 h/job. Measuring 1000 muons is a resource prerequisite,
+    # never infer full production memory/time solely from average physics.
+    resources=[]
+    for ch,indices in requested.items():
+        for i in indices:
+            file=_path(root,ch,i)/"resource_time.txt"
+            require(file.is_file(),
+                    "Missing /usr/bin/time -v resource measurement: "+str(file))
+            content=file.read_text()
+            match=re.search(r"Maximum resident set size \(kbytes\):\s*(\d+)",
+                            content)
+            require(match is not None,
+                    "Cannot read pilot peak memory from "+str(file))
+            # Prefer measured PBS-native worker's resource file. elapsed may
+            # also appear as h:mm:ss or m:ss; use external wall time if needed.
+            elapsed=re.search(r"Elapsed \(wall clock\) time .*?:\s*([^\n]+)",
+                              content)
+            raw=elapsed.group(1).strip() if elapsed else ""
+            seconds=0.
+            if raw:
+                nums=[float(n) for n in raw.split(":")]
+                for number in nums:seconds=seconds*60+number
+            require(seconds>0.,
+                    "Cannot parse true Garfield elapsed wall time: "+str(file))
+            row=next(t for t in records
+                     if t["channel"]==ch and t["chunk"]==i)
+            resources.append({
+                "channel":ch,"chunk":i,"max_rss_kib":int(match.group(1)),
+                "garfield_wall_seconds":seconds,
+                "native_csv_bytes":sum(
+                    v["bytes"] for v in row["files"].values()),
+            })
+    require(max(r["max_rss_kib"] for r in resources)<3800000
+            and max(r["garfield_wall_seconds"] for r in resources)<8*3600,
+            "Pilot exceeded 4 GB/8h PBS limits with safety margin; "
+            "adjust job request only after cluster resource review")
+    import statistics
+    avg=statistics.mean(r["garfield_wall_seconds"] for r in resources)
+    avg_bytes=statistics.mean(r["native_csv_bytes"] for r in resources)
     gate_report={
         "schema":SCHEMA,"gate":gate_name,"chunks":len(records),
+        "measured_resources":{
+            "max_rss_kib":max(r["max_rss_kib"] for r in resources),
+            "max_chunk_garfield_wall_seconds":max(
+                r["garfield_wall_seconds"] for r in resources),
+            "mean_chunk_garfield_wall_seconds":avg,
+            "projected_1500_chunk_cpu_wall_hours":avg*1500/3600,
+            "projected_1500_chunk_raw_GiB":avg_bytes*1500/(1024**3),
+            "based_on_exactly_n_tested_chunks":len(resources),
+            "caution":"Projection only; high-Heed tail/time and disk distribution "
+                      "must be monitored during full PBS campaign",
+        },
         "counts":dict(sums),
         "source_git_commit":_git(),
         "binary_sha256":_load(root/"locked"/"binary.json")["binary_sha256"],
