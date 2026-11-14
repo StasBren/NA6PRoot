@@ -71,6 +71,8 @@ cat "$ROOT/submissions/qsub_ids.tsv"
 then wait for the build job to finish successfully. Only then:
 
 ```bash
+export GARFIELD_INSTALL=/cvmfs/sft-nightlies.cern.ch/lcg/nightlies/dev3/Mon/Garfield++/HEAD/x86_64-el9-gcc13-opt
+source "$GARFIELD_INSTALL/Garfield++-env.sh"
 python3 "$SCRIPT" runtime-check --root "$ROOT"
 find "$ROOT/inputs" -name 'chunk_*.csv' | wc -l
 cat "$ROOT/locked/binary.json"
