@@ -8,7 +8,7 @@
 
 # Build existing dedicated Garfield CMake target on compute node,
 # stage IDENTICAL old 30k original Geant4 inputs, freeze binary/runtime.
-set -Eeuo pipefail
+set -Eeo pipefail
 REPO=${WT_REPO:-"$HOME/NA6PRoot-wiretruth30k"}
 ROOT=${WT_ROOT:-/storage/cgrp/stanis/mwpc_penning057_wiretruth30k_v1}
 PROGRAM="$REPO/test/mwpc-stage-c/pi_wiretruth30k_production_v1.py"
@@ -17,6 +17,9 @@ TARGET=mwpc_p3_noFW_penning057_wiretruth_v1
 
 export GARFIELD_INSTALL=/cvmfs/sft-nightlies.cern.ch/lcg/nightlies/dev3/Mon/Garfield++/HEAD/x86_64-el9-gcc13-opt
 source "$GARFIELD_INSTALL/Garfield++-env.sh"
+# CVMFS initialization may reference an unset ZSH_NAME; activate nounset only
+# after sourcing the validated Garfield++ environment.
+set -u
 echo "BUILD_JOB=${PBS_JOBID:-manual} NODE=$(hostname)"
 echo "GIT_COMMIT=$(git -C "$REPO" rev-parse HEAD)"
 echo "GARFIELD_INSTALL=$GARFIELD_INSTALL"
