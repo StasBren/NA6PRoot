@@ -37,5 +37,6 @@ fi
 python3 -u "$SCRIPT" run --max-chunks 50
 python3 "$SCRIPT" audit
 python3 "$SCRIPT" analyse
+python3 "$SCRIPT" export
 python3 "$SCRIPT" status
 printf '\nRESULTS: %s\n' "$REPO/test_runs/mwpc_stage_c/p3_noFW_penning057_wiretruth_1000_v1"
