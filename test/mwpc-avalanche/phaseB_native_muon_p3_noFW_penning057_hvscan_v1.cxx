@@ -958,7 +958,7 @@ int main(int argc,char**argv) {
       RunGeometry(gas,GEOMS.front(),h,electrons,id,seedOut,birthOut,
                   hitOut,nCl,discarded,failed,nullptr,
                   cacheMuonPhysics?&timingOut:nullptr,false,
-                  cacheMuonPhysics?128:100,
+                  hvScanMode?0:(cacheMuonPhysics?128:100),
                   wireTruthMode?&wireSeedOut:nullptr,
                   wireTruthMode?&wireMuonOut:nullptr,
                    anodeVoltageV,avalancheLimit);
