@@ -50,6 +50,16 @@ These are research requirements; do not claim any voltage trend, channel effect 
 - Avalanche-size caps MUST be audited; larger voltage may invalidate a capped simulation and is sensitive to missing space-charge effects.
 - Metrics: per-primary mean gain including zeros, positive-only gain, P(g=0), RMS(g)/mean(g), muon-effective gain fluctuations, signed A and station-conditioned checks; ROOT/C++ plots with per-muon bootstrap.
 
+### Additional requested HV / wire-diameter pilot (prepared, not yet executed)
+
+- New independent GitHub branch `feature/p3-hv-wire50-check-20261116`.
+- Same Geant4/Heed inputs; 20 muons at 2000, 2050, 2100 V for **30 um** anodes; paired first five muons at 2000 V with **50 um** anodes.
+- Separate local target, runner, ROOT/C++ analysis:
+  `test/mwpc-stage-c/hv-diameter-study/`.
+- Pilot=5 per configuration, full extends the 30 um set to 20; 50 um remains 5.
+- Code prepared and source-reviewed only: no Garfield++ compilation, run or physics results have been confirmed yet. Abort on size-capped avalanches.
+- Do not confuse this branch/run with the original 1900–2050 V scan.
+
 ### Future 30k per-wire sample
 
 A new 30k wire-resolved Garfield++ campaign may be in progress on the HPC farm (status not independently confirmed here). Before use, require immutable manifests, exact configuration, per-wire endpoint counts, birth census, and discover whether raw ion birth positions/times or only bounded reservoirs are saved.
