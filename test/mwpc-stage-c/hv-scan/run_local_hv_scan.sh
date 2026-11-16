@@ -13,7 +13,7 @@ CHUNK="${HV_CHUNK_SIZE:-5}"
 CAP="${HV_AVALANCHE_CAP:-1000000}"
 VOLTAGES=(1900 1950 2000 2050)
 SELECTION="$REPO/test/mwpc-stage-c/p3_wiretruth_1000_selection.csv"
-OUT="$REPO/test_runs/mwpc_stage_c/p3_hv_scan_v1"
+OUT="${HV_OUTPUT_DIR:-$REPO/test_runs/mwpc_stage_c/p3_hv_scan_v1}"
 BUILD="$REPO/test/mwpc-avalanche/build-hvscan"
 EXE="$BUILD/mwpc_p3_noFW_penning057_hvscan_v1"
 
@@ -141,5 +141,5 @@ for V in "${VOLTAGES[@]}";do
 done
 
 echo "RUN ROOT/C++ bootstrap analysis and ATLAS-style plots"
-root -l -b -q "$HERE/AnalyzeHV_ROOT.C(\\"$OUT\\")"
+root -l -b -q "$HERE/AnalyzeHV_ROOT.C(\"$OUT\")"
 echo "DONE. Results: $OUT/analysis/"
