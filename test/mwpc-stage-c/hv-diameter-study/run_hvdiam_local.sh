@@ -47,7 +47,8 @@ else
 fi
 
 run_chunk() {
-  local v="$1" diameter="$2" start="$3" end=$((start+5))
+  local v="$1" diameter="$2" start="$3"
+  local end=$((start+5))
   local group="$OUT/V_${v}_D${diameter}" idx=$((start/5))
   local name dir
   printf -v name 'chunk_%04d' "$idx"
