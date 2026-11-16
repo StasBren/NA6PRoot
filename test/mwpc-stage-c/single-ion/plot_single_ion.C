@@ -17,6 +17,8 @@
 #include "TMultiGraph.h"
 #include "TPad.h"
 #include "TStyle.h"
+#include "TString.h"
+#include "TFile.h"
 
 namespace {
 struct Row {
@@ -169,6 +171,12 @@ void DrawSide(const std::string& dir, const std::vector<Row>& rows,
   t.DrawLatex(0.17,0.87,"Dashed: endpoint Shockley-Ramo integral");
   canvas->SaveAs((dir+"/single_ion_"+s+".png").c_str());
   canvas->SaveAs((dir+"/single_ion_"+s+".pdf").c_str());
+  TFile file((dir+"/single_ion_"+s+".root").c_str(),"RECREATE");
+  if(file.IsZombie()) throw std::runtime_error("Cannot save ROOT plot objects");
+  canvas->Write(("canvas_"+s).c_str());
+  for(std::size_t k=0;k<hold.size();++k)
+    hold[k]->Write(("graph_"+s+"_"+std::to_string(k)).c_str());
+  file.Close();
 }
 } // namespace
 
