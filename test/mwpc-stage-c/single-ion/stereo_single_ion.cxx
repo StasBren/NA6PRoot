@@ -3,6 +3,7 @@
 // Weighting: existing 3D Gmsh/Elmer solution imported with ComponentElmer.
 // No Geant4/Heed simulation, avalanche gain, electronics or Python analysis.
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -78,6 +79,7 @@ struct Result {
   bool ok, complete, arrived;
   double qMinus, qPlus, ramoMinus, ramoPlus;
   double errPlus, errMinus;
+  std::array<double,5> earlyMinus{}, earlyPlus{};
 };
 double Tolerance(double qRamo) {
   // Absolute floor of 0.005 elementary charges; 3% otherwise.
@@ -234,6 +236,11 @@ int main(int argc, char** argv) {
              << "time_ns,minus_ion_fC_per_ns,plus_ion_fC_per_ns,"
                 "minus_cumulative_fC,plus_cumulative_fC\n";
         double qm=0.,qp=0.;
+        // Compare the *evolution* of induced charge, not only its integral.
+        constexpr std::array<double,5> checkTimesNs{
+            100., 1000., 10000., 50000., 100000.};
+        std::array<double,5> earlyMinus{}, earlyPlus{};
+        std::size_t checkIndex=0;
         for (int k=0;k<nBins;++k) {
           const double im=sensor.GetIonSignal(minus,k);
           const double ip=sensor.GetIonSignal(plus,k);
@@ -241,12 +248,22 @@ int main(int argc, char** argv) {
             throw std::runtime_error("Non-finite Garfield strip current");
           qm+=im*dt;
           qp+=ip*dt;
+          while (checkIndex < checkTimesNs.size() &&
+                 (k+1)*dt >= checkTimesNs[checkIndex]) {
+            earlyMinus[checkIndex]=qm;
+            earlyPlus[checkIndex]=qp;
+            ++checkIndex;
+          }
           wave << (k+0.5)*dt << "," << im << "," << ip
                << "," << qm << "," << qp << "\n";
         }
         Result result{dt,step,10.*ue,10.*ve,10.*we,te,
                       status,ok,complete,arrived,qm,qp,qmRamo,qpRamo,
                       std::abs(qm-qmRamo),std::abs(qp-qpRamo)};
+        if (checkIndex != checkTimesNs.size())
+          throw std::runtime_error("Recording window misses early-charge checks");
+        result.earlyMinus=earlyMinus;
+        result.earlyPlus=earlyPlus;
         all.push_back(result);
         const bool pass = ok && complete && arrived &&
                    CloseCharge(qm,qmRamo) && CloseCharge(qp,qpRamo);
@@ -266,8 +283,32 @@ int main(int argc, char** argv) {
                   << "), gate=" << (pass?"PASS":"FAIL") << "\n";
       }
     }
+    // Time-bin convergence: compare early and late integrated current at
+    // identical physical times, avoiding a tautological endpoint-only check.
+    const auto finestDtIndex =
+        std::min_element(o.dts.begin(),o.dts.end())-o.dts.begin();
+    for (std::size_t js=0;js<o.steps.size();++js) {
+      const auto& fine=all[js*o.dts.size()+finestDtIndex];
+      for (std::size_t jd=0;jd<o.dts.size();++jd) {
+        if (jd==static_cast<std::size_t>(finestDtIndex)) continue;
+        const auto& coarse=all[js*o.dts.size()+jd];
+        bool shapeAgree=true;
+        for (std::size_t k=0;k<fine.earlyMinus.size();++k) {
+          const double minusTol=std::max(0.05*std::abs(fine.ramoMinus),
+                                          0.01*kElementaryChargeFc);
+          const double plusTol=std::max(0.05*std::abs(fine.ramoPlus),
+                                         0.01*kElementaryChargeFc);
+          shapeAgree &= std::abs(fine.earlyMinus[k]-coarse.earlyMinus[k])<=minusTol;
+          shapeAgree &= std::abs(fine.earlyPlus[k]-coarse.earlyPlus[k])<=plusTol;
+        }
+        std::cout<<"cumulative-charge shape dt "<<coarse.dt<<" vs "<<fine.dt
+                 <<" ns, step "<<o.steps[js]<<" mm: "
+                 <<(shapeAgree?"PASS":"FAIL")<<"\n";
+        gates &= shapeAgree;
+      }
+    }
     // Drift-step convergence: compare the same finest time bin across steps.
-    const auto finest = std::min_element(o.dts.begin(),o.dts.end())-o.dts.begin();
+    const auto finest = finestDtIndex;
     for(std::size_t js=1;js<o.steps.size();++js) {
       const auto& a=all[(js-1)*o.dts.size()+finest];
       const auto& b=all[js*o.dts.size()+finest];
@@ -293,6 +334,7 @@ int main(int argc, char** argv) {
              << "Diffusion disabled for deterministic convergence test\n"
              << "Finite FEM patch; ideal grounded inter-strip gaps; no PCB FR4\n"
              << "Error tolerance: max(3% of Ramo charge, 0.005 elementary charge)\n"
+             << "Cumulative-shape time-bin tolerance: 5% total charge, floor 0.01 e\n"
              << "Recorded window must cover full trajectory; cathode arrival required\n"
              << "GATES="<<(gates?"PASS":"FAIL")<<"\n";
     std::cout << (gates ? "PASS" : "FAIL")
