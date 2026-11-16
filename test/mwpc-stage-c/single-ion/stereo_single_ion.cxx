@@ -76,7 +76,7 @@ struct Result {
   double dt, step, ue, ve, we, te;
   int status;
   bool ok, complete, arrived;
-  double qPlus, qMinus, ramoPlus, ramoMinus;
+  double qMinus, qPlus, ramoMinus, ramoPlus;
   double errPlus, errMinus;
 };
 double Tolerance(double qRamo) {
