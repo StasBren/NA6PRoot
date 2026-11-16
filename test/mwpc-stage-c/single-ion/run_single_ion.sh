@@ -80,6 +80,14 @@ cmake --build "$BUILD" --target mwpc_stage_c_single_ion_stereo -j2
   | tee "$OUT/results/physics.log"
 root -l -b -q "$HERE/plot_single_ion.C(\"$OUT/results\")" \
   > "$OUT/results/root_plot.log" 2>&1
+for side in plus minus; do
+  for extension in png pdf root; do
+    [[ -s "$OUT/results/single_ion_${side}.${extension}" ]] || {
+      echo "Missing ROOT result: $side.$extension" >&2
+      exit 5
+    }
+  done
+done
 {
   echo "GIT_REV=$(git -C "$REPO" rev-parse HEAD)"
   echo "DATE_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
