@@ -45,3 +45,8 @@ target_compile_features(pi_fast_lut_existing_starts_mc PRIVATE cxx_std_17)
 add_executable(pi_fast_lut_attachment_hazards pi_fast_lut_attachment_hazards.cxx)
 target_link_libraries(pi_fast_lut_attachment_hazards PRIVATE Garfield::Garfield)
 target_compile_features(pi_fast_lut_attachment_hazards PRIVATE cxx_std_17)
+
+# Isolated cathode-response validation; no changes to original Stage-C targets.
+add_executable(mwpc_stage_c_single_ion_stereo single-ion/stereo_single_ion.cxx)
+target_link_libraries(mwpc_stage_c_single_ion_stereo PRIVATE Garfield::Garfield)
+target_compile_features(mwpc_stage_c_single_ion_stereo PRIVATE cxx_std_17)
