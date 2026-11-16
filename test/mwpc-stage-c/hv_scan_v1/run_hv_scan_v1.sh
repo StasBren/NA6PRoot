@@ -13,9 +13,16 @@ ROOT_ARGS="-l -b -q"
 VOLTAGES="${NA60_HV_VOLTAGES:-1700 1750 1800 1850 1900}"
 MODE="${1:-status}"
 
-if [[ -f "$HOME/na6p/env.sh" ]]; then source "$HOME/na6p/env.sh"; fi
-if [[ -f "$HOME/na6p/install/garfieldpp/share/Garfield/setupGarfield.sh" ]]; then
-  source "$HOME/na6p/install/garfieldpp/share/Garfield/setupGarfield.sh"
+# WSL defaults plus explicit cluster overrides. A cluster may load the
+# Garfield environment from CVMFS rather than from the local WSL installation.
+if [[ -n "${NA60_HV_GARFIELD_ENV:-}" ]]; then
+  [[ -f "$NA60_HV_GARFIELD_ENV" ]] || { echo "Garfield env script not found: $NA60_HV_GARFIELD_ENV" >&2;exit 2; }
+  source "$NA60_HV_GARFIELD_ENV"
+else
+  if [[ -f "$HOME/na6p/env.sh" ]]; then source "$HOME/na6p/env.sh"; fi
+  if [[ -f "$HOME/na6p/install/garfieldpp/share/Garfield/setupGarfield.sh" ]]; then
+    source "$HOME/na6p/install/garfieldpp/share/Garfield/setupGarfield.sh"
+  fi
 fi
 
 require_root(){ command -v root >/dev/null || { echo "ROOT executable not found; source ROOT/Garfield environment" >&2;exit 2; }; }
@@ -24,8 +31,13 @@ require_cpp(){ command -v cmake >/dev/null || { echo "cmake missing" >&2;exit 2;
 build(){
   require_root;require_cpp
   if [[ ! -f "$BUILD/CMakeCache.txt" ]]; then
-    cmake -S "$REPO/test/mwpc-avalanche" -B "$BUILD" \
-      -DGarfield_DIR="$HOME/na6p/install/garfieldpp/lib/cmake/Garfield"
+    local opts=()
+    if [[ -n "${NA60_HV_GARFIELD_DIR:-}" ]]; then
+      opts+=("-DGarfield_DIR=$NA60_HV_GARFIELD_DIR")
+    elif [[ -d "$HOME/na6p/install/garfieldpp/lib/cmake/Garfield" ]]; then
+      opts+=("-DGarfield_DIR=$HOME/na6p/install/garfieldpp/lib/cmake/Garfield")
+    fi
+    cmake -S "$REPO/test/mwpc-avalanche" -B "$BUILD" "${opts[@]}"
   fi
   cmake --build "$BUILD" --target "$TARGET" -j2
   test -x "$BUILD/$TARGET"
