@@ -60,6 +60,14 @@ These are research requirements; do not claim any voltage trend, channel effect 
 - Code prepared and source-reviewed only: no Garfield++ compilation, run or physics results have been confirmed yet. Abort on size-capped avalanches.
 - Do not confuse this branch/run with the original 1900–2050 V scan.
 
+### Additional 2100–2250 V scan (prepared; not yet executed)
+
+- New isolated branch `feature/p3-hv-high-2100-2250-20261116`, folder `test/mwpc-stage-c/hv-high-2100-2250/`.
+- Same 30 um P3 noFW Garfield++ physics; 2100, 2150, 2200, 2250 V with 1-muon smoke, 5-muon pilot, and optional 20 muons/voltage.
+- Microphysics uses collision-by-collision `AvalancheMicroscopic`; no `AvalancheMC` macroscopic diffusion step to tune. EnableAvalancheSizeLimit truncation and missing space-charge physics are explicit validation gates.
+- Per-event checkpoints, timeouts, independent CMake target, ROOT/C++ statistics and plots. Do not confuse with historical lower-HV scan or 30/50um comparison.
+- Status: files committed and static-checked, Garfield++ compile/execution on WSL not verified.
+
 ### Future 30k per-wire sample
 
 A new 30k wire-resolved Garfield++ campaign may be in progress on the HPC farm (status not independently confirmed here). Before use, require immutable manifests, exact configuration, per-wire endpoint counts, birth census, and discover whether raw ion birth positions/times or only bounded reservoirs are saved.
