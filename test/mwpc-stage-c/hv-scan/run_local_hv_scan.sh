@@ -11,7 +11,8 @@ cd "$REPO"
 N="${1:-5}"
 CHUNK="${HV_CHUNK_SIZE:-5}"
 CAP="${HV_AVALANCHE_CAP:-1000000}"
-VOLTAGES=(1900 1950 2000 2050)
+# Test the highest-gain / slowest voltage first, avoiding wasted laptop hours.
+VOLTAGES=(2050 2000 1950 1900)
 SELECTION="$REPO/test/mwpc-stage-c/p3_wiretruth_1000_selection.csv"
 OUT="${HV_OUTPUT_DIR:-$REPO/test_runs/mwpc_stage_c/p3_hv_scan_v1}"
 BUILD="$REPO/test/mwpc-avalanche/build-hvscan"
