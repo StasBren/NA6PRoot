@@ -70,7 +70,10 @@ Q_Ramo   = (+e) * [phi_w(endpoint) - phi_w(birth)]
 ```
 
 It repeats for dt=10,5,2 ns and maximum drift steps 0.04,0.02 mm,
-checking both strips. The charge tolerance is
+checking both strips. The code also compares cumulative charge at fixed
+physical times (0.1, 1, 10, 50 and 100 microseconds) across time-bin
+choices using a 5%-of-Ramo-charge tolerance (floor 0.01 elementary charges).
+The endpoint charge tolerance is
 max(3% of |Q_Ramo|, 0.005 elementary charges), with additional
 endpoint/step stability gates. Failures return nonzero and must not be
 described as validation.
