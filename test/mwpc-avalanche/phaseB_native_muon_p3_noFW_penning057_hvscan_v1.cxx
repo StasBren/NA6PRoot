@@ -334,7 +334,8 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
                  const std::size_t birthReservoirLimit=100,
                   std::ostream* wireSeedOut=nullptr,
                   std::ostream* wireMuonOut=nullptr,
-                  const double anodeVoltageV=1800.) {
+                  const double anodeVoltageV=1800.,
+                   const unsigned int avalancheLimit=200000u) {
   const double p=.1*geom.pitchMm;
   const double wireRadius=.0015; // 30 um diameter = 0.0015 cm radius
   // For the finite centered anode grid, translate the Geant4 physical
@@ -406,7 +407,7 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
     const unsigned int rngSeed=1+unsigned(raw%2'000'000'000ULL);
     SeedGarfield(rngSeed);
     Garfield::AvalancheMicroscopic avalanche(&sensor);
-    constexpr unsigned int cap=200000;
+    const unsigned int cap=avalancheLimit;
     avalanche.EnableAvalancheSizeLimit(cap);
     BirthAccumulator births(rngSeed,p,birthReservoirLimit);gBirth=&births;
     avalanche.SetUserHandleIonisation(OnIonisation);
@@ -819,20 +820,24 @@ int main(int argc,char**argv) {
       return 0;
     }
     // Standalone voltage scan; legacy 1800-V reference remains unchanged.
-    const bool voltageScanMode=(argc==5 &&
+    const bool voltageScanMode=(argc==6 &&
         std::string(argv[1])=="--wiretruth-hv-p3-noFW");
     const bool wireTruthMode=voltageScanMode || (argc==4 &&
         std::string(argv[1])=="--wiretruth-p3-noFW");
     const bool cacheMuonPhysics=wireTruthMode || (argc==4 &&
         std::string(argv[1])=="--muon-cache-physics-p3-noFW");
-    if(argc!=(voltageScanMode?5:4))throw std::runtime_error(
-      "Usage: mwpc_phase_b_native_muon_3p3 INPUT_NATIVE_CSV OUTPUT_PREFIX MAX_PRIMARY_ELECTRONS | --wiretruth-hv-p3-noFW INPUT_NATIVE_CSV OUTPUT_PREFIX VOLTAGE_V | --muon-cache-physics-p3-noFW REAL_MUON_INPUT_CSV PREFIX | --validate-input INPUT_NATIVE_CSV | --validate-heed INPUT_NATIVE_CSV | --lut-sidecar FROZEN_EXACT_START_INDEX_CSV OUTPUT_PREFIX");
+    if(argc!=(voltageScanMode?6:4))throw std::runtime_error(
+      "Usage: mwpc_phase_b_native_muon_3p3 INPUT_NATIVE_CSV OUTPUT_PREFIX MAX_PRIMARY_ELECTRONS | --wiretruth-hv-p3-noFW INPUT_NATIVE_CSV OUTPUT_PREFIX VOLTAGE_V AVALANCHE_CAP | --muon-cache-physics-p3-noFW REAL_MUON_INPUT_CSV PREFIX | --validate-input INPUT_NATIVE_CSV | --validate-heed INPUT_NATIVE_CSV | --lut-sidecar FROZEN_EXACT_START_INDEX_CSV OUTPUT_PREFIX");
     const double anodeVoltageV=voltageScanMode?std::stod(argv[4]):1800.;
-    if(!std::isfinite(anodeVoltageV) || anodeVoltageV<1500. || anodeVoltageV>2000.)
-      throw std::runtime_error("Invalid HV: expected finite value in [1500,2000] volts");
-    std::cout<<"P3_NOFW_ANODE_VOLTAGE_V="<<std::setprecision(10)
-             <<anodeVoltageV<<"\n";
-    const std::string input=argv[cacheMuonPhysics?2:1],
+     const unsigned int avalancheLimit=voltageScanMode?
+         static_cast<unsigned int>(std::stoul(argv[5])):200000u;
+     if(!std::isfinite(anodeVoltageV)||anodeVoltageV<1800.||anodeVoltageV>2150.)
+       throw std::runtime_error("HV voltage must be finite and 1800..2150 V");
+     if(avalancheLimit<200000u||avalancheLimit>5000000u)
+       throw std::runtime_error("Avalanche limit must be 200000..5000000");
+     std::cout<<"P3_NOFW_ANODE_VOLTAGE_V="<<std::setprecision(10)
+              <<anodeVoltageV<<" AVALANCHE_SIZE_CAP="<<avalancheLimit<<"\n";
+     const std::string input=argv[cacheMuonPhysics?2:1],
                       prefix=argv[cacheMuonPhysics?3:2];
     const int maxPrimary=cacheMuonPhysics?50000:std::stoi(argv[3]);
     if(maxPrimary<1||maxPrimary>50000)throw std::runtime_error("max primaries must be 1..50000");
@@ -956,7 +961,7 @@ int main(int argc,char**argv) {
                   cacheMuonPhysics?128:100,
                   wireTruthMode?&wireSeedOut:nullptr,
                   wireTruthMode?&wireMuonOut:nullptr,
-                  anodeVoltageV);
+                   anodeVoltageV,avalancheLimit);
       if(cacheMuonPhysics){
         const double avalWall=std::chrono::duration<double>(
             std::chrono::steady_clock::now()-avalancheStart).count();
