@@ -13,6 +13,7 @@
 #include "TROOT.h"
 #include "TAxis.h"
 #include "TMath.h"
+#include "TError.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -223,6 +224,13 @@ void DrawGraph(VSample* data[],const std::string& root,
   g2.SetMarkerColor(kBlue+1);g2.SetLineColor(kBlue+1);
   g3.SetMarkerColor(kRed+1);g3.SetLineColor(kRed+1);
   g1.SetTitle(isMean?";Anode high voltage [V];Mean collected gain [e^{-}]":";Anode high voltage [V];RMS / mean");
+  double maxY=0.;
+  for(int i=0;i<4;++i) {
+    const auto& a=*data[i];
+    if(isMean)maxY=std::max(maxY,std::max(a.seedMean+a.eMean,a.gmuMean+a.eGmuMean));
+    else maxY=std::max(maxY,std::max({a.rAll+a.eAll,a.rPos+a.ePos,a.rMuon+a.eMuon}));
+  }
+  g1.SetMinimum(0.);g1.SetMaximum(maxY>0?1.2*maxY:1.);
   g1.Draw("AP");g1.GetXaxis()->SetLimits(1870,2080);
   g1.GetYaxis()->SetTitleOffset(1.25);
   g2.Draw("P SAME");
