@@ -71,6 +71,9 @@ qsub -J '0-244%12' -v "NA60_HV_OUT=$NA60_HV_OUT,NA60_HV_REPO=$PWD" \
   test/mwpc-stage-c/hv_scan_v1/pbs_hv_scan_chunk.sh
 ```
 
+For clusters using CVMFS, set `NA60_HV_GARFIELD_ENV` to the real path of your
+Garfield++ environment script and optionally `NA60_HV_GARFIELD_DIR` to its
+CMake package directory. Set and export these in the PBS environment as well.
 Confirm PBS array syntax, concurrency cap, resource requests, and fair-use
 policy with your site's queue. The wrapper does NOT build 245 times or alter
 completed runs. `NA60_HV_OUT` is mandatory on sites without shared home paths.
