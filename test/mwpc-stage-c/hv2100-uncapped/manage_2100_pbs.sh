@@ -8,7 +8,7 @@ REPO="$(cd "$HERE/../../.." && pwd)"
 SELECTION="$REPO/test/mwpc-stage-c/p3_wiretruth_1000_selection.csv"
 BUILD="$REPO/test/mwpc-avalanche/build-hv2100-uncapped"
 EXE="$BUILD/mwpc_p3_noFW_penning057_2100_uncapped_v1"
-OUT="${MWPC_2100_OUTPUT_DIR:-/storage/cgrp/stanis/mwpc_penning057/hv2100_uncapped_1000_v1}"
+OUT="${MWPC_2100_OUTPUT_DIR:-/storage/cgrp/stanis/mwpc_penning057/hv2100_uncapped_ion128_1000_v2}"
 MODE="${1:-status}"
 
 if [[ -f "$HOME/na6p/env.sh" ]];then source "$HOME/na6p/env.sh";fi
@@ -30,7 +30,7 @@ lock_data() {
   git_sha="$(git -C "$REPO" rev-parse HEAD)"
   printf 'selection_sha256=%s\nbinary_sha256=%s\ngit_revision=%s\n' \
       "$input_sha" "$binary_sha" "$git_sha"
-  printf 'voltage_V=2100\navalanche_size_limit=DISABLED\nmuons=1000\n'
+  printf 'voltage_V=2100\navalanche_size_limit=DISABLED\nion_birth_reservoir_per_primary=128\nmuons=1000\n'
   printf 'configuration=P3_noFW;30um;3mm;gap_pm3mm;ArCO2_70_30;Penning0.57;B0\n'
 }
 check_lock() {
@@ -83,6 +83,9 @@ audit_one() {
   (cd "$d" && sha256sum -c SHA256SUMS >/dev/null 2>&1) || return 1
   [[ "$(wc -l < "$d/microscopic_crossing.csv")" -eq 2 ]] || return 1
   grep -q '^GARFIELD_AVALANCHE_SIZE_LIMIT_DISABLED=1$' "$d/physics.log" || return 1
+  grep -q '^ION_BIRTH_RESERVOIR_PER_PRIMARY=128$' "$d/physics.log" || return 1
+  [[ -s "$d/microscopic_ion_birth_sample.csv" ]] || return 1
+  head -n1 "$d/microscopic_ion_birth_sample.csv" | grep -q 'nearest_wire_u_global_mm,reservoir_sample_size' || return 1
   return 0
 }
 status() {

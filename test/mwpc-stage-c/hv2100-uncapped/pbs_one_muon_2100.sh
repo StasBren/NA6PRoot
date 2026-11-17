@@ -71,6 +71,7 @@ awk -v target="$((idx+2))" 'NR==1 || NR==target' "$SELECTION" > "$DIR/input.csv"
       "$MWPC_2100_GIT_SHA" "$MWPC_2100_SELECTION_SHA" "$MWPC_2100_BINARY_SHA"
   printf 'physics=P3_noFW,ArCO2_70_30,Penning_r0.57,B0,HV2100\n'
   printf 'Garfield_avalanche_size_limit=DISABLED\n'
+  printf 'ion_birth_reservoir_per_Heed_primary=128\n'
 } > "$DIR/task_metadata.txt"
 
 # One uncapped full microscopic avalanche per true TrackHeed primary electron.
@@ -96,6 +97,9 @@ done
 grep -q '^GARFIELD_AVALANCHE_SIZE_LIMIT_DISABLED=1$' "$DIR/physics.log" || {
   echo "No uncapped Garfield startup proof" >&2;exit 5;
 }
+grep -q '^ION_BIRTH_RESERVOIR_PER_PRIMARY=128$' "$DIR/physics.log" || {
+  echo "Missing 128-ion reservoir proof in physics.log" >&2;exit 5;
+}
 # Verify per-seed bookkeeping; this does not exclude legitimate zero-gain seeds.
 awk -F, '
   NR==1 {
@@ -111,6 +115,62 @@ awk -F, '
   echo "Capped or failed primary avalanche: $DIR" >&2;exit 5;
 }
 
+# Data-integrity audit, NOT a physics/statistical analysis. For each primary,
+# require exactly min(128, N_birth) rows and the corresponding unbiased weight.
+awk -F, '
+  FNR == NR {
+    if (FNR == 1) {
+      for (j=1;j<=NF;j++) {
+        if($j=="crossing_id") ca=j;
+        if($j=="primary_index") pa=j;
+        if($j=="ion_births") ia=j;
+      }
+      if(!ca || !pa || !ia) exit 2
+      next
+    }
+    key=$ca "|" $pa
+    if(key in nb) fail=1
+    nb[key]=$ia+0
+    nprim++
+    next
+  }
+  FNR == 1 {
+    for(j=1;j<=NF;j++) {
+      if($j=="crossing_id") cb=j;
+      if($j=="primary_index") pb=j;
+      if($j=="seed_ion_births_total") ib=j;
+      if($j=="reservoir_weight") wb=j;
+      if($j=="reservoir_sample_size") sb=j;
+      if($j=="u_global_mm") ub=j;
+      if($j=="w_global_mm") zb=j;
+      if($j=="nearest_wire_index_global") gb=j;
+    }
+    if(!cb || !pb || !ib || !wb || !sb || !ub || !zb || !gb) exit 2
+    next
+  }
+  {
+    key=$cb "|" $pb
+    if(!(key in nb)) { fail=1; next }
+    expected=nb[key] < 128 ? nb[key] : 128
+    rows[key]++
+    if($ib+0!=nb[key] || $sb+0!=expected || expected<1) fail=1
+    target=nb[key]/expected
+    err=$wb-target; if(err<0) err=-err
+    if(err>1e-9*(1+target)) fail=1
+  }
+  END {
+    if(nprim==0) fail=1
+    for(k in nb) {
+      expected=nb[k] < 128 ? nb[k] : 128
+      if(rows[k] != expected) fail=1
+    }
+    if(fail) exit 1
+  }
+' "$DIR/microscopic_seed.csv" "$DIR/microscopic_ion_birth_sample.csv" || {
+  echo "Weighted ion-birth coordinates do not reproduce per-primary birth census" >&2
+  exit 5
+}
+
 (cd "$DIR" && sha256sum input.csv physics.log task_metadata.txt microscopic_*.csv > SHA256SUMS)
-printf 'DONE HV=2100 index=%s muons=1 no_avalanche_size_limit=1\n' "$idx" > "$DIR/complete.txt"
+printf 'DONE HV=2100 index=%s muons=1 no_avalanche_size_limit=1 ion_reservoir_per_primary=128\n' "$idx" > "$DIR/complete.txt"
 echo "PASS 2100V uncapped: $tag"
