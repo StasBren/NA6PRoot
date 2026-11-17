@@ -63,7 +63,7 @@ int main(int argc,char**argv) {
     auto* electron=tree("electron_control");
     tree("clusters");
     Require(muons->GetEntries()==1,"single-muon ROOT archive requires exactly one row");
-    int st=0,det=0,base=0;double pitch=0,phase=0,patchShift=0,entryW=0;
+    int st=0,det=0,base=0,reservoir=0;double pitch=0,phase=0,patchShift=0,entryW=0;
     std::string *mode=nullptr,*source=nullptr,*crossingId=nullptr;
     muons->SetBranchAddress("storage_mode",&mode);
     muons->SetBranchAddress("source_channel",&source);
@@ -71,6 +71,7 @@ int main(int argc,char**argv) {
     muons->SetBranchAddress("station",&st);
     muons->SetBranchAddress("det_id",&det);
     muons->SetBranchAddress("base_global_wire",&base);
+    muons->SetBranchAddress("reservoir_per_primary",&reservoir);
     muons->SetBranchAddress("pitch_cm",&pitch);
     muons->SetBranchAddress("station_phase_mm",&phase);
     muons->SetBranchAddress("patch_shift_cm",&patchShift);
@@ -100,9 +101,9 @@ int main(int argc,char**argv) {
               "invalid primary order/census");
       Require(succ==1,"failed primary in ROOT archive");
       if(*mode=="full")Require(saved==total,"FULL mode silently sampled ions");
-      else Require(saved==std::min<long long>(total,
-                      (long long)(int)(saved>1024?0:1024)),
-                   "weighted mode has too many ion rows");
+      else Require((reservoir==256||reservoir==512||reservoir==1024) &&
+                     saved==std::min<long long>(total,reservoir),
+                   "weighted reservoir size disagrees with exact ion census");
       census.emplace(pri,Census{total,saved,collected,endpoints,0,true});
       totalIons+=total;totalSaved+=saved;totalCollected+=collected;
     }
