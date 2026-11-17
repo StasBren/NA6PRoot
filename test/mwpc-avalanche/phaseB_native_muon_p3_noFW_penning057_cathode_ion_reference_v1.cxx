@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdint>
 #include <fstream>
+#include <functional>
 #include <iomanip>
 #include <iostream>
 #include <limits>
@@ -31,6 +32,7 @@
 #include "Garfield/RandomEngineRoot.hh"
 #include "Garfield/Sensor.hh"
 #include "Garfield/TrackHeed.hh"
+#include "../mwpc-stage-c/cathode-ion-reference/CathodeIonArchive.hh"
 
 namespace {
 constexpr double PI=3.1415926535897932384626433832795;
@@ -102,6 +104,9 @@ struct BirthAccumulator {
   // Independent reservoir RNG; MUST NOT consume Garfield microscopic RNG.
   std::mt19937_64 sampleRng;
   std::vector<std::array<double,4>> sample;
+  std::vector<std::uint64_t> sampleOrdinals;
+  // Per-callback streaming only for FULL archival mode, never for base HV.
+  std::function<void(double,double,double,double,std::uint64_t)> fullBirthSink;
   BirthAccumulator(unsigned int seed,double p,std::size_t limit=100)
     :pitch(p),reservoirLimit(limit),
      sampleRng(std::uint64_t(seed)+0x9e3779b97f4a7c15ULL){}
@@ -113,13 +118,19 @@ struct BirthAccumulator {
       byWire[static_cast<std::size_t>(nearest+4)].Add(phi,w,t);
     else ++birthsOutsidePatch;
     ++total;
+    if(fullBirthSink)fullBirthSink(u,v,w,t,total-1);
     const std::array<double,4> birth{{u,v,w,t}};
     const std::size_t limit=reservoirLimit;
-    if(sample.size()<limit)sample.push_back(birth);
-    else if(limit>0) {
+    if(sample.size()<limit) {
+      sample.push_back(birth);
+      sampleOrdinals.push_back(total-1);
+    } else if(limit>0) {
       std::uniform_int_distribution<std::uint64_t> choose(0,total-1);
       const auto j=choose(sampleRng);
-      if(j<limit)sample[static_cast<std::size_t>(j)]=birth;
+      if(j<limit) {
+        sample[static_cast<std::size_t>(j)]=birth;
+        sampleOrdinals[static_cast<std::size_t>(j)]=total-1;
+      }
     }
   }
 };
@@ -316,7 +327,8 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
                   std::ostream* wireSeedOut=nullptr,
                   std::ostream* wireMuonOut=nullptr,
                   const double anodeVoltageV=1800.,
-                   [[maybe_unused]] const unsigned int avalancheLimit=0u) {
+                   [[maybe_unused]] const unsigned int avalancheLimit=0u,
+                   CathodeRef::Archive* detailArchive=nullptr) {
   const double p=.1*geom.pitchMm;
   const double wireRadius=.0015; // 30 um diameter = 0.0015 cm radius
   // For the finite centered anode grid, translate the Geant4 physical
