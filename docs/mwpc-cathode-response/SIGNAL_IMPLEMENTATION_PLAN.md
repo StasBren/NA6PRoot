@@ -4,8 +4,8 @@
 
 ## M0 — baseline freeze, voltage decision and input audit
 
-- Start from known 1800 V P3 noFW geometry as a reproducible reference, but **do not select the new cathode-response HV yet**. Current laptop/farm scan is at 1900, 1950, 2000, 2050 V.
-- Wait for actual ROOT/C++ voltage-scan results: gain distributions including zeros, RMS(g)/mean(g), RMS(g|g>0)/mean(g|g>0), RMS(G_mu)/mean(G_mu), signed A distributions, capping and runtime. Decide a usable voltage only once results and physical-model limitations (space-charge absence) are understood.
+- **Working voltage selected by user: 2100 V** (preliminary user-reported gain ~80,000; not an independently audited Garfield++ result). Preserve 1800 V as historical reference and keep anode HV configurable for numerical tests.
+- Before accepting 2100 V as physically validated, audit the ROOT/C++ gain distributions (zeros included), RMS/mean, signed A, capped avalanches, runtime and absent space-charge/discharge physics. The user's choice establishes the development target, NOT validation of stable chamber operation.
 - Freeze the Geant4 crossing / Heed seed and Garfield++ code/config/versions with immutable sha and manifest. Keep an independently held-out validation sample. Compare all six station/detector occupancies and geometry before mixing samples.
 - Output a short, frozen run/physics summary, not just an arbitrary PDF plot.
 - **No change to ongoing high-voltage laptop run or archived 1800 V reference.**
