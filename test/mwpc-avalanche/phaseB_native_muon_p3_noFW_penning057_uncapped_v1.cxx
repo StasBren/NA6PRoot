@@ -338,8 +338,7 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
                  const std::size_t birthReservoirLimit=100,
                   std::ostream* wireSeedOut=nullptr,
                   std::ostream* wireMuonOut=nullptr,
-                  const double anodeVoltageV=1800.,
-                   const bool explicitNoLimit=false) {
+                  const double anodeVoltageV=1800.) {
   const double p=.1*geom.pitchMm;
   const double wireRadius=.0015; // 30 um diameter = 0.0015 cm radius
   // For the finite centered anode grid, translate the Geant4 physical
@@ -411,7 +410,7 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
     const unsigned int rngSeed=1+unsigned(raw%2'000'000'000ULL);
     SeedGarfield(rngSeed);
     Garfield::AvalancheMicroscopic avalanche(&sensor);
-    // Explicitly disable Garland's default/previous avalanche size cutoff.
+    // Explicitly disable Garfield's possible avalanche size cutoff.
      // NO physical or software avalanche-size truncation in this run.
      avalanche.DisableAvalancheSizeLimit();
     BirthAccumulator births(rngSeed,p,birthReservoirLimit);gBirth=&births;
@@ -835,7 +834,7 @@ int main(int argc,char**argv) {
     if(argc!=(voltageScanMode?5:4))throw std::runtime_error(
       "Usage: mwpc_phase_b_native_muon_3p3 INPUT_NATIVE_CSV OUTPUT_PREFIX MAX_PRIMARY_ELECTRONS | --wiretruth-uncapped-p3-noFW INPUT_NATIVE_CSV OUTPUT_PREFIX VOLTAGE_V | --muon-cache-physics-p3-noFW REAL_MUON_INPUT_CSV PREFIX | --validate-input INPUT_NATIVE_CSV | --validate-heed INPUT_NATIVE_CSV | --lut-sidecar FROZEN_EXACT_START_INDEX_CSV OUTPUT_PREFIX");
     const double anodeVoltageV=voltageScanMode?std::stod(argv[4]):1800.;
-     const bool unlimitedAvalanche=voltageScanMode;
+     // All calls in this isolated executable are uncapped.
      if(!std::isfinite(anodeVoltageV)||anodeVoltageV<1800.||anodeVoltageV>2250.)
        throw std::runtime_error("HV voltage must be finite and 1800..2250 V");
      // No EnableAvalancheSizeLimit in this executable, even in old modes.
@@ -965,7 +964,7 @@ int main(int argc,char**argv) {
                   voltageScanMode?0:(cacheMuonPhysics?128:100),
                   wireTruthMode?&wireSeedOut:nullptr,
                   wireTruthMode?&wireMuonOut:nullptr,
-                   anodeVoltageV,unlimitedAvalanche);
+                   anodeVoltageV);
       if(cacheMuonPhysics){
         const double avalWall=std::chrono::duration<double>(
             std::chrono::steady_clock::now()-avalancheStart).count();
