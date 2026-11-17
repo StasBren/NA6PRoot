@@ -18,6 +18,8 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <memory>
+#include <numeric>
 #include <map>
 #include <sstream>
 #include <stdexcept>
