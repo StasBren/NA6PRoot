@@ -39,7 +39,7 @@ lock_data(){
  printf 'garfield_install=%s\n' "$GARFIELD_INSTALL"
  printf 'garfield_install_realpath=%s\n' "$(readlink -f "$GARFIELD_INSTALL")"
  local garfield_so
- garfield_so="$(ldd "$BIN" | awk '$1 ~ /Garfield/ && $3 ~ /^\// {print $3;exit}')"
+ garfield_so="$(ldd "$BIN" | awk '$1 ~ /Garfield/ && index($3,"/")==1 {print $3;exit}')"
  [[ -n "$garfield_so" && -f "$garfield_so" ]] || {
    echo "Could not locate actual linked Garfield++ shared library" >&2; exit 4; }
  printf 'garfield_library_realpath=%s\n' "$(readlink -f "$garfield_so")"
