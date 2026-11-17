@@ -25,13 +25,13 @@ fi
 if [[ ! "$VMEM_GB" =~ ^[0-9]+$ ]] || (( VMEM_GB<2 || VMEM_GB>64 ));then
   echo "HV_UNCAPPED_VMEM_GB must be integer 2..64" >&2;exit 2
 fi
-command -v timeout >/dev/null || { echo "GNU timeout required";exit 2; }
-command -v root >/dev/null || { echo "ROOT required for analysis";exit 2; }
 [[ -s "$SELECTION" ]] || { echo "Frozen 1000 selection missing: $SELECTION" >&2;exit 2; }
 
 [[ -f "$HOME/na6p/env.sh" ]] && source "$HOME/na6p/env.sh"
 GARFIELD_SETUP="$HOME/na6p/install/garfieldpp/share/Garfield/setupGarfield.sh"
 [[ -f "$GARFIELD_SETUP" ]] && source "$GARFIELD_SETUP"
+command -v timeout >/dev/null || { echo "GNU timeout required";exit 2; }
+command -v root >/dev/null || { echo "ROOT required for analysis";exit 2; }
 
 cmake -S "$REPO/test/mwpc-avalanche" -B "$BUILD" \
   -DGarfield_DIR="$HOME/na6p/install/garfieldpp/lib/cmake/Garfield"
