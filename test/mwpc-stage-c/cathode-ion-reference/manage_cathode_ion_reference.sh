@@ -56,7 +56,7 @@ prepare(){
  cmake -S "$REPO/test/mwpc-avalanche" -B "$BUILD"
  cmake --build "$BUILD" --target \
     mwpc_p3_noFW_penning057_cathode_ion_reference_v1 \
-    verify_cathode_ion_root audit_geant4_1000_root -j2
+    verify_cathode_ion_root audit_geant4_1000_root compare_sampling_to_full_root -j2
  [[ -x "$BIN" && -x "$AUDITOR" && -x "$INPUT_AUDITOR" ]] || {
    echo "ROOT/C++ detailed target build failed" >&2;exit 4; }
  TEMP=$(mktemp "$OUT/.inputcheck.XXXXXX.csv")
