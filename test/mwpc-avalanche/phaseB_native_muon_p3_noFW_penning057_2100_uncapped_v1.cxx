@@ -2,7 +2,9 @@
 // Input: frozen true-Geant4 1000 crossing selection, original TrackHeed seeds.
 // NO Garfield avalanche-size cutoff: explicitly calls DisableAvalancheSizeLimit().
 // Exact positive-ion BIRTH census and collecting-wire electron endpoints are retained.
-// HV mode saves no ion-birth position/time reservoir; it is NOT a cathode-waveform source.
+// HV mode saves up to 128 unbiased ion births PER Heed primary with independent
+// sampling RNG, per-primary weights, and physical wire/global position metadata.
+// A reservoir is NOT equivalent to full microscopic ion-birth truth for waveforms.
 // Resource failures (PBS OOM/walltime) are unsealed errors, never clipped gain entries.
 // Fixed-field microscopic model omits space charge, streamers, photon feedback, discharge.
 // This is a separate target; all 1800-V and other voltage scans are preserved.
@@ -480,15 +482,37 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
            <<births.counts.top<<","<<births.counts.bottom<<","
            <<Asym(births.counts.up,births.counts.down)<<","
            <<Asym(births.counts.top,births.counts.bottom)<<"\n";
-    // The full birth census is used for A; this bounded independent-RNG
-    // reservoir gives unbiased spatial draws WITHIN each seed avalanche.
-    // Weight by N_birth / sample_size for pooling different-sized avalanches.
-    const double reservoirWeight=births.sample.empty()?0.:
-        double(births.total)/births.sample.size();
-    for(const auto& v:births.sample)
+    // Exact census plus unbiased bounded uniform draws from each primary.
+    // Garfield++ RNG is independent; weights sum to N_ion_birth for each seed.
+    const std::size_t nSampleExpected =
+        births.total < birthReservoirLimit ?
+        static_cast<std::size_t>(births.total) : birthReservoirLimit;
+    if (births.sample.size() != nSampleExpected)
+      throw std::runtime_error("Ion reservoir sample count/census mismatch");
+    if (births.total && births.sample.empty())
+      throw std::runtime_error("Ion sample unexpectedly empty");
+    const double reservoirWeight = births.sample.empty() ? 0. :
+        static_cast<double>(births.total) / births.sample.size();
+    const double baseWireUMm = stationPhaseMm +
+        static_cast<double>(baseWire) * physicalPitchMm;
+    for(const auto& v:births.sample) {
+      // Local Garfield x=u, y=v, z=w; physical translation uses the true
+      // station/anode phase and the original Geant4 entrance position.
+      const int localWire = static_cast<int>(std::llround(v[0] / p));
+      if(localWire < -4 || localWire > 4)
+        throw std::runtime_error("Sampled birth outside 9-wire patch");
+      const int globalWire = baseWire + localWire;
+      const double globalWireUMm = stationPhaseMm +
+          static_cast<double>(globalWire) * physicalPitchMm;
+      const double uGlobalMm = baseWireUMm + 10. * v[0];
+      const double wGlobalMm = h.a[2] + 10. * v[2];
       birthOut<<crossingLabel<<","<<geom.label<<","<<i<<","
               <<(10.*v[0])<<","<<(10.*v[1])<<","<<(10.*v[2])<<","
-              <<v[3]<<","<<births.total<<","<<reservoirWeight<<"\n";
+              <<v[3]<<","<<births.total<<","<<reservoirWeight<<","
+              <<uGlobalMm<<","<<wGlobalMm<<","
+              <<globalWire<<","<<globalWireUMm<<","
+              <<births.sample.size()<<"\n";
+    }
   }
   if(wireMuonOut) {
     std::uint64_t eCheck=0,bCheck=0;
@@ -820,9 +844,11 @@ int main(int argc,char**argv) {
          static_cast<unsigned int>(std::stoul(argv[5])):200000u;
      if(!voltageScanMode || !std::isfinite(anodeVoltageV) || anodeVoltageV!=2100. || avalancheLimit!=0u)
        throw std::runtime_error("UNCAPPED target requires --wiretruth-hv-p3-noFW INPUT PREFIX 2100 0");
+     constexpr std::size_t ionReservoirPerPrimary=128;
      std::cout<<"P3_NOFW_ANODE_VOLTAGE_V="<<std::setprecision(10)
               <<anodeVoltageV<<" AVALANCHE_SIZE_CAP=DISABLED\n"
-              <<"GARFIELD_AVALANCHE_SIZE_LIMIT_DISABLED=1\n";
+              <<"GARFIELD_AVALANCHE_SIZE_LIMIT_DISABLED=1\n"
+              <<"ION_BIRTH_RESERVOIR_PER_PRIMARY="<<ionReservoirPerPrimary<<"\n";
      const std::string input=argv[cacheMuonPhysics?2:1],
                       prefix=argv[cacheMuonPhysics?3:2];
     const int maxPrimary=cacheMuonPhysics?50000:std::stoi(argv[3]);
@@ -887,7 +913,7 @@ int main(int argc,char**argv) {
       // output's default iostream(6) would round those quantities.
       hitOut<<std::setprecision(15);
       seedOut<<std::setprecision(15);
-      birthOut<<std::setprecision(15);
+      // Ion sample precision is set explicitly below for all run modes.
     }
     hitOut<<"source|chunk|event|hit_index|track_id|station|det_id,configuration,"
              "station,det_id,theta_u_in_deg,theta_w_in_deg,path_mm,momentum_GeV,"
@@ -902,8 +928,12 @@ int main(int argc,char**argv) {
              "garfield_ne,garfield_ni,ion_births,collected_e,"
              "attached,other,successful,capped,"
              "ion_up,ion_down,ion_top,ion_bottom,A_ion_hemi,A_ion_TB\n";
+    // Retain legacy local coordinates and physical station coordinates.
+    birthOut<<std::setprecision(17);
     birthOut<<"crossing_id,configuration,primary_index,u_mm,v_mm,w_mm,t_ns,"
-               "seed_ion_births_total,reservoir_weight\n";
+               "seed_ion_births_total,reservoir_weight,"
+               "u_global_mm,w_global_mm,nearest_wire_index_global,"
+               "nearest_wire_u_global_mm,reservoir_sample_size\n";
     for(const auto& h:crossings){
       const auto muonStart=std::chrono::steady_clock::now();
       const std::string id=h.source+"|"+std::to_string(h.chunk)+"|"+
@@ -944,7 +974,7 @@ int main(int argc,char**argv) {
       RunGeometry(gas,GEOMS.front(),h,electrons,id,seedOut,birthOut,
                   hitOut,nCl,discarded,failed,nullptr,
                   cacheMuonPhysics?&timingOut:nullptr,false,
-                  voltageScanMode?0:(cacheMuonPhysics?128:100),
+                  ionReservoirPerPrimary,
                   wireTruthMode?&wireSeedOut:nullptr,
                   wireTruthMode?&wireMuonOut:nullptr,
                    anodeVoltageV,avalancheLimit);
