@@ -5,7 +5,15 @@
 #PBS -j oe
 # One *complete* true-Geant4 muon per OpenPBS array element. No avalanche size cap.
 # Resource failures are FAILURES, not valid gain measurements.
-set -Eeuo pipefail
+# Keep PBS compute-node Garfield++/ROOT/GCC consistent with login build.
+# CVMFS Garfield++-env.sh accesses unset ZSH_NAME; enable -u only after it.
+set -Eeo pipefail
+export GARFIELD_INSTALL=${GARFIELD_INSTALL:-/cvmfs/sft-nightlies.cern.ch/lcg/nightlies/dev3/Mon/Garfield++/HEAD/x86_64-el9-gcc13-opt}
+[[ -f "$GARFIELD_INSTALL/Garfield++-env.sh" ]] || {
+  echo "Pinned CVMFS Garfield++ environment unavailable: $GARFIELD_INSTALL" >&2; exit 2;
+}
+source "$GARFIELD_INSTALL/Garfield++-env.sh"
+set -u
 umask 027
 
 : "${PBS_ARRAY_INDEX:?This file must run as a PBS array task}"
@@ -25,12 +33,6 @@ SELECTION="$REPO/test/mwpc-stage-c/p3_wiretruth_1000_selection.csv"
 EXE="$REPO/test/mwpc-avalanche/build-hv2100-uncapped/mwpc_p3_noFW_penning057_2100_uncapped_v1"
 printf -v tag 'muon_%04d' "$idx"
 DIR="$OUT/$tag"
-
-# PBS can start with a minimal environment; load only our known environment setup.
-if [[ -f "$HOME/na6p/env.sh" ]]; then source "$HOME/na6p/env.sh"; fi
-if [[ -f "$HOME/na6p/install/garfieldpp/share/Garfield/setupGarfield.sh" ]]; then
-  source "$HOME/na6p/install/garfieldpp/share/Garfield/setupGarfield.sh"
-fi
 
 [[ -s "$SELECTION" && -x "$EXE" ]] || {
   echo "Missing source selection or Garfield executable" >&2; exit 3;
