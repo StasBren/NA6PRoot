@@ -352,6 +352,15 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
   Garfield::Sensor sensor;
   sensor.AddComponent(&field);
   sensor.SetArea(-(half+.5)*p,-.3,-5.,(half+.5)*p,.3,5.);
+  // Direct ELECTRON-only whole-plane cathode signal for one FULL-reference
+  // Heed primary. This is a geometry/control observable, NOT stereo strips.
+  constexpr double kElectronDtNs=0.05;
+  constexpr int kElectronBins=4000;
+  if(detailArchive && detailArchive->Full()) {
+    sensor.AddElectrode(&field,"cathode_plus");
+    sensor.AddElectrode(&field,"cathode_minus");
+    sensor.SetTimeWindow(0.,kElectronDtNs,kElectronBins);
+  }
   Response tot;
   std::array<std::uint64_t,9> muCollected{};
   std::array<double,9> muEndT{},muEndT2{};
@@ -404,7 +413,21 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
     // cutoff biases both the gain distribution and RMS(g)/mean(g).
     // This is intentionally independent of PBS memory/walltime safeguards.
     avalanche.DisableAvalancheSizeLimit();
-    BirthAccumulator births(rngSeed,p,birthReservoirLimit);gBirth=&births;
+    BirthAccumulator births(rngSeed,p,birthReservoirLimit);
+    if(detailArchive) {
+      detailArchive->BeginPrimary(e,static_cast<int>(i),static_cast<int>(rngSeed));
+      if(detailArchive->Full()) {
+        births.fullBirthSink=[detailArchive](double x,double y,double z,
+                                            double t,std::uint64_t ord) {
+          detailArchive->Ion(x,y,z,t,static_cast<long long>(ord),1.,1.);
+        };
+      }
+      if(detailArchive->Full() && i==0) {
+        sensor.ClearSignal();
+        avalanche.EnableSignalCalculation(true);
+      }
+    }
+    gBirth=&births;
     avalanche.SetUserHandleIonisation(OnIonisation);
     // With TrackHeed::EnableDeltaElectronTransport(), GetElectron gives
     // low-energy conduction electron POSITIONS and times. Its returned
@@ -427,6 +450,8 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
       double x0,y0,z0,t0,E0,x1,y1,z1,t1,E1;int status=0;
       avalanche.GetElectronEndpoint(j,x0,y0,z0,t0,E0,
                                    x1,y1,z1,t1,E1,status);
+      if(detailArchive && detailArchive->Full() && i==0)
+        detailArchive->Endpoint(x0,y0,z0,t0,E0,x1,y1,z1,t1,E1,status);
       const int kEnd=static_cast<int>(std::llround(x1/p));
       const double du=x1-double(kEnd)*p;
       if(std::hypot(du,y1)<wireRadius*1.5) {
@@ -440,6 +465,33 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
     }
     if(births.birthsOutsidePatch)
       throw std::runtime_error("Ion birth outside 9-wire analytic patch");
+    if(detailArchive) {
+      std::uint64_t saved=births.total;
+      if(!detailArchive->Full()){
+        saved=births.sample.size();
+        const double pi=births.total?
+           double(saved)/double(births.total):1.;
+        for(std::size_t b=0;b<saved;++b){
+          const auto& xyz=births.sample[b];
+          detailArchive->Ion(xyz[0],xyz[1],xyz[2],xyz[3],
+                static_cast<long long>(births.sampleOrdinals[b]),
+                pi,1./pi);
+        }
+      }
+      detailArchive->PrimaryResult(
+          static_cast<long long>(births.total),
+          static_cast<long long>(saved),
+          static_cast<long long>(collected),
+          static_cast<long long>(nEnd),ok);
+      if(detailArchive->Full() && i==0){
+        for(int bin=0;bin<kElectronBins;++bin){
+          detailArchive->ElectronBin(
+            bin,(bin+.5)*kElectronDtNs,
+            sensor.GetElectronSignal("cathode_plus",bin),
+            sensor.GetElectronSignal("cathode_minus",bin));
+        }
+      }
+    }
     // No Garfield avalanche-size limit is active in this executable.
     // Keep CSV schema compatible with existing ROOT analysis: capped=0 always.
     // Resource failures abort the job; never encode them as capped=0 success.
