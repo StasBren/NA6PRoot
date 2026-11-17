@@ -107,7 +107,8 @@ int main(int argc,char**argv) {
       census.emplace(pri,Census{total,saved,collected,endpoints,0,true});
       totalIons+=total;totalSaved+=saved;totalCollected+=collected;
     }
-    Require(primaries->GetEntries()>0,"no Heed primaries in detailed event");
+    // A genuine Geant4 crossing may have no accepted Heed primaries;
+    // preserve it as a physical zero-ion, zero-electron event.
 
     int ipri=0,wire=0,local=0;
     long long ordinal=0;
@@ -174,9 +175,10 @@ int main(int argc,char**argv) {
     for(const auto& [idx,c]:census)
       Require(c.rootIonRows==c.saved,"primary ion count incomplete or corrupted");
     if(*mode=="full"){
-      Require(ends->GetEntries()==census.at(0).endpoints,
+      const long long expectedEndpoints=census.empty()?0:census.at(0).endpoints;
+      Require(ends->GetEntries()==expectedEndpoints,
               "full first primary electron endpoints incomplete");
-      Require(electron->GetEntries()==4000,
+      Require(electron->GetEntries()==(census.empty()?0:4000),
               "no direct 0.05ns whole-cathode electron signal reference");
     }else{
       Require(ends->GetEntries()==0&&electron->GetEntries()==0,
