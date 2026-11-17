@@ -44,6 +44,11 @@ grep -Fxq "git_sha=$MWPC_DETAIL_GIT_SHA" "$LOCK"
 grep -Fxq "selection_sha256=$MWPC_DETAIL_SELECTION_SHA" "$LOCK"
 grep -Fxq "binary_sha256=$MWPC_DETAIL_BINARY_SHA" "$LOCK"
 grep -Fxq "garfield_install_realpath=$(readlink -f "$GARFIELD_INSTALL")" "$LOCK"
+GARFIELD_SO="$(ldd "$EXE" | awk '$1 ~ /Garfield/ && $3 ~ /^\\/ {print $3;exit}')"
+[[ -n "$GARFIELD_SO" && -f "$GARFIELD_SO" ]] || {
+ echo "Missing linked Garfield shared library" >&2;exit 3; }
+grep -Fxq "garfield_library_realpath=$(readlink -f "$GARFIELD_SO")" "$LOCK"
+grep -Fxq "garfield_library_sha256=$(sha256sum "$GARFIELD_SO" | cut -d' ' -f1)" "$LOCK"
 grep -Fxq "root_version=$(root-config --version)" "$LOCK"
 grep -Fxq "gpp_version=$(c++ -dumpfullversion)" "$LOCK"
 printf -v TAG 'muon_%04d' "$IDX"
