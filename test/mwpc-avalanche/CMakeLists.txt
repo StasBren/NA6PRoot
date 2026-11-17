@@ -196,3 +196,9 @@ add_executable(mwpc_p3_noFW_penning057_cathode_ion_reference_v1
 target_link_libraries(mwpc_p3_noFW_penning057_cathode_ion_reference_v1
                       PRIVATE Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree)
 target_compile_features(mwpc_p3_noFW_penning057_cathode_ion_reference_v1 PRIVATE cxx_std_17)
+
+add_executable(verify_cathode_ion_root
+               ../mwpc-stage-c/cathode-ion-reference/verify_cathode_ion_root.cc)
+target_link_libraries(verify_cathode_ion_root
+                      PRIVATE ROOT::Core ROOT::RIO ROOT::Tree)
+target_compile_features(verify_cathode_ion_root PRIVATE cxx_std_17)
