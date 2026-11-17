@@ -67,6 +67,16 @@ These are research requirements; do not claim any voltage trend, channel effect 
 - New isolated **2100-V-only** runner and ROOT analysis branch: `feature/p3-2100V-only-20261117`; directory `test/mwpc-stage-c/hv-2100-only/`.
 - Start with 1, then 5, then 20 muons, auditing capping, collection, ion births and missing space-charge effects before declaring a validated working point.
 
+### Uncapped five-voltage cross-check requested (2026-11-17; not yet run)
+
+- Requested **20 genuine muons per voltage** at 2000, 2050, 2100, 2150, 2200 V, with the *same* frozen Geant4 crossings and the Penning r=0.57 gas setup.
+- New GitHub branch: `feature/p3-uncapped-hv-2000-2200-20261117`. Runner and ROOT analysis: `test/mwpc-stage-c/hv-uncapped-2000-2200/`.
+- This is an explicitly **uncapped** Garfield++ `AvalancheMicroscopic` variant (`DisableAvalancheSizeLimit()`, no `EnableAvalancheSizeLimit()`), NOT the previously capped high-voltage scans.
+- Measures both number of ion births / electron endpoints (avalanche size) and collected-anode electrons (gain), so the definitions are not conflated.
+- One-muon per-process external time / virtual-memory guard prevents exhausting the laptop; if aborted, muon is censored and NO finite size or gain is inferred from it.
+- Purpose: test how numerical size truncation influences amplification and tails. High-HV results still omit space charge and discharge and may not describe real stable chamber physics.
+- **2100 V remains the user's chosen *working* point**, conditional on physical validation; scanning up to 2200 V does NOT mean changing it.
+
 ### Archived 2100–2250 V exploratory scan (prepared previously; superseded by 2100-V decision)
 
 - New isolated branch `feature/p3-hv-high-2100-2250-20261116`, folder `test/mwpc-stage-c/hv-high-2100-2250/`.
