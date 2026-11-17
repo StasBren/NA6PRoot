@@ -2,7 +2,16 @@
 # Prepare, submit and audit 1000 true Geant4 muons at 2100 V, UNCAPPED Garfield++.
 # Usage (on PBS login): bash manage_2100_pbs.sh prepare|pilot|status|full
 # Never modifies 1800-V references, any other HV scan or prior PBS campaigns.
-set -Eeuo pipefail
+# WIPP login/PBS shells do not automatically load Garfield++.
+# Pin the same working CVMFS toolchain as the frozen 1800 V campaign.
+# The CVMFS environment refers to unset ZSH_NAME on bash: source before -u.
+set -Eeo pipefail
+export GARFIELD_INSTALL=${GARFIELD_INSTALL:-/cvmfs/sft-nightlies.cern.ch/lcg/nightlies/dev3/Mon/Garfield++/HEAD/x86_64-el9-gcc13-opt}
+[[ -f "$GARFIELD_INSTALL/Garfield++-env.sh" ]] || {
+  echo "Missing pinned CVMFS Garfield++ environment: $GARFIELD_INSTALL" >&2; exit 2;
+}
+source "$GARFIELD_INSTALL/Garfield++-env.sh"
+set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
 SELECTION="$REPO/test/mwpc-stage-c/p3_wiretruth_1000_selection.csv"
@@ -11,10 +20,6 @@ EXE="$BUILD/mwpc_p3_noFW_penning057_2100_uncapped_v1"
 OUT="${MWPC_2100_OUTPUT_DIR:-/storage/cgrp/stanis/mwpc_penning057/hv2100_uncapped_1000_v1}"
 MODE="${1:-status}"
 
-if [[ -f "$HOME/na6p/env.sh" ]];then source "$HOME/na6p/env.sh";fi
-if [[ -f "$HOME/na6p/install/garfieldpp/share/Garfield/setupGarfield.sh" ]];then
-  source "$HOME/na6p/install/garfieldpp/share/Garfield/setupGarfield.sh"
-fi
 need_input() {
   [[ -s "$SELECTION" ]] || { echo "Missing frozen 1000 Geant4 selection: $SELECTION" >&2;exit 2; }
   local lines
@@ -49,6 +54,9 @@ prepare() {
   mkdir -p "$OUT/pbs-logs"
   echo "Cluster host: $(hostname -f)"
   echo "Build directory: $BUILD"
+  echo "Pinned Garfield++: $GARFIELD_INSTALL"
+  echo "Compiler version: $(c++ -dumpfullversion)"
+  echo "ROOT version: $(root-config --version)"
   cmake_args=()
   if [[ -n "${Garfield_DIR:-}" ]];then
     cmake_args+=("-DGarfield_DIR=$Garfield_DIR")
