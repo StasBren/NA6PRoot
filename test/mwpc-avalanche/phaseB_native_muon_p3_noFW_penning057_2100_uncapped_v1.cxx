@@ -1,35 +1,11 @@
-// NA60+ P3 noFW 2100 V: UNCAPPED MICROSCOPIC REFERENCE, isolated from all historical binaries.
-// Explicitly disables Garfield++ avalanche size truncation. Jobs MAY fail due to OOM/walltime;
-// those failures must NEVER be interpreted as measured or capped gain values.
-// For complete ion-current waveforms, the zero-size reservoir is insufficient; this program
-// records exact ion-birth census and physical wire endpoint charges, not per-ion waveforms.
-// Isolated HIGH-VOLTAGE experiment 2100-2250 V. Do not infer stable detector\n// operation without space charge, photon feedback, streamer/discharge modelling.\n// Voltage-scan variant of the validated full-Garfield++ per-wire reference.
-// Only anode HV is varied; the 1800-V source, Heed seeds, Penning transfer,
-// RNG namespaces and physical chamber geometry remain untouched.
-// Isolated CMake target and new output directory.
-// NEW independent cluster 10k Penning-ON variant. The ONLY physical-code change
-// versus phaseB_native_muon_p3_noFW_jpsi_penning057_pilot_v1.cxx is
-// increasing the accepted TrackHeed primaries safety budget 1000 -> 50000.
-// Geometry, Penning r=0.57, random seeds and Avalon microscopic cap unchanged.
-// Original pilot and historical SHA-sealed results remain untouched.
-// PENNING-ON isolated physics gain PILOT: only difference from original
-// 11k p3_noFW executable is enabled Ar Penning transfer r=0.57.
-// Original SHA-sealed microscopic 11k campaign is NEVER overwritten.
-// NEW separate native MWPC spatial-time reference (V1).
-// Physical Geant4/TrackHeed/Garfield microphysics remains identical to the
-// archived 5-point sampler. This variant raises independent-RNG
-// per-primary ion-birth coordinate/time reservoir size to 128 for studying
-// cathode response approximations. Still NOT a complete cloud for arbitrary
-// weighting-field readout; verify convergence before use.
-// REAL native Geant4 crossing -> one common TrackHeed cluster population
-// -> four independent full microscopic Garfield avalanche geometries.
-// B1 is an ionization-BIRTH count, not induced cathode signal.
-// No old 2+4mm code, original ROOT files or frozen LUTs are modified.
-// One-geometry p3_noFW-only native J/psi benchmark; isolated fork of frozen
-// phaseB_native_muon_3p3_spacetime_v1.cxx. No changes to physics kernel:
-// TrackHeed + AvalancheMicroscopic + all ion-sector counts. 128-point
-// unbiased per-primary birth reservoir, NOT full cathode signal.
-// The one-geometry filter deliberately avoids timing the other 3 fields.
+// NA60+ P3 noFW: isolated 2100 V UNCAPPED full Garfield++ reference (2026-11-17).
+// Input: frozen true-Geant4 1000 crossing selection, original TrackHeed seeds.
+// NO Garfield avalanche-size cutoff: explicitly calls DisableAvalancheSizeLimit().
+// Exact positive-ion BIRTH census and collecting-wire electron endpoints are retained.
+// HV mode saves no ion-birth position/time reservoir; it is NOT a cathode-waveform source.
+// Resource failures (PBS OOM/walltime) are unsealed errors, never clipped gain entries.
+// Fixed-field microscopic model omits space charge, streamers, photon feedback, discharge.
+// This is a separate target; all 1800-V and other voltage scans are preserved.
 #include <algorithm>
 #include <array>
 #include <chrono>
