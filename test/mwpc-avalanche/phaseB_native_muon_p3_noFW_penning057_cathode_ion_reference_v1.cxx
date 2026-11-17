@@ -1035,7 +1035,8 @@ int main(int argc,char**argv) {
       RunGeometry(gas,GEOMS.front(),h,electrons,id,seedOut,birthOut,
                   hitOut,nCl,discarded,failed,nullptr,
                   cacheMuonPhysics?&timingOut:nullptr,false,
-                  voltageScanMode?0:(cacheMuonPhysics?128:100),
+                  detailedMode?static_cast<std::size_t>(detailedReservoir):
+                  (voltageScanMode?0:(cacheMuonPhysics?128:100)),
                   wireTruthMode?&wireSeedOut:nullptr,
                   wireTruthMode?&wireMuonOut:nullptr,
                    anodeVoltageV,avalancheLimit,detailArchive.get());
