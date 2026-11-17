@@ -186,3 +186,13 @@ add_executable(mwpc_p3_noFW_penning057_2100_uncapped_v1
                phaseB_native_muon_p3_noFW_penning057_2100_uncapped_v1.cxx)
 target_link_libraries(mwpc_p3_noFW_penning057_2100_uncapped_v1 PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_p3_noFW_penning057_2100_uncapped_v1 PRIVATE cxx_std_17)
+
+# Isolated 2100 V uncapped microscopic ion-birth reference for future physical
+# cathode-strip weighting-current calculations (NOT the strip-current solver).
+# Writes per-callback buffered ROOT trees; original HV2100 target is untouched.
+find_package(ROOT REQUIRED COMPONENTS Core RIO Tree)
+add_executable(mwpc_p3_noFW_penning057_cathode_ion_reference_v1
+               phaseB_native_muon_p3_noFW_penning057_cathode_ion_reference_v1.cxx)
+target_link_libraries(mwpc_p3_noFW_penning057_cathode_ion_reference_v1
+                      PRIVATE Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree)
+target_compile_features(mwpc_p3_noFW_penning057_cathode_ion_reference_v1 PRIVATE cxx_std_17)
