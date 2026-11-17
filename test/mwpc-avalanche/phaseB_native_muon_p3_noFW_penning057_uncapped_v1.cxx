@@ -410,7 +410,7 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
     const unsigned int rngSeed=1+unsigned(raw%2'000'000'000ULL);
     SeedGarfield(rngSeed);
     Garfield::AvalancheMicroscopic avalanche(&sensor);
-    // Explicitly disable Garfield's possible avalanche size cutoff.
+    // Explicitly disable Garfield's avalanche-size cutoff.
      // NO physical or software avalanche-size truncation in this run.
      avalanche.DisableAvalancheSizeLimit();
     BirthAccumulator births(rngSeed,p,birthReservoirLimit);gBirth=&births;
@@ -493,7 +493,7 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
     seedOut<<crossingLabel<<","<<geom.label<<","<<i<<","<<rngSeed<<","
            <<(10.*u)<<","<<(10.*e.v)<<","<<(10.*e.w)<<","
            <<startEnergy<<","<<ne<<","<<ni<<","<<births.total<<","
-           <<collected<<","<<attached<<","<<other<<","<<ok<<","
+           <<collected<<","<<attached<<","<<other<<","<<nEnd<<","<<ok<<","
            <<capped<<","<<births.counts.up<<","<<births.counts.down<<","
            <<births.counts.top<<","<<births.counts.bottom<<","
            <<Asym(births.counts.up,births.counts.down)<<","
@@ -917,7 +917,7 @@ int main(int argc,char**argv) {
     seedOut<<"crossing_id,configuration,primary_index,garfield_seed,"
              "seed_u_mm,seed_v_mm,seed_w_mm,seed_energy_eV,"
              "garfield_ne,garfield_ni,ion_births,collected_e,"
-             "attached,other,successful,capped,"
+             "attached,other,electron_endpoints,successful,capped,"
              "ion_up,ion_down,ion_top,ion_bottom,A_ion_hemi,A_ion_TB\n";
     birthOut<<"crossing_id,configuration,primary_index,u_mm,v_mm,w_mm,t_ns,"
                "seed_ion_births_total,reservoir_weight\n";
