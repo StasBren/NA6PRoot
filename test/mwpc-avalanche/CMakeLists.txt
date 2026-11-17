@@ -213,3 +213,8 @@ add_executable(compare_sampling_to_full_root
                ../mwpc-stage-c/cathode-ion-reference/compare_sampling_to_full_root.cc)
 target_link_libraries(compare_sampling_to_full_root PRIVATE ROOT::Core ROOT::RIO ROOT::Tree)
 target_compile_features(compare_sampling_to_full_root PRIVATE cxx_std_17)
+
+add_executable(select_detailed_1000_root
+               ../mwpc-stage-c/cathode-ion-reference/select_detailed_1000_root.cc)
+target_link_libraries(select_detailed_1000_root PRIVATE ROOT::Core ROOT::RIO ROOT::Tree)
+target_compile_features(select_detailed_1000_root PRIVATE cxx_std_17)
