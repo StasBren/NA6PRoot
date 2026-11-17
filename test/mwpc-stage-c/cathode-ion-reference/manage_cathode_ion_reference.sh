@@ -10,6 +10,7 @@ set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
 BUILD="$REPO/test/mwpc-avalanche/build-cathode-2100"
+INPUT_AUDITOR="$BUILD/audit_geant4_1000_root"
 SELECTION="$REPO/test/mwpc-stage-c/p3_wiretruth_1000_selection.csv"
 BIN="$BUILD/mwpc_p3_noFW_penning057_cathode_ion_reference_v1"
 AUDITOR="$BUILD/verify_cathode_ion_root"
@@ -52,13 +53,18 @@ prepare(){
  cmake -S "$REPO/test/mwpc-avalanche" -B "$BUILD"
  cmake --build "$BUILD" --target \
     mwpc_p3_noFW_penning057_cathode_ion_reference_v1 \
-    verify_cathode_ion_root -j2
- [[ -x "$BIN" && -x "$AUDITOR" ]] || {
+    verify_cathode_ion_root audit_geant4_1000_root -j2
+ [[ -x "$BIN" && -x "$AUDITOR" && -x "$INPUT_AUDITOR" ]] || {
    echo "ROOT/C++ detailed target build failed" >&2;exit 4; }
  TEMP=$(mktemp "$OUT/.inputcheck.XXXXXX.csv")
  { head -n 1 "$SELECTION"; sed -n '2p' "$SELECTION"; } > "$TEMP"
  "$BIN" --validate-input "$TEMP"
  rm -f "$TEMP"
+ # This audit only reads immutable Geant4 geometry and draws ROOT-only plots.
+ # Actual Heed counts, gain and multi-anode fractions require Garfield.
+ if [[ ! -s "$OUT/geant4_input_audit/audit.root" ]];then
+   "$INPUT_AUDITOR" "$SELECTION" "$OUT/geant4_input_audit/audit.root"
+ fi
  expected=$(lock_data)
  if [[ -f "$OUT/config.lock" ]];then
    [[ "$(cat "$OUT/config.lock")" == "$expected" ]] || {
