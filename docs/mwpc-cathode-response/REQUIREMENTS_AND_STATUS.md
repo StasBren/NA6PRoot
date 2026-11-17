@@ -60,7 +60,14 @@ These are research requirements; do not claim any voltage trend, channel effect 
 - Code prepared and source-reviewed only: no Garfield++ compilation, run or physics results have been confirmed yet. Abort on size-capped avalanches.
 - Do not confuse this branch/run with the original 1900–2050 V scan.
 
-### Additional 2100–2250 V scan (prepared; not yet executed)
+### 2100 V working point selected by user (2026-11-17)
+
+- User chooses **2100 V** for further MWPC/cathode-response work, reporting an approximate gain of **80,000** (user-reported preliminary number, NOT an independently audited Garfield++ result). Keep the high voltage configurable in code.
+- Do **not** continue 2150/2200/2250 V scan unless user explicitly changes the plan. The previously created exploratory four-voltage branch is archived, not the active run target.
+- New isolated **2100-V-only** runner and ROOT analysis branch: `feature/p3-2100V-only-20261117`; directory `test/mwpc-stage-c/hv-2100-only/`.
+- Start with 1, then 5, then 20 muons, auditing capping, collection, ion births and missing space-charge effects before declaring a validated working point.
+
+### Archived 2100–2250 V exploratory scan (prepared previously; superseded by 2100-V decision)
 
 - New isolated branch `feature/p3-hv-high-2100-2250-20261116`, folder `test/mwpc-stage-c/hv-high-2100-2250/`.
 - Same 30 um P3 noFW Garfield++ physics; 2100, 2150, 2200, 2250 V with 1-muon smoke, 5-muon pilot, and optional 20 muons/voltage.
@@ -82,7 +89,7 @@ A new 30k wire-resolved Garfield++ campaign may be in progress on the HPC farm (
 
 ## E. Open physics/design decisions
 
-- Which anode HV to use for *real* cathode-response development after the scan?
+- User-selected 2100 V must be validated for uncapped gain, physics-model limits and signal realism; keep 1800 V as historical test/reference and HV configurable.
 - What is the correct mixture-dependent positive-ion mobility / ion composition? Existing Phase-C code explicitly labels mobility as provisional.
 - Which strip layout on upper/lower cathodes per station, with stereo angle sign, pitch, width, gaps and boundary effects?
 - Which electrostatic and weighting-field models provide validated strip currents (not whole cathode currents)?
