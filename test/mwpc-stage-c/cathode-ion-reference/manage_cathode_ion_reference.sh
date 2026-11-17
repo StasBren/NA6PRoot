@@ -37,6 +37,9 @@ lock_data(){
  printf 'physics=2100V;ArCO2_70_30;Penning0.57;p3_noFW;30um;3mm;cathodes_pm3mm;B0;UNCAPPED\n'
  printf 'root_archive=ion_callbacks_all_or_unbiased_per_primary_reservoir;no_species_inferred\n'
  printf 'garfield_install=%s\n' "$GARFIELD_INSTALL"
+ printf 'garfield_install_realpath=%s\n' "$(readlink -f "$GARFIELD_INSTALL")"
+ printf 'root_version=%s\n' "$(root-config --version)"
+ printf 'gpp_version=%s\n' "$(c++ -dumpfullversion)"
 }
 check_lock(){
  [[ -x "$BIN" && -x "$AUDITOR" && -s "$OUT/config.lock" ]] || {
