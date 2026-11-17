@@ -179,3 +179,8 @@ target_compile_features(mwpc_p3_noFW_penning057_hvscan_v1 PRIVATE cxx_std_17)
 add_executable(mwpc_p3_noFW_penning057_hvhigh_v1 phaseB_native_muon_p3_noFW_penning057_hvhigh_v1.cxx)
 target_link_libraries(mwpc_p3_noFW_penning057_hvhigh_v1 PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_p3_noFW_penning057_hvhigh_v1 PRIVATE cxx_std_17)
+
+# ISOLATED TRUE-UNCAPPED Garfield++ 2000–2200 V test; no size truncation.
+add_executable(mwpc_p3_noFW_penning057_uncapped_v1 phaseB_native_muon_p3_noFW_penning057_uncapped_v1.cxx)
+target_link_libraries(mwpc_p3_noFW_penning057_uncapped_v1 PRIVATE Garfield::Garfield)
+target_compile_features(mwpc_p3_noFW_penning057_uncapped_v1 PRIVATE cxx_std_17)
