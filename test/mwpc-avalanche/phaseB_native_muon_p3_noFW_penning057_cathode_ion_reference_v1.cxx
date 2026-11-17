@@ -871,15 +871,25 @@ int main(int argc,char**argv) {
       return 0;
     }
     // Standalone voltage scan; legacy 1800-V reference remains unchanged.
-    const bool voltageScanMode=(argc==6 &&
+    const bool detailedMode=(argc==9 &&
+        std::string(argv[1])=="--cathode-ion-reference");
+    const bool voltageScanMode=detailedMode || (argc==6 &&
         std::string(argv[1])=="--wiretruth-hv-p3-noFW");
     const bool wireTruthMode=voltageScanMode || (argc==4 &&
         std::string(argv[1])=="--wiretruth-p3-noFW");
     const bool cacheMuonPhysics=wireTruthMode || (argc==4 &&
         std::string(argv[1])=="--muon-cache-physics-p3-noFW");
-    if(argc!=(voltageScanMode?6:4))throw std::runtime_error(
+    if(!detailedMode && argc!=(voltageScanMode?6:4))throw std::runtime_error(
       "Usage: mwpc_phase_b_native_muon_3p3 INPUT_NATIVE_CSV OUTPUT_PREFIX MAX_PRIMARY_ELECTRONS | --wiretruth-hv-p3-noFW INPUT_NATIVE_CSV OUTPUT_PREFIX VOLTAGE_V AVALANCHE_CAP | --muon-cache-physics-p3-noFW REAL_MUON_INPUT_CSV PREFIX | --validate-input INPUT_NATIVE_CSV | --validate-heed INPUT_NATIVE_CSV | --lut-sidecar FROZEN_EXACT_START_INDEX_CSV OUTPUT_PREFIX");
     const double anodeVoltageV=voltageScanMode?std::stod(argv[4]):1800.;
+    const std::string detailedArchiveMode=detailedMode?argv[6]:"";
+    const int detailedReservoir=detailedMode?std::stoi(argv[7]):0;
+    const std::string detailedRootPath=detailedMode?argv[8]:"";
+    if(detailedMode && !((detailedArchiveMode=="weighted" &&
+       (detailedReservoir==256||detailedReservoir==512||detailedReservoir==1024))
+       ||(detailedArchiveMode=="full"&&detailedReservoir==0)))
+      throw std::runtime_error(
+        "Usage: --cathode-ion-reference INPUT PREFIX 2100 0 weighted {256|512|1024} OUTPUT.root | full 0 OUTPUT.root");
      const unsigned int avalancheLimit=voltageScanMode?
          static_cast<unsigned int>(std::stoul(argv[5])):200000u;
      if(!voltageScanMode || !std::isfinite(anodeVoltageV) || anodeVoltageV!=2100. || avalancheLimit!=0u)
@@ -892,6 +902,13 @@ int main(int argc,char**argv) {
     const int maxPrimary=cacheMuonPhysics?50000:std::stoi(argv[3]);
     if(maxPrimary<1||maxPrimary>50000)throw std::runtime_error("max primaries must be 1..50000");
     const auto crossings=ReadCrossings(input);
+    if(detailedMode && crossings.size()!=1)
+      throw std::runtime_error(
+        "Cathode ion reference requires exactly ONE frozen Geant4 muon per ROOT file");
+    std::unique_ptr<CathodeRef::Archive> detailArchive;
+    if(detailedMode)
+      detailArchive=std::make_unique<CathodeRef::Archive>(
+         detailedRootPath,detailedArchiveMode,detailedReservoir);
     Garfield::MediumMagboltz gas;
     gas.SetComposition("ar",70.,"co2",30.);
     gas.SetTemperature(293.15);gas.SetPressure(760.);
@@ -974,6 +991,14 @@ int main(int argc,char**argv) {
          std::to_string(h.event)+"|"+std::to_string(h.hit)+"|"+
          std::to_string(h.track)+"|"+std::to_string(h.station)+"|"+
          std::to_string(h.det);
+      if(detailArchive){
+        constexpr double pitchMm=3.;
+        const double phaseCm=.1*EntrancePhase(h.a[0],h.station,pitchMm);
+        const double phaseMm=(NAnodes(h.station,pitchMm)%2==0)?
+                             pitchMm*.5:0.;
+        const int base=int(std::llround((h.a[0]-phaseMm)/pitchMm));
+        detailArchive->Muon(h,id,phaseCm,pitchMm,base);
+      }
       int nCl=0,discarded=0,failed=0;
       std::vector<HeedCluster> clusters;
       const auto electrons=HeedPrimaries(gas,h,nCl,discarded,failed,
@@ -987,6 +1012,8 @@ int main(int argc,char**argv) {
       if(cacheMuonPhysics){
         if(clusters.size()!=static_cast<std::size_t>(nCl))
           throw std::runtime_error("TrackHeed accepted cluster bookkeeping changed");
+        if(detailArchive)for(std::size_t j=0;j<clusters.size();++j)
+          detailArchive->ClusterEntry(clusters[j],static_cast<int>(j));
         for(std::size_t j=0;j<clusters.size();++j){
           const auto& cl=clusters[j];
           clusterOut<<id<<","<<j<<","<<cl.u<<","<<cl.v<<","
@@ -1011,7 +1038,7 @@ int main(int argc,char**argv) {
                   voltageScanMode?0:(cacheMuonPhysics?128:100),
                   wireTruthMode?&wireSeedOut:nullptr,
                   wireTruthMode?&wireMuonOut:nullptr,
-                   anodeVoltageV,avalancheLimit);
+                   anodeVoltageV,avalancheLimit,detailArchive.get());
       if(cacheMuonPhysics){
         const double avalWall=std::chrono::duration<double>(
             std::chrono::steady_clock::now()-avalancheStart).count();
@@ -1024,6 +1051,15 @@ int main(int argc,char**argv) {
       }
       std::cout<<"PASS genuine native muon "<<id
                <<" p3_noFW Heed primaries="<<electrons.size()<<"\n";
+    }
+    if(detailArchive) {
+      detailArchive->Finish();
+      std::cout<<"PASS CATHODE_ION_ARCHIVE_ROOT="<<detailedRootPath
+               <<" mode="<<detailedArchiveMode
+               <<" reservoir_per_Heed_primary="<<detailedReservoir
+               <<" callback_physics=UNCAPPED_2100V"
+               <<" electron_control=whole_cathode_planes_FIRST_PRIMARY_ONLY"
+               <<" strip_currents=NOT_COMPUTED\n";
     }
     if(wireTruthMode) {
       wireSeedOut.flush();wireMuonOut.flush();
