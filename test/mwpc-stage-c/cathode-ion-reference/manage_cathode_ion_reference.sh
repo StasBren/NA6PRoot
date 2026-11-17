@@ -38,6 +38,12 @@ lock_data(){
  printf 'root_archive=ion_callbacks_all_or_unbiased_per_primary_reservoir;no_species_inferred\n'
  printf 'garfield_install=%s\n' "$GARFIELD_INSTALL"
  printf 'garfield_install_realpath=%s\n' "$(readlink -f "$GARFIELD_INSTALL")"
+ local garfield_so
+ garfield_so="$(ldd "$BIN" | awk '$1 ~ /Garfield/ && $3 ~ /^\// {print $3;exit}')"
+ [[ -n "$garfield_so" && -f "$garfield_so" ]] || {
+   echo "Could not locate actual linked Garfield++ shared library" >&2; exit 4; }
+ printf 'garfield_library_realpath=%s\n' "$(readlink -f "$garfield_so")"
+ printf 'garfield_library_sha256=%s\n' "$(sha256sum "$garfield_so" | cut -d' ' -f1)"
  printf 'root_version=%s\n' "$(root-config --version)"
  printf 'gpp_version=%s\n' "$(c++ -dumpfullversion)"
 }
