@@ -9,7 +9,7 @@
 // NEW independent cluster 10k Penning-ON variant. The ONLY physical-code change
 // versus phaseB_native_muon_p3_noFW_jpsi_penning057_pilot_v1.cxx is
 // increasing the accepted TrackHeed primaries safety budget 1000 -> 50000.
-// Geometry, Penning r=0.57, random seeds and Avalon microscopic cap unchanged.
+// Geometry, Penning r=0.57 and random seeds unchanged. Only size capping is disabled here.
 // Original pilot and historical SHA-sealed results remain untouched.
 // PENNING-ON isolated physics gain PILOT: only difference from original
 // 11k p3_noFW executable is enabled Ar Penning transfer r=0.57.
@@ -447,6 +447,8 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
       } else if(status==-7)++attached;
       else ++other;
     }
+    if(nEnd!=collected+attached+other)
+      throw std::runtime_error("Per-primary electron endpoint census mismatch");
     if(births.birthsOutsidePatch)
       throw std::runtime_error("Ion birth outside 9-wire analytic patch");
     const bool capped=false; // There is deliberately NO internal size cap.
