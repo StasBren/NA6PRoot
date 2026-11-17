@@ -30,7 +30,7 @@
 
 ## Next scientific milestone
 
-Select an operating voltage *after* completing/assessing the voltage scan and cap diagnostics. Demonstrate **one honest, physically consistent cathode-strip current** from a verified ion-birth input and weighting field, checking charge conservation and numerical convergence. Then extend to both cathode sides, real geometry, electron contribution, electronics and muon-level validation. Do not jump straight from six per-wire moments to a claim of realistic waveforms.
+The user has selected **2100 V as the working voltage** (user-reported gain ~80,000; still to be verified against a completed, uncapped Garfield++ sample). Keep voltage configurable and check cap/space-charge limitations before relying on absolute charge. Demonstrate **one honest, physically consistent cathode-strip current** from a verified ion-birth input and weighting field, checking charge conservation and numerical convergence. Then extend to both cathode sides, real geometry, electron contribution, electronics and muon-level validation. Do not jump straight from six per-wire moments to a claim of realistic waveforms.
 
 ## Reference geometry (baseline, NOT final hardware)
 
