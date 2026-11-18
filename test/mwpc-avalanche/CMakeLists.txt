@@ -218,3 +218,10 @@ add_executable(select_detailed_1000_root
                ../mwpc-stage-c/cathode-ion-reference/select_detailed_1000_root.cc)
 target_link_libraries(select_detailed_1000_root PRIVATE ROOT::Core ROOT::RIO ROOT::Tree)
 target_compile_features(select_detailed_1000_root PRIVATE cxx_std_17)
+
+# Standalone M2a at 2100 V: real P3 9-wire drift + WHOLE-cathode Ramo
+# control, independent of old 1800-V prototype; not a stereo-strip model.
+add_executable(mwpc_phase_c_p3_noFW_2100_single_ion_control_v1
+               phaseC_p3_noFW_2100_single_ion_control_v1.cxx)
+target_link_libraries(mwpc_phase_c_p3_noFW_2100_single_ion_control_v1 PRIVATE Garfield::Garfield)
+target_compile_features(mwpc_phase_c_p3_noFW_2100_single_ion_control_v1 PRIVATE cxx_std_17)
