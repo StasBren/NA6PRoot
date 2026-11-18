@@ -20,26 +20,8 @@ case "${1:-}" in
     ;;
   pilot|full)
     if [[ "$1" == pilot ]]; then n=10000; else n=100000; fi
-    find_unique() {
-      local filename="$1" varname="$2" path="" found=0 hit
-      if [[ -n "${!varname:-}" ]]; then
-        path="${!varname}"
-        [[ -f "$path" ]] || { printf 'Missing %s: %s\n' "$varname" "$path" >&2; return 1; }
-      else
-        while IFS= read -r -d '' hit; do
-          ((found+=1))
-          path="$hit"
-        done < <(find "$HOME/na6p" -type f -name "$filename" -print0 2>/dev/null)
-        if (( found != 1 )); then
-          printf 'Expected exactly one %s under ~/na6p, found %s.\n' "$filename" "$found" >&2
-          printf 'Set %s=/absolute/path/to/%s and rerun.\n' "$varname" "$filename" >&2
-          return 1
-        fi
-      fi
-      printf '%s\n' "$path"
-    }
-    lut="$(find_unique 'NA60_LUT500.zip' LUT_ZIP)"
-    calibration="$(find_unique 'model_calibration_jpsi_v1.npz' CALIBRATION_NPZ)"
+    lut="$(bash "$HERE/ensure_frozen_inputs.sh" lut)"
+    calibration="$(bash "$HERE/ensure_frozen_inputs.sh" calibration)"
     "$PYTHON_BIN" "$HERE/run_comparison.py" compare \
        --repo "$REPO" --selected-n 100000 --limit "$n" \
        --lut "$lut" --calibration "$calibration" --weights donor
