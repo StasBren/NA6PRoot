@@ -151,7 +151,8 @@ void MakePlot(const std::vector<Sample>&data,double dt,
  canvas.Divide(2,2);
  for(int c=0;c<2;++c)for(int zoom=0;zoom<2;++zoom){
    const int n=zoom?std::min((int)data.size(),20):(int)data.size();
-   const std::string suffix=(c?"minus":"plus")+(zoom?"_first2us":"_full");
+   const std::string suffix=std::string(c?"minus":"plus")+
+                            (zoom?"_first2us":"_full");
    const std::string caption=(c?"Lower":"Upper")+
              std::string(" whole-plane induced current")+
              (zoom?" (first 2 #mus)":" (100 #mus)");
