@@ -25,6 +25,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <map>
 #include <numeric>
 #include <random>
 #include <stdexcept>
@@ -293,14 +294,14 @@ int main(int argc,char**argv){
   std::sort(order.begin(),order.end(),[&](int a,int b){
     return eigen[a]>eigen[b];
   });
-  const int maxRank=std::min(16,nTrain-2);
+  const int rankCap=std::min(16,nTrain-2);
   std::vector<Vec> basis;
   std::vector<double> lambda;
   const double maxEval=std::max(0.,eigen[order[0]]);
-  for(int p=0;p<maxRank;++p){
+  NA60Plane::Require(maxEval>0.,"zero variance in all training trajectories");
+  for(int p=0;p<rankCap;++p){
     int col=order[p];double ev=eigen[col];
-    NA60Plane::Require(ev>std::max(maxEval*1.e-12,1.e-30),
-      "insufficient meaningful PCA rank, try smaller target rank");
+    if(ev<=std::max(maxEval*1.e-12,1.e-30))break;
     Vec v(len,0.);
     for(int i=0;i<nTrain;++i)
       for(int t=0;t<len;++t)
@@ -311,6 +312,11 @@ int main(int argc,char**argv){
     for(auto&x:v)x/=norm;
     basis.push_back(std::move(v));lambda.push_back(ev);
   }
+  NA60Plane::Require(!basis.empty(),"PCA model has no meaningful basis");
+  const int maxRank=(int)basis.size();
+  std::vector<int> ranks;
+  for(int rank:{2,4,8,16})if(rank<=maxRank)ranks.push_back(rank);
+  if(ranks.empty())ranks.push_back(maxRank);
   for(auto&trn:train){
     trn.coeff=OracleCoeff(trn.wave,mean,basis,maxRank);
   }
@@ -330,8 +336,8 @@ int main(int argc,char**argv){
      <<"ion_source_row,primary,u_cm,v_cm,w_cm,birth_t_ns,model,rank,"
        "relative_L2,max_cumulative_error_e,final_plus_error_e,"
        "final_minus_error_e,early_1us_error_e\n";
-  std::vector<Metrics> metricRaw, metricBasis4,metricBasis8,metricBasis16,
-                       oracle4,oracle8,oracle16;
+  std::vector<Metrics> metricRaw;
+  std::map<int,std::vector<Metrics>> metricBasis,oracleMetrics;
   for(int i=0;i<nTest;++i){
     const auto&b=test[i].b;
     const auto near=Neighbors(b,train,neighbors);
@@ -345,21 +351,13 @@ int main(int argc,char**argv){
          <<m.finalMinusErrorE<<","<<m.early1usErrorE<<"\n";
     };
     evaluate("raw_spatial_IDW",0,RawIDW(train,near,len),metricRaw);
-    for(int rank:{4,8,16}){
+    for(int rank:ranks){
       auto coeff=InterpolatedCoeffs(train,near,rank);
       auto interp=Reconstruct(mean,basis,coeff,rank);
       auto oracle=Reconstruct(mean,basis,
                      OracleCoeff(test[i].wave,mean,basis,rank),rank);
-      if(rank==4) {
-        evaluate("PCA_spatial_IDW",rank,interp,metricBasis4);
-        evaluate("PCA_ORACLE_not_fast",rank,oracle,oracle4);
-      } else if(rank==8) {
-        evaluate("PCA_spatial_IDW",rank,interp,metricBasis8);
-        evaluate("PCA_ORACLE_not_fast",rank,oracle,oracle8);
-      } else {
-        evaluate("PCA_spatial_IDW",rank,interp,metricBasis16);
-        evaluate("PCA_ORACLE_not_fast",rank,oracle,oracle16);
-      }
+      evaluate("PCA_spatial_IDW",rank,interp,metricBasis[rank]);
+      evaluate("PCA_ORACLE_not_fast",rank,oracle,oracleMetrics[rank]);
     }
   }
   row.close();
@@ -371,12 +369,12 @@ int main(int argc,char**argv){
       "max_relative_L2,max_cumulative_error_e,max_final_charge_error_e,"
       "max_early_1us_error_e\n";
   PrintSummary("raw_spatial_IDW",metricRaw,summary);
-  PrintSummary("PCA_rank4_spatial_IDW",metricBasis4,summary);
-  PrintSummary("PCA_rank8_spatial_IDW",metricBasis8,summary);
-  PrintSummary("PCA_rank16_spatial_IDW",metricBasis16,summary);
-  PrintSummary("PCA_rank4_ORACLE_not_fast",oracle4,summary);
-  PrintSummary("PCA_rank8_ORACLE_not_fast",oracle8,summary);
-  PrintSummary("PCA_rank16_ORACLE_not_fast",oracle16,summary);
+  for(int rank:ranks) {
+    PrintSummary("PCA_rank"+std::to_string(rank)+"_spatial_IDW",
+                 metricBasis[rank],summary);
+    PrintSummary("PCA_rank"+std::to_string(rank)+"_ORACLE_not_fast",
+                 oracleMetrics[rank],summary);
+  }
   summary.close();
 
   TFile root((prefix+"_basis.root").c_str(),"RECREATE",
