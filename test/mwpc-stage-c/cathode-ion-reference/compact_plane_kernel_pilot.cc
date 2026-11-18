@@ -232,13 +232,17 @@ int main(int argc,char**argv){
     if(source[i].v>0)positive.push_back(i);
     else if(source[i].v<0)negative.push_back(i);
   }
+  // Learning-curve comparisons require an immutable held-out set.
+  // First choose held-out starts, then grow a TRAINING PREFIX from other
+  // shuffled starts. The split is independent of --train for the same
+  // source, --test count, and seed, including its hemisphere policy.
+  constexpr int maxAllowedTrain=256;
   const bool bothSupported =
-    (int)positive.size()>=(nTrain+1)/2+(nTest+1)/2+1 &&
-    (int)negative.size()>=(nTrain+1)/2+(nTest+1)/2+1;
-  // Muon 0 can strongly favor one cathode. Do not force artificial
-  // 50:50 hemisphere coverage that does not exist in the source cloud.
-  // If the minority lacks test statistics, explicitly restrict to the
-  // majority and flag that this is NOT validated on the other side.
+    (int)positive.size()>=(maxAllowedTrain+1)/2+(nTest+1)/2 &&
+    (int)negative.size()>=maxAllowedTrain/2+nTest/2;
+  // Do not invent opposite-hemisphere coverage for a cloud that strongly
+  // favors one cathode. Fix the policy at maximum training size, so it
+  // cannot silently change when --train changes from 96 to 256.
   const bool dominantPlus=positive.size()>=negative.size();
   const std::string samplingScope=bothSupported?"both_hemispheres":
                                  (dominantPlus?"plus_only":"minus_only");
@@ -250,22 +254,25 @@ int main(int argc,char**argv){
   std::shuffle(negative.begin(),negative.end(),rng);
   std::vector<int> selectedTrain,selectedTest;
   if(bothSupported) {
-    for(int i=0;i<nTrain;++i) {
-      const auto &v=(i%2==0?positive:negative);
-      selectedTrain.push_back(v[i/2]);
-    }
     for(int i=0;i<nTest;++i) {
       const auto &v=(i%2==0?positive:negative);
-      selectedTest.push_back(v[(nTrain+1)/2+i/2]);
+      selectedTest.push_back(v[i/2]);
+    }
+    const int offsetPlus=(nTest+1)/2,offsetMinus=nTest/2;
+    for(int i=0;i<nTrain;++i) {
+      const auto &v=(i%2==0?positive:negative);
+      const int offset=(i%2==0?offsetPlus:offsetMinus);
+      selectedTrain.push_back(v[offset+i/2]);
     }
   } else {
     const auto &v=dominantPlus?positive:negative;
-    selectedTrain.assign(v.begin(),v.begin()+nTrain);
-    selectedTest.assign(v.begin()+nTrain,v.begin()+nTrain+nTest);
+    selectedTest.assign(v.begin(),v.begin()+nTest);
+    selectedTrain.assign(v.begin()+nTest,v.begin()+nTest+nTrain);
   }
   std::cout<<"SOURCE coverage plus_births="<<positive.size()
            <<" minus_births="<<negative.size()
-           <<" benchmark_scope="<<samplingScope<<"\n";
+           <<" benchmark_scope="<<samplingScope
+           <<" split=heldout_first_fixed_across_train_sizes"<<"\n";
   // All draws are without replacement, and test identities excluded from train.
   std::vector<int> all=selectedTrain;all.insert(all.end(),
      selectedTest.begin(),selectedTest.end());
