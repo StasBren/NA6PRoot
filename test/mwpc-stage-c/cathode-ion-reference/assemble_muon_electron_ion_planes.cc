@@ -149,55 +149,72 @@ void MakePlot(const std::vector<Sample>&data,double dt,
  TCanvas canvas("electron_plus_ion_planes",
                 "NA60+ complete muon electron and ion cathode currents",1350,940);
  canvas.Divide(2,2);
+ // ROOT pads hold pointers to objects passed to TH1::Draw().
+ // Prior stack-local histograms were destroyed before canvas.SaveAs(),
+ // leaving only cloned legends. Keep all plot histograms alive until print.
+ std::vector<std::unique_ptr<TH1D>> drawn;
+ drawn.reserve(16);
  for(int c=0;c<2;++c)for(int zoom=0;zoom<2;++zoom){
    const int n=zoom?std::min((int)data.size(),20):(int)data.size();
    const std::string suffix=std::string(c?"minus":"plus")+
                             (zoom?"_first2us":"_full");
-   const std::string caption=(c?"Lower":"Upper")+
-             std::string(" whole-plane induced current")+
+   const std::string caption=std::string(c?"Lower":"Upper")+
+             " whole-plane induced current"+
              (zoom?" (first 2 #mus)":" (100 #mus)");
-   TH1D electron(("electron_"+suffix).c_str(),
-           (caption+";t (ns);current (fC/ns)").c_str(),n,0,n*dt);
-   TH1D ion(("ion_"+suffix).c_str(),"",n,0,n*dt);
-   TH1D sum(("total_"+suffix).c_str(),"",n,0,n*dt);
-   TH1D sumKernel(("kernel_total_"+suffix).c_str(),"",n,0,n*dt);
+   auto electron=std::make_unique<TH1D>(("electron_"+suffix).c_str(),
+             (caption+";t (ns);current (fC/ns)").c_str(),n,0,n*dt);
+   auto ion=std::make_unique<TH1D>(("ion_"+suffix).c_str(),"",n,0,n*dt);
+   auto sum=std::make_unique<TH1D>(("total_"+suffix).c_str(),
+             (caption+";t (ns);current (fC/ns)").c_str(),n,0,n*dt);
+   auto sumKernel=std::make_unique<TH1D>(("kernel_total_"+suffix).c_str(),"",n,0,n*dt);
+   for(TH1D* h:{electron.get(),ion.get(),sum.get(),sumKernel.get()})
+     h->SetDirectory(nullptr);
    for(int j=0;j<n;++j){
      const auto&p=data[j];
      const double e=c?p.ekm:p.ekp;
      const double i=c?p.dm:p.dp;
      const double k=c?p.km:p.kp;
-     electron.SetBinContent(j+1,e);
-     ion.SetBinContent(j+1,i);
-     sum.SetBinContent(j+1,e+i);
-     sumKernel.SetBinContent(j+1,e+k);
+     electron->SetBinContent(j+1,e);
+     ion->SetBinContent(j+1,i);
+     sum->SetBinContent(j+1,e+i);
+     sumKernel->SetBinContent(j+1,e+k);
    }
-   electron.SetLineColor(kRed+1);electron.SetLineWidth(2);
-   ion.SetLineColor(kBlue+1);ion.SetLineWidth(2);
-   sum.SetLineColor(kBlack);sum.SetLineWidth(2);
-   sumKernel.SetLineColor(kGreen+2);sumKernel.SetLineWidth(2);
-   sumKernel.SetLineStyle(2);
-   const double low=std::min({0.,electron.GetMinimum(),
-                              ion.GetMinimum(),sum.GetMinimum(),
-                              sumKernel.GetMinimum()});
-   const double high=std::max({0.,electron.GetMaximum(),
-                               ion.GetMaximum(),sum.GetMaximum(),
-                               sumKernel.GetMaximum()});
-   sum.SetMinimum(low-.10*std::max(1.e-10,high-low));
-   sum.SetMaximum(high+.16*std::max(1.e-10,high-low));
+   electron->SetLineColor(kRed+1);electron->SetLineWidth(2);
+   ion->SetLineColor(kBlue+1);ion->SetLineWidth(2);
+   sum->SetLineColor(kBlack);sum->SetLineWidth(2);
+   sumKernel->SetLineColor(kGreen+2);sumKernel->SetLineWidth(2);
+   sumKernel->SetLineStyle(2);
+   const double low=std::min({0.,electron->GetMinimum(),
+                              ion->GetMinimum(),sum->GetMinimum(),
+                              sumKernel->GetMinimum()});
+   const double high=std::max({0.,electron->GetMaximum(),
+                               ion->GetMaximum(),sum->GetMaximum(),
+                               sumKernel->GetMaximum()});
+   Must(std::isfinite(low)&&std::isfinite(high)&&high>low,
+        "plot has empty or invalid signal ranges");
+   sum->SetMinimum(low-.10*std::max(1.e-10,high-low));
+   sum->SetMaximum(high+.16*std::max(1.e-10,high-low));
    canvas.cd(zoom*2+c+1);
-   sum.Draw("HIST");
-   ion.Draw("HIST SAME");
-   electron.Draw("HIST SAME");
-   sumKernel.Draw("HIST SAME");
+   sum->Draw("HIST");
+   ion->Draw("HIST SAME");
+   electron->Draw("HIST SAME");
+   sumKernel->Draw("HIST SAME");
    TLegend leg(.43,.69,.91,.89);
    leg.SetFillStyle(0);leg.SetBorderSize(0);leg.SetTextSize(.032);
-   leg.AddEntry(&sum,"Total: electron + direct RKF ion","l");
-   leg.AddEntry(&sumKernel,"Total: electron + fast ion kernel","l");
-   leg.AddEntry(&electron,"Microscopic prompt electrons","l");
-   leg.AddEntry(&ion,"Direct weighted ion response","l");
+   leg.AddEntry(sum.get(),"Total: electron + direct RKF ion","l");
+   leg.AddEntry(sumKernel.get(),"Total: electron + fast ion kernel","l");
+   leg.AddEntry(electron.get(),"Microscopic prompt electrons","l");
+   leg.AddEntry(ion.get(),"Direct weighted ion response","l");
    leg.DrawClone();
-   out.cd();electron.Write();ion.Write();sum.Write();sumKernel.Write();
+   out.cd();electron->Write();ion->Write();sum->Write();sumKernel->Write();
+   drawn.push_back(std::move(electron));
+   drawn.push_back(std::move(ion));
+   drawn.push_back(std::move(sum));
+   drawn.push_back(std::move(sumKernel));
  }
+ canvas.cd(0);
+ canvas.Modified();
+ canvas.Update();
  out.cd();canvas.Write();
  canvas.SaveAs((prefix+"_electron_ion_planes.png").c_str());
 }
