@@ -225,3 +225,13 @@ add_executable(mwpc_phase_c_p3_noFW_2100_single_ion_control_v1
                phaseC_p3_noFW_2100_single_ion_control_v1.cxx)
 target_link_libraries(mwpc_phase_c_p3_noFW_2100_single_ion_control_v1 PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_phase_c_p3_noFW_2100_single_ion_control_v1 PRIVATE cxx_std_17)
+
+# Stage C3 M2b: read immutable microscopic ROOT births, calculate whole-plane
+# induced currents for weighted macroions and charge-only FULL archive baseline.
+add_executable(mwpc_plane_response_from_ions_root
+    ../mwpc-stage-c/cathode-ion-reference/plane_response_from_ions_root.cc)
+target_include_directories(mwpc_plane_response_from_ions_root PRIVATE
+    ../mwpc-stage-c/cathode-ion-reference)
+target_link_libraries(mwpc_plane_response_from_ions_root
+    PRIVATE Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree ROOT::Hist)
+target_compile_features(mwpc_plane_response_from_ions_root PRIVATE cxx_std_17)
