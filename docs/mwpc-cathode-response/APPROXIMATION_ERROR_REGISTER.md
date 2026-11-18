@@ -23,3 +23,7 @@
 ## Presentation instruction
 
 Place the updated table on a dedicated slide titled **Model simplifications and known uncertainties**, using at most a short evidence line per row. If space is insufficient, split into (A) numerical approximations and (B) physical/detector omissions. Retain an explicit `not yet quantified` status; do not replace it with guessed percentages. Link slide notes to the corresponding run manifests and analysis comparisons.
+
+### Symmetry-based response extension (2026-11-18)
+
+The K256 single-ion kernel bank contained only positive-v starts; K512 has at least one ion with an opposite-side start. For the existing analytically symmetric P3 noFW nine-wire / ±3 mm whole-cathode model and B=0, reflection `v -> -v` and interchange of the two cathode readout channels is an exact **model symmetry** (no extra approximation within this idealized geometry). We apply it to the single-hemisphere template bank; it is not valid for asymmetric cathodes, magnetic-field effects or individual U/V stereo strips. The event-level K512 comparison against direct Garfield RKF remains the numerical validation gate.
