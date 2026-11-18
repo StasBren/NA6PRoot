@@ -85,3 +85,27 @@ diff -u \
 ~~~
 
 An empty diff confirms the same held-out source rows. If interpolation error shrinks sharply with N, source coverage matters. If it plateaus well above the PCA oracle, investigate physically motivated 2D interpolation or conditional parametric response. Further independent muon/channel holdouts and real mixture ion mobility remain necessary.
+
+## Wire-centered polar interpolation test (2026-11-18)
+
+With held-out ion IDs verified fixed for 96/192/256 training positions, the mean raw Cartesian-IDW L2 decreased 1.796% -> 1.364%. PCA16-IDW did not significantly beat raw IDW; PCA16 oracle at 256 was 0.574%, so position interpolation is the limiting factor. Worst-case raw IDW remained ~8.31%. These are 48 ions from a SINGLE microscopic muon, not independent event validation.
+
+An exploratory alternative is now implemented in the same executable. The baseline Cartesian distance remains unchanged, and additional `polar_raw_spatial_IDW` and `polar_PCA_rankN_spatial_IDW` rows use: local coordinate relative to nearest anode wire, rho=hypot(u_local,v), theta=atan2(v,u_local); squared distance=(ln(rho1/rho2)/0.25)^2+((theta1-theta2)/0.35)^2. Interpolation only uses training starts on the same v hemisphere and nearest anode. Scales 0.25 and 0.35 rad are preselected TEST HYPOTHESES, not calibrated physics or a trusted universal optimum. Training and held-out Garfield RKF waveforms are shared between both spatial methods within one run, so no duplicated transport is needed.
+
+~~~bash
+cd ~/na6p/cathode-compact-kernel-2100
+git pull --ff-only
+cmake --build test/mwpc-avalanche/build-kernel --target mwpc_compact_plane_kernel_pilot -j2
+BIN=./test/mwpc-avalanche/build-kernel/mwpc_compact_plane_kernel_pilot
+MOBILITY="$HOME/na6p/src/garfieldpp/Data/IonMobility_Ar+_Ar.txt"
+DATA="$HOME/na6p/cathode-ion-2100-wsl/test_runs/mwpc_stage_c/cathode_2100_laptop_v1"
+OUT="$PWD/test_runs/mwpc_stage_c/polar_kernel_v3"
+mkdir -p "$OUT"
+"$BIN" --ion-file "$DATA/weighted_k256/muon_0000/ion_births.root" \
+  --mobility "$MOBILITY" --out-prefix "$OUT/train256_test48" \
+  --train 256 --test 48 --neighbors 4 --seed 210018 \
+  --dt-ns 100 --window-us 100 --max-step-mm 0.05
+cat "$OUT/train256_test48_summary.csv"
+~~~
+
+Cartesian results must reproduce the previous fixed-split train256 baseline within numerical precision. Polar rows are exploratory; judge both median/p90 and worst case, separate plus/minus current, cumulative and early charge. Do not choose a preferred coordinate metric from the same 48 test ions and then claim independent validation on those same ions. Test any selected model on a separate muon/channel/station. This is still ONLY single-ion whole-plane signals, not an event-level Fast4 demonstration.
