@@ -121,6 +121,38 @@ Wave EmptyWave(int bins,double dt) {
  for(auto&x:w.cur)x.assign(bins,0.);
  return w;
 }
+// Match the direct-RKF SUMMARY to the exact ROOT crossing, reservoir and
+// time grid. The waveform CSV alone does not contain event identity.
+void ValidateReferenceSummary(const std::string&path,
+                 const NA60Plane::Archive&input,double dt,double windowUs) {
+ std::ifstream f(path);
+ NA60Plane::Require(bool(f),"cannot read direct RKF summary "+path);
+ std::string header,line,field;
+ NA60Plane::Require(bool(std::getline(f,header)) &&
+                    bool(std::getline(f,line)),
+                    "empty direct RKF summary");
+ const std::string expected=
+   "crossing_id,channel,station,det_id,archive_mode,response_mode,"
+   "true_ion_births,retained_ion_rows,dt_ns,window_us,max_ion_arrival_ns,"
+   "plus_endpoint_side_estimate_fC,minus_endpoint_side_estimate_fC,"
+   "plus_RKF_window_fC,minus_RKF_window_fC,"
+   "plus_RKF_ramo_fC,minus_RKF_ramo_fC";
+ NA60Plane::Require(header==expected,"unexpected direct RKF summary schema");
+ std::istringstream csv(line);
+ std::vector<std::string> cells;
+ while(std::getline(csv,field,','))cells.push_back(field);
+ NA60Plane::Require(cells.size()==17,
+                    "direct RKF summary record column count wrong");
+ NA60Plane::Require(cells[0]==input.id &&
+   cells[2]==std::to_string(input.station) &&
+   cells[3]==std::to_string(input.det) &&
+   cells[4]=="weighted"&&cells[5]=="direct"&&
+   std::stoll(cells[6])==input.nTrue &&
+   std::stoll(cells[7])==input.nSaved &&
+   std::abs(std::stod(cells[8])-dt)<1.e-10*dt &&
+   std::abs(std::stod(cells[9])-windowUs)<1.e-10*windowUs,
+   "reference belongs to a DIFFERENT muon/reservoir/time grid");
+}
 Wave ReadRef(const std::string&path,int bins,double dt) {
  std::ifstream f(path);
  NA60Plane::Require(bool(f),"could not read direct-RKF waveform CSV: "+path);
@@ -274,13 +306,16 @@ int main(int argc,char**argv) {
   const std::string ions=Arg(argc,argv,"--ion-file");
   const std::string training=Arg(argc,argv,"--training-root");
   const std::string direct=Arg(argc,argv,"--reference-waveforms");
+  const std::string directSummary=Arg(argc,argv,"--reference-summary");
   const std::string prefix=Arg(argc,argv,"--out-prefix");
   const int neighbors=(int)Number(argc,argv,"--neighbors",4);
   const double dt=Number(argc,argv,"--dt-ns",100.);
   const double tmaxUs=Number(argc,argv,"--window-us",100.);
-  NA60Plane::Require(!ions.empty()&&!training.empty()&&!direct.empty()&&!prefix.empty(),
+  NA60Plane::Require(!ions.empty()&&!training.empty()&&!direct.empty()&&
+      !directSummary.empty()&&!prefix.empty(),
     "usage: --ion-file weighted.root --training-root basis.root "
-    "--reference-waveforms direct_waveforms.csv --out-prefix PREFIX");
+    "--reference-waveforms direct_waveforms.csv "
+    "--reference-summary direct_summary.csv --out-prefix PREFIX");
   NA60Plane::Require(neighbors>=1&&neighbors<=8&&dt>0&&tmaxUs>0&&tmaxUs<=500,
                      "invalid event kernel grid/neighbor config");
   const int bins=(int)std::ceil(1000.*tmaxUs/dt);
@@ -296,6 +331,7 @@ int main(int argc,char**argv) {
   const auto loaded=Clock::now();
   NA60Plane::Archive input(ions);
   NA60Plane::Require(input.mode=="weighted","require weighted primary-accurate ROOT archive");
+  ValidateReferenceSummary(directSummary,input,dt,tmaxUs);
   Wave kernel=EmptyWave(bins,dt);
   Loss truncated;
   for(long long j=0;j<input.Entries();++j) {
@@ -369,7 +405,8 @@ int main(int argc,char**argv) {
   NA60Plane::Require(!root.IsZombie(),"cannot create ROOT muon signal output");
   TNamed provenance("provenance",
     ("event_ions="+ions+"\ntrained_ion_archive="+trainingOrigin+
-     "\ntraining_basis="+training+"\nweighted_RKF_reference="+direct).c_str());
+     "\ntraining_basis="+training+"\nweighted_RKF_reference="+direct+
+     "\nweighted_RKF_summary="+directSummary).c_str());
   provenance.Write();
   TNamed limits("limits",
    "This is a COMPLETE-MUON ION-ONLY current for both WHOLE cathode planes "
