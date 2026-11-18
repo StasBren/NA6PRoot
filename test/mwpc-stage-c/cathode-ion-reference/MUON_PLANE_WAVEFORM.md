@@ -61,3 +61,9 @@ Output: `<prefix>_summary.csv`, `<prefix>_waveforms.csv`, `<prefix>_response.roo
 ## Project presentation uncertainty table
 
 The living reference table is `docs/mwpc-cathode-response/APPROXIMATION_ERROR_REGISTER.md`. Update that file when actual muon-level comparisons become available; preserve a clearly labeled `not quantified` status for all untested physical approximations.
+
+## 2026-11-18: missing cathode hemisphere in training bank
+
+The 256-ion kernel training bank was built only from positive-v ion births (original K256 muon 0 had 1536 positive and zero negative starts). The K512 muon run can contain negative-v starts, so the previous raw-IDW lookup rejected those starts with `kernel training bank lacks enough ions on target cathode hemisphere`. This was a legitimate coverage error, NOT an ion-transport failure.
+
+The program now extends a **single-hemisphere bank only** by reflected copies `v -> -v`, and exchanges the complete `plus` and `minus` impulse-response channels WITHOUT changing current sign. This follows exact reflection symmetry of the symmetric analytic P3 noFW E field with equal +3/-3 mm cathode gaps, identical whole-plane readout, and B=0. It does NOT introduce additional approximation error within that ideal model, but does NOT apply to asymmetric geometry, magnetic field, or actual stereo strips. Printed `training_templates` now counts original + reflected effective entries (256 + 256 = 512), not 512 independently Garfield-simulated templates. Monitor error against K512 direct RKF to validate this use of symmetry in the event waveform.
