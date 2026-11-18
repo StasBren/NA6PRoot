@@ -36,7 +36,7 @@ bash "$STUDY/run.sh" full
 
 `export` SHA-verifies and resumes frozen Geant4-to-CSV exports for up to 40 x 50,000-parent chunks per channel. No Geant4 transport is repeated. `select` chooses 100,000 eligible crossings in each of the nine channel/station strata; it **fails rather than silently shortens a sample**. The `pilot` takes the first nested 10,000 of each saved 100k sample, so it is strictly paired to the full run.
 
-The runner locates the original `NA60_LUT500.zip` and `model_calibration_jpsi_v1.npz` within `~/na6p` and refuses to guess if absent or ambiguous. If your archives are elsewhere or appear multiple times, set both explicit paths:
+The runner first reuses any SHA-verified files in `~/na6p/studies/lut500_vs_geometry_100k/frozen_inputs/`, otherwise automatically retrieves the exact historical `NA60_LUT500.zip` and `model_calibration_jpsi_v1.npz` from the validated Fast4/Fast5 Google Drive folder using the existing WSL `na60drive:` rclone remote. It SHA-256 verifies both inputs against the frozen archive manifest before the first physics event. **No re-generation of LUT500 and no new Geant4 transport are performed.** The cached originals are reused on later runs. If rclone is unavailable, point explicitly at the original files:
 
 ```bash
 LUT_ZIP=/absolute/path/NA60_LUT500.zip \
