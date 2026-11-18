@@ -12,7 +12,7 @@ Inputs are **already existing**, no microscopic Garfield avalanches should be re
 - The `polar_kernel_v3/train256_test48_basis.root` from the previous K256 training run (the code reads the stored 256 RAW ion response templates; it does NOT rely on the polar or PCA fit). Those templates have 100-ns bins, 100-us duration, positive ions and two whole-plane currents.
 - The `muon0_weighted512_direct_waveforms.csv` produced with direct `DriftLineRKF` for exactly the SAME K512 muon archive.
 
-Method: load training bank; per archived weighted macroion, find four nearest same-side training responses with the previously frozen Cartesian/radial IDW metric; shift each response by the actual `t_birth_ns` with charge-conserving fractional-bin deposition; add both cathodes. Compare full time series with the directly drifted K512 response. Store absolute charge errors, separate plus/minus and combined L2, early cumulative charge errors and peak time. Plot ROOT 2x2 current/cumulative response, overlaying direct RKF in black and kernel in blue. No diffusion, electronics, or prompt electron current.
+The program also verifies the direct RKF summary has identical Geant4 crossing ID, station/detector, exact ion count, retained sample count and time grid before accepting the reference. Method: load training bank; per archived weighted macroion, find four nearest same-side training responses with the previously frozen Cartesian/radial IDW metric; shift each response by the actual `t_birth_ns` with charge-conserving fractional-bin deposition; add both cathodes. Compare full time series with the directly drifted K512 response. Store absolute charge errors, separate plus/minus and combined L2, early cumulative charge errors and peak time. Plot ROOT 2x2 current/cumulative response, overlaying direct RKF in black and kernel in blue. No diffusion, electronics, or prompt electron current.
 
 **Error attribution:** this comparison isolates kernel approximation plus discrete time shifting on the SAME fixed weighted macroion population. It does NOT test sampling versus ALL individual ion births. K256 training and K512 testing use the same original underlying Geant4 muon, and could share callback births, so this is an event-level smoke test, NOT held-out-muon generalization.
 
@@ -30,14 +30,16 @@ BIN=./test/mwpc-avalanche/build-kernel/mwpc_plane_muon_kernel_compare
 DATA="$HOME/na6p/cathode-ion-2100-wsl/test_runs/mwpc_stage_c/cathode_2100_laptop_v1"
 TRAIN="$PWD/test_runs/mwpc_stage_c/polar_kernel_v3/train256_test48_basis.root"
 REF="$HOME/na6p/cathode-plane-response-2100/test_runs/mwpc_stage_c/plane_response_pilot_v1/muon0_weighted512_direct_waveforms.csv"
+REFSUM="$HOME/na6p/cathode-plane-response-2100/test_runs/mwpc_stage_c/plane_response_pilot_v1/muon0_weighted512_direct_summary.csv"
 OUT="$PWD/test_runs/mwpc_stage_c/muon_plane_waveform_v1"
 mkdir -p "$OUT"
-test -s "$TRAIN" && test -s "$REF" && test -s "$DATA/weighted_k512/muon_0000/ion_births.root"
+test -s "$TRAIN" && test -s "$REF" && test -s "$REFSUM" && test -s "$DATA/weighted_k512/muon_0000/ion_births.root"
 
 "$BIN" \
   --ion-file "$DATA/weighted_k512/muon_0000/ion_births.root" \
   --training-root "$TRAIN" \
   --reference-waveforms "$REF" \
+  --reference-summary "$REFSUM" \
   --out-prefix "$OUT/jpsi_muon0_K512" \
   --neighbors 4 --dt-ns 100 --window-us 100
 
