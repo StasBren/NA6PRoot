@@ -99,7 +99,7 @@ if [ ! -f "$HEED_DATABASE/cbdel.dat" ]; then
   echo "Heed database missing at $HEED_DATABASE"
   find "$HOME/na6p/install/garfieldpp" "$HOME/na6p/src/garfieldpp" \
     -type f -name cbdel.dat -print 2>/dev/null
-  exit 1
+  echo "Do not launch the replay until HEED_DATABASE is fixed."
 fi
 echo "HEED_DATABASE=$HEED_DATABASE"
 ~~~
