@@ -40,8 +40,8 @@ using Birth=NA60Plane::Archive::Birth;
 using Clock=std::chrono::steady_clock;
 struct Point {Birth b;Vec wave;Vec coeff;};
 struct Metrics {
-  double relL2=0, maxCumErrorE=0, finalPlusErrorE=0,
-         finalMinusErrorE=0, early1usErrorE=0;
+  double relL2=0,plusRelL2=0,minusRelL2=0,maxCumErrorE=0,
+         finalPlusErrorE=0,finalMinusErrorE=0,early1usErrorE=0;
 };
 std::string Arg(int n,char**v,const std::string& key){
   for(int i=1;i+1<n;++i)if(key==v[i])return v[i+1];return "";
@@ -111,6 +111,7 @@ Metrics Evaluate(const Vec&pred,const Vec&ref,int bins,double dt){
     "waveform shape mismatch");
   Metrics m;
   double sse=0,den=0;
+  double sideSse[2]{},sideDen[2]{};
   constexpr double q=NA60Plane::eFc;
   int early=std::min(bins,std::max(1,(int)std::ceil(1000./dt)));
   for(int c=0;c<2;++c) {
@@ -119,6 +120,7 @@ Metrics Evaluate(const Vec&pred,const Vec&ref,int bins,double dt){
       const int k=c*bins+t;
       const double d=pred[k]-ref[k];
       sse+=d*d;den+=ref[k]*ref[k];
+      sideSse[c]+=d*d;sideDen[c]+=ref[k]*ref[k];
       dFinal+=dt*d;
     }
     if(c==0)m.finalPlusErrorE=std::abs(dFinal)/q;
@@ -132,6 +134,8 @@ Metrics Evaluate(const Vec&pred,const Vec&ref,int bins,double dt){
     }
   }
   m.relL2=std::sqrt(sse/std::max(den,1.e-60));
+  m.plusRelL2=std::sqrt(sideSse[0]/std::max(sideDen[0],1.e-60));
+  m.minusRelL2=std::sqrt(sideSse[1]/std::max(sideDen[1],1.e-60));
   return m;
 }
 Vec RawIDW(const std::vector<Point>&train,
@@ -164,22 +168,27 @@ Vec OracleCoeff(const Vec&truth,const Vec&mean,
 void PrintSummary(const std::string&label,const std::vector<Metrics>&data,
                   std::ostream&out) {
   NA60Plane::Require(!data.empty(),"no metrics to summarize");
-  std::vector<double> errors;
+  std::vector<double> errors,plusErrors,minusErrors;
   double sum=0,maxCum=0,maxFinal=0,maxEarly=0;
   for(const auto&m:data){
     errors.push_back(m.relL2);sum+=m.relL2;
+    plusErrors.push_back(m.plusRelL2);
+    minusErrors.push_back(m.minusRelL2);
     maxCum=std::max(maxCum,m.maxCumErrorE);
     maxFinal=std::max(maxFinal,std::max(m.finalPlusErrorE,m.finalMinusErrorE));
     maxEarly=std::max(maxEarly,m.early1usErrorE);
   }
   std::sort(errors.begin(),errors.end());
+  std::sort(plusErrors.begin(),plusErrors.end());
+  std::sort(minusErrors.begin(),minusErrors.end());
   auto percentile=[&](double frac){
     return errors[std::min(errors.size()-1,
                           (std::size_t)std::ceil(frac*errors.size())-1)];
   };
   out<<label<<","<<data.size()<<","<<sum/data.size()<<","
      <<errors[errors.size()/2]<<","<<percentile(0.9)<<","
-     <<errors.back()<<","<<maxCum<<","<<maxFinal<<","<<maxEarly<<"\n";
+     <<errors.back()<<","<<plusErrors.back()<<","<<minusErrors.back()
+     <<","<<maxCum<<","<<maxFinal<<","<<maxEarly<<"\n";
 }
 } // namespace
 int main(int argc,char**argv){
@@ -334,7 +343,8 @@ int main(int argc,char**argv){
   NA60Plane::Require(bool(row),"cannot create per-ion metrics CSV");
   row<<std::setprecision(12)
      <<"ion_source_row,primary,u_cm,v_cm,w_cm,birth_t_ns,model,rank,"
-       "relative_L2,max_cumulative_error_e,final_plus_error_e,"
+       "relative_L2,plus_relative_L2,minus_relative_L2,"
+       "max_cumulative_error_e,final_plus_error_e,"
        "final_minus_error_e,early_1us_error_e\n";
   std::vector<Metrics> metricRaw;
   std::map<int,std::vector<Metrics>> metricBasis,oracleMetrics;
@@ -347,7 +357,8 @@ int main(int argc,char**argv){
       list.push_back(m);
       row<<selectedTest[i]<<","<<b.primary<<","<<b.u<<","<<b.v<<","
          <<b.w<<","<<b.t<<","<<name<<","<<rank<<","
-         <<m.relL2<<","<<m.maxCumErrorE<<","<<m.finalPlusErrorE<<","
+         <<m.relL2<<","<<m.plusRelL2<<","<<m.minusRelL2
+         <<","<<m.maxCumErrorE<<","<<m.finalPlusErrorE<<","
          <<m.finalMinusErrorE<<","<<m.early1usErrorE<<"\n";
     };
     evaluate("raw_spatial_IDW",0,RawIDW(train,near,len),metricRaw);
@@ -366,7 +377,8 @@ int main(int argc,char**argv){
   NA60Plane::Require(bool(summary),"cannot create pilot summary CSV");
   summary<<std::setprecision(12)
     <<"model,n_test,mean_relative_L2,median_relative_L2,p90_relative_L2,"
-      "max_relative_L2,max_cumulative_error_e,max_final_charge_error_e,"
+      "max_relative_L2,max_plus_relative_L2,max_minus_relative_L2,"
+       "max_cumulative_error_e,max_final_charge_error_e,"
       "max_early_1us_error_e\n";
   PrintSummary("raw_spatial_IDW",metricRaw,summary);
   for(int rank:ranks) {
@@ -431,7 +443,7 @@ int main(int argc,char**argv){
     <<" train_RKF="<<Seconds(sampled,trained)
     <<" PCA="<<Seconds(trained,decomposed)
     <<" test_RKF="<<Seconds(decomposed,tested)
-    <<" fast_predictions="<<Seconds(tested,predicted)<<"\n"
+    <<" validation_including_oracle_sec="<<Seconds(tested,predicted)<<"\n"
     <<"IMPORTANT: PASS means computations completed; accuracy is in CSV, "
       "not automatically accepted.\n";
   std::ifstream view(prefix+"_summary.csv");std::string line;
