@@ -38,3 +38,7 @@ The K256 single-ion kernel bank contained only positive-v starts; K512 has at le
 ### Explicit distinction between numerical P3-noFW reference and actual Prototype-3
 
 The attached 2026 chamber-design note, Table 1, lists its tested **Prototype-3 (2026)** as **30 um wires, 4 mm wire pitch, asymmetric 2+4 mm gas gap, 1.8 kV, single-sided SRS readout** (1.2 mm strip dimension). Our frozen numerical reference is instead **30 um wires, 3 mm pitch, 3+3 mm symmetric gaps, 2.1 kV and two ideal whole-cathode readouts**. The source file naming uses `p3_noFW`, but this is a deliberate simplified reference configuration **NOT the as-built Prototype-3 geometry**. This mismatch is a separate unquantified geometry/operation systematic, not an interpolation error. Keep the frozen 2100V configuration for internal model comparisons; agree the eventual target geometry with the detector team before claiming as-built electronics or strip response.
+
+### Small primary-ion component not yet included
+
+The archived microscopic Garfield++ ion callback counts ion-electron pairs created **during avalanches**. TrackHeed's original muon ionizations also leave one positive ion per original primary electron in the gas. Those **Heed primary positive ions are not contained in the avalanche-ion archive and are currently absent from the cathode ion current**. Their count is likely much smaller than the amplified avalanche ion population at 2100 V, but this contribution has not been calculated; do not call the electron+avalanche-ion sum fully charge-complete until it has been assessed.
