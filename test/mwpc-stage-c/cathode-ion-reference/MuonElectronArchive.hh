@@ -73,8 +73,8 @@ public:
       referenceBirths_+=row.births;referenceCollected_+=row.collected;
     }
     Must(!expected_.empty(),"source has no successful Heed primaries");
-    out_.reset(TFile::Open(output.c_str(),"RECREATE","NA60+ direct electron plane response",4));
-    Must(out_&&!out_->IsZombie(),"cannot create output ROOT "+output);
+    // Do not open/create the output ROOT file until every original seed
+    // and every microscopic avalanche count has passed the physics audit.
   }
   void BeginMuon(const std::string&id,int station,int detector,int heedSeed,int nPrimaries) {
     Must(id==expectedId_ && station==sourceStation_ &&
@@ -117,6 +117,9 @@ public:
   void Finish() {
     Must(seen_==(int)expected_.size() && crossingId_==expectedId_,
          "not every Heed primary contributed an electron current");
+    out_.reset(TFile::Open(outPath_.c_str(),"RECREATE",
+                           "NA60+ direct electron plane response",4));
+    Must(out_&&!out_->IsZombie(),"cannot create verified output ROOT "+outPath_);
     out_->cd();
     TNamed provenance("source_microscopic_ion_archive",sourcePath_.c_str());
     TNamed limitations("scope",
