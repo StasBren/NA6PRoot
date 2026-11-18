@@ -42,3 +42,17 @@ The attached 2026 chamber-design note, Table 1, lists its tested **Prototype-3 (
 ### Small primary-ion component not yet included
 
 The archived microscopic Garfield++ ion callback counts ion-electron pairs created **during avalanches**. TrackHeed's original muon ionizations also leave one positive ion per original primary electron in the gas. Those **Heed primary positive ions are not contained in the avalanche-ion archive and are currently absent from the cathode ion current**. Their count is likely much smaller than the amplified avalanche ion population at 2100 V, but this contribution has not been calculated; do not call the electron+avalanche-ion sum fully charge-complete until it has been assessed.
+
+### Full-muon electron+avalanche-ion plane response — first actual result (2026-11-18)
+
+Uploaded `muon0_complete_planes_coarse100ns_summary.csv` and waveform CSV correspond to the same crossing `jpsi40-bore|1|8953|3|1|1|39`, 7 Heed primaries, 554943 avalanche-ion births, 555139 collected avalanche electrons. Replayed microscopic electron endpoints end by 40.6543 ns and 0.05ns electron samples are conservatively rebinned into existing 100ns ion samples.
+
+- Integrated microscopic electron signals: +1.092342 fC (+ plane), +1.014428 fC (- plane).
+- Direct weighted RKF ion responses: +87.608213 fC (+), -0.743271 fC (-).
+- Combined electron + direct weighted RKF ions: +88.700555 fC (+), +0.271157 fC (-). These are two ideal complete planes with provisional ion mobility, not shaped voltage or real stereo strips.
+- In the first 100 ns: electron +1.092342/+1.014428 fC, ion +9.816792/+8.439056 fC, total +10.909134/+9.453484 fC (plus/minus). Electrons are 10.0% and 10.7% of the first-bin total charges. Current fast-ion template underestimates first-bin totals by 18.21% (+) and 19.56% (-). This early-time kernel discrepancy is NOT negligible for a VMM3a shaping study and must be addressed with finer ion bins.
+- Total-ion fast-kernel vs direct-RKF integrated-charge error remains +0.024465/+0.023445 fC; small final-charge error does NOT prove first-bin waveform accuracy.
+- The initially exported ROOT PNG was blank because histogram objects were stack-local and destroyed before rendering. The ROOT plot lifetime bug is now corrected in C++ source; this affected visualization, not the archived CSV currents.
+
+**Physical scope:** only avalanche ions (not original Heed positive ions), unsegmented two-plane analytic field, no VMM3a frontend, and only one muon event. These numbers must NOT be presented as detector-wide systematic uncertainties.
+
