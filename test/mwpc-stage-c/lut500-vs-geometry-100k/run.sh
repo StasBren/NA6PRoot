@@ -26,6 +26,9 @@ case "${1:-}" in
        --repo "$REPO" --selected-n 100000 --limit "$n" \
        --lut "$lut" --calibration "$calibration" --weights donor
     ;;
+  diagnose)
+    "$PYTHON_BIN" "$HERE/inspect_angle_tail.py"
+    ;;
   *)
     cat <<'USAGE'
 Usage: bash test/mwpc-stage-c/lut500-vs-geometry-100k/run.sh COMMAND
@@ -33,7 +36,7 @@ Usage: bash test/mwpc-stage-c/lut500-vs-geometry-100k/run.sh COMMAND
   export  -- verified/restartable existing 2M Geant4 ROOT-to-CSV export
   select  -- nine hash-ranked 100k crossing samples (3 channels x 3 stations)
   pilot   -- run first 10k in each sample with frozen LUT500 + J/psi donors
-  full    -- run all 100k in each sample with frozen LUT500 + J/psi donors
+  full    -- run all 100k in each sample with frozen LUT500 + J/psi donors\n  diagnose -- analyze exact high-angle muons from existing full output; no simulation
 Optional env vars: ROOT_BIN, LUT_ZIP, CALIBRATION_NPZ, PYTHON_BIN.
 Requires the pre-existing 2M Geant4 parent chunks and Heed calibration files in WSL.
 USAGE
