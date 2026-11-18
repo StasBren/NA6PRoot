@@ -66,3 +66,14 @@ Important: one selected event is one **physical muon crossing at a station**, no
 4. For high-angle tracks across many physical wire cells, LUT can represent ≥3, ≥4, and more collecting anodes. For a **single electron** moving >1 cell away, LUT500's stored offsets cannot represent that motion; count and flag such configurations in an extended LUT study if needed.
 5. Multiple crossings of one physical muon within the same station are reduced to the longest valid gas chord. That rule is explicit to avoid double-counting a physical muon as two independent observations; if station-level total signal from overlapping modules is the target, the definition must change.
 6. A full-truth study should also validate station/chamber-specific geometry assumptions for MS5 (MuID), and check whether rates conditional on the 5% threshold are robust to the underlying gain fluctuations and zero-gain events.
+## Postrun fine-angle diagnostics (18 November 2026)
+
+After the 100k full run, use:
+
+```bash
+bash test/mwpc-stage-c/lut500-vs-geometry-100k/run.sh diagnose
+```
+
+This is a **read-only** scan of the nine existing `events_*_MS*.csv.gz` and `summary_*_MS*.json` files. It verifies exact per-event/summary agreement for >5% two-anode and three-anode rates and hashes the frozen inputs. It writes only to a NEW `comparison_100000_donor/angle_tail_diagnostics_v1/` directory and refuses to overwrite existing diagnostic output. No physics, sampling, LUT/Geant4/Heed, or gain draw is rerun.
+
+Key products are `angle_bins_fine.csv` (5° bins from 20–50°, then wider to 180°), `high_angle_muons_ge30.csv` (individual original track IDs, inclinations, source cells, anode multiplicity, charge fractions and edge losses), `three_plus_anodes_5pct.csv` (all muons with >=3 significant anodes in either method), and `standardized_0_20.csv` (rates reweighted to the same pooled 0–20° angle-bin mix). The latter isolates differences in broad-angle composition **descriptively**; it cannot establish a causal detector effect, and uncertainty bars are not derived there. The rare >=30° bin should not be treated as uniformly distributed or as a validation of detector geometry without inspecting individual muon tracks.
