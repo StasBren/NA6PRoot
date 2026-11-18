@@ -130,3 +130,5 @@ ls -lh "$OUT/muon0_complete_planes_plotfix_v2_electron_ion_planes.png"
 
 Next physics timing gate: preserve the 0.05ns direct electron ROOT and regenerate direct K512 ion current at a finer (e.g. 10ns) time grid, then compare against similarly fine kernel/fast-ion response. **Do not invent a VMM3a shaper response from 100ns box bins.**
 
+
+**Attribution warning:** The fast event response starts from 100ns-bin *integrated* single-ion templates and uses a fractional-bin time shift for each true ion birth. Therefore the measured 18–20% first-bin discrepancy combines **spatial template interpolation and temporal discretization/shift error**; it is NOT justified to attribute all of it to spatial kernel physics. In fact, the uploaded waveform shows the upper-plane first-bin residual -1.98664 fC, second-bin residual +1.77446 fC (net -0.21217 fC after 200 ns). The strong compensation suggests resampling/shift sensitivity. Distinguish these errors with fine-bin single-ion impulses and a separate like-for-like rebinned RKF test before changing the kernel model or predicting VMM peaking.
