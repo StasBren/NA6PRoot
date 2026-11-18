@@ -82,3 +82,7 @@ Update `docs/mwpc-cathode-response/APPROXIMATION_ERROR_REGISTER.md` after observ
 - **Kernel interpolation**: direct versus fast-ion same-reservoir disagreement, concentrated in the first 100ns for the previous run.
 - **Signal combination**: fixed electric field + linear Shockley-Ramo superposition, no ion-cloud space-charge correction.
 - **Electronics**: **not modeled**; 100ns is one possible VMM3a peaking setting, not a readout box/window.
+
+## Reference-vs-hardware geometry caveat
+
+The inspected `New_chamber_design(1).pdf` Table 1 lists the real **2026 Prototype-3** at **4 mm pitch, 2+4 mm gaps, 1.8 kV, one-side SRS readout**. The present *frozen* internal `p3_noFW` simulation is **3 mm pitch, 3+3 mm gaps, 2.1 kV, two ideal whole-plane cathodes**. These are NOT the same detector. We preserve internal apples-to-apples comparisons now, and will align the simulation to target as-built/final geometry before detector-performance claims. This is an important unquantified physical systematic independent of kernel or macroion sampling error.
