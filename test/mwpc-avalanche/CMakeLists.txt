@@ -190,7 +190,7 @@ target_compile_features(mwpc_p3_noFW_penning057_2100_uncapped_v1 PRIVATE cxx_std
 # Isolated 2100 V uncapped microscopic ion-birth reference for future physical
 # cathode-strip weighting-current calculations (NOT the strip-current solver).
 # Writes per-callback buffered ROOT trees; original HV2100 target is untouched.
-find_package(ROOT REQUIRED COMPONENTS Core RIO Tree Hist Graf Gpad)
+find_package(ROOT REQUIRED COMPONENTS Core RIO Tree Hist Graf Gpad Matrix)
 add_executable(mwpc_p3_noFW_penning057_cathode_ion_reference_v1
                phaseB_native_muon_p3_noFW_penning057_cathode_ion_reference_v1.cxx)
 target_link_libraries(mwpc_p3_noFW_penning057_cathode_ion_reference_v1
@@ -235,3 +235,17 @@ target_include_directories(mwpc_plane_response_from_ions_root PRIVATE
 target_link_libraries(mwpc_plane_response_from_ions_root
     PRIVATE Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree ROOT::Hist)
 target_compile_features(mwpc_plane_response_from_ions_root PRIVATE cxx_std_17)
+
+
+# Experimental fixed-field compact whole-plane kernel:
+# train RKF ion responses from archived ion-birth positions, then compare
+# raw IDW, low-rank PCA+IDW, and the non-usable projection oracle on
+# disjoint held-out ion starts. NO stereo strips, electronics or Fast4 yet.
+add_executable(mwpc_compact_plane_kernel_pilot
+               ../mwpc-stage-c/cathode-ion-reference/compact_plane_kernel_pilot.cc)
+target_include_directories(mwpc_compact_plane_kernel_pilot PRIVATE
+               ../mwpc-stage-c/cathode-ion-reference)
+target_link_libraries(mwpc_compact_plane_kernel_pilot
+               PRIVATE Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree
+                       ROOT::Hist ROOT::Matrix)
+target_compile_features(mwpc_compact_plane_kernel_pilot PRIVATE cxx_std_17)
