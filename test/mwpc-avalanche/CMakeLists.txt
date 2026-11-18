@@ -262,3 +262,25 @@ target_link_libraries(mwpc_plane_muon_kernel_compare
                PRIVATE Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree
                        ROOT::Hist ROOT::Graf ROOT::Gpad)
 target_compile_features(mwpc_plane_muon_kernel_compare PRIVATE cxx_std_17)
+
+
+# Electron contribution for SAME microscopic Geant4 muon (independent target).
+# Copies unchanged uncapped 2100V Garfield physics selection, but enables
+# electron-induced sensor currents for ALL Heed primaries and audits each
+# avalanche seed, ion birth and collected electron census against frozen ROOT.
+add_executable(mwpc_p3_2100_full_muon_electron_planes
+  phaseC_p3_noFW_2100_muon_electron_response_v1.cxx)
+target_link_libraries(mwpc_p3_2100_full_muon_electron_planes PRIVATE
+  Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree ROOT::Hist)
+target_compile_features(mwpc_p3_2100_full_muon_electron_planes PRIVATE cxx_std_17)
+
+# NO electronics filter: combine audited prompt electrons (0.05 ns) with
+# already saved same-muon K512 direct/kernel ion currents at 100 ns,
+# produce coarse e+ion ROOT and plots, preserve fine electron ROOT.
+add_executable(mwpc_assemble_electron_ion_planes
+  ../mwpc-stage-c/cathode-ion-reference/assemble_muon_electron_ion_planes.cc)
+target_include_directories(mwpc_assemble_electron_ion_planes PRIVATE
+  ../mwpc-stage-c/cathode-ion-reference)
+target_link_libraries(mwpc_assemble_electron_ion_planes PRIVATE
+  ROOT::Core ROOT::RIO ROOT::Tree ROOT::Hist ROOT::Graf ROOT::Gpad)
+target_compile_features(mwpc_assemble_electron_ion_planes PRIVATE cxx_std_17)
