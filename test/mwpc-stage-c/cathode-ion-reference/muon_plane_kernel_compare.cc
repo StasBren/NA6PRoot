@@ -79,7 +79,8 @@ std::vector<Template> ReadBank(const std::string&path,int bins,double dt,
  bank->SetBranchAddress("v_cm",&v);
  bank->SetBranchAddress("waveform_plus_then_minus",&vec);
  std::vector<Template> out;
- out.reserve(bank->GetEntries());
+ out.reserve(2*bank->GetEntries());
+ int positive=0,negative=0;
  for(Long64_t j=0;j<bank->GetEntries();++j) {
    NA60Plane::Require(bank->GetEntry(j)>0&&vec,
                       "training bank corrupted or missing row");
@@ -88,7 +89,32 @@ std::vector<Template> ReadBank(const std::string&path,int bins,double dt,
    for(double x:*vec)NA60Plane::Require(std::isfinite(x),
                        "nonfinite training current");
    out.push_back({u,v,*vec});
+   if(v>0)++positive;else ++negative;
  }
+ // The P3 noFW analytic geometry has identical grounded cathode planes
+ // at v=+-0.3 cm and no magnetic field. Reflection v -> -v interchanges
+ // plus and minus weighting electrodes without changing current sign:
+ // K_plus(u,-v,t)=K_minus(u,+v,t), and vice versa.
+ // Extend a SINGLE-HEMISPHERE training bank by exact model symmetry
+ // rather than inventing a statistical kernel or discarding negative ions.
+ // This is NOT valid for asymmetric cathode gaps, B fields or real strips.
+ if(positive==0 || negative==0) {
+   const auto original=out.size();
+   for(std::size_t i=0;i<original;++i) {
+     Template reflected=out[i];
+     reflected.v=-reflected.v;
+     for(int j=0;j<bins;++j) {
+       reflected.wave[j]=out[i].wave[bins+j];
+       reflected.wave[bins+j]=out[i].wave[j];
+     }
+     out.push_back(std::move(reflected));
+   }
+   std::cout<<"MODEL SYMMETRY: expanded "<<original
+            <<" original training templates by "<<original
+            <<" v-reflected/electrode-swapped templates; "
+            <<"exact for symmetric P3 noFW two-WHOLE-plane model ONLY.\n";
+ }
+ NA60Plane::Require(out.size()>=4,"too few response templates");
  return out;
 }
 std::vector<std::pair<int,double>> Nearest(const Birth&b,
@@ -411,6 +437,8 @@ int main(int argc,char**argv) {
   TNamed limits("limits",
    "This is a COMPLETE-MUON ION-ONLY current for both WHOLE cathode planes "
    "using weighted Garfield ion births and raw nearest response templates. "
+   "For single-hemisphere banks, reflect v and swap upper/lower currents "
+   "using the exact symmetry of the ideal P3 noFW analytic model. "
    "No prompt electrons, physical U/V strips or electronics. Ion transport "
    "training mobility: provisional Ar+ in pure Ar for Ar/CO2 70:30. "
    "Training and evaluation may share the same underlying muon. "
