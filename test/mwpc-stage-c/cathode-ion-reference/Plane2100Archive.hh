@@ -3,6 +3,7 @@
 #pragma once
 #include <TFile.h>
 #include <TTree.h>
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <string>
