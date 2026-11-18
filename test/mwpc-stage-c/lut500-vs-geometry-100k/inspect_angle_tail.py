@@ -107,8 +107,7 @@ def diagnose(base: Path, output: Path) -> None:
                     add(counts, row)
                     if theta >= 30 or (int(row["geometry_n_gt5pct"]) >= 3 or
                                        int(row["lut_n_gt5pct"]) >= 3):
-                        entry = {"channel": channel, "station": f"MS{station}",
-                                 "abs_theta_u_deg": f"{theta:.7g}",
+                        entry = {"channel": channel, "abs_theta_u_deg": f"{theta:.7g}",
                                  **{k: row[k] for k in sorted(REQUIRED)}}
                         if theta >= 30:
                             high.append(entry)
@@ -163,7 +162,7 @@ def diagnose(base: Path, output: Path) -> None:
     write_rows(output / "angle_bins_fine.csv", list(bin_rows[0]), bin_rows)
     write_rows(output / "standardized_0_20.csv", list(standardized[0]), standardized)
     write_rows(output / "sample_counts.csv", list(samples[0]), samples)
-    columns = ["channel", "station", "abs_theta_u_deg"] + sorted(REQUIRED)
+    columns = ["channel", "abs_theta_u_deg"] + sorted(REQUIRED)
     write_rows(output / "high_angle_muons_ge30.csv", columns, high)
     write_rows(output / "three_plus_anodes_5pct.csv", columns, third)
     manifest = {
