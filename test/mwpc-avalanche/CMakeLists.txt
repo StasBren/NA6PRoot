@@ -249,3 +249,16 @@ target_link_libraries(mwpc_compact_plane_kernel_pilot
                PRIVATE Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree
                        ROOT::Hist ROOT::Matrix)
 target_compile_features(mwpc_compact_plane_kernel_pilot PRIVATE cxx_std_17)
+
+# Stage C3 muon response: two WHOLE cathode planes, ion-only.
+# Read one sealed microscopic ROOT ion-birth archive and a precomputed
+# single-ion response template bank; compare to direct weighted Garfield RKF
+# waveforms for the SAME sampled ion cloud. Saves ROOT/CSV/PNG.
+add_executable(mwpc_plane_muon_kernel_compare
+               ../mwpc-stage-c/cathode-ion-reference/muon_plane_kernel_compare.cc)
+target_include_directories(mwpc_plane_muon_kernel_compare PRIVATE
+               ../mwpc-stage-c/cathode-ion-reference)
+target_link_libraries(mwpc_plane_muon_kernel_compare
+               PRIVATE Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree
+                       ROOT::Hist ROOT::Graf ROOT::Gpad)
+target_compile_features(mwpc_plane_muon_kernel_compare PRIVATE cxx_std_17)
