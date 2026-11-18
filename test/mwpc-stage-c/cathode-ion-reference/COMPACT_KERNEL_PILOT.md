@@ -53,3 +53,35 @@ Interpretation:
 - A good held-out ion result is only a pilot. Next compare entire muon waveforms and compare K256/K512, then independent channels/stations and full ROOT truth, and later stereo strip weighting fields.
 - No grid/kernel is assumed correct for real Ar/CO2 positive ion drift time because Ar+ in pure Ar is a PROVISIONAL mobility surrogate.
 - Existing frozen ROOT references and historical 371MB C2 numerical weighting directory are not modified or deleted.
+
+## Fixed held-out learning curve (2026-11-18)
+
+Original 96-train / 48-test pilot showed 2.41% raw-IDW mean waveform L2, 2.40% PCA-8 with IDW and 0.83% PCA-16 oracle. Interpolation rather than temporal rank is dominant. However the original holdout changes with --train and therefore must not be compared to a different training size.
+
+New source selects held-out ions FIRST and keeps the test IDs fixed when --train is changed but archive, --test and --seed are unchanged. It freezes hemisphere policy using the maximum allowed training size 256. Rerun 96 in a fresh output prefix.
+
+~~~bash
+cd ~/na6p/cathode-compact-kernel-2100
+git pull --ff-only
+cmake --build test/mwpc-avalanche/build-kernel --target mwpc_compact_plane_kernel_pilot -j2
+BIN=./test/mwpc-avalanche/build-kernel/mwpc_compact_plane_kernel_pilot
+MOBILITY="$HOME/na6p/src/garfieldpp/Data/IonMobility_Ar+_Ar.txt"
+DATA="$HOME/na6p/cathode-ion-2100-wsl/test_runs/mwpc_stage_c/cathode_2100_laptop_v1"
+OUT="$PWD/test_runs/mwpc_stage_c/kernel_learning_curve_v2"
+mkdir -p "$OUT"
+for N in 96 192 256; do
+  "$BIN" --ion-file "$DATA/weighted_k256/muon_0000/ion_births.root" \
+    --mobility "$MOBILITY" --out-prefix "$OUT/train${N}_test48" \
+    --train "$N" --test 48 --neighbors 4 --seed 210018 \
+    --dt-ns 100 --window-us 100 --max-step-mm 0.05
+done
+for N in 96 192 256; do
+  echo "=== train=$N ==="
+  cat "$OUT/train${N}_test48_summary.csv"
+done
+diff -u \
+  <(awk -F, 'NR>1{print $1}' "$OUT/train96_test48_metrics.csv" | sort -nu) \
+  <(awk -F, 'NR>1{print $1}' "$OUT/train256_test48_metrics.csv" | sort -nu)
+~~~
+
+An empty diff confirms the same held-out source rows. If interpolation error shrinks sharply with N, source coverage matters. If it plateaus well above the PCA oracle, investigate physically motivated 2D interpolation or conditional parametric response. Further independent muon/channel holdouts and real mixture ion mobility remain necessary.
