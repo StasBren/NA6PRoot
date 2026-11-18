@@ -68,12 +68,33 @@ double Distance(const Birth&a,const Birth&b){
   const double dlog=std::log(ra/rb)/0.4;
   return du*du+dv*dv+dlog*dlog;
 }
+// Experimental geometry-aware distance: log radial distance from the
+// *nearest* anode wire and azimuth around that wire. The scales are
+// hypotheses to test, not fitted against the held-out ions.
+double PolarDistance(const Birth&a,const Birth&b) {
+  const double centerA=std::round(a.u/NA60Plane::pitch)*NA60Plane::pitch;
+  const double centerB=std::round(b.u/NA60Plane::pitch)*NA60Plane::pitch;
+  const double ua=a.u-centerA,ub=b.u-centerB;
+  const double ra=std::hypot(ua,a.v),rb=std::hypot(ub,b.v);
+  NA60Plane::Require(ra>NA60Plane::wireRadius && rb>NA60Plane::wireRadius,
+                     "polar model ion position lies within a metal wire");
+  const double dlog=std::log(ra/rb)/0.25;
+  const double dtheta=(std::atan2(a.v,ua)-std::atan2(b.v,ub))/0.35;
+  return dlog*dlog+dtheta*dtheta;
+}
 std::vector<std::pair<int,double>> Neighbors(
-   const Birth&b,const std::vector<Point>&train,int neighbors) {
+   const Birth&b,const std::vector<Point>&train,int neighbors,
+   bool polar=false) {
   std::vector<std::pair<double,int>> distances;
   for(int i=0;i<(int)train.size();++i) {
     if((train[i].b.v>0)!=(b.v>0))continue;
-    distances.emplace_back(Distance(b,train[i].b),i);
+    // P3 finite nine-wire patch: don't infer exact periodicity near its
+    // edges. Restrict this first polar study to the SAME nearest wire.
+    if(polar &&
+       std::lround(b.u/NA60Plane::pitch)!=
+       std::lround(train[i].b.u/NA60Plane::pitch))continue;
+    distances.emplace_back(polar?PolarDistance(b,train[i].b)
+                                :Distance(b,train[i].b),i);
   }
   NA60Plane::Require((int)distances.size()>=neighbors,
     "insufficient same-cathode training positions");
@@ -353,11 +374,12 @@ int main(int argc,char**argv){
        "relative_L2,plus_relative_L2,minus_relative_L2,"
        "max_cumulative_error_e,final_plus_error_e,"
        "final_minus_error_e,early_1us_error_e\n";
-  std::vector<Metrics> metricRaw;
-  std::map<int,std::vector<Metrics>> metricBasis,oracleMetrics;
+  std::vector<Metrics> metricRaw,metricPolarRaw;
+  std::map<int,std::vector<Metrics>> metricBasis,metricPolarBasis,oracleMetrics;
   for(int i=0;i<nTest;++i){
     const auto&b=test[i].b;
     const auto near=Neighbors(b,train,neighbors);
+    const auto polarNear=Neighbors(b,train,neighbors,true);
     auto evaluate=[&](const std::string& name,int rank,const Vec&wave,
                       std::vector<Metrics>&list){
       const auto m=Evaluate(wave,test[i].wave,bins,dt);
@@ -369,12 +391,18 @@ int main(int argc,char**argv){
          <<m.finalMinusErrorE<<","<<m.early1usErrorE<<"\n";
     };
     evaluate("raw_spatial_IDW",0,RawIDW(train,near,len),metricRaw);
+    evaluate("polar_raw_spatial_IDW",0,
+             RawIDW(train,polarNear,len),metricPolarRaw);
     for(int rank:ranks){
       auto coeff=InterpolatedCoeffs(train,near,rank);
+      auto polarCoeff=InterpolatedCoeffs(train,polarNear,rank);
       auto interp=Reconstruct(mean,basis,coeff,rank);
+      auto polarInterp=Reconstruct(mean,basis,polarCoeff,rank);
       auto oracle=Reconstruct(mean,basis,
                      OracleCoeff(test[i].wave,mean,basis,rank),rank);
       evaluate("PCA_spatial_IDW",rank,interp,metricBasis[rank]);
+      evaluate("polar_PCA_spatial_IDW",rank,polarInterp,
+               metricPolarBasis[rank]);
       evaluate("PCA_ORACLE_not_fast",rank,oracle,oracleMetrics[rank]);
     }
   }
@@ -388,9 +416,12 @@ int main(int argc,char**argv){
        "max_cumulative_error_e,max_final_charge_error_e,"
       "max_early_1us_error_e\n";
   PrintSummary("raw_spatial_IDW",metricRaw,summary);
+  PrintSummary("polar_raw_spatial_IDW",metricPolarRaw,summary);
   for(int rank:ranks) {
     PrintSummary("PCA_rank"+std::to_string(rank)+"_spatial_IDW",
                  metricBasis[rank],summary);
+    PrintSummary("polar_PCA_rank"+std::to_string(rank)+"_spatial_IDW",
+                 metricPolarBasis[rank],summary);
     PrintSummary("PCA_rank"+std::to_string(rank)+"_ORACLE_not_fast",
                  oracleMetrics[rank],summary);
   }
