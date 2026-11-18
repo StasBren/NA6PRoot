@@ -1,0 +1,17 @@
+{
+  "prepared_date": "2026-11-18",
+  "status": "source package prepared; actual user WSL runs not executed",
+  "tests_executed": "python -m unittest discover -s . -p 'test_*.py' -v",
+  "test_count": 7,
+  "test_result": "PASS (6 pure/core tests + 1 synthetic end-to-end 9-sample comparison)",
+  "synthetic_test": "in-memory native-shaped CSV for 3 channels, 3 stations, 2 crossing rows/group; 450k-row synthetic ZIP with deterministic central-wire responses; 9 summary JSON files and consolidated table",
+  "synthetic_data_is_not_physics_evidence": true,
+  "required_for_actual_run": [
+    "locally available 2m/channel frozen native Geant4 ROOT and verified CSV exports",
+    "NA60_LUT500.zip",
+    "Heed calibration track/cluster CSV files under existing WSL checkout",
+    "Jpsi calibration model_calibration_jpsi_v1.npz with cell/gain arrays for donor-weighted study"
+  ],
+  "scientific_scope": "matched Geant4 tracks, Heed-calibrated marked-Poisson primary-ionization (not full per-track TrackHeed), common avalanche-gain draws, geometric vs conditional LUT wire assignment",
+  "anode_multiplicity_cap": "none at muon level; per-electron LUT delta wire limited to -1, 0, +1"
+}
