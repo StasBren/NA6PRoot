@@ -86,3 +86,22 @@ Update `docs/mwpc-cathode-response/APPROXIMATION_ERROR_REGISTER.md` after observ
 ## Reference-vs-hardware geometry caveat
 
 The inspected `New_chamber_design(1).pdf` Table 1 lists the real **2026 Prototype-3** at **4 mm pitch, 2+4 mm gaps, 1.8 kV, one-side SRS readout**. The present *frozen* internal `p3_noFW` simulation is **3 mm pitch, 3+3 mm gaps, 2.1 kV, two ideal whole-plane cathodes**. These are NOT the same detector. We preserve internal apples-to-apples comparisons now, and will align the simulation to target as-built/final geometry before detector-performance claims. This is an important unquantified physical systematic independent of kernel or macroion sampling error.
+
+## Runtime environment fix — TrackHeed database (2026-11-18)
+
+A WSL run stopped at `TrackHeed::Initialise: Cannot retrieve database path`, before avalanche replay. This is a missing environment setup, not a physical failure. Garfield++ explicitly documents `HEED_DATABASE` as the installed `share/Heed/database` directory. Preflight before launching the expensive uncapped microscopic replay:
+
+~~~bash
+export GARFIELD_INSTALL="$HOME/na6p/install/garfieldpp"
+export HEED_DATABASE="$GARFIELD_INSTALL/share/Heed/database"
+export LD_LIBRARY_PATH="$GARFIELD_INSTALL/lib:${LD_LIBRARY_PATH:-}"
+if [ ! -f "$HEED_DATABASE/cbdel.dat" ]; then
+  echo "Heed database missing at $HEED_DATABASE"
+  find "$HOME/na6p/install/garfieldpp" "$HOME/na6p/src/garfieldpp" \
+    -type f -name cbdel.dat -print 2>/dev/null
+  exit 1
+fi
+echo "HEED_DATABASE=$HEED_DATABASE"
+~~~
+
+If the `find` lists a different directory, point `HEED_DATABASE` to the **parent directory of cbdel.dat**. Because the failed run exited before replay, the audited electron ROOT should not exist; if it does, inspect provenance before running again. The replay source invokes `AvalancheMicroscopic::EnableSignalCalculation(true)` for *every* Heed primary and reads `Sensor::GetElectronSignal`; this comprises both the initial electron drift AND all multiplication (secondary) electrons in each microscopic avalanche. The separate positive-ion birth archive contains the ionization-callback ions; it does not include the original positive ions left behind by Heed primary ionization, an additional small omitted component to register.
