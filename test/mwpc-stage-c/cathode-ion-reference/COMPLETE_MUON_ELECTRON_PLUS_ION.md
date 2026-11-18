@@ -105,3 +105,28 @@ echo "HEED_DATABASE=$HEED_DATABASE"
 ~~~
 
 If the `find` lists a different directory, point `HEED_DATABASE` to the **parent directory of cbdel.dat**. Because the failed run exited before replay, the audited electron ROOT should not exist; if it does, inspect provenance before running again. The replay source invokes `AvalancheMicroscopic::EnableSignalCalculation(true)` for *every* Heed primary and reads `Sensor::GetElectronSignal`; this comprises both the initial electron drift AND all multiplication (secondary) electrons in each microscopic avalanche. The separate positive-ion birth archive contains the ionization-callback ions; it does not include the original positive ions left behind by Heed primary ionization, an additional small omitted component to register.
+
+## 2026-11-18 uploaded full-muon result and ROOT plotting repair
+
+The uploaded same-muon electron+ion summary shows all 7 Heed primaries, 554943 original avalanche ion births, 555139 collected electrons. Both whole-cathode induced-current CSVs have finite nonzero values. Full-window combined electron + K512 direct-RKF ion charges are +88.700555 fC and +0.271157 fC. Electron endpoints finish by 40.6543ns and all their current is in the first 100ns coarse ion bin. The total first-100ns direct ion+electron charges are +10.909134/+9.453484 fC; the simple fast ion template yields 18.21/19.56% less during that bin. The underprediction matters for later shaping and cannot be declared harmless.
+
+The first `*_electron_ion_planes.png` was BLANK except legends because `MakePlot` constructed TH1D histograms on the stack inside a loop and destroyed them before TCanvas::SaveAs. Fixed by keeping `std::unique_ptr<TH1D>` histograms alive and calling canvas.Update before SaveAs; all existing physics outputs remain valid.
+
+Only rerun the **assembler** with a FRESH output prefix. The microscopic electron replay and weighted-ion RKF simulations do not need to be rerun:
+
+~~~bash
+cd ~/na6p/cathode-compact-kernel-2100
+git fetch origin feature/p3-2100v-complete-electron-plane-20261118
+git merge --ff-only FETCH_HEAD
+cmake --build test/mwpc-avalanche/build-kernel --target mwpc_assemble_electron_ion_planes -j2
+OUT="$PWD/test_runs/mwpc_stage_c/whole_muon_electron_plus_ion_v1"
+ION="$PWD/test_runs/mwpc_stage_c/muon_plane_waveform_v1/jpsi_muon0_K512"
+MERGE=./test/mwpc-avalanche/build-kernel/mwpc_assemble_electron_ion_planes
+"$MERGE" --electron-root "$OUT/muon0_direct_electron_retry1.root" \
+  --ion-waveforms "${ION}_waveforms.csv" --ion-summary "${ION}_summary.csv" \
+  --out-prefix "$OUT/muon0_complete_planes_plotfix_v2"
+ls -lh "$OUT/muon0_complete_planes_plotfix_v2_electron_ion_planes.png"
+~~~
+
+Next physics timing gate: preserve the 0.05ns direct electron ROOT and regenerate direct K512 ion current at a finer (e.g. 10ns) time grid, then compare against similarly fine kernel/fast-ion response. **Do not invent a VMM3a shaper response from 100ns box bins.**
+
