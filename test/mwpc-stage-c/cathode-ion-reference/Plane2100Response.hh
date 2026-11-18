@@ -54,7 +54,9 @@ public:
     sensor_.SetTimeWindow(0.,dt_,bins_);
     drift_.EnableSignalCalculation(true);
     drift_.UseWeightingPotential(true);
-    drift_.EnableDiffusion(false);
+    // DriftLineRKF integrates mean ion drift deterministically; unlike
+    // AvalancheMC it does not add stochastic diffusion at each step.
+    // No EnableDiffusion API exists on DriftLineRKF in installed Garfield++.
     drift_.SetSignalAveragingOrder(2);
     drift_.SetMaximumStepSize(0.1*stepMm);
   }
