@@ -56,3 +56,5 @@ Uploaded `muon0_complete_planes_coarse100ns_summary.csv` and waveform CSV corres
 
 **Physical scope:** only avalanche ions (not original Heed positive ions), unsegmented two-plane analytic field, no VMM3a frontend, and only one muon event. These numbers must NOT be presented as detector-wide systematic uncertainties.
 
+
+**Attribution warning:** The fast event response starts from 100ns-bin *integrated* single-ion templates and uses a fractional-bin time shift for each true ion birth. Therefore the measured 18–20% first-bin discrepancy combines **spatial template interpolation and temporal discretization/shift error**; it is NOT justified to attribute all of it to spatial kernel physics. In fact, the uploaded waveform shows the upper-plane first-bin residual -1.98664 fC, second-bin residual +1.77446 fC (net -0.21217 fC after 200 ns). The strong compensation suggests resampling/shift sensitivity. Distinguish these errors with fine-bin single-ion impulses and a separate like-for-like rebinned RKF test before changing the kernel model or predicting VMM peaking.
