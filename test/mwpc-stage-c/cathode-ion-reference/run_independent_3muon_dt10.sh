@@ -61,6 +61,7 @@ run(){
       --out-prefix "${prefix}_direct_dt10" \
       --mobility "$MOBILITY" --mode direct \
       --dt-ns 10 --window-us 100 --max-step-mm 0.05 \
+      --record-late-ion-endpoints \
       --max-direct-ions 20000
     "$FAST" --ion-file "$in" \
       --training-root "$TRAIN" \
