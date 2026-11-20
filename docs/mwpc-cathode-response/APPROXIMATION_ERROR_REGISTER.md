@@ -127,3 +127,22 @@ Physics motivation: the earlier ideal stereo strip Laplace boundary test is **wi
 New independent diagnostics at `wire_aware_stereo_strip_pilot.cc` compute both upper adjacent strips, one lower strip, the screened whole-plane weighting potentials, selected strip grounded-wire residual, stereo mirror check, sum-of-strips vs screened whole plane and comparison with **Garfield::ComponentAnalyticField::WeightingPotential** for the same nine-anode analytic reference. With `--convergence`, independently halves longitudinal charge-segment length and expands correction support by ±4mm, reporting absolute potential deviations. Need test image-sum truncation and full cylinder surface BEM, and impose quantitative tolerance to Garfield. New C++ source **not yet compiled or executed on user WSL**. A separate Python numerical derivation sanity check with the same 9×20 source elements produced max midpatch wire-cylinder potential residual ~0.0038 (dimensionless) and sum-of-23-strip error vs screened whole plane ~4.6×10^-6 at one point; these are not execution results for the committed C++ solver or general performance claims.
 
 Design source: New_chamber_design(1).pdf sections 4.2, 5 and 6 states 1.7mm and tan(α)=0.1, symmetric 3+3mm contemplated and 2.5+2.5mm option, and that strips on opposed cathodes are preferable to a complex interlaced one-sided layout. See `test/mwpc-stage-c/cathode-ion-reference/NA60_STEREO_3D_WIRE_FIELD_STAGE1.md`. Do not claim a validated physical stereo-strip field until the independent whole-plane Garfield control, wire-surface residuals and longitudinal/image convergence are observed and appropriately accepted on the WSL installation.
+
+### 3D wire-aware thin-wire stereo-strip field: first WSL numerical result (2026-11-20)
+
+User compiled `mwpc_wire_aware_stereo_strip_pilot` successfully and executed the candidate **3+3mm**, **1.7mm strip width and provisional strip pitch**, **tan(α)=0.1**, nine **30μm diameter** anodes of 3mm pitch. Initial M=12 Dirichlet image cutoff, ±10mm longitudinal 180-unknown line-element solve, and optional segment/extent/image convergence all completed with program `PASS`.
+
+| Diagnostic | Measured result |
+|---|---:|
+| Max additional 12-angle wire-surface potential residual on U / V / whole plate | 0.003788416 / 0.003789194 / 0.002538913 |
+| U↔V mirrored stereo potential discrepancy at selected locations | 6.533331e-5 |
+| 23 contiguous upper-strip potentials minus screened whole cathode | 5.026515e-6 |
+| Interior finite-difference 3D Laplace residual | 3.258118e-5 mm^-2 |
+| Max abs 3D screened whole-cathode potential difference vs Garfield analytic 9-wire whole-plane at six selected interior points | **8.872376e-4** |
+| Max change in monitored potentials: w segmentation 1→0.5mm | 1.592416e-4 |
+| Max change in monitored potentials: w source half-span 10→14mm | 5.785199e-4 |
+| Max change in monitored potentials: Green image cutoff M=12→20 | 6.713097e-4 |
+
+Interpretation: this is promising preliminary interior *weighting-potential* agreement and consistent U/V geometry. Do NOT present it as a <0.1% calibrated strip-current error: Garfield comparison sampled only six bulk points, not a near-anode sweep or full gradient; the anode surface residual of ~0.0038 dimensionless can be comparable to the entire local strip weighting potential near a wire. Gradient/detailed induced currents are much more sensitive than potential agreement at bulk sample points. The strip partition is primarily an INTERNAL consistency check; it is not an independent physical reference. Absolute differences also do not imply small relative errors for channels with weak induced response. Actual strip pitches/copper gaps, PCB dielectrics, edge guards, module finite extent and ion mobility remain unmodeled.
+
+Follow-up code now offers `--near-wire`: scans weighting potentials and finite-difference gradients in the region 1.1–20 anode radii from wire centers, across multiple wires/angles/w locations, comparing the **screened whole-plane fields** against independent Garfield analytic weighting potentials. It writes `_near_wire.csv`, max/RMS potential differences and a global vector-gradient L2; additionally outputs the candidate selected-strip potential at the same near-anode positions. This is diagnostic, not an automatic accuracy certification, and has NOT been run on user WSL yet. Do not compute real strip currents from this thin-wire solver before near-anode field checks and refinement criteria are assessed.
