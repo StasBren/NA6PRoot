@@ -327,3 +327,18 @@ target_include_directories(mwpc_stereo_strip_boundary_pilot PRIVATE
 target_link_libraries(mwpc_stereo_strip_boundary_pilot PRIVATE
   ROOT::Core ROOT::RIO ROOT::Tree ROOT::Hist ROOT::Graf ROOT::Gpad)
 target_compile_features(mwpc_stereo_strip_boundary_pilot PRIVATE cxx_std_17)
+
+
+# Stage C proposal-facing 3D U/V stereo-cathode weighting-potential model:
+# analytic two-plate strip base plus approximate grounded thin-anode-wire
+# 3D line-element collocation, with Garfield analytic WHOLE-cathode
+# weighting-potential reference and numerical boundary/convergence tests.
+# THIS IS A FIELD STUDY, NOT an induced-current or electronics model.
+add_executable(mwpc_wire_aware_stereo_strip_pilot
+  ../mwpc-stage-c/cathode-ion-reference/wire_aware_stereo_strip_pilot.cc)
+target_include_directories(mwpc_wire_aware_stereo_strip_pilot PRIVATE
+  ../mwpc-stage-c/cathode-ion-reference)
+target_link_libraries(mwpc_wire_aware_stereo_strip_pilot PRIVATE
+  Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree ROOT::Hist
+  ROOT::Graf ROOT::Gpad)
+target_compile_features(mwpc_wire_aware_stereo_strip_pilot PRIVATE cxx_std_17)
