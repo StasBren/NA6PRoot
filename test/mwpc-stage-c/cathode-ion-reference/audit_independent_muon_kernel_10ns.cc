@@ -172,7 +172,10 @@ int main(int argc,char**argv){
       "saved_K256_ions,collected_electrons,effective_gain_per_Heed,"
       "plus_native10_L2,minus_native10_L2,plus_rebinned100_L2,"
       "minus_rebinned100_L2,plus_final_direct_fC,plus_final_fast_fC,"
-      "minus_final_direct_fC,minus_final_fast_fC\n";
+      "minus_final_direct_fC,minus_final_fast_fC,"
+      "late_ion_rows,weighted_late_ions,"
+      "plus_unrecorded_tail_fC,minus_unrecorded_tail_fC,"
+      "max_late_arrival_ns\n";
   windows<<std::setprecision(16)
     <<"index,channel,station,window_ns,plane,direct_ion_fC,"
       "fast_ion_fC,difference_fC,relative_difference_percent\n";
@@ -214,6 +217,18 @@ int main(int argc,char**argv){
         std::stoi(V(fast,"training_templates"))==512 &&
         std::stoi(V(fast,"neighbors"))==4,
         "different reservoir or spatial interpolation configuration");
+   const long long lateCount=std::stoll(V(direct,"late_ion_rows"));
+   const double latePopulation=std::stod(V(direct,"late_ion_weighted_population"));
+   const double tailPlus=std::stod(V(direct,"plus_unrecorded_tail_fC"));
+   const double tailMinus=std::stod(V(direct,"minus_unrecorded_tail_fC"));
+   const double maxLateArrival=std::stod(V(direct,"max_late_arrival_ns"));
+   Need(lateCount>=0 && lateCount<=m.stored &&
+        latePopulation>=0. && latePopulation<=m.exact+1.e-5 &&
+        std::isfinite(tailPlus) && std::isfinite(tailMinus) &&
+        std::isfinite(maxLateArrival) &&
+        (lateCount>0 || (latePopulation==0.&&
+         std::abs(tailPlus)<1.e-9&&std::abs(tailMinus)<1.e-9)),
+        "invalid late-ion window-tail accounting in direct RKF summary");
    const auto w=ReadFast(base+"_fast_dt10_waveforms.csv");
    for(int side=0;side<2;++side) {
     const auto& kernel=w[side];const auto& ref=w[side+2];
@@ -270,13 +285,18 @@ int main(int argc,char**argv){
    // Write complete row below; no partial records.
    output<<dnL2<<","<<upReb<<","<<dnReb<<","
          <<Charge(w[2],100000)<<","<<Charge(w[0],100000)<<","
-         <<Charge(w[3],100000)<<","<<Charge(w[1],100000)<<"\n";
+         <<Charge(w[3],100000)<<","<<Charge(w[1],100000)<<","
+         <<lateCount<<","<<latePopulation<<","
+         <<tailPlus<<","<<tailMinus<<","<<maxLateArrival<<"\n";
    std::cout<<std::setprecision(7)<<"independent "<<tag.str()
        <<" source="<<m.channel<<" gain="
        <<(m.primaries?double(m.collected)/m.primaries:0.)
        <<" upper_10ns_L2="<<upL2<<" lower_10ns_L2="<<dnL2
        <<" upper_100ns_rebinned_L2="<<upReb
-       <<" lower_100ns_rebinned_L2="<<dnReb<<"\n";
+       <<" lower_100ns_rebinned_L2="<<dnReb
+       <<" late_ion_rows="<<lateCount
+       <<" unrecorded_tail_plus_fC="<<tailPlus
+       <<" unrecorded_tail_minus_fC="<<tailMinus<<"\n";
   }
   output.close();windows.close();
   canvas.cd(0);canvas.Modified();canvas.Update();
