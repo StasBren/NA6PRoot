@@ -14,6 +14,7 @@
 #include <iostream>
 #include <limits>
 #include <stdexcept>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -61,6 +62,7 @@ int main(int argc,char**argv) {
   long long processed=0;
   for(long long j=0;j<input.Entries();++j) {
     const auto b=input.Get(j);
+    try {
     tr.CheckStart(b.u,b.v,b.w,b.t);
     const auto pred=tr.PredictedEndpointCharge(b.u,b.v,b.w);
     for(int k=0;k<2;++k)qPred[k]+=b.weight*pred[k];
@@ -75,6 +77,19 @@ int main(int argc,char**argv) {
         iPlus[ib]+=b.weight*tr.Current(0,ib);
         iMinus[ib]+=b.weight*tr.Current(1,ib);
       }
+    }
+    } catch(const std::exception& error) {
+      std::ostringstream out;
+      out<<std::setprecision(17)
+         <<"ION ROW FAILED: crossing="<<input.id
+         <<" source_root="<<source
+         <<" ion_row="<<j<<"/"<<input.Entries()
+         <<" parent_Heed_primary="<<b.primary
+         <<" sampling_weight="<<b.weight
+         <<" birth_cm=("<<b.u<<","<<b.v<<","<<b.w<<")"
+         <<" birth_time_ns="<<b.t
+         <<" detail={"<<error.what()<<"}";
+      throw std::runtime_error(out.str());
     }
     ++processed;
     if(processed%1000==0)
