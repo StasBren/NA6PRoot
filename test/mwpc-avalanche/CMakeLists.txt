@@ -305,3 +305,11 @@ target_include_directories(mwpc_compare_plane_timing_100ns_10ns PRIVATE
 target_link_libraries(mwpc_compare_plane_timing_100ns_10ns PRIVATE
   ROOT::Core ROOT::RIO ROOT::Tree ROOT::Hist ROOT::Graf ROOT::Gpad)
 target_compile_features(mwpc_compare_plane_timing_100ns_10ns PRIVATE cxx_std_17)
+
+
+# Stage C: candidate 2026 U/V strip geometry + exact bare parallel-plate
+# Laplace boundary-control. Explicitly NO wire-grid or PCB weighting field.
+# The code deliberately requires an explicit (not documented) strip pitch.
+add_executable(mwpc_uv_stereo_strip_weighting_baseline
+  ../mwpc-stage-c/cathode-ion-reference/uv_stereo_strip_weighting_baseline.cc)
+target_compile_features(mwpc_uv_stereo_strip_weighting_baseline PRIVATE cxx_std_17)
