@@ -156,3 +156,33 @@ cat "$OUT/strip_nearwire_gradconv_v1_summary.csv"
 ~~~
 
 All 4 alternative models are solved anew, and failure must be investigated rather than ignored. Do not conflate the output with Garfield's separate exact whole-plane reference, or with physical U/V strip currents. If gradient convergence is poor, improve wire-surface boundary discretization; if stable, next controlled experiment is single-ion induced-charge closure with sampled trajectories and a *physically justified* independent charge-sharing accuracy assessment.
+
+## Measured individual U/V gradients: 1 mm wire segmentation NOT converged
+
+User ran complete independent near-wire U/V strip gradient sensitivity on 2026-11-20. U and V strip field-vector relative L2 difference was **6.0335%** after halving wire-source element length 1→0.5mm; max local relative gradient change **11.74%**. Near-wire maximum absolute potential change **0.004109**. By contrast changing wire-source extent ±10→±14mm changes vector gradient L2 ~0.000202%, image cutoff 12→20 changes ~0.0362%, and angular quadrature mean 4→8 angles has near-zero effect (~6.63e-11 relative gradient L2). The 4-to-8 result does NOT mean anode cylinder surface potential is properly enforced because mean-zero constraints with only axial line monopoles cannot impose pointwise zero around a tilted-strip wire.
+
+The historical program printed `PASS` to indicate calculations completed. **It was not an actual field-convergence pass.** New code now reports explicit `NOT_CONVERGED` when the gradient L2 changes by more than 2% (a screening diagnostic, not calibrated detector tolerance) and accepts `--only-variation segment_half` for a focused high-cost next test.
+
+Next use the already-existing analysis worktree and update only it, not the running 1000-muon microscopic campaign. Dense matrix at 0.25mm segment spacing has 720 unknown wire elements, so this is a relatively costly numerical computation. Run with reduced CPU priority and only one perturbation:
+
+~~~bash
+cd ~/na6p/cathode-independent-stereo-2100
+git fetch origin feature/p3-2100v-wire-aware-stereo-weighting-20261120
+git merge --ff-only FETCH_HEAD
+cmake --build test/mwpc-avalanche/build-independent \
+  --target mwpc_stereo_strip_gradient_convergence -j2
+BIN="$PWD/test/mwpc-avalanche/build-independent/mwpc_stereo_strip_gradient_convergence"
+OUT="$PWD/test_runs/mwpc_stage_c/wire_aware_stereo_v1"
+nice -n 10 "$BIN" \
+  --gap-mm 3 --strip-width-mm 1.7 --strip-pitch-mm 1.7 \
+  --tan-stereo 0.1 --wire-pitch-mm 3 --wire-radius-mm 0.015 \
+  --wires 9 --halfspan-w-mm 10 \
+  --segment-step-mm 0.5 --image-pairs 12 \
+  --only-variation segment_half \
+  --out-prefix "$OUT/strip_nearwire_seg05_vs025_v1" \
+  > "$OUT/strip_nearwire_seg05_vs025.log" 2>&1
+tail -n 25 "$OUT/strip_nearwire_seg05_vs025.log"
+cat "$OUT/strip_nearwire_seg05_vs025_v1_summary.csv"
+~~~
+
+**Stop and reconsider the discretization** if the 0.5→0.25mm gradient differences remain large. Even if this single test looks stable, pointwise grounded wire-cylinder boundary errors and actual strip PCB/microgeometry remain unvalidated. Because the present unknowns are line-source monopoles with only azimuthal *mean* wire-boundary constraints, angular-surface multipoles or a proper 3D surface BEM/FEM may be necessary; increasing the 4/8 angular sample count alone cannot fix angular boundary errors. Do NOT infer 0.11% individual strip accuracy from the whole-plane Garfield reference, and do NOT proceed to strip current/RKF calculations until these issues are resolved.
