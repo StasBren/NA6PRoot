@@ -342,3 +342,15 @@ target_link_libraries(mwpc_wire_aware_stereo_strip_pilot PRIVATE
   Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree ROOT::Hist
   ROOT::Graf ROOT::Gpad)
 target_compile_features(mwpc_wire_aware_stereo_strip_pilot PRIVATE cxx_std_17)
+
+
+# Numerical convergence of the INDIVIDUAL U/V stereo-strip weighting
+# gradient near grounded anode wires. Tests four vs eight angular
+# collocation samples, segmented wire length, finite source span, and
+# image-series cutoff. Pure 3D weighting-potential calculation;
+# no particle drift/induced current/no electronics.
+add_executable(mwpc_stereo_strip_gradient_convergence
+  ../mwpc-stage-c/cathode-ion-reference/stereo_near_wire_strip_gradient_convergence.cc)
+target_include_directories(mwpc_stereo_strip_gradient_convergence PRIVATE
+  ../mwpc-stage-c/cathode-ion-reference)
+target_compile_features(mwpc_stereo_strip_gradient_convergence PRIVATE cxx_std_17)
