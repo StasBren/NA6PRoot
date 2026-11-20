@@ -175,6 +175,99 @@ Results Validate(const ws::Model&model,
        <<res.maxWholeGarfield<<","<<res.maxWholeGarfield<<"\n";
  return res;
 }
+
+// Independent Garfield++ near-anode control. The true avalanche ion birth
+// positions lie just outside the ~15um radius wire surface. A small
+// absolute potential error at distant, smooth points does not imply
+// accurate local weighting fields near that surface. Compare BOTH phi
+// and -grad(phi) of the full-plane model at controlled radial shells.
+struct NearWireMetrics {
+ int points=0;
+ double maxPotentialDifference=0.;
+ double rmsPotentialDifference=0.;
+ double maxGradientAbsDifferencePerMm=0.;
+ double globalGradientRelativeL2=0.;
+ double maxStripNearWirePotential=0.;
+};
+NearWireMetrics NearWireAudit(const ws::Model&model,
+    const ws::Solution&up,const ws::Solution&down,
+    const ws::Solution&wholeUp,const ws::Solution&wholeDown,
+    std::ostream&csv) {
+ const auto&g=model.Geometry();
+ Garfield::ComponentAnalyticField garfield;
+ ConfigureGarfieldPlaneReference(garfield,g);
+ NearWireMetrics ans;
+ double sumPotentialSquared=0.;
+ double sumGradientDifferenceSquared=0.;
+ double sumGradientReferenceSquared=0.;
+ csv<<std::setprecision(16)
+    <<"wire_index,radius_over_wire_radius,theta_rad,w_mm,side,"
+      "model_weighting_potential,garfield_weighting_potential,"
+      "potential_difference,model_Eu_per_mm,model_Ev_per_mm,"
+      "garfield_Eu_per_mm,garfield_Ev_per_mm,"
+      "gradient_difference_per_mm,reference_gradient_norm_per_mm,"
+      "selected_strip0_potential\n";
+ const std::array<double,5> radii{{1.10,1.50,2.0,5.0,20.0}};
+ const std::array<double,4> angles{{pi/8.,5.*pi/8.,9.*pi/8.,13.*pi/8.}};
+ for(int wireIndex:{-1,0,1})for(double ratio:radii)
+  for(double theta:angles)for(double w:{0.,1.1}) {
+   const double radius=g.wireRadiusMm*ratio;
+   const double u=wireIndex*g.wirePitchMm+radius*std::cos(theta);
+   const double v=radius*std::sin(theta);
+   // Finite differences must stay OUTSIDE the physical conductor.
+   // Leave a substantial clearance and independently check h convergence.
+   const double clearance=radius-g.wireRadiusMm;
+   const double h=std::min(0.0015,0.15*clearance);
+   ss::Check(h>0.&&h<clearance*0.5,
+      "near-wire reference derivative crosses conductor surface");
+   for(int side=0;side<2;++side){
+    const auto label=side?"cathode_minus":"cathode_plus";
+    const auto&solution=side?wholeDown:wholeUp;
+    const auto&strip=side?down:up;
+    const double pModel=model.Potential(solution,u,v,w);
+    const auto gphi=[&](double uu,double vv) {
+       return garfield.WeightingPotential(.1*uu,.1*vv,.1*w,label);
+    };
+    const auto mphi=[&](double uu,double vv) {
+       return model.Potential(solution,uu,vv,w);
+    };
+    const double pReference=gphi(u,v);
+    const double euModel=-(mphi(u+h,v)-mphi(u-h,v))/(2.*h);
+    const double evModel=-(mphi(u,v+h)-mphi(u,v-h))/(2.*h);
+    const double euReference=-(gphi(u+h,v)-gphi(u-h,v))/(2.*h);
+    const double evReference=-(gphi(u,v+h)-gphi(u,v-h))/(2.*h);
+    const double delta=std::hypot(euModel-euReference,
+                                  evModel-evReference);
+    const double normRef=std::hypot(euReference,evReference);
+    const double pdiff=pModel-pReference;
+    const double localStrip=model.Potential(strip,u,v,w);
+    ss::Check(std::isfinite(pModel)&&std::isfinite(pReference)&&
+       std::isfinite(delta)&&std::isfinite(localStrip)&&
+       std::isfinite(normRef),"nonfinite near-wire field");
+    ans.maxPotentialDifference=std::max(ans.maxPotentialDifference,
+                                        std::abs(pdiff));
+    ans.maxGradientAbsDifferencePerMm=std::max(
+       ans.maxGradientAbsDifferencePerMm,delta);
+    ans.maxStripNearWirePotential=std::max(
+       ans.maxStripNearWirePotential,std::abs(localStrip));
+    sumPotentialSquared+=pdiff*pdiff;
+    sumGradientDifferenceSquared+=delta*delta;
+    sumGradientReferenceSquared+=normRef*normRef;
+    ++ans.points;
+    csv<<wireIndex<<","<<ratio<<","<<theta<<","<<w<<","
+       <<label<<","<<pModel<<","<<pReference<<","<<pdiff<<","
+       <<euModel<<","<<evModel<<","
+       <<euReference<<","<<evReference<<","
+       <<delta<<","<<normRef<<","<<localStrip<<"\n";
+   }
+  }
+ ss::Check(ans.points>0,"no near-wire test positions evaluated");
+ ans.rmsPotentialDifference=std::sqrt(sumPotentialSquared/ans.points);
+ ans.globalGradientRelativeL2=std::sqrt(sumGradientDifferenceSquared/
+   std::max(sumGradientReferenceSquared,1.e-30));
+ return ans;
+}
+
 struct Convergence {
  double maxStepDifference=0,maxExtentDifference=0,maxImageDifference=0;
  int refinedUnknowns=0,wideUnknowns=0;
@@ -258,9 +351,10 @@ int main(int argc,char**argv){
   g.imagePairs=(int)Numeric(argc,argv,"--image-pairs",12.);
   const auto prefix=Arg(argc,argv,"--out-prefix");
   const bool refine=Flag(argc,argv,"--convergence");
+  const bool nearWire=Flag(argc,argv,"--near-wire");
   ws::Validate(g);
   if(!prefix.empty())for(const auto&ext:{"_checks.csv","_potential.csv",
-           "_potential.root","_potential.png"}) {
+           "_potential.root","_potential.png","_near_wire.csv"}) {
     ss::Check(!std::filesystem::exists(prefix+ext),
        "refusing overwrite result "+prefix+ext);
   }
@@ -280,6 +374,9 @@ int main(int argc,char**argv){
   const auto metrics=Validate(model,up,minus,wholeUp,wholeDown,measurements);
   Convergence conv;
   if(refine)conv=Refine(g,model,up,wholeUp,measurements);
+  NearWireMetrics near;
+  std::ostringstream nearCsv;
+  if(nearWire)near=NearWireAudit(model,up,minus,wholeUp,wholeDown,nearCsv);
   std::cout<<std::setprecision(7)
      <<"WIRE-GROUNDED SURFACE residual U="<<metrics.wirePlus
      <<" V="<<metrics.wireMinus<<" whole="<<metrics.wireWhole<<"\n"
@@ -288,6 +385,16 @@ int main(int argc,char**argv){
      <<" max_interior_laplacian_per_mm2="<<metrics.maxLaplacian<<"\n"
      <<"max_abs_whole_plane_difference_vs_Garfield_analytic="
      <<metrics.maxWholeGarfield<<"\n";
+  if(nearWire)
+    std::cout<<"NEAR-WIRE 3D CHECK points="<<near.points
+      <<" max_abs_potential_error="<<near.maxPotentialDifference
+      <<" rms_potential_error="<<near.rmsPotentialDifference
+      <<" max_abs_weighting_gradient_error_per_mm="
+      <<near.maxGradientAbsDifferencePerMm
+      <<" combined_relative_gradient_L2="
+      <<near.globalGradientRelativeL2
+      <<" max_local_strip0_potential="<<near.maxStripNearWirePotential
+      <<" (Garfield whole-plane reference only)\n";
   if(refine)
     std::cout<<"CONVERGENCE step_max_deviation="<<conv.maxStepDifference
      <<" wire_span_max_deviation="<<conv.maxExtentDifference
@@ -298,6 +405,12 @@ int main(int argc,char**argv){
     std::ofstream checks(prefix+"_checks.csv");
     ss::Check(bool(checks),"cannot write checks CSV");
     checks<<measurements.str();checks.close();
+    if(nearWire){
+      std::ofstream nearFile(prefix+"_near_wire.csv");
+      ss::Check(bool(nearFile),"cannot write near-anode reference CSV");
+      nearFile<<nearCsv.str();
+      nearFile.close();
+    }
     std::ofstream data(prefix+"_potential.csv");
     ss::Check(bool(data),"cannot write field map CSV");
     data<<std::setprecision(15)
