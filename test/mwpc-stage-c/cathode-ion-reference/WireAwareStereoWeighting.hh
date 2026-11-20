@@ -37,7 +37,9 @@ struct Settings {
  double wireRadiusMm=0.015; // 30 micrometre diameter (NOT radius)
  int nWires=9;
  double halfSpanWmm=10.; // controlled numerical correction extent
- double segmentStepMm=1.;
+ double segmentStepMm=1.; // uniform step, or OUTER step with local refinement
+ double localHalfSpanWmm=0.; // 0 disables local longitudinal refinement
+ double localStepMm=0.;     // 0 disables local longitudinal refinement
  int imagePairs=12; // sum image indices -M..M
  int angularCollocationSamples=4; // average equally spaced wire-cylinder angles
 };
@@ -58,10 +60,31 @@ inline void Validate(const Settings&g) {
       g.angularCollocationSamples==8 ||
       g.angularCollocationSamples==16),
      "invalid wire segmentation/image parameters");
- const double n=2.*g.halfSpanWmm/g.segmentStepMm;
- st::Check(std::abs(n-std::round(n))<1.e-8,
-           "w length must be integer number of wire segments");
- st::Check(g.nWires*(int)std::lround(n)<=800,
+ const bool adaptive=(g.localHalfSpanWmm>0.||g.localStepMm>0.);
+ st::Check(!adaptive || (g.localHalfSpanWmm>0.&&g.localStepMm>0.),
+           "adaptive mesh requires BOTH local halfspan and local step");
+ int perWire=0;
+ auto integerSegments=[&](double length,double step,const std::string&part){
+   const double count=length/step;
+   st::Check(std::isfinite(count)&&count>=1. &&
+             std::abs(count-std::round(count))<1.e-8,
+             "adaptive/uniform segment boundaries not integer aligned: "+part);
+   return (int)std::lround(count);
+ };
+ if(adaptive){
+   st::Check(g.localHalfSpanWmm<g.halfSpanWmm &&
+             g.localStepMm>=0.03125 &&
+             g.localStepMm<=g.segmentStepMm,
+             "local mesh must have narrower span and positive finer step");
+   const int outer=integerSegments(
+       g.halfSpanWmm-g.localHalfSpanWmm,g.segmentStepMm,"outer");
+   const int central=integerSegments(
+       2.*g.localHalfSpanWmm,g.localStepMm,"inner");
+   perWire=2*outer+central;
+ }else{
+   perWire=integerSegments(2.*g.halfSpanWmm,g.segmentStepMm,"uniform");
+ }
+ st::Check(g.nWires*perWire<=800,
            "dense wire boundary matrix exceeds 800 unknowns");
 }
 // Integral along [a,b] of the two-plate Dirichlet point-charge Green
@@ -175,17 +198,32 @@ class Model {
 public:
  explicit Model(Settings g):g_(std::move(g)){
    Validate(g_);
-   const int segments=(int)std::lround(2.*g_.halfSpanWmm/g_.segmentStepMm);
    const int half=(g_.nWires-1)/2;
-   nodes_.reserve((std::size_t)g_.nWires*segments);
+   const bool adaptive=(g_.localHalfSpanWmm>0.);
+   auto appendRange=[&](double u,double first,double last,double step){
+     const int segments=(int)std::lround((last-first)/step);
+     for(int i=0;i<segments;++i){
+       const double lo=first+i*step;
+       const double hi=(i+1==segments?last:first+(i+1)*step);
+       nodes_.push_back({u,(lo+hi)/2.,lo,hi});
+     }
+   };
    for(int wire=-half;wire<=half;++wire){
      const double u=wire*g_.wirePitchMm;
-     for(int i=0;i<segments;++i){
-       const double lo=-g_.halfSpanWmm+i*g_.segmentStepMm;
-       nodes_.push_back({u,lo+0.5*g_.segmentStepMm,lo,
-                        lo+g_.segmentStepMm});
+     if(adaptive){
+       appendRange(u,-g_.halfSpanWmm,-g_.localHalfSpanWmm,
+                   g_.segmentStepMm);
+       appendRange(u,-g_.localHalfSpanWmm,+g_.localHalfSpanWmm,
+                   g_.localStepMm);
+       appendRange(u,+g_.localHalfSpanWmm,+g_.halfSpanWmm,
+                   g_.segmentStepMm);
+     }else{
+       appendRange(u,-g_.halfSpanWmm,+g_.halfSpanWmm,
+                   g_.segmentStepMm);
      }
    }
+   st::Check(!nodes_.empty() && nodes_.size()<=800,
+             "invalid generated wire line element count");
    Factorize();
  }
  const Settings& Geometry()const{return g_;}
