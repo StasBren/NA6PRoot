@@ -27,6 +27,8 @@ for spec in '0435:jpsi40-bore:4' '0511:phi40-bore:3' '0101:omega40-bore:4'; do
     fail "checksum mismatch muon_$idx"
   grep -qx 'PASS CATHODE ROOT PHYSICS AUDIT' "$dir/root_audit.log" ||
     fail "no valid ROOT audit muon_$idx"
+  grep -q "channel=$source station=$station " "$dir/root_audit.log" ||
+    fail "wrong source/station archive in muon_$idx"
   grep -qx 'GARFIELD_AVALANCHE_SIZE_LIMIT_DISABLED=1' "$dir/physics.log" ||
     fail "uncapped Garfield flag missing"
   d="$OUT/muon_$idx"
