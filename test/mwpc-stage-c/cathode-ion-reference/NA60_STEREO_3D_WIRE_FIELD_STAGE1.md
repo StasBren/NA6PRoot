@@ -31,7 +31,7 @@ Importantly this field solution is not equivalent to running `Garfield::Componen
 - U versus V opposite stereo reflection under (u,v)↦(−u,−v) with unchanged w.
 - Sum of 23 contiguous upper strips should reproduce the same numerical solver's **wire-screened whole-upper-cathode** potential in the central detector patch.
 - Diagnostic comparison of numerical whole-cathode weighting potential to `Garfield::ComponentAnalyticField::WeightingPotential` for the same 9-wire reference. This is the most important physics fidelity comparison: report the worst ABSOLUTE potential discrepancy; it is **not** automatically accepted just because a boundary test passes.
-- With `--convergence`, refine 1.0mm line segments to 0.5mm and extend the charge-source correction region by 4mm each side. Report maximum changes at fixed interior points for both a selected strip and whole plate. Need also study image truncation if significant.
+- With `--convergence`, refine 1.0mm line segments to 0.5mm, extend charge-source correction by 4mm each side, and independently increase Green image count by 8 on each side. Report maximum differences at fixed interior points for both a selected strip and whole plate. Check the numerical 3D Laplacian away from electrodes as a separate harmonicity test.
 
 **A PASS currently means only numerical boundary, symmetry, partition and broad refinement checks passed within the coded pilot thresholds. It does NOT certify physical strip current, precise charge sharing, or complete field convergence.** Required later: finite PCB/inactive edges, actual copper gaps, traces, dielectric layers, realistic wire segmentation, systematic tolerance convergence, and credible 3D field reference with ions and direct weighting-potential charge closure.
 
