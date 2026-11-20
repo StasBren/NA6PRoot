@@ -75,3 +75,46 @@ The output PNG contains the upper U0 and U1 strip weighting potentials, the lowe
 ### Independent control for candidate 2.5+2.5mm
 
 After the first case is scientifically acceptable, run a separate prefix with `--gap-mm 2.5`; do not reuse a previously created prefix or pretend the 2100V microscopic reference holds in a redesigned chamber. The change is a geometry sensitivity study only.
+
+## First actual WSL result — preliminary numerical validation
+
+Compiled successfully on WSL (2026-11-20). With the default candidate geometry, 180 unknown longitudinal wire-line densities and `--convergence`, the completed log reports:
+
+~~~text
+wire_surface_residual U=0.003788416 V=0.003789194 whole=0.002538913
+stereo_reflection_error=0.00006533331
+sum_strips_minus_screened_whole=0.000005026515
+max_3D_Laplace_residual_per_mm2=0.00003258118
+max_abs_whole_screened_potential_minus_Garfield_analytic=0.0008872376
+segment_refinement_change=0.0001592416
+wire_source_extent_change=0.0005785199
+image_count_change=0.0006713097
+~~~
+
+These are absolute *weighting potential* differences and are NOT guaranteed relative accuracy on the individual strip response or local weighting electric fields. The Garfield comparison sampled a small set of interior points. A ~0.0038 wire-surface deviation could be serious very near the anode wire. The program PASS reflects loose diagnostic thresholds, not physical accuracy certification.
+
+### Required next test: near-anode field gradients
+
+New optional `--near-wire` run compares both screened **whole-cathode** potential and the vector weighting field (`E_u`, `E_v` from finite differences) to Garfield's independent analytic 9-wire whole-cathode reference. Samples three central wires, radial distances 1.1, 1.5, 2, 5, 20 times the physical 15μm wire radius, four polar angles and two longitudinal positions (240 configurations including upper/lower electrode references). An independent *physical strip* reference does not yet exist, so this test cannot establish actual strip-current accuracy on its own. Selected strip potential is sampled as a useful extra near-wire check.
+
+Run a NEW output prefix to avoid overwriting the already successful convergence run:
+
+~~~bash
+cd ~/na6p/cathode-independent-stereo-2100
+git fetch origin feature/p3-2100v-wire-aware-stereo-weighting-20261120
+git merge --ff-only FETCH_HEAD
+cmake --build test/mwpc-avalanche/build-independent \
+  --target mwpc_wire_aware_stereo_strip_pilot -j2
+BIN="$PWD/test/mwpc-avalanche/build-independent/mwpc_wire_aware_stereo_strip_pilot"
+OUT="$PWD/test_runs/mwpc_stage_c/wire_aware_stereo_v1"
+"$BIN" --gap-mm 3 --strip-width-mm 1.7 --strip-pitch-mm 1.7 \
+  --tan-stereo 0.1 --wire-pitch-mm 3 --wire-radius-mm 0.015 \
+  --wires 9 --halfspan-w-mm 10 --segment-step-mm 1 \
+  --image-pairs 12 --near-wire \
+  --out-prefix "$OUT/wire_aware_nearwire_v1" \
+  > "$OUT/nearwire.log" 2>&1
+tail -n 25 "$OUT/nearwire.log"
+head -n 10 "$OUT/wire_aware_nearwire_v1_near_wire.csv"
+~~~
+
+Before proceeding to physical induced strip currents, assess potential and *gradient* differences by radius, then decide whether the approximate thin-wire collocation suffices or requires improved angular surface treatment and finer near-wire resolution.
