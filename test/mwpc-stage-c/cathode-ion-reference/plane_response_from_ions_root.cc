@@ -26,6 +26,10 @@ std::string Arg(int n,char**v,const std::string& key) {
 double Number(int n,char**v,const std::string& key,double def) {
  const auto x=Arg(n,v,key);return x.empty()?def:std::stod(x);
 }
+bool HasFlag(int n,char**v,const std::string&key) {
+ for(int i=1;i<n;++i)if(key==v[i])return true;
+ return false;
+}
 }
 
 int main(int argc,char**argv) {
@@ -34,6 +38,7 @@ int main(int argc,char**argv) {
   const std::string prefix=Arg(argc,argv,"--out-prefix");
   const std::string mobility=Arg(argc,argv,"--mobility");
   const std::string mode=Arg(argc,argv,"--mode");
+  const bool recordLate=HasFlag(argc,argv,"--record-late-ion-endpoints");
   const double dt=Number(argc,argv,"--dt-ns",100.);
   const double windowUs=Number(argc,argv,"--window-us",100.);
   const double maxStepMm=Number(argc,argv,"--max-step-mm",0.05);
@@ -41,6 +46,8 @@ int main(int argc,char**argv) {
   NA60Plane::Require(!source.empty()&&!prefix.empty()&&!mobility.empty(),
     "usage: --ion-file ROOT --out-prefix PREFIX --mobility FILE --mode direct|charge");
   NA60Plane::Require(mode=="direct"||mode=="charge","mode must be direct or charge");
+  NA60Plane::Require(!recordLate||mode=="direct",
+    "--record-late-ion-endpoints applies only in direct mode");
   NA60Plane::Require(dt>0.&&windowUs>0.&&windowUs<=500.&&maxDirect>0,
     "invalid time window or direct-event limit");
   const double n=std::ceil(1000.*windowUs/dt);
@@ -55,8 +62,11 @@ int main(int argc,char**argv) {
     NA60Plane::Require(!std::filesystem::exists(prefix+extension),
       "output already exists; choose a fresh prefix");
   }
-  NA60Plane::Transport tr(mobility,dt,bins,maxStepMm);
-  std::array<double,2> qPred{},qDirect{},qRamo{};
+  NA60Plane::Transport tr(mobility,dt,bins,maxStepMm,recordLate);
+  std::array<double,2> qPred{},qDirect{},qRamo{},qUnrecordedTail{};
+  long long nLateRows=0;
+  double nLateWeighted=0.;
+  double maxLateArrivalNs=0.;
   std::vector<double> iPlus(bins,0.),iMinus(bins,0.);
   double lastArrivalNs=0.;
   long long processed=0;
@@ -68,6 +78,13 @@ int main(int argc,char**argv) {
     for(int k=0;k<2;++k)qPred[k]+=b.weight*pred[k];
     if(mode=="direct") {
       auto result=tr.Drift(b.u,b.v,b.w,b.t);
+      if(result.late) {
+        ++nLateRows;
+        nLateWeighted+=b.weight;
+        maxLateArrivalNs=std::max(maxLateArrivalNs,result.endT);
+        for(int k=0;k<2;++k)
+          qUnrecordedTail[k]+=b.weight*result.unrecordedTailQ[k];
+      }
       lastArrivalNs=std::max(lastArrivalNs,result.endT);
       for(int k=0;k<2;++k) {
         qDirect[k]+=b.weight*result.integralQ[k];
@@ -106,8 +123,17 @@ int main(int argc,char**argv) {
                          0.0005*NA60Plane::eFc*input.nTrue);
       NA60Plane::Require(std::abs(qPred[k]-qRamo[k])<=tol,
         "initial-v endpoint-side hypothesis differs from RKF endpoints");
-      NA60Plane::Require(std::abs(qDirect[k]-qRamo[k])<=tol,
-        "integrated sample waveform differs from endpoint Ramo charge");
+      if(nLateRows==0) {
+        NA60Plane::Require(std::abs(qDirect[k]-qRamo[k])<=tol,
+          "integrated complete waveform differs from endpoint Ramo charge");
+      } else {
+        // Current is only recorded through dt*bins. Physical drift is
+        // complete, so endpoint Ramo Q must be the window charge PLUS
+        // explicitly recorded unobserved tail contribution.
+        NA60Plane::Require(
+          std::abs(qDirect[k]+qUnrecordedTail[k]-qRamo[k])<=tol,
+          "window charge + unobserved ion tail != full endpoint Ramo");
+      }
     }
   }
 
@@ -118,15 +144,21 @@ int main(int argc,char**argv) {
             "true_ion_births,retained_ion_rows,dt_ns,window_us,max_ion_arrival_ns,"
             "plus_endpoint_side_estimate_fC,minus_endpoint_side_estimate_fC,"
             "plus_RKF_window_fC,minus_RKF_window_fC,"
-            "plus_RKF_ramo_fC,minus_RKF_ramo_fC\n";
+            "plus_RKF_ramo_fC,minus_RKF_ramo_fC,"
+            "late_ion_rows,late_ion_weighted_population,"
+            "plus_unrecorded_tail_fC,minus_unrecorded_tail_fC,"
+            "max_late_arrival_ns\n";
   summary<<input.id<<","<<input.source<<","<<input.station<<","<<input.det
          <<","<<input.mode<<","<<mode<<","<<input.nTrue<<","<<input.nSaved
          <<","<<dt<<","<<windowUs<<",";
   if(mode=="direct")summary<<lastArrivalNs;else summary<<"NA";
   summary<<","<<qPred[0]<<","<<qPred[1]<<",";
   if(mode=="direct")summary<<qDirect[0]<<","<<qDirect[1]<<","
-                           <<qRamo[0]<<","<<qRamo[1]<<"\n";
-  else summary<<"NA,NA,NA,NA\n";
+                           <<qRamo[0]<<","<<qRamo[1]<<","
+                           <<nLateRows<<","<<nLateWeighted<<","
+                           <<qUnrecordedTail[0]<<","<<qUnrecordedTail[1]<<","
+                           <<maxLateArrivalNs<<"\n";
+  else summary<<"NA,NA,NA,NA,NA,NA,NA,NA,NA\n";
   summary.close();
 
   if(mode=="direct") {
@@ -152,7 +184,10 @@ int main(int argc,char**argv) {
   NA60Plane::Require(!root.IsZombie(),"ROOT output creation failed");
   TNamed note("limitations",
     "Ion ONLY, two WHOLE cathodes, provisional Ar+ in Ar mobility; "
-    "no electron signal/real strips/electronics; FULL charge-mode assumes cathode sign(v).");
+    "no electron signal/real strips/electronics; FULL charge-mode assumes cathode sign(v). "
+    "If late_ion_rows > 0, *_RKF_window_fC is INDUCED CHARGE OBSERVED "
+    "IN THE FIXED WINDOW, NOT THE COMPLETE CATHODE ENDPOINT CHARGE; "
+    "*_RKF_ramo_fC includes the full endpoint; late residuals are logged.");
   note.Write();
   if(mode=="direct") {
     TH1D hp("plus_ion_current","NA60+ Simulation;time (ns);I_{+} (fC/ns)",
@@ -171,10 +206,21 @@ int main(int argc,char**argv) {
            <<" ions="<<input.nTrue<<" saved="<<input.nSaved<<"\n"
            <<"plus_predicted_Q_fC="<<qPred[0]
            <<" minus_predicted_Q_fC="<<qPred[1]<<"\n";
-  if(mode=="direct")
-    std::cout<<"plus_RKF_Q_fC="<<qDirect[0]
-             <<" minus_RKF_Q_fC="<<qDirect[1]
-             <<" max_end_time_ns="<<lastArrivalNs<<"\n";
+  if(mode=="direct") {
+    std::cout<<"plus_RKF_WINDOW_Q_fC="<<qDirect[0]
+             <<" minus_RKF_WINDOW_Q_fC="<<qDirect[1]
+             <<" max_end_time_ns="<<lastArrivalNs
+             <<" late_ion_rows="<<nLateRows
+             <<" weighted_late_ion_population="<<nLateWeighted
+             <<" plus_unrecorded_tail_fC="<<qUnrecordedTail[0]
+             <<" minus_unrecorded_tail_fC="<<qUnrecordedTail[1]
+             <<" max_late_end_time_ns="<<maxLateArrivalNs<<"\n";
+    if(nLateRows>0) {
+      std::cout<<"LATE ION PHYSICS: ALL ions reached valid physical cathodes; "
+                  "some arrivals occur after the 100us current-recording window. "
+                  "Window charge is NOT complete endpoint charge.\n";
+    }
+  }
   std::cout<<"No electronics, no physical stereo strips, no calibrated ion mobility.\n";
   return 0;
  } catch(const std::exception& e) {
