@@ -163,11 +163,16 @@ void ValidateReferenceSummary(const std::string&path,
    "plus_endpoint_side_estimate_fC,minus_endpoint_side_estimate_fC,"
    "plus_RKF_window_fC,minus_RKF_window_fC,"
    "plus_RKF_ramo_fC,minus_RKF_ramo_fC";
- NA60Plane::Require(header==expected,"unexpected direct RKF summary schema");
+ const std::string lateSuffix=
+   ",late_ion_rows,late_ion_weighted_population,"
+   "plus_unrecorded_tail_fC,minus_unrecorded_tail_fC,"
+   "max_late_arrival_ns";
+ NA60Plane::Require(header==expected||header==expected+lateSuffix,
+    "unexpected direct RKF summary schema");
  std::istringstream csv(line);
  std::vector<std::string> cells;
  while(std::getline(csv,field,','))cells.push_back(field);
- NA60Plane::Require(cells.size()==17,
+ NA60Plane::Require(cells.size()==(header==expected?17u:22u),
                     "direct RKF summary record column count wrong");
  NA60Plane::Require(cells[0]==input.id &&
    cells[2]==std::to_string(input.station) &&

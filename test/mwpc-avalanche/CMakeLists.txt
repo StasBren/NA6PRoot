@@ -305,3 +305,25 @@ target_include_directories(mwpc_compare_plane_timing_100ns_10ns PRIVATE
 target_link_libraries(mwpc_compare_plane_timing_100ns_10ns PRIVATE
   ROOT::Core ROOT::RIO ROOT::Tree ROOT::Hist ROOT::Graf ROOT::Gpad)
 target_compile_features(mwpc_compare_plane_timing_100ns_10ns PRIVATE cxx_std_17)
+
+
+# Read-only three independent K256 genuine muons (phi/jpsi/omega) run with
+# unchanged 256 starting-position template RKF response at 10ns.
+add_executable(mwpc_audit_independent_muon_kernel_10ns
+  ../mwpc-stage-c/cathode-ion-reference/audit_independent_muon_kernel_10ns.cc)
+target_include_directories(mwpc_audit_independent_muon_kernel_10ns PRIVATE
+  ../mwpc-stage-c/cathode-ion-reference)
+target_link_libraries(mwpc_audit_independent_muon_kernel_10ns PRIVATE
+  ROOT::Core ROOT::RIO ROOT::Tree ROOT::Hist ROOT::Graf ROOT::Gpad)
+target_compile_features(mwpc_audit_independent_muon_kernel_10ns PRIVATE cxx_std_17)
+
+# Design baseline only: candidate two-sided 1.7mm stereo strips with analytic
+# WIRE-FREE Laplace boundary solution. The actual wire-aware 3D strip field
+# is still required before physical induced-current calculations.
+add_executable(mwpc_stereo_strip_boundary_pilot
+  ../mwpc-stage-c/cathode-ion-reference/plot_stereo_strip_boundary_pilot.cc)
+target_include_directories(mwpc_stereo_strip_boundary_pilot PRIVATE
+  ../mwpc-stage-c/cathode-ion-reference)
+target_link_libraries(mwpc_stereo_strip_boundary_pilot PRIVATE
+  ROOT::Core ROOT::RIO ROOT::Tree ROOT::Hist ROOT::Graf ROOT::Gpad)
+target_compile_features(mwpc_stereo_strip_boundary_pilot PRIVATE cxx_std_17)
