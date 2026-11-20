@@ -25,6 +25,8 @@ struct Direct {
   double endU=0,endV=0,endW=0,endT=0;
   int status=0;
   bool ok=false;
+  bool late=false; // successfully reached cathode AFTER recorded signal window
+  std::array<double,2> unrecordedTailQ{}; // full endpoint Q minus window Q
 };
 class Transport {
   Garfield::MediumMagboltz gas_;
@@ -33,9 +35,12 @@ class Transport {
   Garfield::DriftLineRKF drift_;
   double dt_;
   int bins_;
+  bool allowLateArrival_;
 public:
-  Transport(const std::string& mobility,double dt,int bins,double stepMm)
-    : drift_(&sensor_),dt_(dt),bins_(bins) {
+  Transport(const std::string& mobility,double dt,int bins,double stepMm,
+            bool allowLateArrival=false)
+    : drift_(&sensor_),dt_(dt),bins_(bins),
+      allowLateArrival_(allowLateArrival) {
     Require(dt>0 && bins>=2 && bins<=10000,"invalid time grid");
     Require(stepMm>0 && stepMm<=0.5,"invalid RKF max step");
     gas_.SetComposition("ar",70.,"co2",30.);
@@ -87,8 +92,9 @@ public:
     Direct out;
     out.ok=drift_.DriftIon(u,v,w,t);
     drift_.GetEndPoint(out.endU,out.endV,out.endW,out.endT,out.status);
-    if(!(out.ok&&std::isfinite(out.endT)&&out.endT>t &&
-         out.endT < dt_*bins_)) {
+    const bool validTransport=out.ok&&std::isfinite(out.endT)&&out.endT>t;
+    out.late=validTransport && out.endT>=dt_*bins_;
+    if(!validTransport || (out.late&&!allowLateArrival_)) {
       std::ostringstream diagnostic;
       diagnostic<<std::setprecision(17)
        <<"ion drift did not satisfy transport/time-window integrity: "
@@ -101,7 +107,8 @@ public:
        <<" duration_ns="<<(out.endT-t)
        <<" window_end_ns="<<(dt_*bins_)
        <<" valid_end_time="<<std::isfinite(out.endT)
-       <<" inside_time_window="<<(std::isfinite(out.endT)&&out.endT<dt_*bins_);
+       <<" inside_time_window="<<(std::isfinite(out.endT)&&out.endT<dt_*bins_)
+       <<" finite_window_late_policy_enabled="<<allowLateArrival_;
       Require(false,diagnostic.str());
     }
     Require(std::abs(std::abs(out.endV)-gap)<0.001,
@@ -119,8 +126,19 @@ public:
     }
     for(int k=0;k<2;++k) {
       const double tol=std::max(2.e-5*eFc,1.e-3*std::abs(out.endpointQ[k]));
-      Require(std::abs(out.integralQ[k]-out.endpointQ[k])<tol,
-              "Ramo endpoint versus integrated current failed");
+      if(out.late) {
+        // The induced current in [0, t_end_window] is a VALID PARTIAL
+        // signal; after that interval the ion continues moving until the
+        // true physical cathode. Never compare window Q with full Ramo Q.
+        // The unsampled tail is recorded explicitly, not silently lost.
+        out.unrecordedTailQ[k]=out.endpointQ[k]-out.integralQ[k];
+        Require(std::isfinite(out.integralQ[k])&&
+                std::isfinite(out.unrecordedTailQ[k]),
+                "late ion generated nonfinite recorded or unrecorded charge");
+      } else {
+        Require(std::abs(out.integralQ[k]-out.endpointQ[k])<tol,
+                "Ramo endpoint versus complete integrated current failed");
+      }
     }
     return out;
   }
