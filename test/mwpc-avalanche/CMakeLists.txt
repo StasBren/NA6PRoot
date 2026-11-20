@@ -284,3 +284,11 @@ target_include_directories(mwpc_assemble_electron_ion_planes PRIVATE
 target_link_libraries(mwpc_assemble_electron_ion_planes PRIVATE
   ROOT::Core ROOT::RIO ROOT::Tree ROOT::Hist ROOT::Graf ROOT::Gpad)
 target_compile_features(mwpc_assemble_electron_ion_planes PRIVATE cxx_std_17)
+
+# READ-ONLY first-500/first-N audited 2100 V K256 muon population analysis.
+# No Garfield transport and no modification of actively produced archives.
+add_executable(mwpc_summary_audited_2100_muons
+  ../mwpc-stage-c/cathode-ion-reference/summary_audited_2100_muons.cc)
+target_link_libraries(mwpc_summary_audited_2100_muons PRIVATE
+  ROOT::Core ROOT::RIO ROOT::Tree ROOT::Hist ROOT::Graf ROOT::Gpad)
+target_compile_features(mwpc_summary_audited_2100_muons PRIVATE cxx_std_17)
