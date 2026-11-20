@@ -79,3 +79,32 @@ mkdir -p "$PWD/test_runs/mwpc_stage_c/strip_boundary_v1"
 Original benchmark K512 muon0, 256 template positions: upper first-100ns charge error from -20.24% to +0.206%, lower from -21.92% to +0.177%, when using 10ns instead of 100ns template shifting. The native 10ns waveform L2 remained 2.94%/3.45%. **These are single-muon findings.** Independent test outcomes must not be inferred in advance.
 
 After confirming or revising spatial interpolation generalization on the three independent muons, a full stereo-strip signal requires 3D wire-aware weighting field: all non-readout electrodes and anodes grounded, individual strip at unit potential, realistic PCB geometry, boundary conditions, mesh convergence and strip/whole-plane sum rules. Only after this validation should we integrate true ion trajectories to produce physical U/V currents. No electronics in this project phase.
+
+## Diagnosed long ion drift and explicit finite observation window (2026-11-20)
+
+First independent RKF attempt for phi muon 0301 initially stopped at sampled ion row 257, parent Heed primary 2, weight 225.9296875, ion birth (-0.00155895027043, +0.000009720811895, +0.0346130405591) cm at 7.648904ns. Garfield reports **transport_ok=1**, status=-1 (left drift area), endpoint (-0.149434289857, +0.29999966319, +0.0346130405591) cm, endpoint time **131747.107 ns**, versus a **100000 ns** observation window. Endpoint v is effectively the +3mm cathode. Status=-1 is consistent with reaching the drift-area boundary; geometry and Garfield transport succeeded. The previous assumption that every ion must reach its electrode during the 100us recording window was over-restrictive, not a physical avalanche failure. The ion was born only ~0.097 microns above the symmetry plane, near an anode, and followed a long curved trajectory to its electrode.
+
+**Fixed policy: physically drift every ion to its valid electrode, but record current only within the requested 0-100us acquisition window.** This is an *explicit opt-in* via `--record-late-ion-endpoints` in the independent-muon runner. Original strict mode remains default for older benchmark scripts. No truncated ion is omitted, and all original per-primary sampling weights remain unchanged. Endpoint status, finite arrival time, cathode landing and expected +/- initial side still require a valid full RKF trajectory. For ions arriving inside the window, integrated recorded current must equal full endpoint Ramo charge within the original strict tolerance. For ions arriving after window end, the recorded current is a physically legitimate *partial* ion current; endpoint charge minus window integral is explicitly registered as `plus/minus_unrecorded_tail_fC`, with late-row count, weighted late-ion count and maximal arrival time in the direct summary. Do not call a 100us-window integral a full endpoint-induced charge when any ions arrive late.
+
+These columns are appended to the legacy 17-column direct summary; the kernel comparison accepts *only* the known legacy schema or the known extended 22-column schema. The three-event audit preserves the late-ion statistics in its own event CSV. Response kernels still describe the same original 256 sites; any new out-of-distribution slow-tail error is measurable rather than silently removed. All statistics and validation outcomes after this correction remain **pending until rerun on WSL**.
+
+### How to update the already-compiled worktree
+
+~~~bash
+cd ~/na6p/cathode-independent-stereo-2100
+git fetch origin feature/p3-2100v-independent-muons-stereo-boundary-20261120
+git merge --ff-only FETCH_HEAD
+cmake --build test/mwpc-avalanche/build-independent --target \
+  mwpc_plane_response_from_ions_root \
+  mwpc_plane_muon_kernel_compare \
+  mwpc_audit_independent_muon_kernel_10ns -j2
+RUNNER=test/mwpc-stage-c/cathode-ion-reference/run_independent_3muon_dt10.sh
+bash "$RUNNER" preflight
+bash "$RUNNER" run > "$PWD/independent3_windowed.log" 2>&1
+tail -n 30 independent3_windowed.log
+OUT="$PWD/test_runs/mwpc_stage_c/independent_muon_dt10_v1"
+cat "$OUT/independent3_events.csv"
+cat "$OUT/independent3_windows.csv"
+~~~
+
+**Never silently use the late-ion acceptance flag outside this controlled 100us-window ion-current study.** If subsequent RKF checks fail, they must still abort, and their root cause needs separate investigation.
