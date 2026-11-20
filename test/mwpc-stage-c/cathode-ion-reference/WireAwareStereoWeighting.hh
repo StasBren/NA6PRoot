@@ -39,6 +39,7 @@ struct Settings {
  double halfSpanWmm=10.; // controlled numerical correction extent
  double segmentStepMm=1.;
  int imagePairs=12; // sum image indices -M..M
+ int angularCollocationSamples=4; // average equally spaced wire-cylinder angles
 };
 struct Node {
  double u=0,w=0,zmin=0,zmax=0;
@@ -52,7 +53,10 @@ inline void Validate(const Settings&g) {
      "wire pitch/radius outside validated numerical range");
  st::Check(g.halfSpanWmm>=4.&&g.halfSpanWmm<=30. &&
      g.segmentStepMm>=0.25&&g.segmentStepMm<=2. &&
-     g.imagePairs>=6&&g.imagePairs<=64,
+     g.imagePairs>=6&&g.imagePairs<=64 &&
+     (g.angularCollocationSamples==4 ||
+      g.angularCollocationSamples==8 ||
+      g.angularCollocationSamples==16),
      "invalid wire segmentation/image parameters");
  const double n=2.*g.halfSpanWmm/g.segmentStepMm;
  st::Check(std::abs(n-std::round(n))<1.e-8,
@@ -96,8 +100,16 @@ class Model {
  std::vector<Node> nodes_;
  std::vector<double> lu_;
  std::vector<int> swaps_;
- static std::array<std::pair<double,double>,4> Angles(double r){
-   return {{{r,0.},{-r,0.},{0.,r},{0.,-r}}};
+ // Equally spaced angle quadrature around each 30um wire cylinder.
+ // n=4 exactly reproduces the original four-angle mean equations.
+ // Use 8 and 16 as explicit angular-discretization sensitivity controls.
+ template<class Op>
+ void ForCylinderAngles(Op&&fn) const {
+   for(int a=0;a<g_.angularCollocationSamples;++a){
+     const double theta=2.*pi*a/g_.angularCollocationSamples;
+     fn(g_.wireRadiusMm*std::cos(theta),
+        g_.wireRadiusMm*std::sin(theta));
+   }
  }
  double Base(st::Side side,Electrode kind,int strip,
              double u,double v,double w) const {
@@ -116,9 +128,10 @@ class Model {
    for(int i=0;i<n;++i)
      for(int j=0;j<n;++j){
        double sum=0.;
-       for(const auto&[du,dv]:Angles(g_.wireRadiusMm))
+       ForCylinderAngles([&](double du,double dv){
          sum+=SegmentGreen(g_,nodes_[i].u+du,dv,nodes_[i].w,nodes_[j]);
-       lu_[(std::size_t)i*n+j]=sum/4.;
+       });
+       lu_[(std::size_t)i*n+j]=sum/g_.angularCollocationSamples;
      }
    // Partial-pivot LU factorization; reusable for many different readout
    // strips and for complete-plane controls. One matrix for one geometry.
@@ -182,9 +195,10 @@ public:
    rhs.reserve(nodes_.size());
    for(const auto& node:nodes_){
      double mean=0.;
-     for(const auto&[du,dv]:Angles(g_.wireRadiusMm))
+     ForCylinderAngles([&](double du,double dv){
        mean+=Base(side,kind,index,node.u+du,dv,node.w);
-     rhs.push_back(-mean/4.);
+     });
+     rhs.push_back(-mean/g_.angularCollocationSamples);
    }
    Solution out;
    out.side=side;out.electrode=kind;out.strip=index;
