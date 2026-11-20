@@ -54,9 +54,8 @@ struct Results {
  double maxReflection=0,maxPartition=0,maxWholeGarfield=0;
  double maxSymmetryU=0;
 };
-Garfield::ComponentAnalyticField GarfieldPlaneReference(
-       const ws::Settings&g) {
- Garfield::ComponentAnalyticField field;
+void ConfigureGarfieldPlaneReference(
+       Garfield::ComponentAnalyticField&field,const ws::Settings&g) {
  for(int i=-(g.nWires-1)/2;i<=(g.nWires-1)/2;++i) {
    // Geometry uses cm in Garfield++, mm in our 3D line-element solver.
    field.AddWire(0.1*i*g.wirePitchMm,0.,
@@ -67,7 +66,6 @@ Garfield::ComponentAnalyticField GarfieldPlaneReference(
  field.SetMagneticField(0.,0.,0.);
  field.AddReadout("cathode_plus");
  field.AddReadout("cathode_minus");
- return field;
 }
 Results Validate(const ws::Model&model,
       const ws::Solution&plus,const ws::Solution&minus,
@@ -95,7 +93,8 @@ Results Validate(const ws::Model&model,
    CheckClose(model.Potential(sol,0.,vHere,2*g.strip.stripPitchMm),
               0.,1.e-12,"neighbor electrode strip boundary");
  }
- auto gf=GarfieldPlaneReference(g);
+ Garfield::ComponentAnalyticField gf;
+ ConfigureGarfieldPlaneReference(gf,g);
  const auto sumTest=std::array<Point,4>{{
    {0.4,0.75,0.2},{1.5,-0.65,0.8},
    {-1.2,1.1,-0.7},{2.7,0.4,0.3}
