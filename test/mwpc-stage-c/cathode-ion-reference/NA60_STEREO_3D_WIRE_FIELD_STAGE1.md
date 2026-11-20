@@ -118,3 +118,41 @@ head -n 10 "$OUT/wire_aware_nearwire_v1_near_wire.csv"
 ~~~
 
 Before proceeding to physical induced strip currents, assess potential and *gradient* differences by radius, then decide whether the approximate thin-wire collocation suffices or requires improved angular surface treatment and finer near-wire resolution.
+
+## Next numerical gate: near-wire *individual stereo-strip* gradient sensitivity (not Garfield whole cathode)
+
+The newly provided 240-point reference scan CSV shows excellent **screened full-plane** agreement with Garfield: ~0.1109% combined vector-gradient L2, maximum local vector-gradient relative error ~0.548%, max absolute potential difference 3.849e-4. These are not independently validated U or V STRIP field gradients; the near-anode selected strip weighting-potential magnitude can itself be ~0.0038–0.01, similar to the prior 0.0038 wire-surface residual. It would be premature to use the existing thin-wire strip gradient to predict strip induced currents.
+
+New `mwpc_stereo_strip_gradient_convergence` compares the actual *three-component* weighting electric field E_w=-∇φ_w of **separate U0 and V0 stereo strips** at radial shells 1.1R, 2R and 5R, across three anode wires, four polar angles and two longitudinal positions. It recomputes the U and V strip potentials from scratch under four independent perturbations of the field discretization:
+
+- grounded cylinder angular collocation **4→8 equally spaced surface angles** (previously 4-angle mean only);
+- longitudinal wire-segment length **1.0→0.5 mm**;
+- finite correction-charge source half-span **10→14 mm**;
+- Dirichlet image cutoff **12→20 pairs**.
+
+For each perturbation and U/V side, report near-wire **vector gradient relative L2**, maximum local relative gradient error (can be unstable when the reference gradient is tiny), maximum absolute gradient difference in mm⁻¹, and absolute weighting-potential sensitivity. These compare **two numerical approximations** of the same physical model, not a strip-level experimental or independent BEM reference. An apparent gradient convergence is a necessary but not sufficient condition for real U/V signal validity.
+
+Separate worktree already exists at ~/na6p/cathode-independent-stereo-2100. User can update it without touching sealed muon archives or prior successful output prefixes:
+
+~~~bash
+cd ~/na6p/cathode-independent-stereo-2100
+git fetch origin feature/p3-2100v-wire-aware-stereo-weighting-20261120
+git merge --ff-only FETCH_HEAD
+cmake -S test/mwpc-avalanche -B test/mwpc-avalanche/build-independent \
+  -DCMAKE_PREFIX_PATH="$HOME/na6p/install/garfieldpp" \
+  -DROOT_DIR="$HOME/na6p/install/root/cmake"
+cmake --build test/mwpc-avalanche/build-independent \
+  --target mwpc_stereo_strip_gradient_convergence -j2
+BIN="$PWD/test/mwpc-avalanche/build-independent/mwpc_stereo_strip_gradient_convergence"
+OUT="$PWD/test_runs/mwpc_stage_c/wire_aware_stereo_v1"
+mkdir -p "$OUT"
+"$BIN" --gap-mm 3 --strip-width-mm 1.7 --strip-pitch-mm 1.7 \
+  --tan-stereo 0.1 --wire-pitch-mm 3 --wire-radius-mm 0.015 \
+  --wires 9 --halfspan-w-mm 10 --segment-step-mm 1 \
+  --image-pairs 12 --out-prefix "$OUT/strip_nearwire_gradconv_v1" \
+  > "$OUT/strip_nearwire_gradconv.log" 2>&1
+tail -n 35 "$OUT/strip_nearwire_gradconv.log"
+cat "$OUT/strip_nearwire_gradconv_v1_summary.csv"
+~~~
+
+All 4 alternative models are solved anew, and failure must be investigated rather than ignored. Do not conflate the output with Garfield's separate exact whole-plane reference, or with physical U/V strip currents. If gradient convergence is poor, improve wire-surface boundary discretization; if stable, next controlled experiment is single-ion induced-charge closure with sampled trajectories and a *physically justified* independent charge-sharing accuracy assessment.
