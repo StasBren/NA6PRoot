@@ -34,3 +34,12 @@ for cmd in gmsh ElmerGrid ElmerSolver; do
 done
 find ~/na6p -maxdepth 9 -type f -name 'weight_plus_0.result' -print 2>/dev/null | head -n 15
 ~~~
+
+
+## Recovered local Elmer assets and safe 2100V FEM rerun (2026-11-20)
+
+User confirmed WSL has gmsh, ElmerGrid and ElmerSolver installed and five existing plus-cathode weighting map files. These include a p3_reference_test map in ~/na6p/mwpc-cathode-single-ion and historical C2 maps in ~/na6p/src/NA6PRoot-mwpc. Existence does NOT establish matching geometries or convergence. Inspect saved input_config.json and manifest.json before reuse.
+
+Earlier branch feature/p3-2100v-stereo-single-ion-20261118 already contains p3_single_ion_fem_2100.json: nine wires, 3mm pitch, 30um wire diameter, +/-3mm gaps, 2100V physical drift reference, FEM patch +/-15.5mm u and +/-11mm w, wire mesh nominal 0.012mm. Its earlier README did not establish a completed exact 2100V mesh computation. The older p3_reference_test runner defaulted to five wires and 1800V; confirm local saved configuration independently.
+
+Current branch now provides a non-overwriting field-only runner test/mwpc-stage-c/numerical-weighting/run_p3_2100_fem_field_only.sh with pinned p3_2100_stereo_width_along_w_1p7mm.json. An optional stereo_sign_convention=plus_negative_u on the old FEM generator aligns PLUS with w-0.1u and MINUS with w+0.1u, retaining legacy signs by default for older configurations. Strip width and pitch are converted from 1.7mm along the anode wire to 1.69156322335698mm in the projected normal-to-strip MATC coordinate. Runner BASELINE uses original 0.012mm near-wire mesh and WIRE_REFINE changes only this to 0.006mm. These are unrun, separate new-output Gmsh/Elmer field maps: no avalanches, ion drift or electronics. A successful solve is not proof of local U/V strip gradient convergence. Never run older scripts with destructive rm -rf output-folder handling.
