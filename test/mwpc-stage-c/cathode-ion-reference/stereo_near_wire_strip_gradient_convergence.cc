@@ -94,6 +94,17 @@ std::vector<Case> Variations(const ws::Settings&base) {
  auto image=base;
  image.imagePairs+=8;
  out.push_back({"image_plus8",image});
+ if(base.localHalfSpanWmm>0. && base.localStepMm>0.){
+   auto local=base;
+   local.localStepMm/=2.;
+   out.push_back({"local_segment_half",local});
+   auto outer=base;
+   outer.segmentStepMm/=2.;
+   out.push_back({"outer_segment_half",outer});
+   auto span=base;
+   span.localHalfSpanWmm+=1.;
+   out.push_back({"local_span_plus1mm",span});
+ }
  for(const auto&v:out)ws::Validate(v.geometry);
  return out;
 }
@@ -110,6 +121,8 @@ int main(int argc,char**argv) {
   g.nWires=(int)Number(argc,argv,"--wires",9.);
   g.halfSpanWmm=Number(argc,argv,"--halfspan-w-mm",10.);
   g.segmentStepMm=Number(argc,argv,"--segment-step-mm",1.);
+  g.localHalfSpanWmm=Number(argc,argv,"--local-halfspan-w-mm",0.);
+  g.localStepMm=Number(argc,argv,"--local-step-mm",0.);
   g.imagePairs=(int)Number(argc,argv,"--image-pairs",12.);
   g.angularCollocationSamples=4;  // original baseline, fixed
   ws::Validate(g);
@@ -120,7 +133,10 @@ int main(int argc,char**argv) {
     ss::Check(onlyVariation=="segment_half"||
               onlyVariation=="angle_4to8"||
               onlyVariation=="span_plus4mm"||
-              onlyVariation=="image_plus8",
+              onlyVariation=="image_plus8"||
+              onlyVariation=="local_segment_half"||
+              onlyVariation=="outer_segment_half"||
+              onlyVariation=="local_span_plus1mm",
               "--only-variation must name an existing numerical perturbation");
   }
   for(const auto&suffix:{"_points.csv","_summary.csv"})
@@ -134,7 +150,9 @@ int main(int argc,char**argv) {
     ss::Check(variations.size()==1,"unknown filtered convergence case");
   }
   std::cout<<"Building baseline 3D model, 4 wire-surface collocation angles, "
-           <<"longitudinal segments="<<g.segmentStepMm<<" mm ...\n";
+           <<"outer segments="<<g.segmentStepMm<<" mm"
+           <<" central_halfspan="<<g.localHalfSpanWmm<<" mm"
+           <<" central_step="<<g.localStepMm<<" mm ...\n";
   Response baseline(g);
   std::cout<<"baseline_unknowns="<<baseline.model.Unknowns()<<"\n";
   std::ofstream csv(prefix+"_points.csv"),summary(prefix+"_summary.csv");
@@ -164,6 +182,7 @@ int main(int argc,char**argv) {
     std::cout<<"BEGIN "<<variation.name<<" ";
     std::cout.flush();
     Response test(variation.geometry);
+    std::cout<<"variant_unknowns="<<test.model.Unknowns()<<" ";
     std::array<Errors,2> error;
     for(int index:{-1,0,1})
      for(double ratio:shells)
