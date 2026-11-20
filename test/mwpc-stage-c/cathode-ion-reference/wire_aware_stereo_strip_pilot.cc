@@ -208,7 +208,8 @@ NearWireMetrics NearWireAudit(const ws::Model&model,
       "gradient_difference_per_mm,reference_gradient_norm_per_mm,"
       "selected_strip0_potential\n";
  const std::array<double,5> radii{{1.10,1.50,2.0,5.0,20.0}};
- const std::array<double,4> angles{{pi/8.,5.*pi/8.,9.*pi/8.,13.*pi/8.}};
+ const std::array<double,4> angles{{ws::pi/8.,5.*ws::pi/8.,
+                                     9.*ws::pi/8.,13.*ws::pi/8.}};
  for(int wireIndex:{-1,0,1})for(double ratio:radii)
   for(double theta:angles)for(double w:{0.,1.1}) {
    const double radius=g.wireRadiusMm*ratio;
