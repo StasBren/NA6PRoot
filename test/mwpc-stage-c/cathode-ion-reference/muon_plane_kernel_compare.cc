@@ -345,7 +345,7 @@ int main(int argc,char**argv) {
   NA60Plane::Require(neighbors>=1&&neighbors<=8&&dt>0&&tmaxUs>0&&tmaxUs<=500,
                      "invalid event kernel grid/neighbor config");
   const int bins=(int)std::ceil(1000.*tmaxUs/dt);
-  NA60Plane::Require(bins>=2&&bins<=5000,"event time bins must be 2..5000");
+  NA60Plane::Require(bins>=2&&bins<=10000,"event time bins must be 2..10000");
   for(const std::string& ext:{"_summary.csv","_waveforms.csv",
                               "_response.root","_muon_overlay.png"}) {
     NA60Plane::Require(!std::filesystem::exists(prefix+ext),
