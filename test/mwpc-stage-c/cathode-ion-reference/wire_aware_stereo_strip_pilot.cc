@@ -349,6 +349,8 @@ int main(int argc,char**argv){
   g.nWires=(int)Numeric(argc,argv,"--wires",9.);
   g.halfSpanWmm=Numeric(argc,argv,"--halfspan-w-mm",10.);
   g.segmentStepMm=Numeric(argc,argv,"--segment-step-mm",1.);
+  g.localHalfSpanWmm=Numeric(argc,argv,"--local-halfspan-w-mm",0.);
+  g.localStepMm=Numeric(argc,argv,"--local-step-mm",0.);
   g.imagePairs=(int)Numeric(argc,argv,"--image-pairs",12.);
   const auto prefix=Arg(argc,argv,"--out-prefix");
   const bool refine=Flag(argc,argv,"--convergence");
