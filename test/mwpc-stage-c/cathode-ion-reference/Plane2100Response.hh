@@ -4,6 +4,8 @@
 #pragma once
 #include <array>
 #include <cmath>
+#include <iomanip>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -85,8 +87,23 @@ public:
     Direct out;
     out.ok=drift_.DriftIon(u,v,w,t);
     drift_.GetEndPoint(out.endU,out.endV,out.endW,out.endT,out.status);
-    Require(out.ok&&std::isfinite(out.endT)&&out.endT>t &&
-            out.endT < dt_*bins_,"ion drift failure or time window truncated");
+    if(!(out.ok&&std::isfinite(out.endT)&&out.endT>t &&
+         out.endT < dt_*bins_)) {
+      std::ostringstream diagnostic;
+      diagnostic<<std::setprecision(17)
+       <<"ion drift did not satisfy transport/time-window integrity: "
+       <<"transport_ok="<<out.ok
+       <<" endpoint_status="<<out.status
+       <<" start_cm=("<<u<<","<<v<<","<<w<<")"
+       <<" start_time_ns="<<t
+       <<" end_cm=("<<out.endU<<","<<out.endV<<","<<out.endW<<")"
+       <<" end_time_ns="<<out.endT
+       <<" duration_ns="<<(out.endT-t)
+       <<" window_end_ns="<<(dt_*bins_)
+       <<" valid_end_time="<<std::isfinite(out.endT)
+       <<" inside_time_window="<<(std::isfinite(out.endT)&&out.endT<dt_*bins_);
+      Require(false,diagnostic.str());
+    }
     Require(std::abs(std::abs(out.endV)-gap)<0.001,
             "ion did not end on a physical cathode");
     const bool plus=out.endV>0;
