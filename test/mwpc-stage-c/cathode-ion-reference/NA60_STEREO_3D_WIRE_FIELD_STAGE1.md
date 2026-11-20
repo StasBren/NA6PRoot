@@ -186,3 +186,35 @@ cat "$OUT/strip_nearwire_seg05_vs025_v1_summary.csv"
 ~~~
 
 **Stop and reconsider the discretization** if the 0.5→0.25mm gradient differences remain large. Even if this single test looks stable, pointwise grounded wire-cylinder boundary errors and actual strip PCB/microgeometry remain unvalidated. Because the present unknowns are line-source monopoles with only azimuthal *mean* wire-boundary constraints, angular-surface multipoles or a proper 3D surface BEM/FEM may be necessary; increasing the 4/8 angular sample count alone cannot fix angular boundary errors. Do NOT infer 0.11% individual strip accuracy from the whole-plane Garfield reference, and do NOT proceed to strip current/RKF calculations until these issues are resolved.
+
+## Uniform 0.5→0.25mm check — still not converged (actual WSL result)
+
+Using exactly the same 72 individual U-strip and V-strip near-wire locations per side, the user ran the uniform 0.5mm (360 elements) versus uniform 0.25mm (720 elements) comparison. Gradient vector L2 change **2.571503% (U) and 2.571493% (V)**; maximum local relative changes **5.0937% / 5.0940%**, maximum absolute potential difference **0.00166804**. The program explicitly printed `NOT_CONVERGED`. Earlier uniform 1→0.5mm gradient L2 was 6.0335%. This downward trend supports further convergence study but does NOT demonstrate field physics accuracy, since grounded-cylinder surface residuals and missing PCB details remain.
+
+### Next targeted test: adaptive w-refinement, not uniform 0.125mm
+
+Uniform 0.125mm would need 1,440 line-element sources for nine wires, exceeding the current 800-element maximum. A guarded *piecewise uniform, symmetric* local grid has now been added (source pending compilation): outer 1mm segments between |w|=2 and 10mm, and fine inner segments for |w|≤2mm. Compare fine 0.125mm vs 0.0625mm only in the central region (432 and 720 unknowns respectively). The code also reports pointwise 12-angle grounded-cylinder surface residuals in the central |w|≤1.1mm region to prevent false convergence conclusions.
+
+Do not touch microscopic 1000-muon worktree. Reuse the existing separate development worktree and do not overwrite previous outputs:
+
+~~~bash
+cd ~/na6p/cathode-independent-stereo-2100
+git fetch origin feature/p3-2100v-wire-aware-stereo-weighting-20261120
+git merge --ff-only FETCH_HEAD
+cmake --build test/mwpc-avalanche/build-independent \
+  --target mwpc_stereo_strip_gradient_convergence -j2
+BIN="$PWD/test/mwpc-avalanche/build-independent/mwpc_stereo_strip_gradient_convergence"
+OUT="$PWD/test_runs/mwpc_stage_c/wire_aware_stereo_v1"
+nice -n 10 "$BIN" \
+  --gap-mm 3 --strip-width-mm 1.7 --strip-pitch-mm 1.7 \
+  --tan-stereo 0.1 --wire-pitch-mm 3 --wire-radius-mm 0.015 \
+  --wires 9 --halfspan-w-mm 10 --segment-step-mm 1 \
+  --local-halfspan-w-mm 2 --local-step-mm 0.125 \
+  --image-pairs 12 --only-variation local_segment_half \
+  --out-prefix "$OUT/strip_local0125_vs00625_v1" \
+  > "$OUT/strip_local0125_vs00625.log" 2>&1
+tail -n 30 "$OUT/strip_local0125_vs00625.log"
+cat "$OUT/strip_local0125_vs00625_v1_summary.csv"
+~~~
+
+**Important:** The local mesh is an approximation and needs further checks even if the near-wire vector-gradient differences become small. Specifically compare **outer_segment_half** (outer 1→0.5mm) and **local_span_plus1mm** (central |w|≤2→3mm) before accepting the chosen adaptive mesh. Those checks have separate `--only-variation` names and require separate new output prefixes. If boundary residuals remain significant or gradients are sensitive, stop and design a proper cylindrical surface BEM/FEM/multipole method; do not endlessly refine the same line-source model.
