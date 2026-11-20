@@ -59,8 +59,31 @@ Uploaded `muon0_complete_planes_coarse100ns_summary.csv` and waveform CSV corres
 
 **Attribution warning:** The fast event response starts from 100ns-bin *integrated* single-ion templates and uses a fractional-bin time shift for each true ion birth. Therefore the measured 18–20% first-bin discrepancy combines **spatial template interpolation and temporal discretization/shift error**; it is NOT justified to attribute all of it to spatial kernel physics. In fact, the uploaded waveform shows the upper-plane first-bin residual -1.98664 fC, second-bin residual +1.77446 fC (net -0.21217 fC after 200 ns). The strong compensation suggests resampling/shift sensitivity. Distinguish these errors with fine-bin single-ion impulses and a separate like-for-like rebinned RKF test before changing the kernel model or predicting VMM peaking.
 
-### Controlled ion-current time grid test (prepared 2026-11-20; not yet run)
+### Controlled ion-current time grid test (run on WSL 2026-11-20; first muon K512)
 
 Previous first-100ns kernel-minus-direct K512 full-muon ion response was approximately -1.987 fC on the upper plane, while the ~100us integrated ion charge differed by only +0.0245 fC. A 100ns-bin impulse library shifted by fractional ion birth times can distort the early transient even if total charge is conserved; spatial interpolant error is not isolated by this observation.
 
-Stage C 10ns test in `test/mwpc-stage-c/cathode-ion-reference/PLANE_TIMING_10NS_20261120.md` holds fixed (i) microscopic muon crossing, (ii) original K512 sampled ion births and statistical weights, (iii) the same original 256 RKF template start positions, (iv) nine-wire analytic field/ion mobility/geometry. It recomputes direct and fast responses at 10ns and uses charge-conserving rebinning to compare against the old 100ns currents. Separately records old-vs-fine direct reference numerical error and old-vs-fine fast interpolation error for early 100/200/400ns windows, and optionally adds the already-audited full-muon electron current for context. **Accuracy results remain unknown until user WSL runs these targets**. No VMM shaper, noise, realistic strips or hardware calibration are included.
+Stage C 10ns test in `test/mwpc-stage-c/cathode-ion-reference/PLANE_TIMING_10NS_20261120.md` holds fixed (i) microscopic muon crossing, (ii) original K512 sampled ion births and statistical weights, (iii) the same original 256 RKF template start positions, (iv) nine-wire analytic field/ion mobility/geometry. It recomputes direct and fast responses at 10ns and uses charge-conserving rebinning to compare against the old 100ns currents. Separately records old-vs-fine direct reference numerical error and old-vs-fine fast interpolation error for early 100/200/400ns windows, and optionally adds the already-audited full-muon electron current for context. The WSL run **completed successfully** for the original K512 benchmark; quantitative results follow. No VMM shaper, noise, realistic strips or hardware calibration are included.
+
+**Observed results, exact same ion reservoir and training sites:**
+
+| Quantity | Plus plane | Minus plane |
+|---|---:|---:|
+| Direct RKF first 100ns (both grids, fC) | +9.81679168838 | +8.43905632153 |
+| Old fast first 100ns (fC) | +7.83015489848 | +6.58952528012 |
+| 10ns fast integrated first 100ns (fC) | +9.83697554425 | +8.45397206411 |
+| Old fast minus direct first 100ns (fC) | -1.98663678990 | -1.84953104140 |
+| 10ns fast minus direct first 100ns (fC) | +0.02018385587 | +0.01491574258 |
+| Old relative early integrated error | -20.24% | -21.92% |
+| New relative early integrated error | +0.206% | +0.177% |
+| Old current-waveform L2 relative to direct, native 100ns bins | 22.88% | 27.37% |
+| New current-waveform L2 relative to direct, native 10ns bins | 2.943% | 3.447% |
+| New response *rebinned to 100ns* L2 relative to direct rebinned to 100ns | 0.226% | 0.179% |
+| Old direct vs 10ns direct rebinned to 100ns, waveform L2 | ~1.3e-15 | ~1.1e-15 |
+| Final 100us fast-vs-direct induced-charge bias (fC; unchanged) | +0.02446462114 | +0.02344520447 |
+
+Including the **same** previously calculated microscopic full-muon electron current, the first-100ns combined direct electron+ion charges are +10.909133967 fC / +9.453483978 fC, and fast10 electron+ion totals are +10.929317823 fC / +9.468399721 fC (+0.185% / +0.158% errors). Electrons are common to both, so this comparison tests ion-kernel error only.
+
+**Interpretation:** 100ns direct RKF exactly matches charge-conserving rebin of 10ns direct RKF to numerical precision; the 100ns reference numerical grid was not the cause. Time-shifting *already averaged* 100ns single-ion impulse templates produced the dominant spurious first-bin error. Using 10ns impulse sampling and shifts nearly eliminates the early **integrated charge** bias for this same K512 muon while keeping all spatial interpolation/sampling unchanged. This is an empirical attribution to coarse temporal response handling, not a general proof across muons or real detector geometry. The 2.94–3.45% **native 10ns pointwise waveform L2 error** is considerably larger than the ~0.18–0.23% rebinned 100ns L2: bin averaging hides high-frequency mismatches. For ~25ns-peaking VMM3a, do not equate integrated-charge agreement with shaped peak amplitude/threshold timing precision.
+
+**Still unknown:** independent-muon response-kernel generalization; actual strip weighting-field response, ion mobility in the operating gas, model-vs-hardware systematics, stochastic ion-sampling variance, and actual VMM3a shaping/noise. No need to increase the template count or add a neural network on the basis of the old first-100ns error. Preserve these distinctions in group-meeting slides.
