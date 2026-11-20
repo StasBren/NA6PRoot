@@ -114,12 +114,27 @@ int main(int argc,char**argv) {
   g.angularCollocationSamples=4;  // original baseline, fixed
   ws::Validate(g);
   const auto prefix=Arg(argc,argv,"--out-prefix");
-  ss::Check(!prefix.empty(),"usage: --out-prefix PREFIX");
+  const auto onlyVariation=Arg(argc,argv,"--only-variation");
+  ss::Check(!prefix.empty(),"usage: --out-prefix PREFIX [--only-variation segment_half]");
+  if(!onlyVariation.empty()) {
+    ss::Check(onlyVariation=="segment_half"||
+              onlyVariation=="angle_4to8"||
+              onlyVariation=="span_plus4mm"||
+              onlyVariation=="image_plus8",
+              "--only-variation must name an existing numerical perturbation");
+  }
   for(const auto&suffix:{"_points.csv","_summary.csv"})
     ss::Check(!std::filesystem::exists(prefix+suffix),
        "refusing to overwrite convergence output "+prefix+suffix);
-  const auto variations=Variations(g);
-  std::cout<<"Building baseline 3D model, 4 wire-surface collocation angles...\n";
+  auto variations=Variations(g);
+  if(!onlyVariation.empty()) {
+    variations.erase(std::remove_if(variations.begin(),variations.end(),
+       [&](const Case&candidate){return candidate.name!=onlyVariation;}),
+       variations.end());
+    ss::Check(variations.size()==1,"unknown filtered convergence case");
+  }
+  std::cout<<"Building baseline 3D model, 4 wire-surface collocation angles, "
+           <<"longitudinal segments="<<g.segmentStepMm<<" mm ...\n";
   Response baseline(g);
   std::cout<<"baseline_unknowns="<<baseline.model.Unknowns()<<"\n";
   std::ofstream csv(prefix+"_points.csv"),summary(prefix+"_summary.csv");
@@ -144,6 +159,7 @@ int main(int argc,char**argv) {
   constexpr std::array<double,4> angles{
        ws::pi/8.,5.*ws::pi/8.,9.*ws::pi/8.,13.*ws::pi/8.};
   constexpr std::array<double,3> shells{1.10,2.,5.};
+  double largestGradientL2=0.;
   for(const auto&variation:variations){
     std::cout<<"BEGIN "<<variation.name<<" ";
     std::cout.flush();
@@ -198,6 +214,7 @@ int main(int argc,char**argv) {
                 "missing valid near-wire strip gradients");
       const double L2=std::sqrt(x.gradientDeltaSquared/
                                 x.baselineGradientSquared);
+      largestGradientL2=std::max(largestGradientL2,L2);
       summary<<variation.name<<","
         <<(side?"V_minus":"U_plus")<<","<<x.n<<","
         <<std::sqrt(x.potentialSquared/x.n)<<","
@@ -210,10 +227,19 @@ int main(int argc,char**argv) {
     }
   }
   csv.close();summary.close();
-  std::cout<<"PASS internal individual U/V strip near-anode numerical "
-     "CONVERGENCE measurements, not independent 3D strip-field validation.\n"
-     "No transport or electronics. See "<<prefix<<"_points.csv and "
-     <<prefix<<"_summary.csv\n";
+  std::cout<<"COMPLETED individual U/V strip near-anode numerical "
+     "REFINEMENT COMPARISONS (not a claim of convergence).\n"
+     <<"Maximum relative vector-gradient L2 change="<<largestGradientL2
+     <<" (across requested perturbations and strip sides).\n";
+  if(largestGradientL2>0.02)
+    std::cout<<"NOT_CONVERGED: at least one numerical change exceeds 2% "
+                "in near-anode U/V strip gradient L2; do not use fields "
+                "for physical strip currents.\n";
+  else
+    std::cout<<"Below 2% for these selected perturbations ONLY; "
+                "no independent physical strip validation.\n";
+  std::cout<<"No transport or electronics. See "
+      <<prefix<<"_points.csv and "<<prefix<<"_summary.csv\n";
   return 0;
  }catch(const std::exception&e){
    std::cerr<<"STEREO STRIP GRADIENT CONVERGENCE FAILED: "
