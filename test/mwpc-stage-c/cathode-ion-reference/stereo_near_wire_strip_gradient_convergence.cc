@@ -154,7 +154,14 @@ int main(int argc,char**argv) {
            <<" central_halfspan="<<g.localHalfSpanWmm<<" mm"
            <<" central_step="<<g.localStepMm<<" mm ...\n";
   Response baseline(g);
-  std::cout<<"baseline_unknowns="<<baseline.model.Unknowns()<<"\n";
+  std::array<double,2> baseWireResidual{};
+  for(int side=0;side<2;++side)
+    baseWireResidual[side]=baseline.model.WireResidual(
+          baseline.Strip(side),1.1);
+  std::cout<<"baseline_unknowns="<<baseline.model.Unknowns()
+           <<" baseline_U_wire_surface_residual="<<baseWireResidual[0]
+           <<" baseline_V_wire_surface_residual="<<baseWireResidual[1]
+           <<"\n";
   std::ofstream csv(prefix+"_points.csv"),summary(prefix+"_summary.csv");
   ss::Check(bool(csv)&&bool(summary),"cannot open strip-convergence CSVs");
   csv<<std::setprecision(16)
@@ -169,7 +176,9 @@ int main(int argc,char**argv) {
       "max_abs_potential_difference,max_abs_gradient_difference_per_mm,"
       "max_local_relative_gradient_difference,"
       "vector_gradient_relative_L2,minimum_baseline_abs_potential,"
-      "max_baseline_gradient_per_mm\n";
+      "max_baseline_gradient_per_mm,"
+      "baseline_wire_surface_residual,"
+      "variant_wire_surface_residual\n";
 
   // Independent U and V strip gradients; no whole-cathode reference here.
   // Each sample is above a wire cylinder at a finite radial clearance.
@@ -182,7 +191,14 @@ int main(int argc,char**argv) {
     std::cout<<"BEGIN "<<variation.name<<" ";
     std::cout.flush();
     Response test(variation.geometry);
-    std::cout<<"variant_unknowns="<<test.model.Unknowns()<<" ";
+    std::array<double,2> testWireResidual{};
+    for(int side=0;side<2;++side)
+      testWireResidual[side]=test.model.WireResidual(
+        test.Strip(side),1.1);
+    std::cout<<"variant_unknowns="<<test.model.Unknowns()
+             <<" variant_U_wire_surface_residual="<<testWireResidual[0]
+             <<" variant_V_wire_surface_residual="<<testWireResidual[1]
+             <<" ";
     std::array<Errors,2> error;
     for(int index:{-1,0,1})
      for(double ratio:shells)
@@ -239,7 +255,8 @@ int main(int argc,char**argv) {
         <<std::sqrt(x.potentialSquared/x.n)<<","
         <<x.maxPotentialDelta<<","<<x.maxGradientDelta<<","
         <<x.maxRelativeGradient<<","<<L2<<","
-        <<x.minBaselinePotential<<","<<x.maxBaselineGradient<<"\n";
+        <<x.minBaselinePotential<<","<<x.maxBaselineGradient<<","
+        <<baseWireResidual[side]<<","<<testWireResidual[side]<<"\n";
       std::cout<<(side?" V":" U")
         <<"_strip_gradient_relative_L2="<<L2
         <<(side?"\n":" ");
@@ -257,6 +274,9 @@ int main(int argc,char**argv) {
   else
     std::cout<<"Below 2% for these selected perturbations ONLY; "
                 "no independent physical strip validation.\n";
+  std::cout<<"GROUNDING CAUTION: residual wire surface potential is an "
+               "independent nonzero boundary error. Small gradient changes "
+               "alone cannot certify strip physics.\n";
   std::cout<<"No transport or electronics. See "
       <<prefix<<"_points.csv and "<<prefix<<"_summary.csv\n";
   return 0;
