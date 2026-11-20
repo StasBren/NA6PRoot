@@ -284,3 +284,24 @@ target_include_directories(mwpc_assemble_electron_ion_planes PRIVATE
 target_link_libraries(mwpc_assemble_electron_ion_planes PRIVATE
   ROOT::Core ROOT::RIO ROOT::Tree ROOT::Hist ROOT::Graf ROOT::Gpad)
 target_compile_features(mwpc_assemble_electron_ion_planes PRIVATE cxx_std_17)
+
+
+# Stage C time-resolution physics study. The first target recomputes exactly
+# the same 256 existing RKF training ion-start sites at finer (10ns) steps.
+# The comparison tool REBINS fine signal by charge conservation and checks
+# same K512 muon identity before comparing early 100ns/200ns totals.
+add_executable(mwpc_rebuild_plane_templates_fine
+  ../mwpc-stage-c/cathode-ion-reference/rebuild_plane_templates_fine.cc)
+target_include_directories(mwpc_rebuild_plane_templates_fine PRIVATE
+  ../mwpc-stage-c/cathode-ion-reference)
+target_link_libraries(mwpc_rebuild_plane_templates_fine PRIVATE
+  Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree ROOT::Hist)
+target_compile_features(mwpc_rebuild_plane_templates_fine PRIVATE cxx_std_17)
+
+add_executable(mwpc_compare_plane_timing_100ns_10ns
+  ../mwpc-stage-c/cathode-ion-reference/compare_plane_timing_100ns_10ns.cc)
+target_include_directories(mwpc_compare_plane_timing_100ns_10ns PRIVATE
+  ../mwpc-stage-c/cathode-ion-reference)
+target_link_libraries(mwpc_compare_plane_timing_100ns_10ns PRIVATE
+  ROOT::Core ROOT::RIO ROOT::Tree ROOT::Hist ROOT::Graf ROOT::Gpad)
+target_compile_features(mwpc_compare_plane_timing_100ns_10ns PRIVATE cxx_std_17)
