@@ -52,7 +52,7 @@ const std::array<Point,6> sample{{
 struct Results {
  double wirePlus=0,wireMinus=0,wireWhole=0;
  double maxReflection=0,maxPartition=0,maxWholeGarfield=0;
- double maxSymmetryU=0;
+ double maxLaplacian=0;
 };
 void ConfigureGarfieldPlaneReference(
        Garfield::ComponentAnalyticField&field,const ws::Settings&g) {
@@ -105,6 +105,19 @@ Results Validate(const ws::Model&model,
    res.maxReflection=std::max(res.maxReflection,std::abs(pUp-pDn));
    const double qUp=model.Potential(wholePlus,p.u,p.v,p.w);
    const double qDn=model.Potential(wholeMinus,p.u,p.v,p.w);
+   // Independent interior 3D Laplace check: the potential must be harmonic
+   // away from grounded wire cylinders and conducting cathode boundaries.
+   constexpr double h=0.03; // mm
+   const auto P=[&](double u,double v,double w){
+     return model.Potential(plus,u,v,w);
+   };
+   const double laplacian=(
+       P(p.u+h,p.v,p.w)+P(p.u-h,p.v,p.w)
+      +P(p.u,p.v+h,p.w)+P(p.u,p.v-h,p.w)
+      +P(p.u,p.v,p.w+h)+P(p.u,p.v,p.w-h)-6.*pUp)/(h*h);
+   res.maxLaplacian=std::max(res.maxLaplacian,std::abs(laplacian));
+   metric<<"laplacian,plus_strip0,u="<<p.u<<";v="<<p.v<<";w="<<p.w
+         <<","<<laplacian<<",0,"<<laplacian<<"\n";
    // Two full-plane weighting potentials must sum to something <=1
    // in the gas (the grounded anodes share some weighting-potential sum).
    ss::Check(pUp>-0.03&&pUp<1.03&&qUp>-0.03&&qUp<1.03 &&
@@ -142,6 +155,8 @@ Results Validate(const ws::Model&model,
  }
  ss::Check(res.maxReflection<0.0001,
            "opposite cathode stereo reflection symmetry broken");
+ ss::Check(res.maxLaplacian<0.03,
+           "field fails numerical 3D Laplace interior check");
  ss::Check(res.maxPartition<0.01,
            "sum of contiguous strips does not reproduce screened whole plate");
  metric<<"quality,wire_surface_residual_plus,central,0,"
@@ -154,12 +169,14 @@ Results Validate(const ws::Model&model,
        <<res.maxReflection<<","<<res.maxReflection<<"\n";
  metric<<"quality,strip_sum_error,central,0,"
        <<res.maxPartition<<","<<res.maxPartition<<"\n";
+ metric<<"quality,max_laplacian_per_mm2,central,0,"
+       <<res.maxLaplacian<<","<<res.maxLaplacian<<"\n";
  metric<<"quality,max_garfield_whole_plane_deviation,central,0,"
        <<res.maxWholeGarfield<<","<<res.maxWholeGarfield<<"\n";
  return res;
 }
 struct Convergence {
- double maxStepDifference=0,maxExtentDifference=0;
+ double maxStepDifference=0,maxExtentDifference=0,maxImageDifference=0;
  int refinedUnknowns=0,wideUnknowns=0;
 };
 Convergence Refine(const ws::Settings&g,
@@ -171,9 +188,12 @@ Convergence Refine(const ws::Settings&g,
  small.segmentStepMm*=0.5;
  ws::Settings wider=g;
  wider.halfSpanWmm+=4.;
+ ws::Settings moreImages=g;
+ moreImages.imagePairs+=8;
  ws::Validate(small);
  ws::Validate(wider);
- ws::Model refined(small),expanded(wider);
+ ws::Validate(moreImages);
+ ws::Model refined(small),expanded(wider),imaged(moreImages);
  const auto refinedU=refined.Solve(ss::Side::Plus,
                         ws::Electrode::SingleStrip,0);
  const auto refinedWhole=refined.Solve(ss::Side::Plus,
@@ -181,6 +201,10 @@ Convergence Refine(const ws::Settings&g,
  const auto expandedU=expanded.Solve(ss::Side::Plus,
                         ws::Electrode::SingleStrip,0);
  const auto expandedWhole=expanded.Solve(ss::Side::Plus,
+                        ws::Electrode::WholeCathode);
+ const auto imagedU=imaged.Solve(ss::Side::Plus,
+                        ws::Electrode::SingleStrip,0);
+ const auto imagedWhole=imaged.Solve(ss::Side::Plus,
                         ws::Electrode::WholeCathode);
  Convergence out;
  out.refinedUnknowns=refined.Unknowns();
@@ -192,6 +216,10 @@ Convergence Refine(const ws::Settings&g,
   const double oldWhole=base.Potential(baseWhole,p.u,p.v,p.w);
   const double newWhole=refined.Potential(refinedWhole,p.u,p.v,p.w);
   const double wideWhole=expanded.Potential(expandedWhole,p.u,p.v,p.w);
+  const double imageU=imaged.Potential(imagedU,p.u,p.v,p.w);
+  const double imageWhole=imaged.Potential(imagedWhole,p.u,p.v,p.w);
+  out.maxImageDifference=std::max(out.maxImageDifference,
+       std::max(std::abs(oldU-imageU),std::abs(oldWhole-imageWhole)));
   out.maxStepDifference=std::max(out.maxStepDifference,
        std::max(std::abs(oldU-newU),std::abs(oldWhole-newWhole)));
   out.maxExtentDifference=std::max(out.maxExtentDifference,
@@ -204,9 +232,14 @@ Convergence Refine(const ws::Settings&g,
         <<","<<oldWhole<<","<<newWhole<<","<<oldWhole-newWhole<<"\n";
   metric<<"extend_w,whole_plus,u="<<p.u<<";v="<<p.v<<";w="<<p.w
         <<","<<oldWhole<<","<<wideWhole<<","<<oldWhole-wideWhole<<"\n";
+  metric<<"increase_images,plus_strip0,u="<<p.u<<";v="<<p.v<<";w="<<p.w
+        <<","<<oldU<<","<<imageU<<","<<oldU-imageU<<"\n";
+  metric<<"increase_images,whole_plus,u="<<p.u<<";v="<<p.v<<";w="<<p.w
+        <<","<<oldWhole<<","<<imageWhole<<","<<oldWhole-imageWhole<<"\n";
  }
- ss::Check(out.maxStepDifference<0.03&&out.maxExtentDifference<0.03,
-           "large 3D line-element segmentation/w-extent dependence");
+ ss::Check(out.maxStepDifference<0.03&&out.maxExtentDifference<0.03 &&
+           out.maxImageDifference<0.03,
+           "large 3D line-element or Green image-sum dependence");
  return out;
 }
 }
@@ -251,12 +284,14 @@ int main(int argc,char**argv){
      <<"WIRE-GROUNDED SURFACE residual U="<<metrics.wirePlus
      <<" V="<<metrics.wireMinus<<" whole="<<metrics.wireWhole<<"\n"
      <<"opposing_stereo_reflection_error="<<metrics.maxReflection
-     <<" strip_sum_vs_wire_aware_plane_error="<<metrics.maxPartition<<"\n"
+     <<" strip_sum_vs_wire_aware_plane_error="<<metrics.maxPartition
+     <<" max_interior_laplacian_per_mm2="<<metrics.maxLaplacian<<"\n"
      <<"max_abs_whole_plane_difference_vs_Garfield_analytic="
      <<metrics.maxWholeGarfield<<"\n";
   if(refine)
     std::cout<<"CONVERGENCE step_max_deviation="<<conv.maxStepDifference
      <<" wire_span_max_deviation="<<conv.maxExtentDifference
+     <<" image_count_max_deviation="<<conv.maxImageDifference
      <<" refined_unknowns="<<conv.refinedUnknowns
      <<" extended_unknowns="<<conv.wideUnknowns<<"\n";
   if(!prefix.empty()) {
