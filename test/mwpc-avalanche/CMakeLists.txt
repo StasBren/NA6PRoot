@@ -364,3 +364,13 @@ target_include_directories(mwpc_deterministic_polar_plane_bank PRIVATE
 target_link_libraries(mwpc_deterministic_polar_plane_bank PRIVATE
     Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree)
 target_compile_features(mwpc_deterministic_polar_plane_bank PRIVATE cxx_std_17)
+
+# Exact-spatial 10ns time-shift identity check on the previously examined
+# muon0301 ion reservoir. No new microscopic avalanche or readout geometry.
+add_executable(mwpc_exact_spatial_time_shift_audit
+    ../mwpc-stage-c/cathode-ion-reference/audit_exact_spatial_time_shift.cc)
+target_include_directories(mwpc_exact_spatial_time_shift_audit PRIVATE
+    ../mwpc-stage-c/cathode-ion-reference)
+target_link_libraries(mwpc_exact_spatial_time_shift_audit PRIVATE
+    Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree)
+target_compile_features(mwpc_exact_spatial_time_shift_audit PRIVATE cxx_std_17)
