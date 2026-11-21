@@ -142,6 +142,24 @@ public:
     }
     return out;
   }
+  // Read-only trajectory and weighting-potential access for an isolated
+  // *experimental* continuous-cumulative-charge control. No change to
+  // Drift(), electrode physics, time binning, or existing production outputs.
+  std::size_t DriftPathSize() const {
+    return drift_.GetNumberOfDriftLinePoints();
+  }
+  void DriftPathPoint(const std::size_t i,double& u,double& v,
+                      double& w,double& t) const {
+    Require(i<DriftPathSize(),"drift path point out of range");
+    drift_.GetDriftLinePoint(i,u,v,w,t);
+  }
+  double WeightingPotentialAt(double u,double v,double w,int electrode) {
+    Require(electrode==0||electrode==1,"invalid weighting electrode index");
+    const double potential=field_.WeightingPotential(
+      u,v,w,electrode==0?"cathode_plus":"cathode_minus");
+    Require(std::isfinite(potential),"nonfinite weighting potential at RKF path");
+    return potential;
+  }
   double Current(int side,int bin) {
     return sensor_.GetIonSignal(side==0?"cathode_plus":"cathode_minus",bin);
   }
