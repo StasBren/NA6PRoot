@@ -22,7 +22,7 @@ if pgrep -x gmsh >/dev/null ||
 fi
 
 ENV_PY="$HOME/na6p/.venv-gmsh4121/bin/python"
-if [[ -n "$MWPC_GMSH_PYTHON" ]]; then ENV_PY="$MWPC_GMSH_PYTHON"; fi
+if [[ -n "${MWPC_GMSH_PYTHON:-}" ]]; then ENV_PY="$MWPC_GMSH_PYTHON"; fi
 [[ -x "$ENV_PY" ]] ||
   { echo "STOP: missing Gmsh Python API environment: $ENV_PY" >&2; exit 2; }
 "$ENV_PY" -c 'import gmsh; gmsh.initialize(); gmsh.finalize()' ||
