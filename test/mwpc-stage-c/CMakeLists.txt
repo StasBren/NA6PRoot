@@ -86,3 +86,9 @@ add_executable(mwpc_stage_c_p3_whole_plane_fourier_reference
   cathode-ion-reference/p3_whole_plane_fourier_reference.cc)
 target_link_libraries(mwpc_stage_c_p3_whole_plane_fourier_reference PRIVATE Garfield::Garfield)
 target_compile_features(mwpc_stage_c_p3_whole_plane_fourier_reference PRIVATE cxx_std_17)
+
+add_executable(mwpc_stage_c_p3_export_spectral_archive_paths
+  cathode-ion-reference/p3_export_spectral_archive_paths.cc)
+target_link_libraries(mwpc_stage_c_p3_export_spectral_archive_paths PRIVATE
+  Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree)
+target_compile_features(mwpc_stage_c_p3_export_spectral_archive_paths PRIVATE cxx_std_17)
