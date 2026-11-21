@@ -39,6 +39,8 @@ c=json.load(open(sys.argv[1]))
 assert c["geometry"]["half_wires"]==4
 assert c["geometry"]["gap_plus_mm"]==c["geometry"]["gap_minus_mm"]==3
 assert c["geometry"]["wire_pitch_mm"]==3
+assert c["geometry"]["wire_diameter_um"]==30
+assert c["electrostatics"]["anode_voltage_V"]==2100
 assert c["weighting"]["stereo_sign_convention"]=="plus_negative_u"
 assert abs(c["geometry"]["strip_pitch_mm"]-1.6915632233569817)<1.e-10
 assert abs(c["geometry"]["strip_width_mm"]-1.6915632233569817)<1.e-10
