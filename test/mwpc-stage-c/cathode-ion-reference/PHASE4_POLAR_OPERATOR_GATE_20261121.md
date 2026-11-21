@@ -42,6 +42,10 @@ The script replay_phase_resolved_polar_bank.py uses identical:
   phase responses and an integer-bin shift,
 - ordinary uncompressed bilinear (ln r,theta) spatial interpolation.
 
+The phase0 templates are first compared directly against the existing
+independently generated 12x24 t=0 grid. Require relative L2 < 1e-8;
+otherwise STOP before studying muon accuracy.
+
 For a birth t/10ns=m+f, let k=floor(4f), eta=4f-k.
 Deposit (1-eta) in phase k, integer bin m, and eta in phase k+1
 at m, except phase 4 -> phase0 at integer bin m+1.
@@ -120,7 +124,9 @@ for file in "$GRID" "$DATA" "$OLD" "$PHASE";do
 done
 test ! -e "$OUT" || { echo 'OUTPUT EXISTS, STOP'; exit 1; }
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python "$PY" \
-  --grid-root "$GRID" --ion-file "$DATA" \
+  --grid-root "$GRID" \
+  --original-grid-root "$PILOT/grid12x24_dt10.root" \
+  --ion-file "$DATA" \
   --reference-waveforms "$BASE/muon_0301_direct_dt10_waveforms.csv" \
   --reference-summary "$BASE/muon_0301_direct_dt10_summary.csv" \
   --baseline-waveforms "$BASE/muon_0301_fast_dt10_waveforms.csv" \
