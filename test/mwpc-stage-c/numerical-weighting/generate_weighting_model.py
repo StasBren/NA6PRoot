@@ -111,6 +111,9 @@ def generate_geo(cfg: Dict[str, Any]) -> str:
     wire_size = float(m["wire_size_mm"])
     wire_depth = float(m["wire_refine_radius_mm"])
     curvature = int(m["wire_curvature_points"])
+    curved_wire_surfaces = m.get("curved_wire_surfaces", False)
+    if not isinstance(curved_wire_surfaces, bool):
+        raise ValueError("mesh.curved_wire_surfaces must be a JSON boolean")
 
     vmin = -gm
     vmax = gp
@@ -249,7 +252,8 @@ def generate_geo(cfg: Dict[str, Any]) -> str:
         "",
         "Mesh.Algorithm3D = 1;",
         "Mesh.Optimize = 1;",
-        "Mesh.SecondOrderLinear = 1;",
+        f"Mesh.SecondOrderLinear = {0 if curved_wire_surfaces else 1};",
+        *([] if not curved_wire_surfaces else ["Mesh.HighOrderOptimize = 1;"]),
         "Mesh.MshFileVersion = 2.2;",
         "",
     ]
