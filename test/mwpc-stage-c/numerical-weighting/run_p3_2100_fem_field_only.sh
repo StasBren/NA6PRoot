@@ -17,8 +17,20 @@ if [[ "$MODE" != baseline && "$MODE" != wire_refine && "$MODE" != curved && "$MO
   echo "Refusing to overwrite any existing output path or choose output implicitly." >&2
   exit 2
 fi
+# The WSL workstation keeps Elmer in a user-local prefix. A fresh terminal
+# after reboot may not source the environment, even though Elmer is installed.
+# Repair only PATH (not installation or frozen overnight worker environment).
+if ! command -v ElmerGrid >/dev/null 2>&1 || \
+   ! command -v ElmerSolver >/dev/null 2>&1; then
+  ELMER_PREFIX="${ELMER_HOME:-$HOME/na6p/install/elmer}"
+  if [[ -x "$ELMER_PREFIX/bin/ElmerGrid" && \
+        -x "$ELMER_PREFIX/bin/ElmerSolver" ]]; then
+    export PATH="$ELMER_PREFIX/bin:$PATH"
+    echo "Using local Elmer installation: $ELMER_PREFIX/bin"
+  fi
+fi
 for cmd in python3 gmsh ElmerGrid ElmerSolver sha256sum; do
-  command -v "$cmd" >/dev/null || { echo "Missing $cmd" >&2; exit 2; }
+  command -v "$cmd" >/dev/null || { echo "Missing $cmd (check PATH and ELMER_HOME)" >&2; exit 2; }
 done
 CONFIG="$HERE/p3_2100_stereo_width_along_w_1p7mm.json"
 GENERATOR="$HERE/generate_weighting_model.py"
