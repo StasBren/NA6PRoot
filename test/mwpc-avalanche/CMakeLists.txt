@@ -374,3 +374,13 @@ target_include_directories(mwpc_exact_spatial_time_shift_audit PRIVATE
 target_link_libraries(mwpc_exact_spatial_time_shift_audit PRIVATE
     Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree)
 target_compile_features(mwpc_exact_spatial_time_shift_audit PRIVATE cxx_std_17)
+
+# Read-only experimental test of cumulative Shockley-Ramo electrode charge
+# along exact Garfield RKF ion drift paths. No new avalanche/strips/electronics.
+add_executable(mwpc_exact_spatial_cumulative_charge_audit
+    ../mwpc-stage-c/cathode-ion-reference/audit_exact_spatial_cumulative_charge.cc)
+target_include_directories(mwpc_exact_spatial_cumulative_charge_audit PRIVATE
+    ../mwpc-stage-c/cathode-ion-reference)
+target_link_libraries(mwpc_exact_spatial_cumulative_charge_audit PRIVATE
+    Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree)
+target_compile_features(mwpc_exact_spatial_cumulative_charge_audit PRIVATE cxx_std_17)
