@@ -45,3 +45,13 @@ target_compile_features(pi_fast_lut_existing_starts_mc PRIVATE cxx_std_17)
 add_executable(pi_fast_lut_attachment_hazards pi_fast_lut_attachment_hazards.cxx)
 target_link_libraries(pi_fast_lut_attachment_hazards PRIVATE Garfield::Garfield)
 target_compile_features(pi_fast_lut_attachment_hazards PRIVATE cxx_std_17)
+
+
+# Stage C candidate P3 2100V: read-only 3D Elmer/Gmsh individual U/V
+# stereo-strip near-anode FIELD potential+vector-gradient diagnostics.
+# Never runs avalanches, ion transport, induced current or electronics.
+add_executable(mwpc_stage_c_fem_stereo_near_wire_probe
+  fem_stereo_strip_near_wire_probe.cxx)
+target_link_libraries(mwpc_stage_c_fem_stereo_near_wire_probe PRIVATE
+  Garfield::Garfield)
+target_compile_features(mwpc_stage_c_fem_stereo_near_wire_probe PRIVATE cxx_std_17)
