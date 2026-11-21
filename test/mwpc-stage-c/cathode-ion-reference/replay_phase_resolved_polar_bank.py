@@ -24,7 +24,7 @@ from study_event_moment_replay import (
     BINS, DT_NS, load_ions, check_direct, load_reference,
     load_baseline, metrics
 )
-from replay_deterministic_polar_bank import interpolants
+from replay_deterministic_polar_bank import interpolants, load_grid
 
 NFFT = 1 << (2 * BINS - 1).bit_length()
 
@@ -273,19 +273,37 @@ def main():
     p.add_argument("--reference-summary",type=Path)
     p.add_argument("--baseline-waveforms",type=Path)
     p.add_argument("--old-polar-waveforms",type=Path)
+    p.add_argument("--original-grid-root",type=Path)
     p.add_argument("--exact-spatial-phase-comparison",type=Path)
     p.add_argument("--out-dir",type=Path)
     a=p.parse_args()
     if a.self_test:
         selftest();return
     for key in ("grid_root","ion_file","reference_waveforms","reference_summary",
-                "old_polar_waveforms","exact_spatial_phase_comparison","out_dir"):
+                "old_polar_waveforms","original_grid_root","exact_spatial_phase_comparison","out_dir"):
         if getattr(a,key) is None:
             p.error("Required parameter --"+key.replace("_","-"))
     if a.out_dir.exists():
         p.error("Refusing to overwrite "+str(a.out_dir))
     begin=time.perf_counter()
     grid=load_phase_grid(a.grid_root)
+    old_grid=load_grid(a.original_grid_root)
+    if not np.allclose(grid["radius_um"],old_grid["radius_um"],rtol=0,atol=1e-9):
+        raise ValueError("Phase-aware and original radial grids differ")
+    if not np.allclose(grid["angle_deg"],old_grid["angle_deg"],rtol=0,atol=1e-9):
+        raise ValueError("Phase-aware and original angular grids differ")
+    original_wave=old_grid["waves"].reshape(-1,2,BINS)
+    same_start_wave=grid["waves"][:,0,:,:]
+    # Must reproduce the existing independently built deterministic t=0
+    # impulse bank exactly before interpreting phase interpolation.
+    phase0_identity_L2=float(np.sqrt(
+        np.sum((original_wave-same_start_wave)**2)/
+        max(np.sum(original_wave**2),1e-50)))
+    if phase0_identity_L2 > 1e-8:
+        raise ValueError("Phase-0 new RKF grid does not reproduce frozen 12x24 bank: "
+                         +str(phase0_identity_L2))
+    print("INTEGRITY new phase0 grid versus original 12x24 grid relative L2=",
+          phase0_identity_L2)
     meta,ions,exact=load_ions(a.ion_file)
     check_direct(meta,a.reference_summary)
     direct=load_reference(a.reference_waveforms)
@@ -340,6 +358,8 @@ def main():
         scope="Phase-resolved polar ion response only: whole-plane model, no U/V",
         source=meta,
         source_archive=str(a.ion_file.resolve()),
+        original_zero_phase_grid=str(a.original_grid_root.resolve()),
+        original_zero_phase_RKF_identity_L2=phase0_identity_L2,
         exact_ion_births=int(exact.sum()),
         grid_file=str(a.grid_root.resolve()),
         grid_radial_nodes=grid["radius_um"].tolist(),
