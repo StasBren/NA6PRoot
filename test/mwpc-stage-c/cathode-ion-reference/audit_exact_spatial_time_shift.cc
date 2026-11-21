@@ -33,10 +33,61 @@ W NewWave() {
   for(auto& c:s)c.assign(NB,0.);
   return s;
 }
+int IntArg(int n,char**v,const std::string&key,int defaultValue) {
+  const auto t=Arg(n,v,key);
+  return t.empty()?defaultValue:std::stoi(t);
+}
 void AccumulateDirect(W& total, NA60Plane::Transport& tr, const Birth& b) {
   for(int channel=0;channel<2;++channel)
     for(int k=0;k<NB;++k)
       total[channel][k]+=b.weight*tr.Current(channel,k);
+}
+// Deposit a signal computed by DriftIon(b.u,b.v,b.w,LOCAL_PHASE_NS)
+ // into the integer-shifted original 10ns window.
+ // This is direct Garfield fractional-PHASE interpolation, not interpolation
+ // of the 10ns histogram samples of a t=0 current.
+void AccumulateIntegerShift(W& total,NA60Plane::Transport& tr,
+                            const Birth& b,int offset,double factor) {
+  NA60Plane::Require(offset>=0 && offset<=NB &&
+                     std::isfinite(factor) && factor>=0. &&
+                     factor<=1.+1e-10,
+                     "Invalid phase interpolation coefficient/shift");
+  if(factor==0)return;
+  for(int channel=0;channel<2;++channel)
+    for(int j=0;j+offset<NB;++j)
+      total[channel][j+offset]+=factor*b.weight*tr.Current(channel,j);
+}
+void AccumulatePhaseInterpolated(W& total,NA60Plane::Transport& tr,
+                                 const Birth& b,int nPhase) {
+  NA60Plane::Require(nPhase>=1 && nPhase<=16,
+                     "phase subdivision must be 1..16");
+  const double shift=b.t/DT;
+  const int offset=(int)std::floor(shift);
+  const double f=shift-offset;
+  NA60Plane::Require(offset>=0 && offset<NB && f>=0 && f<1,
+                     "Original ion birth phase outside window");
+  const double x=f*nPhase;
+  const int k=std::min(nPhase-1,(int)std::floor(x));
+  const double part=x-k;
+  NA60Plane::Require(part>=0 && part<1.+1e-10,
+                     "Phase bin has invalid fraction");
+
+  // Required calling order: tr currently contains the t=0 signal.
+  // First consume all phase endpoints supported by t=0 before any
+  // additional DriftIon call clears its Sensor history.
+  if(k==0)AccumulateIntegerShift(total,tr,b,offset,1.-part);
+  if(k+1==nPhase)AccumulateIntegerShift(total,tr,b,offset+1,part);
+
+  if(k>0 && part<1.) {
+    const double phase=DT*k/nPhase;
+    tr.Drift(b.u,b.v,b.w,phase);
+    AccumulateIntegerShift(total,tr,b,offset,1.-part);
+  }
+  if(k+1<nPhase && part>0.) {
+    const double phase=DT*(k+1)/nPhase;
+    tr.Drift(b.u,b.v,b.w,phase);
+    AccumulateIntegerShift(total,tr,b,offset,part);
+  }
 }
 void AccumulateShifted(W& total,NA60Plane::Transport& tr,
                        const Birth& b) {
@@ -123,6 +174,10 @@ int main(int argc,char**argv) {
     const auto originalSummary=Arg(argc,argv,"--reference-summary");
     const auto mobility=Arg(argc,argv,"--mobility");
     const auto prefix=Arg(argc,argv,"--out-prefix");
+    const int phaseSubdivisions=IntArg(argc,argv,"--phase-subdivisions",1);
+    NA60Plane::Require(phaseSubdivisions==1 || phaseSubdivisions==2 ||
+                       phaseSubdivisions==4 || phaseSubdivisions==8,
+                       "phase subdivisions must be one of 1,2,4,8");
     NA60Plane::Require(!source.empty()&&!original.empty()&&
                        !originalSummary.empty()&&!mobility.empty()&&
                        !prefix.empty(),
@@ -138,7 +193,7 @@ int main(int argc,char**argv) {
     ValidateOriginalSummary(originalSummary,ions);
     const W ref=ReadOriginalReference(original);
     NA60Plane::Transport tr(mobility,DT,NB,.05,true);
-    W direct=NewWave(),shifted=NewWave();
+    W direct=NewWave(),shifted=NewWave(),phaseCorrected=NewWave();
     int late0=0,lateActual=0;
     double sumWeights=0;
     for(long long i=0;i<ions.Entries();++i) {
@@ -150,6 +205,8 @@ int main(int argc,char**argv) {
       const auto zeroDrift=tr.Drift(b.u,b.v,b.w,0.);
       if(zeroDrift.late)++late0;
       AccumulateShifted(shifted,tr,b);
+      // The zero-time ion waveform is still in the sensor.
+      AccumulatePhaseInterpolated(phaseCorrected,tr,b,phaseSubdivisions);
       NA60Plane::Require(std::abs((referenceDrift.endT-b.t)-
                                    zeroDrift.endT)<2.,
                         "Unexpected time-dependence in static-field RKF drift");
@@ -168,6 +225,19 @@ int main(int argc,char**argv) {
                        "recomputed same-ion direct RKF differs from frozen benchmark; "
                        "STOP: check original mobility, RKF step and time grid");
     const double full=RelativeL2(shifted,direct,0,NB);
+    const double phaseFull=RelativeL2(phaseCorrected,direct,0,NB);
+    const auto phaseEarly=ChargeError(phaseCorrected,direct,0,10);
+    const auto phaseWindow=ChargeError(phaseCorrected,direct,0,NB);
+    const double phaseWindows[4]={
+        RelativeL2(phaseCorrected,direct,0,10),
+        RelativeL2(phaseCorrected,direct,10,100),
+        RelativeL2(phaseCorrected,direct,100,1000),
+        RelativeL2(phaseCorrected,direct,1000,NB)
+    };
+    if(phaseSubdivisions==1) {
+      NA60Plane::Require(RelativeL2(phaseCorrected,shifted,0,NB)<1e-11,
+        "nPhase=1 does not reproduce original fractional t=0 time shift");
+    }
     const auto early=ChargeError(shifted,direct,0,10);
     const auto all=ChargeError(shifted,direct,0,NB);
     const double windows[4]={
@@ -183,10 +253,12 @@ int main(int argc,char**argv) {
            "recomputed_direct_minus_fC_per_ns,"
            "perfect_spatial_shifted_plus_fC_per_ns,"
            "perfect_spatial_shifted_minus_fC_per_ns,"
+           "phase_corrected_plus_fC_per_ns,phase_corrected_minus_fC_per_ns,"
            "frozen_direct_plus_fC_per_ns,frozen_direct_minus_fC_per_ns\n";
     for(int j=0;j<NB;++j)
       wave<<(j+.5)*DT<<","<<direct[0][j]<<","<<direct[1][j]<<","
           <<shifted[0][j]<<","<<shifted[1][j]<<","
+          <<phaseCorrected[0][j]<<","<<phaseCorrected[1][j]<<","
           <<ref[0][j]<<","<<ref[1][j]<<"\n";
     wave.close();
     std::ofstream summary(prefix+"_summary.csv");
@@ -198,12 +270,26 @@ int main(int argc,char**argv) {
               "from10us_to100us_L2,"
               "early100plus_error_fC,early100minus_error_fC,"
               "window100us_plus_error_fC,window100us_minus_error_fC,"
-              "n_late_direct,n_late_zero_start\n";
+              "n_late_direct,n_late_zero_start,"
+              "phase_subdivisions,phase_corrected_full_L2,"
+              "phase_corrected_first100ns_L2,"
+              "phase_corrected_100ns_to1us_L2,"
+              "phase_corrected_1us_to10us_L2,"
+              "phase_corrected_10us_to100us_L2,"
+              "phase_corrected_early100plus_error_fC,"
+              "phase_corrected_early100minus_error_fC,"
+              "phase_corrected_100usplus_error_fC,"
+              "phase_corrected_100usminus_error_fC\n";
     summary<<ions.id<<","<<ions.Entries()<<","<<ions.nTrue<<","
            <<orig<<","<<full<<","<<windows[0]<<","<<windows[1]<<","
            <<windows[2]<<","<<windows[3]<<","
            <<early[0]<<","<<early[1]<<","<<all[0]<<","<<all[1]<<","
-           <<lateActual<<","<<late0<<"\n";
+           <<lateActual<<","<<late0<<","
+           <<phaseSubdivisions<<","<<phaseFull<<","
+           <<phaseWindows[0]<<","<<phaseWindows[1]<<","
+           <<phaseWindows[2]<<","<<phaseWindows[3]<<","
+           <<phaseEarly[0]<<","<<phaseEarly[1]<<","
+           <<phaseWindow[0]<<","<<phaseWindow[1]<<"\n";
     summary.close();
     std::cout<<"PASS perfect-spatial 10ns shift control; same original K256 reservoir\n"
              <<"combined_time_shift_L2="<<full
@@ -213,6 +299,14 @@ int main(int argc,char**argv) {
              <<" 10us-100us_L2="<<windows[3]<<"\n"
              <<"early100_err_fC="<<early[0]<<","<<early[1]
              <<" window100us_err_fC="<<all[0]<<","<<all[1]<<"\n"
+             <<"PHASE_CONTROL n_subdivisions="<<phaseSubdivisions
+             <<" phase_corrected_full_L2="<<phaseFull
+             <<" phase_0to100ns_L2="<<phaseWindows[0]
+             <<" phase_100ns_to1us_L2="<<phaseWindows[1]
+             <<" phase_1us_to10us_L2="<<phaseWindows[2]
+             <<" phase_10us_to100us_L2="<<phaseWindows[3]<<"\n"
+             <<"PHASE early100_error_fC="<<phaseEarly[0]<<","<<phaseEarly[1]
+             <<" window100us_error_fC="<<phaseWindow[0]<<","<<phaseWindow[1]<<"\n"
              <<"This is the exact-SPATIAL replay discrepancy, NOT spatial interpolation\n";
     return 0;
   } catch(const std::exception& ex) {
