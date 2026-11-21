@@ -79,6 +79,9 @@ def validate(cfg: Dict[str, Any]) -> None:
         raise ValueError("weighting.cathodes must contain only 'minus'/'plus'")
     if not list(w["strip_indices"]):
         raise ValueError("weighting.strip_indices must not be empty")
+    convention = w.get("stereo_sign_convention", "legacy_c2")
+    if convention not in ("legacy_c2", "plus_negative_u"):
+        raise ValueError("weighting.stereo_sign_convention must be legacy_c2 or plus_negative_u")
 
     wire_pitch = float(g["wire_pitch_mm"])
     half_wires = int(g["half_wires"])
@@ -108,6 +111,9 @@ def generate_geo(cfg: Dict[str, Any]) -> str:
     wire_size = float(m["wire_size_mm"])
     wire_depth = float(m["wire_refine_radius_mm"])
     curvature = int(m["wire_curvature_points"])
+    curved_wire_surfaces = m.get("curved_wire_surfaces", False)
+    if not isinstance(curved_wire_surfaces, bool):
+        raise ValueError("mesh.curved_wire_surfaces must be a JSON boolean")
 
     vmin = -gm
     vmax = gp
@@ -246,7 +252,8 @@ def generate_geo(cfg: Dict[str, Any]) -> str:
         "",
         "Mesh.Algorithm3D = 1;",
         "Mesh.Optimize = 1;",
-        "Mesh.SecondOrderLinear = 1;",
+        f"Mesh.SecondOrderLinear = {0 if curved_wire_surfaces else 1};",
+        *([] if not curved_wire_surfaces else ["Mesh.HighOrderOptimize = 1;"]),
         "Mesh.MshFileVersion = 2.2;",
         "",
     ]
@@ -349,12 +356,16 @@ def strip_expression(cfg: Dict[str, Any], cathode: str, index: int) -> str:
 
     # Variable list is Coordinate 1 (=u), Coordinate 3 (=w), hence
     # tx(0)=u and tx(1)=w in MATC.
-    if cathode == "minus":
-        projection = f"(tx(1)*{_fmt(ca)} - tx(0)*{_fmt(sa)})"
-    elif cathode == "plus":
-        projection = f"(tx(1)*{_fmt(ca)} + tx(0)*{_fmt(sa)})"
-    else:
+    # Legacy C2: minus=w*cos(alpha)-u*sin(alpha), plus=w*cos(alpha)+u*sin(alpha).
+    # New P3 candidate: plus=w*cos(alpha)-u*sin(alpha), minus=w*cos(alpha)+u*sin(alpha).
+    # Optional explicit switch preserves exact backwards compatibility for all
+    # preexisting legacy C2 configurations and their archived weighting maps.
+    convention = cfg["weighting"].get("stereo_sign_convention", "legacy_c2")
+    if cathode not in ("minus", "plus"):
         raise ValueError(cathode)
+    negative_u = (cathode == "minus") if convention == "legacy_c2" else (cathode == "plus")
+    sign = "-" if negative_u else "+"
+    projection = f"(tx(1)*{_fmt(ca)} {sign} tx(0)*{_fmt(sa)})"
 
     half_width = 0.5 * width
     return (
