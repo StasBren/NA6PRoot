@@ -332,7 +332,7 @@ int main(int argc,char** argv) {
   std::ofstream chout(prefix+"_channels.csv");
   Require(bool(chout),"cannot create channel CSV");
   chout<<std::setprecision(16)
-    <<"channel,strip_index,window_charge_fC,full_endpoint_charge_fC,"
+    <<"channel,reference_strip_index,relative_offset,window_charge_fC,full_endpoint_charge_fC,"
       "unrecorded_tail_fC,first100ns_fC\n";
   std::vector<std::vector<double>> wave;
   for(const auto& c:channels) {
@@ -363,12 +363,18 @@ int main(int argc,char** argv) {
            "archive_ion_rows,processed_ion_rows,exact_ion_births,"
            "dt_ns,window_us,step_mm,half_strips,"
            "late_ion_rows,late_weighted_ions,max_end_ns,"
-           "archive_complete,field_accuracy_validated,electron_current_included\n";
+           "archive_complete,field_accuracy_validated,electron_current_included,"
+            "strip_origin_assumed_zero,patch_shift_cm,muon_u_entrance_cm,"
+            "muon_w_entrance_cm,central_u_reference_index,"
+            "central_v_reference_index\n";
   summary<<archive.id<<","<<archive.source<<","<<archive.station<<","
          <<archive.det<<","<<mapDir<<","<<archive.Entries()<<","<<nToRun
          <<","<<archive.nTrue<<","<<dt<<","<<windowUs<<","<<stepMm
          <<","<<halfStrips<<","<<nLate<<","<<weightedLate<<","
-         <<maxEndNs<<","<<(complete?1:0)<<",0,0\n";
+         <<maxEndNs<<","<<(complete?1:0)<<",0,0,1,"
+          <<frame.patchShiftCm<<","<<frame.uEntranceCm<<","
+          <<frame.wEntranceCm<<","<<frame.uCentralIndex<<","
+          <<frame.vCentralIndex<<"\n";
   summary.close();
   std::ofstream seal(prefix+(complete?"_complete.txt":"_pilot.txt"));
   Require(bool(seal),"cannot write completion note");
@@ -376,7 +382,9 @@ int main(int argc,char** argv) {
   seal<<"PROVISIONAL_FEM_FIELD=1\n"
       <<"ELECTRON_CURRENTS_INCLUDED=0\n"
       <<"NONCENTRAL_TRANSLATED_STRIPS_NOT_VALIDATED="<<(halfStrips>0?1:0)<<"\n"
-      <<"GARFIELD_CONVENTION=positive_q_delta_phi\n";
+      <<"GARFIELD_CONVENTION=positive_q_delta_phi\n"
+       <<"GLOBAL_STRIP_PHASE_ORIGIN_ASSUMED_ZERO=1\n"
+       <<"ARCHIVED_CHAMBER_POSITION_OFFSETS_RESTORED=1\n";
   seal.close();
   std::cout<<std::setprecision(10)
            <<"PASS_RKFPATH_Ramo "<<(complete?"FULL_ARCHIVE":"EXPLICIT_PILOT")
