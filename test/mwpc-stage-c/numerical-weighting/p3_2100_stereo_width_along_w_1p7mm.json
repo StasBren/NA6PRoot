@@ -1,0 +1,36 @@
+{
+  "geometry": {
+    "gap_minus_mm": 3,
+    "gap_plus_mm": 3,
+    "wire_pitch_mm": 3,
+    "wire_diameter_um": 30,
+    "half_wires": 4,
+    "u_half_span_mm": 15.5,
+    "w_half_span_mm": 11,
+    "strip_pitch_mm": 1.6915632233569817,
+    "strip_width_mm": 1.6915632233569817,
+    "tan_alpha": 0.1
+  },
+  "electrostatics": {
+    "anode_voltage_V": 2100,
+    "gas_relative_permittivity": 1
+  },
+  "mesh": {
+    "bulk_size_mm": 0.5,
+    "cathode_size_mm": 0.15,
+    "cathode_refine_depth_mm": 0.6,
+    "wire_size_mm": 0.012,
+    "wire_refine_radius_mm": 0.25,
+    "wire_curvature_points": 8
+  },
+  "weighting": {
+    "strip_indices": [
+      0
+    ],
+    "cathodes": [
+      "minus",
+      "plus"
+    ],
+    "stereo_sign_convention": "plus_negative_u"
+  }
+}
