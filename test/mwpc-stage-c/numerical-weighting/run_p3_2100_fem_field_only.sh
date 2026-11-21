@@ -5,13 +5,15 @@
 # Refuses to run over an existing directory; never cleans source data.
 # Usage: bash .../run_p3_2100_fem_field_only.sh baseline /absolute/new/path
 #        bash .../run_p3_2100_fem_field_only.sh wire_refine /absolute/new/path
+#        bash .../run_p3_2100_fem_field_only.sh curved /absolute/new/path
+#        bash .../run_p3_2100_fem_field_only.sh curved_refine /absolute/new/path
 set -Eeuo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
 MODE="${1:-}"
 OUT="${2:-}"
-if [[ "$MODE" != baseline && "$MODE" != wire_refine ]] || [[ "$OUT" != /* ]] || [[ -e "$OUT" ]]; then
-  echo "Usage: $0 {baseline|wire_refine} /absolute/path/TO/NEW/OUTPUT_DIR" >&2
+if [[ "$MODE" != baseline && "$MODE" != wire_refine && "$MODE" != curved && "$MODE" != curved_refine ]] || [[ "$OUT" != /* ]] || [[ -e "$OUT" ]]; then
+  echo "Usage: $0 {baseline|wire_refine|curved|curved_refine} /absolute/path/TO/NEW/OUTPUT_DIR" >&2
   echo "Refusing to overwrite any existing output path or choose output implicitly." >&2
   exit 2
 fi
@@ -25,14 +27,20 @@ GENERATOR="$HERE/generate_weighting_model.py"
 }
 mkdir -p -- "$OUT"
 cp -- "$CONFIG" "$OUT/input_config.json"
-if [[ "$MODE" == wire_refine ]]; then
-  # A single-parameter change isolates the local 30um cylinder surface mesh.
-  python3 - "$OUT/input_config.json" <<'PY'
+if [[ "$MODE" == wire_refine || "$MODE" == curved || "$MODE" == curved_refine ]]; then
+  # wire_refine: halve near-cylinder target mesh size with straight-sided P2.
+  # curved: change only high-order geometry at the same baseline mesh size.
+  # curved_refine: curved geometry and halved wire mesh size (second-stage test).
+  python3 - "$OUT/input_config.json" "$MODE" <<'PY'
 import json,sys,pathlib
 p=pathlib.Path(sys.argv[1])
 c=json.loads(p.read_text(encoding="utf-8"))
 assert c["mesh"]["wire_size_mm"] == .012
-c["mesh"]["wire_size_mm"] = .006
+mode=sys.argv[2]
+if mode in ("wire_refine","curved_refine"):
+    c["mesh"]["wire_size_mm"] = .006
+if mode in ("curved","curved_refine"):
+    c["mesh"]["curved_wire_surfaces"] = True
 p.write_text(json.dumps(c,indent=2)+"\n",encoding="utf-8")
 PY
 fi
