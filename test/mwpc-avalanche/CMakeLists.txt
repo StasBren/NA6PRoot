@@ -354,3 +354,13 @@ add_executable(mwpc_stereo_strip_gradient_convergence
 target_include_directories(mwpc_stereo_strip_gradient_convergence PRIVATE
   ../mwpc-stage-c/cathode-ion-reference)
 target_compile_features(mwpc_stereo_strip_gradient_convergence PRIVATE cxx_std_17)
+
+# Isolated deterministic response-operator coverage pilot: no new
+# TrackHeed/AvalancheMicroscopic and never writes to frozen muon archives.
+add_executable(mwpc_deterministic_polar_plane_bank
+    ../mwpc-stage-c/cathode-ion-reference/build_deterministic_polar_plane_bank.cc)
+target_include_directories(mwpc_deterministic_polar_plane_bank PRIVATE
+    ../mwpc-stage-c/cathode-ion-reference)
+target_link_libraries(mwpc_deterministic_polar_plane_bank PRIVATE
+    Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree)
+target_compile_features(mwpc_deterministic_polar_plane_bank PRIVATE cxx_std_17)
