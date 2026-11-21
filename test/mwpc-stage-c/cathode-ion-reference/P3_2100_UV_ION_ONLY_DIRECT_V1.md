@@ -10,6 +10,12 @@
 4. `run_p3_2100_stereo_ion_response.sh` checks source `complete.txt`, original ROOT physics audit, uncapped microscopic physics evidence, SHA256 event integrity, FEM map SHA256 and candidate geometry. Does not change frozen original.
 5. The existing faceted FEM baseline is **PROVISIONAL**: old quadratic mid-edge wire surface nodes deviate inward as much as 2.222μm compared to only 1.5μm near-wire evaluation clearance. Do not present computed U/V signals as physically validated until curved-P2 mesh, Garfield curved-element interpolation, mesh/patch sensitivity and adjacent-strip checks pass.
 
+## CRITICAL coordinate-provenance audit (fixed in current code)
+
+The frozen `CathodeIonArchive.hh` writes ion `u_patch_cm` and `w_relative_cm` for **microscopic Garfield local transport**, PLUS `u_chamber_cm` and `w_chamber_cm` as physical station-local coordinates. The muon tree stores `patch_shift_cm`, `u_in_mm`, `w_in_mm` and the source writer computes `u_chamber=u_patch+patch_shift`, `w_chamber=w_relative+0.1*w_in_mm`. Using `w_relative` directly as a stereo strip position is WRONG when comparing different muons. A new read-only `ChamberFrame` in the ion response opens the ROOT file independently (leaving all existing whole-plane `Plane2100Archive.hh` consumers untouched), reads these exact branches, and validates the local↔global transform on every ion birth.
+
+By convention for this ideal prototype, reference global U strip index is the nearest integer to `(w_entrance-0.1*u_entrance)/0.17cm`, V to `(w_entrance+0.1*u_entrance)/0.17cm`. Evaluate the **single solved central strip FEM map** at `w_map=w_relative+w_entrance-slope*patch_shift-reference_strip_index*0.17cm`. For a terminal ion on the cathode, use exact 0/1 Dirichlet strip membership in the global phase `w_chamber-slope*u_chamber-k*0.17cm`. `slope=+0.1` for U plus and `-0.1` for V minus. Report channel columns as **reference strip indices** (assumed zero channel phase/origin), NOT final hardware channel numbers. Real detector strip phase/pitch/gaps are not yet settled. A later explicit strip map phase/cell study remains necessary.
+
 ## Low-memory preparation while muon recovery runs
 
 ~~~bash
