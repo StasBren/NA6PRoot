@@ -7,6 +7,7 @@
 // In the 2100V symmetric P3 whole-plane ion model only.
 #include "Plane2100Archive.hh"
 #include <array>
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
