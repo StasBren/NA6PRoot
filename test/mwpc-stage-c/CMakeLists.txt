@@ -73,3 +73,10 @@ add_executable(mwpc_stage_c_stereo_ion_response_2100
 target_link_libraries(mwpc_stage_c_stereo_ion_response_2100 PRIVATE
   Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree)
 target_compile_features(mwpc_stage_c_stereo_ion_response_2100 PRIVATE cxx_std_17)
+
+# Three-wire early cumulative-charge sensitivity on fixed analytic trajectories.
+add_executable(mwpc_stage_c_p3_compare_early_ion_paths
+  cathode-ion-reference/compare_p3_fixed_early_ion_paths.cc)
+target_link_libraries(mwpc_stage_c_p3_compare_early_ion_paths PRIVATE
+  Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree)
+target_compile_features(mwpc_stage_c_p3_compare_early_ion_paths PRIVATE cxx_std_17)
