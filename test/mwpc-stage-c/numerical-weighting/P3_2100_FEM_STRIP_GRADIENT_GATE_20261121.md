@@ -1,5 +1,13 @@
 # P3 2100V candidate — direct 3D Elmer U/V weighting-field gradient gate
 
+## UPDATE: critical wire faceting actually measured 2026-11-21 — PRIORITY CHANGED
+
+The original 1.85M-node Elmer P2 map has mesh type 510 and wire-surface triangle type 306, but corner and mid-edge node audits found median radial mid-edge offset **−0.890395 μm**, extreme **−2.221988 μm**, versus a physical near-wire test clearance of only **1.5 μm at r=1.1R**. This is geometric faceting, not merely a 12→6 μm mesh-size convergence problem. The original `Mesh.SecondOrderLinear=1` must not be treated as exact cylinder geometry. No production U/V currents using this map.
+
+**FIRST controlled study (after overnight muon recovery)**: at the SAME 12μm nominal wire mesh resolution, generate a fresh curved-wire P2 FEM field via the updated `run_p3_2100_fem_field_only.sh curved /absolute/new/output` runner. It opts into `Mesh.SecondOrderLinear=0` and `Mesh.HighOrderOptimize=1` without modifying prior baseline data or defaults. This is a numerical comparison, NOT completed or validated WSL output. Audit the **new** `mesh.boundary` wire radii using `audit_elmer_wire_surface.py`, confirm Elmer solves and no curved-element Jacobian/interpolation failure with Garfield `ComponentElmer`. Sample original and curved maps at identical points using `mwpc_stage_c_fem_stereo_near_wire_probe` (tag `baseline` for original, `curved` for new). Compare with `compare_fem_stereo_near_wire.py --study curvature` and matching configs and fresh output CSV. A successful curved-node audit is necessary but NOT proof of field convergence.
+
+**SECOND, later**: if curved P2 compatibility and field sampling pass, compare 12→6μm at fixed curved geometry, with a fresh `curved_refine` map. Do NOT perform the previous straight-sided `wire_refine` as the principal next physics step; it conflates element-size change with geometrical polygonization error. Do NOT run large Elmer solves concurrently with the frozen overnight 120-muon recovery. The baseline 0.11% **whole-cathode analytic** agreement and 2.57% **line-source strip** sensitivity do not establish accuracy of the FEM individual strips.
+
 Updated 2026-11-21. This is the required numerical gate **before** any physical U/V strip current from the weighted real-muon ion archives. No electrons, positive-ion drift, avalanche simulation or electronics are run by the commands in this document.
 
 ## Scientific context and existing immutable baseline
