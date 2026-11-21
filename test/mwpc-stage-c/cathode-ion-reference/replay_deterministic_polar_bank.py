@@ -33,7 +33,7 @@ def load_grid(filename):
     with uproot.open(filename) as f:
         if "polar_bank" not in f or "scope" not in f:
             raise ValueError("Not a validated deterministic polar RKF bank")
-        scope = str(f["scope"].title)
+        scope = str(f["scope"].member("fTitle"))
         if ("Two ideal whole cathode planes" not in scope or
                 "positive-v" not in scope):
             raise ValueError("Unexpected grid scope; refuse non-whole-plane bank")
