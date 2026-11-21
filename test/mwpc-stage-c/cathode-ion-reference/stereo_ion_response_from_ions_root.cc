@@ -121,9 +121,55 @@ class PhysicalIonPaths {
   }
 };
 
+// Two frames coexist in frozen ROOT: local Garfield patch coordinates and
+// physical chamber coordinates. Both MUST be retained for stereo-strip phase.
+class ChamberFrame {
+  std::unique_ptr<TFile> file_;
+  TTree* ions_ = nullptr;
+  double uChamber_ = 0., wChamber_ = 0.;
+ public:
+  double patchShiftCm=0.,uEntranceCm=0.,wEntranceCm=0.;
+  int uCentralIndex=0,vCentralIndex=0;
+  explicit ChamberFrame(const std::string& filename) {
+    file_.reset(TFile::Open(filename.c_str(),"READ"));
+    Require(file_&&!file_->IsZombie(),"cannot reopen physical position ROOT metadata");
+    auto* mu=dynamic_cast<TTree*>(file_->Get("muons"));
+    ions_=dynamic_cast<TTree*>(file_->Get("ions"));
+    Require(mu&&ions_&&mu->GetEntries()==1,
+            "missing geometry metadata/ions in frozen ROOT archive");
+    for(const char* s:{"patch_shift_cm","u_in_mm","w_in_mm"})
+      Require(mu->GetBranch(s)!=nullptr,
+              "missing required muon physical-frame branch "+std::string(s));
+    for(const char* s:{"u_chamber_cm","w_chamber_cm"})
+      Require(ions_->GetBranch(s)!=nullptr,
+              "missing required ion physical-frame branch "+std::string(s));
+    double uEntranceMm=0.,wEntranceMm=0.;
+    mu->SetBranchAddress("patch_shift_cm",&patchShiftCm);
+    mu->SetBranchAddress("u_in_mm",&uEntranceMm);
+    mu->SetBranchAddress("w_in_mm",&wEntranceMm);
+    mu->GetEntry(0);
+    uEntranceCm=.1*uEntranceMm;
+    wEntranceCm=.1*wEntranceMm;
+    Require(std::isfinite(patchShiftCm)&&std::isfinite(uEntranceCm)&&
+            std::isfinite(wEntranceCm),"nonfinite physical-frame metadata");
+    uCentralIndex=int(std::llround((wEntranceCm-.1*uEntranceCm)/.17));
+    vCentralIndex=int(std::llround((wEntranceCm+.1*uEntranceCm)/.17));
+    ions_->SetBranchAddress("u_chamber_cm",&uChamber_);
+    ions_->SetBranchAddress("w_chamber_cm",&wChamber_);
+  }
+  void CheckBirth(long long j,const NA60Plane::Archive::Birth& b) {
+    Require(ions_->GetEntry(j)>0,"physical ion location row is absent");
+    Require(std::isfinite(uChamber_)&&std::isfinite(wChamber_) &&
+            std::abs(uChamber_-(b.u+patchShiftCm))<1.e-8 &&
+            std::abs(wChamber_-(b.w+wEntranceCm))<1.e-8,
+            "local/physical ion-coordinate mapping failed");
+  }
+};
+
 struct Channel {
   std::string name, label;
-  int k=0;
+  int k=0;  // reference physical strip index (zero phase assumed)
+  int relativeK=0;
   bool plus=false;
   std::unique_ptr<NA60Stereo::TimeBinnedRamoCharge> current;
   double analyticEndpointFc=0.;
@@ -159,8 +205,13 @@ class StereoMap {
             std::abs(farPlus)<.1 && std::abs(farMinus)<.1,
             "FEM channel sign/weighting boundary sanity failed");
   }
-  double Phi(const Point& p, const Channel& c, bool endpoint=false) {
-    const double w=p.w-kPitchCm*c.k;
+  double Phi(const Point& p, const Channel& c, const ChamberFrame& frame,
+             bool endpoint=false) {
+    const double slope=c.plus?kSlope:-kSlope;
+    // Convert to the station-local strip phase while querying the same FEM
+    // central-strip model in patch-local coordinates.
+    const double w=p.w+frame.wEntranceCm-slope*frame.patchShiftCm-
+                   kPitchCm*c.k;
     Require(std::abs(p.u)<1.55-1.e-4 && std::abs(w)<1.1-1.e-4 &&
             std::abs(p.v)<=.300001,
             "FEM map coordinate out of patch; refusing silent zero lookup");
@@ -169,7 +220,8 @@ class StereoMap {
       // boundary is either 0 or 1. Never query outside-gas endpoints as 0.
       const bool onPlane=(p.v>0.)==c.plus;
       if (!onPlane) return 0.;
-      const double phase=p.w-(c.plus?kSlope:-kSlope)*p.u-kPitchCm*c.k;
+      const double phase=p.w+frame.wEntranceCm-
+                         slope*(p.u+frame.patchShiftCm)-kPitchCm*c.k;
       Require(std::abs(std::abs(phase)-kHalfWidthCm)>1.e-7,
               "ion landed at ambiguous ideal strip boundary");
       return std::abs(phase)<kHalfWidthCm ? 1. : 0.;
@@ -213,6 +265,7 @@ int main(int argc,char** argv) {
     Require(!fs::exists(prefix+suffix),"output exists; choose fresh prefix");
   }
   NA60Plane::Archive archive(ionFile);
+  ChamberFrame frame(ionFile);
   Require(archive.mode=="weighted" && archive.Entries()<=20000,
           "requires a complete frozen weighted K256 archive <=20k rows");
   const long long nToRun=(limit==0?archive.Entries():
@@ -227,9 +280,10 @@ int main(int argc,char** argv) {
     for (int side=0;side<2;++side) {
       Channel c;
       c.plus=(side==0);
-      c.k=k;
+      c.relativeK=k;
+      c.k=(c.plus?frame.uCentralIndex:frame.vCentralIndex)+k;
       c.label=c.plus?"plus_strip_0":"minus_strip_0";
-      c.name=(c.plus?"U_plus_":"V_minus_")+std::to_string(k);
+      c.name=(c.plus?"U_refindex_":"V_refindex_")+std::to_string(c.k);
       c.current=std::make_unique<NA60Stereo::TimeBinnedRamoCharge>(dt,nBins);
       channels.push_back(std::move(c));
     }
@@ -238,15 +292,16 @@ int main(int argc,char** argv) {
   for(long long j=0;j<nToRun;++j) {
     const auto b=archive.Get(j);
     try {
+      frame.CheckBirth(j,b);
       auto track=transport.Run(b);
       maxEndNs=std::max(maxEndNs,track.end.t);
       if(track.end.t>=dt*nBins) {++nLate;weightedLate+=b.weight;}
       for(auto& ch:channels) {
-        double previous=map.Phi(track.points.front(),ch);
+        double previous=map.Phi(track.points.front(),ch,frame);
         const double first=previous;
         for(std::size_t p=1;p<track.points.size();++p) {
           const bool last=p+1==track.points.size();
-          const double next=map.Phi(track.points[p],ch,last);
+          const double next=map.Phi(track.points[p],ch,frame,last);
           if(track.points[p].t>track.points[p-1].t)
             ch.current->Add(track.points[p-1].t,track.points[p].t,
                  b.weight*NA60Plane::eFc*(next-previous));
@@ -284,7 +339,7 @@ int main(int argc,char** argv) {
     const auto bins=c.current->BinChargeFc();
     double early=0.;
     for(int i=0;i<10;++i) early+=bins[i];
-    chout<<c.name<<","<<c.k<<","
+    chout<<c.name<<","<<c.k<<","<<c.relativeK<<","
          <<c.current->WindowChargeFc()<<","
          <<c.current->FullEndpointFc()<<","
          <<c.current->TailFc()<<","<<early<<"\n";
