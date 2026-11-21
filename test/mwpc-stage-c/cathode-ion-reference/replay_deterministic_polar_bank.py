@@ -231,6 +231,55 @@ def write_result(out, grid_path, input_path, ref_wave, ref_summary, baseline, gr
         for j in range(10):
             writer.writerow(((j+.5)*DT_NS, prediction[j,0], prediction[j,1],
                              direct[j,0], direct[j,1]))
+    # The full predicted trace is saved for *time-window error attribution*.
+    # Absolute and relative waveform errors serve distinct diagnostic purposes;
+    # windowed L2 may be unstable when the direct signal is almost zero.
+    direct_for_windows = load_reference(ref_wave)
+    baseline_for_windows = None if baseline is None else load_baseline(baseline, direct_for_windows)
+    with (out / "complete_waveforms.csv").open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow((
+            "time_center_ns", "polar_plus_fC_per_ns", "polar_minus_fC_per_ns",
+            "direct_plus_fC_per_ns", "direct_minus_fC_per_ns"
+        ))
+        for j in range(len(prediction)):
+            writer.writerow((
+                (j + .5) * DT_NS, prediction[j,0], prediction[j,1],
+                direct_for_windows[j,0], direct_for_windows[j,1]))
+    windows = (
+        ("first_100ns", 0, 10),
+        ("100ns_to_1us", 10, 100),
+        ("1us_to_10us", 100, 1000),
+        ("10us_to_100us", 1000, 10000),
+    )
+    with (out / "window_metrics.csv").open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=(
+            "model", "window", "window_start_ns", "window_end_ns",
+            "reference_rms_fC_per_ns", "residual_rms_fC_per_ns",
+            "combined_L2_window", "plus_charge_error_fC",
+            "minus_charge_error_fC"))
+        writer.writeheader()
+        comparisons = [("polar_grid_bilinear_uncompressed", prediction)]
+        if baseline_for_windows is not None:
+            comparisons.append(("EXISTING_IDW4", baseline_for_windows))
+        for model, calculated in comparisons:
+            for name, lo, hi in windows:
+                truth = direct_for_windows[lo:hi]
+                delta = calculated[lo:hi] - truth
+                ref_norm2 = float(np.sum(truth*truth))
+                residual_norm2 = float(np.sum(delta*delta))
+                writer.writerow({
+                    "model": model,
+                    "window": name,
+                    "window_start_ns": lo*DT_NS,
+                    "window_end_ns": hi*DT_NS,
+                    "reference_rms_fC_per_ns": float(np.sqrt(np.mean(truth*truth))),
+                    "residual_rms_fC_per_ns": float(np.sqrt(np.mean(delta*delta))),
+                    "combined_L2_window": float(np.sqrt(
+                        residual_norm2 / max(ref_norm2, 1e-50))),
+                    "plus_charge_error_fC": float(DT_NS * np.sum(delta[:,0])),
+                    "minus_charge_error_fC": float(DT_NS * np.sum(delta[:,1])),
+                })
     note = dict(
         scope="Independent original K256 muon, deterministic direct RKF grid",
         grid_path=str(grid_path.resolve()), ion_archive=str(input_path.resolve()),
