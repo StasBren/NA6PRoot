@@ -47,19 +47,29 @@ def read(path: Path, expected_tag: str) -> dict:
     return found
 
 
-def check_config(base_path: Path, fine_path: Path) -> None:
+def check_config(base_path: Path, fine_path: Path, study: str) -> None:
     with base_path.open(encoding="utf-8") as f:
         a = json.load(f)
     with fine_path.open(encoding="utf-8") as f:
         b = json.load(f)
     for k in ("geometry", "weighting", "electrostatics"):
-        need(a[k] == b[k], f"FEM map {k} differs; not a controlled mesh study")
+        need(a[k] == b[k], f"FEM map {k} differs; not a controlled comparison")
     ca, cb = dict(a["mesh"]), dict(b["mesh"])
     wa, wb = ca.pop("wire_size_mm"), cb.pop("wire_size_mm")
-    need(ca == cb, "unexpected FEM mesh settings beyond wire_size_mm")
-    need(math.isclose(wa, .012, abs_tol=1e-12) and
-         math.isclose(wb, .006, abs_tol=1e-12),
-         f"expect wire mesh refinement .012->.006 mm, got {wa}->{wb}")
+    curved_a = ca.pop("curved_wire_surfaces", False)
+    curved_b = cb.pop("curved_wire_surfaces", False)
+    need(ca == cb, "uncontrolled FEM mesh changes")
+    need(math.isclose(wa, .012, abs_tol=1e-12),
+         f"expected original 0.012mm baseline, got {wa}")
+    need(curved_a is False, "baseline must use the original straight-sided mesh")
+    if study == "curvature":
+        need(math.isclose(wb, .012, abs_tol=1e-12) and curved_b is True,
+             "curvature study requires unchanged 0.012mm wire mesh and curved-wire P2 option")
+    elif study == "wire_refine":
+        need(math.isclose(wb, .006, abs_tol=1e-12) and curved_b is False,
+             "original wire refinement requires 0.012->0.006mm with straight-sided P2")
+    else:
+        raise ValueError(f"unknown controlled FEM comparison: {study}")
     need(a["weighting"].get("stereo_sign_convention") == "plus_negative_u",
          "unexpected legacy stereo channel convention")
     need(a["geometry"]["half_wires"] == 4 and
@@ -115,6 +125,8 @@ def report(rows: list[tuple[dict, dict]], group: str, side: str, shell: str) -> 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--study", choices=("wire_refine", "curvature"), default="wire_refine",
+                        help="Only one controlled parameter may differ from original baseline")
     parser.add_argument("--baseline", type=Path, required=True)
     parser.add_argument("--refined", type=Path, required=True)
     parser.add_argument("--baseline-config", type=Path, required=True)
@@ -123,9 +135,9 @@ def main() -> None:
     a = parser.parse_args()
     need(not a.out_summary.exists(),
          f"refusing to overwrite existing summary: {a.out_summary}")
-    check_config(a.baseline_config, a.refined_config)
+    check_config(a.baseline_config, a.refined_config, a.study)
     coarse = read(a.baseline, "baseline")
-    fine = read(a.refined, "wire_refine")
+    fine = read(a.refined, "curved" if a.study == "curvature" else "wire_refine")
     need(coarse.keys() == fine.keys(),
          "different sampled coordinates; cannot compare FEM meshes")
     need(len(coarse) == 480,
@@ -153,12 +165,15 @@ def main() -> None:
         writer = csv.DictWriter(f,fieldnames=list(output[0]))
         writer.writeheader()
         writer.writerows(output)
-    print(f"Compared {len(combined)} identical 3D near-wire U/V FEM samples")
+    print(f"Study={a.study}: Compared {len(combined)} identical 3D near-wire U/V FEM samples")
     for x in output[:3]:
         print(x["group"],x["side"],
             "relative_grad_L2=",f'{x["vector_gradient_relative_L2"]:.6%}',
             "max_local=",f'{x["max_local_relative_gradient_difference"]:.6%}',
             "max_abs_potential=",f'{x["max_abs_potential_difference"]:.8g}')
+    if a.study == "curvature":
+        print("GEOMETRY SENSITIVITY: original straight P2 versus curved P2 at same nominal h.")
+        print("This is not an h-convergence estimate; a refined CURVED mesh is required separately.")
     if output[0]["vector_gradient_relative_L2"] > .02:
         print("NOT_CONVERGED under 2% internal numerical screening criterion.")
     else:
