@@ -329,3 +329,11 @@ add_executable(mwpc_compare_2100_same_muon_K256_K512
 target_link_libraries(mwpc_compare_2100_same_muon_K256_K512
   PRIVATE ROOT::Core ROOT::RIO ROOT::Tree)
 target_compile_features(mwpc_compare_2100_same_muon_K256_K512 PRIVATE cxx_std_17)
+
+# V0 archive statistics (2100 V K256): read-only ROOT/C++ analysis of archived ion births and the exact per-wire
+# census (microscopic_wire_seed.csv). Runs no avalanche, no transport, no weighting field. Never opens sealed slots.
+add_executable(mwpc_v0_archive_stats
+  ../mwpc-stage-c/cathode-ion-reference/v0/v0_archive_stats.cc)
+target_compile_definitions(mwpc_v0_archive_stats PRIVATE V0_ROOT)
+target_link_libraries(mwpc_v0_archive_stats PRIVATE ROOT::Core ROOT::RIO ROOT::Tree)
+target_compile_features(mwpc_v0_archive_stats PRIVATE cxx_std_17)
