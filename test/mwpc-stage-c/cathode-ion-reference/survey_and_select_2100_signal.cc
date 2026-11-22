@@ -274,6 +274,28 @@ int main(int argc,char**argv){
     }
   }
   Need(selected.GetEntries()==40,"corrupt selected 40 ROOT tree");
+  // Separate files discourage accidental model tuning against the sealed
+  // independent phi/omega validation population.
+  csv.flush();
+  std::ifstream selectedFile(output/"selected40.csv");
+  std::ofstream developmentFile(output/"development20.csv");
+  std::ofstream holdoutFile(output/"sealed_validation20.csv");
+  Need(selectedFile&&developmentFile&&holdoutFile,
+       "cannot freeze separated development and validation files");
+  std::string selectionLine;
+  Need(bool(std::getline(selectedFile,selectionLine)),
+       "missing selected40 header");
+  developmentFile<<selectionLine<<"\n";
+  holdoutFile<<selectionLine<<"\n";
+  int nDev=0,nHoldout=0;
+  while(std::getline(selectedFile,selectionLine)){
+    if(selectionLine.rfind("development,",0)==0){
+      developmentFile<<selectionLine<<"\n";++nDev;
+    }else if(selectionLine.rfind("sealed_validation,",0)==0){
+      holdoutFile<<selectionLine<<"\n";++nHoldout;
+    }else Need(false,"unknown selected40 role");
+  }
+  Need(nDev==20&&nHoldout==20,"development/validation freeze not 20/20");
   std::ofstream inventory(output/"archive_inventory.csv");
   Need(bool(inventory),"cannot write 997 archive inventory");
   inventory<<"index,channel,pdg,station,det_id,theta_u_deg,theta_w_deg,"
