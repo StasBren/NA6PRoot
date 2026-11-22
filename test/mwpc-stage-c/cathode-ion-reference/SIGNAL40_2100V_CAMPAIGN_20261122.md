@@ -212,3 +212,36 @@ validation. This expanded step is NOT authorized/submitted by the tiny
   test subset cannot be used to optimize strip pitch, weighting geometry,
   ion mobility, interpolation kernels, electronics, and then claimed as
   independent validation.
+
+
+## Independent K512-vs-K256 reproducibility gate
+
+After the two new PBS K512 pilots are SHA-sealed, copy ONLY those two
+\`ion_births.root\` files to the original 997-archive WSL machine (e.g.
+to a new \`$HOME/na6p/k512_pilot_download/\`, keeping filenames under
+separate \`muon_NNNN\` directories). Build the separate ROOT-only comparator:
+
+\`\`\`bash
+REPO="$HOME/NA6PRoot-signal40-2100"
+cmake --build "$REPO/test/mwpc-avalanche/build-signal40-root" \
+  --target mwpc_compare_2100_same_muon_K256_K512 -j2
+COMPARE="$REPO/test/mwpc-avalanche/build-signal40-root/mwpc_compare_2100_same_muon_K256_K512"
+
+# Replace NNNN with the real two selected development indices.
+OLD="$HOME/na6p/cathode-overnight-2100/test_runs/mwpc_stage_c/overnight_2100_weighted_k256_v1"
+NEW="$HOME/na6p/k512_pilot_download"
+"$COMPARE" "$OLD/muon_NNNN/ion_births.root" \
+  "$NEW/muon_NNNN/ion_births.root"
+\`\`\`
+
+This independently requires exact same original crossing ID, source
+channel, physical station/det_id, Geant4/Heed seed, all accepted
+Heed cluster/primary indices, primary start position/time, every
+microscopic Garfield seed, per-primary true positive-ion birth count,
+per-primary electron endpoint count and collected-anode electron count.
+Only the K256-vs-K512 *retained* ion coordinates/weights may differ.
+The second run must NOT be called validated until these tests pass.
+
+If a code revision changes the microscopic RNG, the paired comparison
+must FAIL and a new physics-model study is required: do not silently
+merge values into one conditionally sampled cathode dataset.
