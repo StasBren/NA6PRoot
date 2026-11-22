@@ -3,6 +3,7 @@
 // ion callbacks and collected-electron endpoints MUST NOT change.
 #include <TFile.h>
 #include <TTree.h>
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <memory>
