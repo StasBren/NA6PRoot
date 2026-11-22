@@ -321,3 +321,11 @@ add_executable(mwpc_survey_and_select_2100_signal
 target_link_libraries(mwpc_survey_and_select_2100_signal
   PRIVATE ROOT::Core ROOT::RIO ROOT::Tree ROOT::Hist)
 target_compile_features(mwpc_survey_and_select_2100_signal PRIVATE cxx_std_17)
+
+# Exact same original Geant4/Heed/microscopic avalanche fingerprints across
+# already-frozen K256 and new independently sampled K512 detail archives.
+add_executable(mwpc_compare_2100_same_muon_K256_K512
+  ../mwpc-stage-c/cathode-ion-reference/compare_2100_same_muon_K256_K512.cc)
+target_link_libraries(mwpc_compare_2100_same_muon_K256_K512
+  PRIVATE ROOT::Core ROOT::RIO ROOT::Tree)
+target_compile_features(mwpc_compare_2100_same_muon_K256_K512 PRIVATE cxx_std_17)
