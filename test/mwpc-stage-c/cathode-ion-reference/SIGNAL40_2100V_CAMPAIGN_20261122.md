@@ -37,7 +37,7 @@ muon sums. It produces:
 
 1. \`archive_inventory.csv\`: original slot/channel/station/detector,
    signed theta_u and theta_w, impact phase in 3 mm lattice,
-   momentum, path, Heed primaries, ion births, actual collected electrons,
+   momentum, path, muon charge sign (PDG ±13), Heed primaries, ion births, actual collected electrons,
    positive-wire count, second-wire collected fraction, mean gain.
 2. \`channel_station_coverage.csv\`: all 18 channel×station cells:
    accepted archive counts, impact phase, angle sign, multiwire (>5% second
@@ -48,7 +48,7 @@ muon sums. It produces:
    2100 V as weighted K256. Greedy deterministic purpose-specific coverage
    rewards each station, det_id, anode-centered/transition/near-boundary
    phase, both theta signs, large angles, >5% two-wire sharing, high-gain
-   decile, extremes of |w| and long gas path.
+   decile, muon charge sign, channel-wise high momentum, extremes of |w| and long gas path.
 5. \`excluded_slots.txt\`: any unsealed/missing candidates.
 6. \`previously_inspected_not_sealed.txt\`: 0301, 0408, 0446, 0435, 0511,
    0101 are *not* eligible for the sealed validation. Event 0301 was heavily
@@ -90,7 +90,8 @@ bash "$RUNNER" survey
 
 OUT="$PWD/test_runs/mwpc_stage_c/phase_space_2100_signal40_v1"
 head -n 8 "$OUT/channel_station_coverage.csv"
-head -n 8 "$OUT/selected40.csv"
+head -n 8 "$OUT/development20.csv"
+# Do not inspect $OUT/sealed_validation20.csv until model freeze.
 cat "$OUT/selection_scope.txt"
 cat "$OUT/FROZEN_SOURCE_SHA256.txt"
 \`\`\`
