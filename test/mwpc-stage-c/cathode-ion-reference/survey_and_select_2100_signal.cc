@@ -54,9 +54,9 @@ std::string Channel(std::string s){
   throw std::runtime_error("unknown Geant4 source channel: "+s);
 }
 struct Event{
-  int index=-1,st=-1,det=-1,heedSeed=0,nPrim=0;
+  int index=-1,st=-1,det=-1,pdg=0,heedSeed=0,nPrim=0;
   int nWires=0,phaseBin=0,signU=0,signW=0;
-  bool share5=false,tail=false,wExtreme=false;
+  bool share5=false,tail=false,wExtreme=false,pExtreme=false;
   std::string channel,id;
   double u=0,w=0,thetaU=0,thetaW=0,phase=0,path=0,p=0;
   double gain=0,secondFrac=0,ions=0,charge=0;
@@ -73,6 +73,7 @@ Event ReadOne(const fs::path&dir,int idx){
   m->SetBranchAddress("crossing_id",&identity);
   m->SetBranchAddress("station",&e.st);
   m->SetBranchAddress("det_id",&e.det);
+  m->SetBranchAddress("pdg",&e.pdg);
   m->SetBranchAddress("heed_seed",&e.heedSeed);
   m->SetBranchAddress("u_in_mm",&e.u);
   m->SetBranchAddress("w_in_mm",&e.w);
@@ -81,7 +82,7 @@ Event ReadOne(const fs::path&dir,int idx){
   m->SetBranchAddress("path_length_mm",&e.path);
   m->SetBranchAddress("momentum_GeV",&e.p);
   m->GetEntry(0);
-  Need(source&&identity&&!identity->empty()&&e.st>=0&&e.st<6,
+  Need(source&&identity&&!identity->empty()&&e.st>=0&&e.st<6&&std::abs(e.pdg)==13,
        "bad source/station/identity for slot "+std::to_string(idx));
   e.channel=Channel(*source);e.id=*identity;
   const int nAnodes=int(std::floor((e.st==0?307.2:512.)/3.+.5));
@@ -158,6 +159,8 @@ std::vector<const Event*> Choose(const std::vector<Event>&pool,
       s+=novelty("signW"+std::to_string(e->signW),10.);
       s+=novelty("tail"+std::to_string(e->tail),12.);
       s+=novelty("wExtreme"+std::to_string(e->wExtreme),7.);
+      s+=novelty("pExtreme"+std::to_string(e->pExtreme),6.);
+      s+=novelty("muonCharge"+std::to_string(e->pdg>0),4.);
       s+=novelty("thetaHigh"+std::to_string(std::abs(e->thetaU)>15),6.);
       s+=novelty("pathHigh"+std::to_string(e->path>6.),5.);
       s+=novelty("zero"+std::to_string(e->charge==0),4.);
@@ -175,6 +178,8 @@ std::vector<const Event*> Choose(const std::vector<Event>&pool,
     inc("signW"+std::to_string(best->signW));
     inc("tail"+std::to_string(best->tail));
     inc("wExtreme"+std::to_string(best->wExtreme));
+    inc("pExtreme"+std::to_string(best->pExtreme));
+    inc("muonCharge"+std::to_string(best->pdg>0));
     inc("thetaHigh"+std::to_string(std::abs(best->thetaU)>15));
     inc("pathHigh"+std::to_string(best->path>6.));
     inc("zero"+std::to_string(best->charge==0));
@@ -203,17 +208,21 @@ int main(int argc,char**argv){
   }
   Need(pool.size()>=900,"fewer than 900 sealed-file candidates; audit source archive");
   std::map<std::string,int> counts;
-  std::map<std::string,std::vector<double>> gains,absW;
+  std::map<std::string,std::vector<double>> gains,absW,momenta;
   for(const auto& e:pool){
     counts[e.channel]++;gains[e.channel].push_back(e.gain);
     absW[e.channel].push_back(std::abs(e.w));
+    momenta[e.channel].push_back(e.p);
   }
   for(auto& [ch,v]:gains)std::sort(v.begin(),v.end());
   for(auto& [ch,v]:absW)std::sort(v.begin(),v.end());
+  for(auto& [ch,v]:momenta)std::sort(v.begin(),v.end());
   for(auto& e:pool){
     const auto&g=gains.at(e.channel);const auto&w=absW.at(e.channel);
+    const auto&m=momenta.at(e.channel);
     e.tail=e.gain>=g[std::min(g.size()-1,size_t(.9*g.size()))];
     e.wExtreme=std::abs(e.w)>=w[std::min(w.size()-1,size_t(.8*w.size()))];
+    e.pExtreme=e.p>=m[std::min(m.size()-1,size_t(.8*m.size()))];
   }
   Need(counts["jpsi"]>=326&&counts["phi"]>=325&&counts["omega"]>=325,
        "too many missing source-channel files");
@@ -227,11 +236,12 @@ int main(int argc,char**argv){
   Need(unique.size()==40,"not exactly 40 distinct reference muons");
   std::ofstream csv(output/"selected40.csv");
   Need(bool(csv),"cannot write selection CSV");
-  csv<<"role,index,channel,station,det_id,theta_u_deg,theta_w_deg,"
+  csv<<"role,index,channel,pdg,station,det_id,theta_u_deg,theta_w_deg,"
        "u_in_mm,w_in_mm,anode_impact_phase_mm,phase_class,"
        "path_length_mm,momentum_GeV,heed_primaries,ion_births_exact,"
        "collected_electrons,mean_gain_per_primary,positive_collecting_wires,"
        "second_wire_fraction,multi_wire_gt5pct,gain_top10pct,w_extreme_proxy,"
+       "momentum_top20pct,"
        "crossing_id,selection_design\n";
   std::unique_ptr<TFile> root(TFile::Open((output/"survey.root").string().c_str(),"RECREATE"));
   Need(root&&!root->IsZombie(),"cannot write survey.root");
@@ -254,19 +264,19 @@ int main(int argc,char**argv){
       second=e->secondFrac;shared=e->share5;phaseClass=e->phaseBin;
       channel=e->channel;role=label;
       selected.Fill();
-      csv<<std::setprecision(15)<<role<<","<<index<<","<<channel<<","<<station<<","<<det
+      csv<<std::setprecision(15)<<role<<","<<index<<","<<channel<<","<<e->pdg<<","<<station<<","<<det
          <<","<<thetaU<<","<<thetaW<<","<<e->u<<","<<e->w<<","<<phase
          <<","<<phaseClass<<","<<e->path<<","<<e->p<<","<<e->nPrim<<","
          <<e->ions<<","<<e->charge<<","<<gain<<","<<e->nWires<<","
          <<second<<","<<int(e->share5)<<","<<int(e->tail)<<","
-         <<int(e->wExtreme)<<","<<e->id
+         <<int(e->wExtreme)<<","<<int(e->pExtreme)<<","<<e->id
          <<",PURPOSIVE_MODEL_DIAGNOSTICS_NOT_POPULATION_WEIGHTED\n";
     }
   }
   Need(selected.GetEntries()==40,"corrupt selected 40 ROOT tree");
   std::ofstream inventory(output/"archive_inventory.csv");
   Need(bool(inventory),"cannot write 997 archive inventory");
-  inventory<<"index,channel,station,det_id,theta_u_deg,theta_w_deg,"
+  inventory<<"index,channel,pdg,station,det_id,theta_u_deg,theta_w_deg,"
             "anode_phase_mm,path_mm,momentum_GeV,heed_primaries,"
             "ion_births_exact,collected_e,mean_gain,n_positive_wires,"
             "second_wire_fraction,multiwire_gt5pct\n";
@@ -292,7 +302,7 @@ int main(int argc,char**argv){
   hPhase.SetDirectory(nullptr);hSecond.SetDirectory(nullptr);
   hTheta.SetDirectory(nullptr);hGain.SetDirectory(nullptr);
   for(const auto&e:pool){
-    inventory<<std::setprecision(15)<<e.index<<","<<e.channel<<","<<e.st<<","<<e.det
+    inventory<<std::setprecision(15)<<e.index<<","<<e.channel<<","<<e.pdg<<","<<e.st<<","<<e.det
              <<","<<e.thetaU<<","<<e.thetaW<<","<<e.phase<<","<<e.path
              <<","<<e.p<<","<<e.nPrim<<","<<e.ions<<","<<e.charge<<","
              <<e.gain<<","<<e.nWires<<","<<e.secondFrac<<","<<int(e.share5)<<"\n";
