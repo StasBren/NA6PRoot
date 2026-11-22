@@ -23,6 +23,8 @@ SEALED="$SELECTION/sealed_validation20.csv"
 BUILD="${MWPC_V0_BUILD:-$REPO/test/mwpc-avalanche/build-v0-root}"
 BIN="$BUILD/mwpc_v0_archive_stats"
 OUTROOT="${MWPC_V0_OUT:-$REPO/test_runs/mwpc_stage_c/v0_archive_stats_2100}"
+# 1800 V LUT500 (p3, no field wire): used ONLY for the side-by-side voltage-consistency columns, never merged.
+LUT500_DIR="${MWPC_LUT500_DIR:-$HOME/na6p/src/NA6PRoot-mwpc/test_runs/mwpc_stage_c/pi_pitch_fieldwire_500_p3_v1/pilot/p3p0_anode_only}"
 fail(){ echo "V0 RUNNER FAILED: $*" >&2; exit 2; }
 
 column_index(){ # prints the 'index' column of a selection CSV, zero padded; never prints other columns
@@ -77,7 +79,13 @@ case "${1:-}" in
     echo "unverified_or_incomplete_skipped=$n_unverified" > "$OUT/selection_note.txt"
     [[ -s "$LIST" ]] || fail "no verified archives"
     provenance "$OUT"
-    "$BIN" --list "$LIST" --exclude-index-csv "$SEALED" --out-dir "$OUT" | tee "$OUT/console.txt"
+    LUTARG=()
+    if [[ -s "$LUT500_DIR/garfield_electrons.csv" && -s "$LUT500_DIR/frozen_config.json" ]]; then
+      { echo "lut500_csv=$LUT500_DIR/garfield_electrons.csv"; echo "lut500_csv_sha256=$(sha256sum "$LUT500_DIR/garfield_electrons.csv" | cut -d' ' -f1)"
+        echo "lut500_frozen_config:"; cat "$LUT500_DIR/frozen_config.json"; } >> "$OUT/provenance.txt"
+      LUTARG=(--lut500 "$LUT500_DIR/garfield_electrons.csv")
+    else echo "lut500=absent (set MWPC_LUT500_DIR); no 1800 V comparison" >> "$OUT/provenance.txt"; fi
+    "$BIN" --list "$LIST" --exclude-index-csv "$SEALED" "${LUTARG[@]}" --out-dir "$OUT" | tee "$OUT/console.txt"
     echo "OUTPUT $OUT  (return v0_summary.txt, v0_manifest.txt, provenance.txt, selection_note.txt)";;
   *) echo "usage: $0 prepare|selftest|schema|pilot|population"; exit 1;;
 esac

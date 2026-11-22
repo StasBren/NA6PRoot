@@ -5,6 +5,7 @@
 //   FILES.txt: one muon_NNNN/ion_births.root path per line; microscopic_wire_seed.csv is read from the same directory.
 //   Holdout guard: --exclude-index-csv (column "index") and/or --exclude-slots 0101,0435 are REQUIRED, unless
 //   --no-holdout-exclusion is given explicitly (then every output is labelled NOT-FOR-CALIBRATION).
+//   optional: --lut500 garfield_electrons.csv[,more.csv]   1800 V LUT500 raw drift trials, binned like the 2100 V map, never merged
 //   v0_archive_stats --dump-schema muon_NNNN/ion_births.root   (prints every branch type and checks the required ones)
 // Synthetic estimator validation (no ROOT needed; NOT NA60+ data):
 //   v0_archive_stats --synthetic N_MUONS [--rho-side B] [--seed S] [--out-dir DIR]
@@ -46,11 +47,29 @@ static bool readSeedCsv(const std::string& path, Muon& m, std::string& why) {
     if (!m.id.empty() && r[H["crossing_id"]] != m.id) { why = "crossing_id differs from ROOT muons tree"; return false; }
     SeedRow s; s.prim = std::stoi(r[H["primary_index"]]); s.gwire = std::stoi(r[H["wire_index_global"]]); s.collected = std::stoll(r[H["collected_e"]]); s.births = std::stoll(r[H["ion_births"]]);
     s.A = numOrNaN(r[H["A_ion_hemi"]]); s.meanT = numOrNaN(r[H["mean_t_birth_ns"]]); s.sigT = numOrNaN(r[H["sigma_t_birth_ns"]]); s.sigWmm = numOrNaN(r[H["sigma_w_birth_mm"]]); s.meanWmm = numOrNaN(r[H["mean_w_birth_global_mm"]]);
+    if (H.count("mean_t_collected_ns")) { s.meanTcol = numOrNaN(r[H["mean_t_collected_ns"]]); s.sigTcol = numOrNaN(r[H["sigma_t_collected_ns"]]); }
     m.seed.push_back(s); }
   long long a = 0, b = 0; for (auto& s : m.seed) a += s.births; for (auto& p : m.prims) b += p.Nexact;
   if (a != b) { why = "sum of exact per-wire births != sum of primaries.ion_births_exact"; m.seed.clear(); return false; }
   long long ca = 0, cb = 0; for (auto& s : m.seed) ca += s.collected; for (auto& p : m.prims) cb += p.collected;
   if (ca != cb) { why = "sum of per-wire collected_e != sum of primaries.collected_electrons"; m.seed.clear(); return false; }
+  return true;
+}
+
+// ---------------- microscopic_seed.csv (per Heed primary, written by the same frozen source) ----------------
+// columns used: primary_index, ion_births, collected_e, attached, other. attached/other are avalanche ELECTRON losses.
+static bool readPrimaryCsv(const std::string& path, Muon& m, std::string& why) {
+  std::ifstream f(path); if (!f) { why = "absent"; return false; }
+  std::string line; if (!std::getline(f, line)) { why = "empty"; return false; }
+  auto h = splitCsv(line); std::map<std::string, size_t> H; for (size_t i = 0; i < h.size(); ++i) H[h[i]] = i;
+  for (const char* c : {"crossing_id", "primary_index", "ion_births", "collected_e", "attached", "other"}) if (!H.count(c)) { why = std::string("missing column ") + c; return false; }
+  size_t n = 0;
+  while (std::getline(f, line)) { if (line.empty()) continue; auto r = splitCsv(line); if (r.size() < h.size()) { why = "short row"; return false; }
+    if (r[H["crossing_id"]] != m.id) { why = "crossing_id differs"; return false; }
+    const int ip = std::stoi(r[H["primary_index"]]); if (ip < 0 || ip >= (int)m.prims.size()) { why = "primary_index out of range"; return false; }
+    Prim& p = m.prims[ip]; if (std::stoll(r[H["ion_births"]]) != p.Nexact || std::stoll(r[H["collected_e"]]) != p.collected) { why = "ion_births/collected_e differ from ROOT primaries"; return false; }
+    p.attached = std::stoll(r[H["attached"]]); p.otherLost = std::stoll(r[H["other"]]); ++n; }
+  if (n != m.prims.size()) { why = "row count differs from ROOT primaries"; return false; }
   return true;
 }
 
@@ -151,10 +170,11 @@ static std::vector<Muon> synthesize(int nMu, double sideBias, unsigned long long
       // exact census per wire (what microscopic_wire_seed.csv holds)
       std::map<int, std::array<double, 7>> ex;   // births, up, down, St, St2, Sw, Sw2
       for (auto& c : cloud) { auto& e = ex[c.wire]; e[0] += 1; if (c.v > 0) e[1] += 1; else if (c.v < 0) e[2] += 1; e[3] += c.t; e[4] += c.t * c.t; e[5] += c.w; e[6] += c.w * c.w; }
+      p.attached = (long long)(N * 0.02 * U(g)); p.otherLost = 0;
       long long colLeft = p.collected;
       for (auto& kv : ex) { auto& e = kv.second; SeedRow s; s.prim = ip; s.gwire = m.base + kv.first; s.births = (long long)e[0];
         s.collected = (kv.first == 0) ? colLeft : 0; s.A = (e[1] + e[2]) > 0 ? (e[1] - e[2]) / (e[1] + e[2]) : kNaN;
-        s.meanT = e[3] / e[0]; s.sigT = std::sqrt(std::max(0., e[4] / e[0] - s.meanT * s.meanT)); const double mw = e[5] / e[0]; s.meanWmm = 10 * mw; s.sigWmm = 10 * std::sqrt(std::max(0., e[6] / e[0] - mw * mw)); m.seed.push_back(s); }
+        s.meanT = e[3] / e[0]; s.sigT = std::sqrt(std::max(0., e[4] / e[0] - s.meanT * s.meanT)); if (s.collected > 0) { s.meanTcol = p.t + D - 0.4; s.sigTcol = 0.6; } const double mw = e[5] / e[0]; s.meanWmm = 10 * mw; s.sigWmm = 10 * std::sqrt(std::max(0., e[6] / e[0] - mw * mw)); m.seed.push_back(s); }
       if (N == 0 && p.collected == 0) { /* no seed row, as in the Garfield writer */ }
       // K-reservoir per primary (algorithm R), independent RNG
       std::vector<size_t> res; for (size_t k = 0; k < cloud.size(); ++k) { if ((int)res.size() < K) res.push_back(k); else { std::uniform_int_distribution<size_t> d(0, k); size_t j = d(gRes); if ((int)j < K) res[j] = k; } }
@@ -185,7 +205,8 @@ int main(int argc, char** argv) {
     if (excl.empty()) { if (!A.count("no-holdout-exclusion")) throw std::runtime_error("refusing to run: give --exclude-index-csv sealed_validation20.csv (or --exclude-slots), or explicitly --no-holdout-exclusion"); calibrationOK = false; }
     std::ifstream fl(A.at("list")); if (!fl) throw std::runtime_error("cannot read --list"); std::string line; const size_t mx = A.count("max-muons") ? std::stoul(A["max-muons"]) : (size_t)1 << 30;
     while (std::getline(fl, line) && mus.size() < mx) { if (line.empty()) continue; const int s = slotOf(line); if (excl.count(s)) { skipped.push_back(line); continue; }
-      Muon m = readMuon(line); std::string why; m.haveSeed = readSeedCsv(dirOf(line) + "/microscopic_wire_seed.csv", m, why); if (!m.haveSeed) seedProblems.push_back(line + " : " + why); mus.push_back(std::move(m)); }
+      Muon m = readMuon(line); std::string why; m.haveSeed = readSeedCsv(dirOf(line) + "/microscopic_wire_seed.csv", m, why); if (!m.haveSeed) seedProblems.push_back(line + " : wire census: " + why);
+      std::string why2; if (!readPrimaryCsv(dirOf(line) + "/microscopic_seed.csv", m, why2)) seedProblems.push_back(line + " : primary census: " + why2); mus.push_back(std::move(m)); }
 #else
     std::cerr << "built without ROOT: use --synthetic, or rebuild with -DV0_ROOT\n"; return 2;
 #endif
@@ -325,6 +346,90 @@ int main(int argc, char** argv) {
     std::vector<double> aP, aM; std::map<int, std::pair<double, double>> am; for (auto& r : P) if (r.Nhat > 0 && !std::isnan(r.x[0])) { aP.push_back(r.x[0]); am[r.muon].first += r.Nhat * r.x[0]; am[r.muon].second += r.Nhat; }
     for (auto& kv : am) aM.push_back(kv.second.first / kv.second.second);
     s << "  RMS of hemisphere A: per primary " << rms(aP) << "  per muon (yield-weighted) " << rms(aM) << "   (1800 V slide: 0.87 / 0.38; different HV and campaign, not comparable as calibration)\n"; out(s); }
+
+  // ===== [8] 2100 V transport and timing map by primary start position (voltage-consistency audit) =====
+  // Cells: |du| (start offset from nearest anode) in 6 bins of 0.25 mm x v_start in 12 bins of 0.5 mm. 2100 V quantities
+  // come only from the K256 archives and their exact census; the optional 1800 V LUT500 is binned identically and
+  // reported in separate columns. Observables differ: 2100 V "onset" = mean endpoint time of the avalanche electrons
+  // collected (AvalancheElectron), 1800 V "drift" = endpoint time of one DriftElectron. They are never merged.
+  {
+    const int NU = 6, NV = 12; auto cellOf = [&](double duMm, double vMm) { const int a = std::min(NU - 1, (int)(std::fabs(duMm) / 0.25)); const int b = std::max(0, std::min(NV - 1, (int)std::floor((vMm + 3.) / 0.5))); return a * NV + b; };
+    struct C2 { double n = 0, zc = 0, zi = 0, inc = 0, multi = 0, same = 0, nOn = 0, on = 0, on2 = 0, nIo = 0, io = 0, io2 = 0, nOff = 0, off = 0, off2 = 0, nSig = 0, sig = 0, nDw = 0, dw = 0, dw2 = 0, nAtt = 0, att = 0, nDir = 0, sn = 0, cs = 0; };
+    struct C1 { double n = 0, nc = 0, nT = 0, t = 0, t2 = 0, nDw = 0, dw = 0, dw2 = 0, same = 0, sn = 0, cs = 0; };
+    std::vector<C2> c2(NU * NV); std::vector<C1> c1(NU * NV); bool haveLut = false; std::string lutNote;
+    struct PT { double on, io, sig, dw; int cell, thBin, nBin, mu; }; std::vector<PT> pts;
+    std::map<std::pair<int, int>, std::vector<const Frag*>> fr; for (auto& g : F) fr[{g.muon, g.prim}].push_back(&g);
+    std::vector<double> thv; for (auto& m : mus) thv.push_back(std::fabs(m.thetaU)); const auto thE = quantileEdges(thv, 3);
+    std::vector<double> nv; for (auto& r : P) if (r.Nexact > 0) nv.push_back((double)r.Nexact); const auto nE = quantileEdges(nv, 5);
+    for (auto& r : P) {
+      const Muon& m = mus[r.muon]; const Prim& p = m.prims[r.prim]; const int cell = cellOf(r.startDuMm, r.startVmm); C2& c = c2[cell]; c.n += 1;
+      c.zc += p.collected == 0; c.zi += p.Nexact == 0; c.inc += (p.Nexact > 0 && p.collected == 0);
+      if (p.attached >= 0) { const double tot = double(p.attached + p.otherLost + p.collected); if (tot > 0) { c.nAtt += 1; c.att += p.attached / tot; } }
+      if (!m.haveSeed) continue;
+      double B = 0, Bt = 0, Bt2 = 0, Bw = 0, Cc = 0, Ct = 0, best = 0, second = 0; int bestW = -999;
+      for (auto* g : fr[{r.muon, r.prim}]) { if (g->exBirths > 0 && !std::isnan(g->exTbar) && !std::isnan(g->exSigt)) { B += g->exBirths; Bt += g->exBirths * g->exTbar; Bt2 += g->exBirths * (g->exSigt * g->exSigt + g->exTbar * g->exTbar); if (!std::isnan(g->exMeanWmm)) Bw += g->exBirths * g->exMeanWmm; }
+        if (g->exCollected > 0) { Cc += g->exCollected; if (!std::isnan(g->exTcol)) Ct += g->exCollected * g->exTcol; if (g->exCollected > best) { second = best; best = g->exCollected; bestW = g->gwire; } else if (g->exCollected > second) second = g->exCollected; } }
+      const int startWire = m.base + (int)std::llround(p.u / m.pitch);
+      if (Cc > 0) { const double on = Ct / Cc; c.nOn += 1; c.on += on; c.on2 += on * on; c.same += bestW == startWire; c.multi += second > 0.05 * Cc; }
+      double io = kNaN, sig = kNaN, dw = kNaN;
+      if (B > 0) { io = Bt / B; sig = std::sqrt(std::max(0., Bt2 / B - io * io)); dw = Bw / B - (m.wInMm + 10. * p.w); c.nIo += 1; c.io += io; c.io2 += io * io; c.nSig += 1; c.sig += sig; c.nDw += 1; c.dw += dw; c.dw2 += dw * dw;
+        if (Cc > 0) { const double off = io - Ct / Cc; c.nOff += 1; c.off += off; c.off2 += off * off; } }
+      if (!std::isnan(r.x[1]) && !std::isnan(r.x[2])) { c.nDir += 1; c.sn += r.x[1]; c.cs += r.x[2]; }
+      pts.push_back({Cc > 0 ? Ct / Cc : kNaN, io, sig, dw, cell, binOf(thE, std::fabs(m.thetaU)), p.Nexact > 0 ? binOf(nE, (double)p.Nexact) : -1, r.muon});
+    }
+    if (A.count("lut500")) {   // 1800 V LUT500 raw garfield_electrons.csv (DriftElectron, attachment on). Never merged with 2100 V numbers.
+      for (auto& path : splitCsv(A["lut500"])) { std::ifstream f(path); if (!f) throw std::runtime_error("cannot read LUT500 file " + path);
+        std::string line; std::getline(f, line); auto h = splitCsv(line); std::map<std::string, size_t> H; for (size_t i = 0; i < h.size(); ++i) H[h[i]] = i;
+        for (const char* col : {"u_start_mm", "v_start_mm", "w_start_mm", "collected", "wire_index", "w_end_mm", "drift_time_ns", "phi_hit_deg"}) if (!H.count(col)) throw std::runtime_error(std::string("LUT500 file lacks column ") + col);
+        long long rows = 0;
+        while (std::getline(f, line)) { if (line.empty()) continue; auto r = splitCsv(line); if (r.size() < h.size()) continue; ++rows;
+          const double u = std::stod(r[H["u_start_mm"]]), v = std::stod(r[H["v_start_mm"]]); const double du = u - 3. * std::round(u / 3.); C1& c = c1[cellOf(du, v)]; c.n += 1;
+          const int col = (int)numOrNaN(r[H["collected"]]); if (col != 1) continue; c.nc += 1; const double t = numOrNaN(r[H["drift_time_ns"]]); if (!std::isnan(t)) { c.nT += 1; c.t += t; c.t2 += t * t; }
+          const double dw = numOrNaN(r[H["w_end_mm"]]) - numOrNaN(r[H["w_start_mm"]]); if (!std::isnan(dw)) { c.nDw += 1; c.dw += dw; c.dw2 += dw * dw; }
+          c.same += (int)numOrNaN(r[H["wire_index"]]) == (int)std::llround(u / 3.); const double ph = numOrNaN(r[H["phi_hit_deg"]]) * kPi / 180.; if (!std::isnan(ph)) { c.sn += std::sin(ph); c.cs += std::cos(ph); } }
+        lutNote += path + " rows=" + std::to_string(rows) + "; "; }
+      haveLut = true; }
+    auto mr = [](double s, double s2, double n, double& m, double& r) { m = n > 0 ? s / n : kNaN; r = n > 1 ? std::sqrt(std::max(0., s2 / n - m * m)) : kNaN; };
+    std::ostringstream s; s << std::setprecision(4);
+    s << "\n[8] 2100 V transport/timing by primary START position (voltage-consistency audit). Delays relative to t_primary [ns].\n";
+    s << "    onset = mean endpoint time of collected avalanche electrons (exact census); ion = mean ion-birth time; sigma = within-avalanche ion-birth RMS; dw = mean ion w minus start w [mm]\n";
+    { C2 t; for (auto& c : c2) { t.n += c.n; t.zc += c.zc; t.zi += c.zi; t.inc += c.inc; t.multi += c.multi; t.same += c.same; t.nOn += c.nOn; t.on += c.on; t.on2 += c.on2; t.nIo += c.nIo; t.io += c.io; t.io2 += c.io2; t.nOff += c.nOff; t.off += c.off; t.off2 += c.off2; t.nSig += c.nSig; t.sig += c.sig; t.nDw += c.nDw; t.dw += c.dw; t.dw2 += c.dw2; t.nAtt += c.nAtt; t.att += c.att; }
+      double om, orr, im, ir, fm, fr2, dm, dr; mr(t.on, t.on2, t.nOn, om, orr); mr(t.io, t.io2, t.nIo, im, ir); mr(t.off, t.off2, t.nOff, fm, fr2); mr(t.dw, t.dw2, t.nDw, dm, dr);
+      std::vector<double> onv, sgv; for (auto& q : pts) { if (!std::isnan(q.on)) onv.push_back(q.on); if (!std::isnan(q.sig)) sgv.push_back(q.sig); }
+      s << "  all primaries " << t.n << ": P(collected=0) " << t.zc / t.n << "  P(ion=0) " << t.zi / t.n << "  P(ion>0 & collected=0) " << t.inc / t.n
+        << "  mean attached share of avalanche electrons " << (t.nAtt > 0 ? t.att / t.nAtt : kNaN) << "\n";
+      s << "  onset delay: mean " << om << "  RMS " << orr << "  p10/p50/p90 " << quantile(onv, .1) << "/" << quantile(onv, .5) << "/" << quantile(onv, .9)
+        << "   ion-birth delay: mean " << im << " RMS " << ir << "   ion minus onset: mean " << fm << " RMS " << fr2 << "\n";
+      s << "  within-avalanche sigma_t: p10/p50/p90 " << quantile(sgv, .1) << "/" << quantile(sgv, .5) << "/" << quantile(sgv, .9) << "   dw: mean " << dm << " RMS " << dr
+        << "   main collecting wire = nearest-to-start wire: " << (t.nOn > 0 ? t.same / t.nOn : kNaN) << "   >5% on a second wire: " << (t.nOn > 0 ? t.multi / t.nOn : kNaN) << "\n"; }
+    auto condTable = [&](const char* name, int nb, auto key) { s << "  onset/ion/sigma/dw by " << name << " (n, onset mean RMS, ion mean, sigma median, dw RMS)\n";
+      for (int b = 0; b < nb; ++b) { std::vector<double> on, io, sg, dw; for (auto& q : pts) { if (key(q) != b) continue; if (!std::isnan(q.on)) on.push_back(q.on); if (!std::isnan(q.io)) io.push_back(q.io); if (!std::isnan(q.sig)) sg.push_back(q.sig); if (!std::isnan(q.dw)) dw.push_back(q.dw); }
+        if (on.empty() && io.empty()) continue; double m1 = mean(on), r1 = 0; for (double x : on) r1 += (x - m1) * (x - m1); r1 = on.size() > 1 ? std::sqrt(r1 / on.size()) : kNaN;
+        double md = mean(dw), rd = 0; for (double x : dw) rd += (x - md) * (x - md); rd = dw.size() > 1 ? std::sqrt(rd / dw.size()) : kNaN;
+        s << "    " << std::setw(2) << b << ": " << std::setw(6) << on.size() << "  " << m1 << " " << r1 << "  " << mean(io) << "  " << quantile(sg, .5) << "  " << rd << "\n"; } };
+    condTable("|theta_u| tercile", 3, [](const PT& q) { return q.thBin; });
+    condTable("ion-yield quintile", 5, [](const PT& q) { return q.nBin; });
+    s << "  onset delay mean [ns] by start cell: rows v_start (-3..3 mm, 0.5 mm), columns |du| (0..1.5 mm, 0.25 mm)" << (haveLut ? "; second block = 1800 V LUT500 drift time, third = 2100 minus 1800" : "") << "\n";
+    for (int blk = 0; blk < (haveLut ? 3 : 1); ++blk) { s << (blk == 0 ? "   2100 V onset\n" : blk == 1 ? "   1800 V LUT500 single-electron drift time\n" : "   difference (2100 onset - 1800 drift); different observables, see header\n");
+      for (int b = 0; b < NV; ++b) { s << "    v " << std::setw(5) << -3. + 0.5 * b << ":"; for (int a = 0; a < NU; ++a) { const C2& x = c2[a * NV + b]; const C1& y = c1[a * NV + b]; const double m2 = x.nOn > 0 ? x.on / x.nOn : kNaN, m1 = y.nT > 0 ? y.t / y.nT : kNaN;
+          s << std::setw(9) << (blk == 0 ? m2 : blk == 1 ? m1 : m2 - m1); } s << "\n"; } }
+    if (haveLut) { double w = 0, d18 = 0, d21 = 0, p18 = 0, p21 = 0, dw18 = 0, dw21 = 0, s18 = 0, s21 = 0;
+      for (int k = 0; k < NU * NV; ++k) { const C2& x = c2[k]; const C1& y = c1[k]; if (x.nOn < 1 || y.nT < 2) continue; double m, r; w += x.nOn; d21 += x.on; mr(y.t, y.t2, y.nT, m, r); d18 += x.nOn * m;
+        p21 += x.zc / x.n * x.nOn; p18 += (1. - y.nc / y.n) * x.nOn; mr(x.dw, x.dw2, x.nDw, m, r); if (std::isfinite(r)) dw21 += x.nOn * r * r; mr(y.dw, y.dw2, y.nDw, m, r); if (std::isfinite(r)) dw18 += x.nOn * r * r;
+        s21 += x.same; s18 += y.nc > 0 ? x.nOn * y.same / y.nc : 0; }
+      s << "  occupancy-weighted (2100 V start positions) comparison over cells present in both:\n    mean delay 2100 onset " << d21 / w << " vs 1800 LUT500 drift " << d18 / w << " ns;  P(no collection) 2100 " << p21 / w << " vs 1800 " << p18 / w
+        << ";  within-cell RMS dw 2100 " << std::sqrt(dw21 / w) << " vs 1800 " << std::sqrt(dw18 / w) << " mm;  collected on start-nearest wire 2100 " << s21 / w << " vs 1800 " << s18 / w << "\n  LUT500 inputs: " << lutNote << "\n"; }
+    else s << "  no --lut500 file given: no 1800 V comparison made\n";
+    s << "  NOT available at 2100 V in K256 archives: individual electron drift lines and electron arrival azimuth at the wire (ion-cloud <sin>,<cos> are a different observable)\n";
+    out(s);
+    std::ofstream f(od + "/v0_transport_map.csv"); f << std::setprecision(8) << "cell,du_lo_mm,du_hi_mm,v_lo_mm,v_hi_mm,v2100_n_primaries,v2100_p_collected0,v2100_p_ion0,v2100_p_ion_pos_collected0,v2100_n_onset,v2100_onset_mean_ns,v2100_onset_rms_ns,v2100_ion_delay_mean_ns,v2100_ion_minus_onset_mean_ns,v2100_sigma_t_mean_ns,v2100_dw_mean_mm,v2100_dw_rms_mm,v2100_same_wire_frac,v2100_multiwire_frac,v2100_cloud_sin_mean,v2100_cloud_cos_mean,v2100_attached_share,lut1800_n,lut1800_p_not_collected,lut1800_drift_mean_ns,lut1800_drift_rms_ns,lut1800_dw_mean_mm,lut1800_dw_rms_mm,lut1800_same_wire_frac,lut1800_hit_sin_mean,lut1800_hit_cos_mean\n";
+    for (int a = 0; a < NU; ++a) for (int b = 0; b < NV; ++b) { const int k = a * NV + b; const C2& x = c2[k]; const C1& y = c1[k]; double om, orr, dm, dr, tm, tr, ym, yr; mr(x.on, x.on2, x.nOn, om, orr); mr(x.dw, x.dw2, x.nDw, dm, dr); mr(y.t, y.t2, y.nT, tm, tr); mr(y.dw, y.dw2, y.nDw, ym, yr);
+      f << k << ',' << 0.25 * a << ',' << 0.25 * (a + 1) << ',' << -3 + 0.5 * b << ',' << -2.5 + 0.5 * b << ',' << x.n << ',' << (x.n ? x.zc / x.n : kNaN) << ',' << (x.n ? x.zi / x.n : kNaN) << ',' << (x.n ? x.inc / x.n : kNaN) << ',' << x.nOn << ',' << om << ',' << orr << ','
+        << (x.nIo ? x.io / x.nIo : kNaN) << ',' << (x.nOff ? x.off / x.nOff : kNaN) << ',' << (x.nSig ? x.sig / x.nSig : kNaN) << ',' << dm << ',' << dr << ',' << (x.nOn ? x.same / x.nOn : kNaN) << ',' << (x.nOn ? x.multi / x.nOn : kNaN) << ','
+        << (x.nDir ? x.sn / x.nDir : kNaN) << ',' << (x.nDir ? x.cs / x.nDir : kNaN) << ',' << (x.nAtt ? x.att / x.nAtt : kNaN) << ',';
+      if (haveLut) f << y.n << ',' << (y.n ? 1 - y.nc / y.n : kNaN) << ',' << tm << ',' << tr << ',' << ym << ',' << yr << ',' << (y.nc ? y.same / y.nc : kNaN) << ',' << (y.nc ? y.sn / y.nc : kNaN) << ',' << (y.nc ? y.cs / y.nc : kNaN) << '\n';
+      else f << ",,,,,,,,\n"; }
+  }
 
   // ===== exports =====
   { std::ofstream f(od + "/v0_fragments.csv"); f << std::setprecision(10) << "muon_slot,primary,global_wire_nearest_birth,n_reservoir,N_hat,neff_res,A,se_A,sin,se_sin,cos,se_cos,dy_um,se_dy,dx_um,se_dx,sin2,cos2,rbar_um,delay_ns,se_delay,sigt_ns,wbar_cm,sigw_cm,exact_births,exact_collected_e,exact_A,exact_delay_ns,exact_sigt_ns,exact_sigw_mm,start_v_mm,start_du_mm,primary_collected_e,primary_ion_births_exact\n";

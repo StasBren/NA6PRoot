@@ -35,6 +35,7 @@ bash $R selftest     # synthetic checks
 bash $R schema       # branch types of the first development archive
 bash $R pilot        # 20 J/psi development archives (development20.csv)
 bash $R population   # all SHA-verified archives except the 20 sealed ones
+# optional 1800 V columns: export MWPC_LUT500_DIR=.../pi_pitch_fieldwire_500_p3_v1/pilot/p3p0_anode_only
 ```
 Sealed slots are dropped before any file of theirs is opened or checksummed; the binary also refuses to run without
 the sealed list. Return `v0_summary.txt`, `v0_manifest.txt`, `provenance.txt`, `selection_note.txt`.
@@ -43,5 +44,6 @@ the sealed list. Return `v0_summary.txt`, `v0_manifest.txt`, `provenance.txt`, `
 `v0_summary.txt` sections: [1] primary census (ion births vs collected electrons, zero-ion primaries kept),
 [2] nearest-birth vs collecting wire and reservoir coverage of wire fragments, [3] nested birth-time decomposition,
 [4] K256 error measured against the exact census, [5] conditional descriptor tables, [6] rank correlations,
-[7] effective-number / independence tests. CSVs: `v0_fragments.csv`, `v0_primaries.csv`, `v0_wires.csv`
-(additive per-wire moments for E3 calibration), `v0_muons.csv`.
+[7] effective-number / independence tests, [8] 2100 V transport/timing map by primary start position
+(optionally next to the 1800 V LUT500, never merged; see `VOLTAGE_CONSISTENCY_AUDIT.md`). CSVs: `v0_fragments.csv`, `v0_primaries.csv`, `v0_wires.csv`
+(additive per-wire moments for E3 calibration), `v0_muons.csv`, `v0_transport_map.csv`.

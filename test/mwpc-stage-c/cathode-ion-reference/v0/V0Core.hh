@@ -25,8 +25,8 @@ constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 constexpr double kPi = 3.14159265358979323846;
 
 struct Ion { int prim, lwire, gwire; double u, v, w, t, wt; };                    // cm, cm, cm, ns
-struct Prim { int idx = 0, cluster = -1, success = 1; double u = 0, v = 0, w = 0, t = 0; long long Nexact = 0, nSaved = 0, collected = 0; };
-struct SeedRow { int prim = 0, gwire = 0; long long collected = 0, births = 0; double A = kNaN, meanT = kNaN, sigT = kNaN, meanWmm = kNaN, sigWmm = kNaN; };
+struct Prim { int idx = 0, cluster = -1, success = 1; double u = 0, v = 0, w = 0, t = 0; long long Nexact = 0, nSaved = 0, collected = 0, attached = -1, otherLost = -1; };   // attached/otherLost: microscopic_seed.csv, -1 if absent
+struct SeedRow { int prim = 0, gwire = 0; long long collected = 0, births = 0; double A = kNaN, meanT = kNaN, sigT = kNaN, meanWmm = kNaN, sigWmm = kNaN, meanTcol = kNaN, sigTcol = kNaN; };   // meanTcol: mean endpoint time of electrons collected on this wire
 struct Muon {
   std::string path, id, channel; int slot = -1, station = 0, det = 0, base = 0, K = 0; double pitch = 0.3, thetaU = 0, thetaW = 0, wInMm = 0;
   std::vector<Prim> prims; std::vector<Ion> ions; bool haveSeed = false; std::vector<SeedRow> seed;
@@ -44,7 +44,7 @@ struct Frag {   // one (muon, primary, nearest-birth global wire)
   double x[kND], se[kND];
   double rbar = kNaN, tbar = kNaN, sigt = kNaN, tbarSE = kNaN, wbar = kNaN, sigw = kNaN;   // t relative to t_primary [ns], w [cm]
   // exact census from microscopic_wire_seed.csv (NaN / -1 if absent)
-  long long exBirths = -1, exCollected = -1; double exA = kNaN, exTbar = kNaN, exSigt = kNaN, exSigwMm = kNaN;
+  long long exBirths = -1, exCollected = -1; double exA = kNaN, exTbar = kNaN, exSigt = kNaN, exSigwMm = kNaN, exMeanWmm = kNaN, exTcol = kNaN, exSigTcol = kNaN;
   double startDuMm = 0, startVmm = 0;
   Frag() { for (int k = 0; k < kND; ++k) { x[k] = kNaN; se[k] = kNaN; } }
 };
@@ -77,7 +77,7 @@ inline void buildFragments(const std::vector<Muon>& mus, std::vector<Frag>& F, s
       auto ip = pr.find(g.prim); const double tP = ip != pr.end() ? ip->second->t : 0.;
       if (ip != pr.end()) { g.NprimExact = (double)ip->second->Nexact; g.startDuMm = 10. * (ip->second->u - std::llround(ip->second->u / m.pitch) * m.pitch); g.startVmm = 10. * ip->second->v; }
       auto is = S.find(kk.first);
-      if (is != S.end()) { g.exBirths = is->second->births; g.exCollected = is->second->collected; g.exA = is->second->A; g.exTbar = is->second->meanT - tP; g.exSigt = is->second->sigT; g.exSigwMm = is->second->sigWmm; }
+      if (is != S.end()) { g.exBirths = is->second->births; g.exCollected = is->second->collected; g.exA = is->second->A; g.exTbar = is->second->meanT - tP; g.exSigt = is->second->sigT; g.exSigwMm = is->second->sigWmm; g.exMeanWmm = is->second->meanWmm; g.exTcol = is->second->meanTcol - tP; g.exSigTcol = is->second->sigTcol; }
       auto ig = G.find(kk.first);
       if (ig != G.end()) {
         const auto& v = ig->second; g.nres = (int)v.size(); const double uw = g.lwire * m.pitch;
