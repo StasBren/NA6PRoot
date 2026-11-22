@@ -270,6 +270,21 @@ int main(int argc,char**argv){
             "anode_phase_mm,path_mm,momentum_GeV,heed_primaries,"
             "ion_births_exact,collected_e,mean_gain,n_positive_wires,"
             "second_wire_fraction,multiwire_gt5pct\n";
+  std::ofstream coverage(output/"channel_station_coverage.csv");
+  Need(bool(coverage),"cannot write channel/station selection coverage");
+  coverage<<"channel,station,n_verified,n_multianode_gt5pct,n_phase_wire_center_0p5mm,"
+            "n_phase_boundary_above_1mm,n_theta_u_positive,n_theta_u_negative,"
+            "n_theta_w_positive,n_theta_w_negative,n_top_gain_decile\n";
+  for(const std::string& ch:{"jpsi","phi","omega"})for(int st=0;st<6;++st){
+    int N=0,M=0,C=0,B=0,up=0,un=0,wp=0,wn=0,tail=0;
+    for(const auto&e:pool)if(e.channel==ch&&e.st==st){
+      ++N;M+=e.share5;C+=(e.phaseBin==0);B+=(e.phaseBin==2);
+      up+=(e.signU>0);un+=(e.signU<0);
+      wp+=(e.signW>0);wn+=(e.signW<0);tail+=e.tail;
+    }
+    coverage<<ch<<","<<st<<","<<N<<","<<M<<","<<C<<","<<B<<","
+            <<up<<","<<un<<","<<wp<<","<<wn<<","<<tail<<"\n";
+  }
   TH1D hPhase("h_phase",";Impact relative to nearest physical anode [mm];Verified muons",60,-1.5,1.5);
   TH1D hSecond("h_second",";Second-wire fraction of collected charge;Verified muons",100,0,1);
   TH1D hTheta("h_theta",";Signed #theta_{u} [deg];Verified muons",100,-90,90);
