@@ -313,3 +313,11 @@ target_compile_features(mwpc_compare_plane_timing_100ns_10ns PRIVATE cxx_std_17)
 add_executable(mwpc_uv_stereo_strip_weighting_baseline
   ../mwpc-stage-c/cathode-ion-reference/uv_stereo_strip_weighting_baseline.cc)
 target_compile_features(mwpc_uv_stereo_strip_weighting_baseline PRIVATE cxx_std_17)
+
+# Survey existing archived 2100V K256 Geant4/Garfield data; does not execute
+# a single avalanche and must not consume the held-out phi/omega test set.
+add_executable(mwpc_survey_and_select_2100_signal
+  ../mwpc-stage-c/cathode-ion-reference/survey_and_select_2100_signal.cc)
+target_link_libraries(mwpc_survey_and_select_2100_signal
+  PRIVATE ROOT::Core ROOT::RIO ROOT::Tree ROOT::Hist)
+target_compile_features(mwpc_survey_and_select_2100_signal PRIVATE cxx_std_17)
