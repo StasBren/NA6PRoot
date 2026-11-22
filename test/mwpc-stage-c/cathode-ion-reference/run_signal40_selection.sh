@@ -52,7 +52,8 @@ case "$MODE" in
     [[ "$count" -eq 40 ]] || fail "expected exactly 40 SHA-verified selected muons"
     (
       cd "$OUTPUT"
-      sha256sum selected40.csv survey.root archive_inventory.csv \
+      sha256sum selected40.csv development20.csv sealed_validation20.csv \
+          survey.root archive_inventory.csv \
           channel_station_coverage.csv excluded_slots.txt \
           previously_inspected_not_sealed.txt selection_scope.txt \
           > FROZEN_SOURCE_SHA256.txt
