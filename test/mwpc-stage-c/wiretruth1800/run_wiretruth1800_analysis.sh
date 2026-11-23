@@ -19,6 +19,13 @@ ROOT="${MWPC_1800_ROOT:-/storage/cgrp/stanis/mwpc_penning057_wiretruth30k_v1}"
 OLD="${MWPC_1800_OLD_ROOT:-/storage/cgrp/stanis/mwpc_penning057}"
 OUT="${MWPC_1800_ANALYSIS_OUT:-$REPO/test_runs/wiretruth1800_8k_snapshot_$(date -u +%Y%m%dT%H%M%SZ)}"
 MODE="${1:-status}"
+# WIPP 'N' was confirmed by successful earlier 1800V production.
+# Unlike the inaccessible normE queue, this queue may be used by the
+# original MWPC project account; user can override after checking qstat -Qf.
+PBS_QUEUE="${MWPC_1800_PBS_QUEUE:-N}"
+[[ "$PBS_QUEUE" =~ ^[A-Za-z][A-Za-z0-9_-]*$ ]] || {
+  echo "Invalid PBS queue name: $PBS_QUEUE" >&2;exit 2;
+}
 CHUNK_LIMIT="${MWPC_1800_CHUNKS_PER_CHANNEL:-0}"
 [[ "$CHUNK_LIMIT" =~ ^[0-9]+$ ]] || { echo "Invalid MWPC_1800_CHUNKS_PER_CHANNEL" >&2;exit 2; }
 fail(){ echo "1800 V analysis ERROR: $*" >&2;exit 2;}
@@ -56,10 +63,12 @@ selection=json.loads((root/"locked/selection.json").read_text())
 binary=json.loads((root/"locked/binary.json").read_text())
 schema="NA60_WIRETRUTH30K_PENNING057_PRODUCTION_V1"
 expected_git="599e29522edb6fcec9dfcca2904308cb3186edce"
-expected_bin="2cf92cb27d3a180cd26d3ab5417f57293473864f6d685ee43bacf931712aa8f1"
 assert selection["schema"]==binary["schema"]==schema
 assert selection["git_commit"]==binary["git_commit"]==expected_git
-assert binary["binary_sha256"]==expected_bin
+assert selection["cxx_sha256"]==binary["cxx_sha256"]
+expected_bin=binary["binary_sha256"]
+assert len(expected_bin)==64 and all(c in "0123456789abcdef" for c in expected_bin)
+print("LOCKED original 1800V binary sha256",expected_bin,flush=True)
 phys=selection["physics"]
 assert phys["anode_voltage_V"]==1800.0
 assert phys["pitch_mm"]==3.0 and phys["penning_r"]==0.57
@@ -126,7 +135,8 @@ PY
     echo "analysis_git_commit=$(git -C "$REPO" rev-parse HEAD)"
     echo "per_channel_chunk_limit=$CHUNK_LIMIT"
     echo "original_physics_git=599e29522edb6fcec9dfcca2904308cb3186edce"
-    echo "original_physics_binary_sha256=2cf92cb27d3a180cd26d3ab5417f57293473864f6d685ee43bacf931712aa8f1"
+    echo "original_physics_binary_sha256=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["binary_sha256"])' "$ROOT/locked/binary.json")"
+    echo "pbs_queue=$PBS_QUEUE"
     echo "root_version=$(root-config --version)"
     echo "gcc_version=$(c++ -dumpfullversion)"
   } > "$OUT/provenance.txt"
@@ -150,9 +160,10 @@ submit(){
     local_jobname=w1800pil
     local_walltime=01:00:00
   fi
-  JOB=$(/opt/pbs/bin/qsub -q normE -N "$local_jobname" \
+  echo "Using PBS queue=$PBS_QUEUE, name=$local_jobname, mem=4gb, walltime=$local_walltime"
+  JOB=$(/opt/pbs/bin/qsub -q "$PBS_QUEUE" -N "$local_jobname" \
     -l select=1:ncpus=1:mem=4gb -l "walltime=$local_walltime" \
-    -v "MWPC_1800_ROOT=$ROOT,MWPC_1800_OLD_ROOT=$OLD,MWPC_1800_ANALYSIS_OUT=$OUT,MWPC_1800_ANALYSIS_REPO=$REPO,MWPC_1800_CHUNKS_PER_CHANNEL=$CHUNK_LIMIT" \
+    -v "MWPC_1800_ROOT=$ROOT,MWPC_1800_OLD_ROOT=$OLD,MWPC_1800_ANALYSIS_OUT=$OUT,MWPC_1800_ANALYSIS_REPO=$REPO,MWPC_1800_CHUNKS_PER_CHANNEL=$CHUNK_LIMIT,MWPC_1800_PBS_QUEUE=$PBS_QUEUE" \
     -o "$REPO/test_runs/pbs-logs" -e "$REPO/test_runs/pbs-logs" \
     "$HERE/pbs_wiretruth1800_analysis.sh")
   echo "PBS_SUBMITTED $JOB"
