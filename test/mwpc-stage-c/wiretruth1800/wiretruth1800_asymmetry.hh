@@ -34,6 +34,7 @@ inline double SignedAsym(long long pos,long long neg){
 class Plots {
 public:
   TH2D *wireGainA=nullptr,*seedWireGainA=nullptr,*muonGainA=nullptr,
+       *muonShareA=nullptr,
        *ionYieldA=nullptr,*wireFracA=nullptr,*aHemiTB=nullptr,
        *aByLocal=nullptr,*aByImpact=nullptr,*aByThetaU=nullptr,
        *aByThetaW=nullptr,*tbGainA=nullptr;
@@ -57,6 +58,9 @@ public:
     muonGainA=new TH2D(name("muon_gain_vs_A_hemi").c_str(),
        ";A_{ion,hemi} per muon;log_{10}(Q_{muon}/N_{Heed,muon})",
        64,-1,1,100,-4.5,7.5);
+    muonShareA=new TH2D(name("muon_second_wire_fraction_vs_A_hemi").c_str(),
+       ";A_{ion,hemi} per muon;Q_{2}/Q_{muon}",
+       64,-1,1,50,0,.5);
     ionYieldA=new TH2D(name("wire_ion_births_vs_A_hemi").c_str(),
        ";A_{ion,hemi} per anode;log_{10}(N_{ion birth,wire})",
        64,-1,1,100,-.5,9.5);
@@ -111,19 +115,20 @@ public:
     }
   }
   std::array<TH1*,21> All() const{
-    return {wireGainA,seedWireGainA,muonGainA,ionYieldA,wireFracA,
+    return {wireGainA,seedWireGainA,muonGainA,muonShareA,ionYieldA,wireFracA,
       aHemiTB,aByLocal,aByImpact,aByThetaU,aByThetaW,tbGainA,
       zeroQIonA,aHemi,aTB,meanWireLogGainA,meanSeedLogGainA,
-      meanAByLocal,meanAByImpact,meanAByThetaU,meanAByThetaW,
-      nullptr};
+      meanAByLocal,meanAByImpact,meanAByThetaU,meanAByThetaW};
   }
   void Write()const{
     for(TH1* h:All())if(h)h->Write();
   }
-  void FillMuon(long long ionUp,long long ionDown,long long collected,int nHeed){
+  void FillMuon(long long ionUp,long long ionDown,long long collected,int nHeed,
+                double fSecond){
     const double a=SignedAsym(ionUp,ionDown);
     if(!std::isfinite(a))return;
     ++muonsWithDefinedA;
+    if(collected>0 && std::isfinite(fSecond))muonShareA->Fill(a,fSecond);
     // Undefined if no accepted Heed primaries, even if there were ions.
     if(collected>0&&nHeed>0){
       muonGainA->Fill(a,std::log10(double(collected)/nHeed));
@@ -195,6 +200,19 @@ inline void DrawOne(const std::filesystem::path&dir,const std::string&ch,
   label.SetTextSize(.025);label.DrawLatex(.16,.875,description.c_str());
   canvas.SaveAs((dir/("asym_"+which+"_"+ch+".png")).string().c_str());
 }
+inline void DrawOneD(const std::filesystem::path&dir,const std::string&ch,
+                     TH1D* h,const std::string&which,const std::string&desc){
+  if(h->GetEntries()==0)return;
+  TCanvas canvas(("c_asym_1d_"+ch+"_"+which).c_str(),"",960,680);
+  canvas.SetLeftMargin(.14);canvas.SetBottomMargin(.14);
+  gStyle->SetOptStat(0);
+  h->SetLineColor(kBlue+1);h->SetLineWidth(2);
+  h->Draw("HIST");
+  TLatex label;label.SetNDC();label.SetTextFont(42);
+  label.SetTextSize(.036);label.DrawLatex(.16,.92,"NA60+ Simulation");
+  label.SetTextSize(.024);label.DrawLatex(.16,.875,desc.c_str());
+  canvas.SaveAs((dir/("asym_"+which+"_"+ch+".png")).string().c_str());
+}
 inline void DrawProfile(const std::filesystem::path&dir,const std::string&ch,
                         TProfile* h,const std::string&which){
   if(h->GetEntries()==0)return;
@@ -219,6 +237,7 @@ inline void Draw(const std::filesystem::path&out,const std::map<std::string,std:
     DrawOne(out,ch,p.wireGainA,"gain_vs_A_hemi_wire",desc);
     DrawOne(out,ch,p.seedWireGainA,"gain_vs_A_hemi_primary_wire",desc);
     DrawOne(out,ch,p.muonGainA,"gain_vs_A_hemi_muon",desc);
+    DrawOne(out,ch,p.muonShareA,"muon_sharing_vs_A_hemi",desc);
     DrawOne(out,ch,p.tbGainA,"gain_vs_A_TB_wire",desc);
     DrawOne(out,ch,p.ionYieldA,"ion_births_vs_A_hemi_wire",desc);
     DrawOne(out,ch,p.wireFracA,"charge_fraction_vs_A_hemi_wire",desc);
@@ -227,6 +246,12 @@ inline void Draw(const std::filesystem::path&out,const std::map<std::string,std:
     DrawOne(out,ch,p.aByImpact,"A_hemi_vs_signed_impact",desc);
     DrawOne(out,ch,p.aByThetaU,"A_hemi_vs_theta_u",desc);
     DrawOne(out,ch,p.aByThetaW,"A_hemi_vs_theta_w",desc);
+    DrawOneD(out,ch,p.zeroQIonA,"zero_collected_ion_wires_A_hemi",
+             "N_{ion birth,wire}>0, Q_{collected,wire}=0; "+ch);
+    DrawOneD(out,ch,p.aHemi,"ion_A_hemi_distribution",
+             "Ion-bearing physical anodes, unweighted per anode; "+ch);
+    DrawOneD(out,ch,p.aTB,"ion_A_TB_distribution",
+             "Ion-bearing physical anodes, top/bottom sectors; "+ch);
     DrawProfile(out,ch,p.meanAByLocal,"mean_A_vs_local_wire");
     DrawProfile(out,ch,p.meanAByImpact,"mean_A_vs_signed_impact");
     DrawProfile(out,ch,p.meanAByThetaU,"mean_A_vs_signed_theta_u");
