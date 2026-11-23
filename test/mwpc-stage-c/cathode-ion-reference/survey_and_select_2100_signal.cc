@@ -195,15 +195,29 @@ int main(int argc,char**argv){
   Need(!fs::exists(output),"output exists: choose new frozen output path");
   fs::create_directories(output);
   std::vector<Event> pool;std::vector<int> excluded;
+  // Match the original campaign's seal gate: a zero-byte marker is NOT
+  // a successful run.  E.g. slot 0878 has a readable ROOT/seed census
+  // but an empty SHA256SUMS and complete.txt, plus a NUL-filled wire_muon
+  // CSV.  It must not enter the 2100V verified population or selected40.
+  const auto nonempty=[](const fs::path&f){
+    std::error_code ec;
+    return fs::is_regular_file(f,ec) && !ec &&
+           fs::file_size(f,ec)>0 && !ec;
+  };
   for(int index=0;index<1000;++index){
     std::ostringstream dir;dir<<"muon_"<<std::setw(4)<<std::setfill('0')<<index;
     const fs::path p=archiveRoot/dir.str();
-    if(!fs::is_regular_file(p/"complete.txt")||
-       !fs::is_regular_file(p/"SHA256SUMS")||
+    if(!nonempty(p/"complete.txt")||
+       !nonempty(p/"SHA256SUMS")||
        !fs::is_regular_file(p/"root_audit.log")||
-       !fs::is_regular_file(p/"ion_births.root")){
+       !nonempty(p/"ion_births.root")){
       excluded.push_back(index);continue;
     }
+    // A candidate with positive seal markers but a damaged per-wire CSV
+    // is an integrity failure, not a reason to skip it silently.
+    Need(nonempty(p/"microscopic_wire_muon.csv"),
+         "apparently sealed candidate missing nonempty wire census at "+
+         std::to_string(index));
     pool.push_back(ReadOne(p,index));
   }
   Need(pool.size()>=900,"fewer than 900 sealed-file candidates; audit source archive");
