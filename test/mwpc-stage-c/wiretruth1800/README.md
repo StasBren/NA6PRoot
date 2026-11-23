@@ -106,6 +106,72 @@ Plots are ROOT-made PNGs with honest `NA60+ Simulation` labels.
 efficiency or detector threshold is simulated by this analysis.**
 Ion birth assignment to wire is not ion drift endpoint assignment.
 
+## Added per-anode gain vs ion-birth asymmetry (same ROOT analysis)
+
+The exact native Garfield++ wire records contain **two independently
+defined ion-birth angular asymmetries**. Both are computed for positive-ion
+creation points assigned to the nearest physical anode by birth position,
+**not** from collected-electron endpoints:
+
+- `A_ion_hemi = (N_up - N_down)/(N_up + N_down)` for ion birth azimuth
+  phi in (0,180) versus (-180,0). Exact boundary births are excluded.
+- `A_ion_TB = (N_top-N_bottom)/(N_top+N_bottom)` for phi in [45,135)
+  versus [-135,-45). Ion births outside those angular sectors are excluded.
+  When the relevant denominator is zero, **A is NaN/undefined**, not 0.
+
+The wire-level gain proxy is **`G_wire=Q_collected_wire/N_Heed,muon`**;
+the muon gain proxy is `G_muon=Q_collected_muon/N_Heed,muon`.
+For a single original Heed primary, its intrinsic wire contribution is
+`G_primary_wire=Q_collected_primary_wire`. These are distinct
+normalizations: a wire with zero collected electrons can still have
+true ion births and asymmetry; log10(gain) is undefined for zero gain.
+
+The same analysis now creates (for all pooled data, Jpsi, Phi, Omega;
+all 18 channel×station groups are available as ROOT distributions):
+
+- `asym_gain_vs_A_hemi_wire_all.png`: 2D density, one row per ion-bearing
+  physical anode with positive collected charge, versus log10(G_wire).
+- `asym_gain_vs_A_hemi_muon_all.png`: independent muon-level
+  gain vs muon's exact aggregate ion-birth hemisphere A.
+- `asym_gain_vs_A_hemi_primary_wire_all.png`: one Heed-primary×anode
+  contribution, preserving native ion birth sectors.
+- `asym_gain_vs_A_TB_wire_all.png`: the restricted 45°–135° top/bottom
+  sector asymmetry version.
+- `asym_muon_sharing_vs_A_hemi_all.png`: independent muon's Q2/Qtotal
+  versus aggregate A_hemi.
+- `asym_ion_births_vs_A_hemi_wire_all.png`: exact N_ion vs A irrespective
+  of collected-electron endpoints.
+- `asym_charge_fraction_vs_A_hemi_wire_all.png`: actual Q_wire/Q_muon
+  including zero-collected but ion-bearing wires.
+- `asym_A_hemi_vs_A_TB_all.png`: relationship of the two distinct azimuthal
+  sectors. Do not assume they are independent.
+- `asym_A_hemi_vs_local_wire_all.png`: local anode offsets -4..+4,
+  centered on the physical entrance-nearest anode (station0 half-pitch).
+- `asym_A_hemi_vs_signed_impact_all.png`,
+  `asym_A_hemi_vs_theta_u_all.png`,
+  `asym_A_hemi_vs_theta_w_all.png`: signed geometry dependence.
+- `asym_zero_collected_ion_wires_A_hemi_all.png`: exactly the group with
+  ion births but **Q_wire=0**. This group is intentionally absent from
+  the logarithmic gain panel but remains in `wires` and QA denominators.
+- `asym_mean_A_vs_local_wire_all.png` and signed impact/angle profiles:
+  mean A conditioned on the explanatory variable, **unweighted per
+  ion-bearing physical anode**. These profile error bars are exploratory:
+  multiple wires from one muon are correlated and do NOT represent
+  a full event-cluster bootstrap uncertainty.
+
+For each channel and station, extra
+`asym_gain_vs_A_hemi_wire_jpsi_station0.png` etc. and
+`asym_A_hemi_vs_local_wire_jpsi_station0.png` are exported.
+
+`asymmetry_denominators.csv` reports precisely how many ion-bearing
+wire/primary-wire rows, defined A values, zero-electron cases and
+positive-gain/defined-A pairs contribute in each group. The `wires`,
+`seeds`, `seed_wires` and `muons` ROOT TTrees preserve the new
+`ion_A_TB`, true sector counts and unlogged gain values.
+
+No cathode strip current, gas ion drift velocity or physical
+charge-sign response is inferred by these plots.
+
 ## WIPP commands (new isolated worktree, never change ongoing jobs)
 
 Connect (no campus VPN if direct WIPP access works):
