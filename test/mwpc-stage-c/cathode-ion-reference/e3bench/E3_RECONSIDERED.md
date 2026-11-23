@@ -11,7 +11,11 @@ Labels: **[identity]**, **[assumption-consequence]**, **[measured]** (with machi
   **[measured, Python, by the project]**
 * Frozen RKF + spectral replay: 55.5 s per muon. **[measured, project]**
 
-### New C++ stage benchmark: `digitizer_cost_bench.cc` **[measured, table contents synthetic]**
+### C++ operation-cost estimate: `digitizer_cost_bench.cc` **[operation-cost estimate; NOT measured production throughput]**
+This times the arithmetic and memory access of each stage on random table contents. It is not the real kernel, not
+real occupancy (pile-up of several muons per chamber, noise hits, real strip counts, real sample counts and readout
+window), and not real Heed. Its numbers rank the stages; they are not a throughput claim. The real kernel must be
+benchmarked once it exists, with realistic sample counts and occupancy.
 Machine: 2-core Xeon 2.3 GHz cloud VM, g++ -O2, single thread, 20,000 crossings, median of 3 repetitions.
 Table sizes and loop counts are realistic: 52.78 primaries and 1.39 wires with ions per crossing (V0 means), LUT500
 900 cells × 500 trials, 539,422 J/psi donor seeds, a 51,550-record joint 2100 V donor in 72 cells, and a
@@ -39,8 +43,8 @@ Findings:
   generation costs 0.56–1.4 µs and Strategy B 0.03–0.1 µs, so B would save at most about 0.5–1.4 µs per crossing, or
   roughly 10–20% of the digitizer. That is not a large enough gain to give up the correlations A keeps by construction.
   **[measured]**
-* Scale: 720 station hits per Pb–Pb event at about 6–7 µs each is about 4–5 ms of digitizer time per event per core,
-  and about 1.2–1.4 core-hours per million events, **excluding Heed and Geant4**. **[arithmetic on the measurement]**
+* Scale (illustration only): 720 station hits per Pb–Pb event at about 6–7 µs each would be about 4–5 ms per event
+  per core, excluding Heed and Geant4. **[arithmetic on an operation-cost estimate, not a throughput measurement]**
 
 ### Is Heed a relevant production cost? **[open: not measurable here]**
 The Heed surrogate costs about 0.4 µs. Real TrackHeed is not measured in any document I found. In
@@ -49,14 +53,9 @@ is paid per crossing. If that cost is in the 0.1–1 ms range, it is 15–150 ti
 need either a reused `TrackHeed` per geometry or a cluster-level surrogate. This is the largest unknown in the budget.
 It is separate from microscopic avalanche multiplication, which the production chain does not run.
 
-Measurement (WSL, existing binary, Heed only, no avalanches):
-```bash
-B=<build>/mwpc_phase_b_native_muon_3p3
-head -n 101  NATIVE.csv > /tmp/h100.csv; head -n 1001 NATIVE.csv > /tmp/h1000.csv
-/usr/bin/time -f "%e s" $B --validate-heed /tmp/h100.csv  > /dev/null
-/usr/bin/time -f "%e s" $B --validate-heed /tmp/h1000.csv > /dev/null
-# per-crossing Heed cost = (t1000 - t100) / 900 ; intercept = gas/startup
-```
+Measurement: `e3bench/run_heed_timing.sh` runs the frozen 2100 V executable in `--validate-heed` mode (TrackHeed only,
+no avalanche) on 50 and 400 non-sealed crossings of the frozen 1000-crossing selection, 3 repetitions, and reports the
+per-crossing slope, the intercept (start-up, Heed tables) and the cost per Heed primary.
 
 ## 2. Keep LUT + per-primary generation? Yes, with a 2100 V input
 **[measured cost] + [hypothesis on physics]** Keep Strategy A: one stochastic record per Heed primary carrying the
@@ -96,7 +95,7 @@ Wire collection, three separate claims:
    by start cell. This is the 2100 V counterpart of claim 2, per primary, not per muon.
 
 ## 4. What can be omitted for 100 / 200 ns shaping
-* Shaping times: the VMM3a user guide gives 25/50/100/200 ns peaking times and a 3rd-order shaper (1 real + 2
+* Shaping times (100 and 200 ns are PROVISIONAL): the VMM3a user guide gives 25/50/100/200 ns peaking times and a 3rd-order shaper (1 real + 2
   complex-conjugate poles) without pole values. I found no document that fixes the NA60+ operating value.
   **[open: needs the front-end configuration]**
 * Within-avalanche birth-time spread: 0.0947 ns RMS (V0, 977 muons). The CR-RC^3 estimate of the relative peak loss

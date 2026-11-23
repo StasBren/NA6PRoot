@@ -3,9 +3,12 @@
 
 Input layout (written by run_t_ladder.sh):
   ROOT/<muon>/<variant>/replay/waveforms.csv          frozen replay, ion term (fC/ns per 10 ns bin)
-  ROOT/<muon>/<variant>/prompt/prompt_waveforms.csv   avalanche-electron term (same grid and channels)
+  ROOT/<muon>/<variant>/prompt/prompt_waveforms.csv   APPROXIMATE electron term: instantaneous step at birth time
+Run ion-only (--no-prompt) first; the ion term is the time-dependent Shockley-Ramo signal of the frozen paths, the
+electron step is an approximation of the time-dependent electron signal (see t_prompt_electron_term.py).
 Variant "T0" is the identity export (byte-identical to the frozen export) and is the reference.
 
+Shaping times 100/200 ns are PROVISIONAL until the NA60+ VMM3a configuration is verified.
 Shaper: by default a unit-peak CR-RC^n stand-in, h(t) ~ (t/tau)^n exp(-t/tau), tau = Tp/n (n = 3).
 THIS IS NOT THE VMM3a IMPULSE RESPONSE (the VMM3a user guide gives a 3rd-order 1 real + 2 complex-pole shaper without
 pole values). Supply --impulse FILE (two columns: t_ns, h; any normalization; renormalized to unit peak) when a
@@ -175,7 +178,7 @@ def main():
         raise SystemExit(f"refusing: {a.out} exists")
     a.out.mkdir(parents=True)
     rng = np.random.default_rng(12345)
-    report = {"muons": muons, "variants": variants, "prompt_included": not a.no_prompt, "shapers": {}}
+    report = {"muons": muons, "variants": variants, "signal": "ion_only" if a.no_prompt else "ion_plus_instantaneous_electron_step", "shaping_status": "provisional (NA60+ VMM3a peaking time unverified)", "shapers": {}}
     lines = []
     for tp in [float(x) for x in a.tp.split(",")]:
         h, hlabel = impulse(tp, a.order, a.dt, max(12 * tp, 2000.0), a.impulse)
@@ -224,7 +227,7 @@ def main():
                 d[f"{s}_strip_peak_minus_T0_over_T0_lead"] = boot(rel, a.bootstrap, rng)
             summ[v] = d
         report[f"Tp{tp:g}"] = summ
-        lines.append(f"== shaper: {hlabel}; muons={len(muons)}; prompt term {'ON' if not a.no_prompt else 'OFF'}")
+        lines.append(f"== PROVISIONAL shaper: {hlabel}; muons={len(muons)}; signal = " + ("ion term + INSTANTANEOUS electron-step approximation" if not a.no_prompt else "ION TERM ONLY (time-dependent Shockley-Ramo, frozen paths)"))
         for v, d in summ.items():
             lines.append(f"-- {v} minus {variants[0]}")
             for k, s in d.items():

@@ -56,6 +56,10 @@ case "${1:-}" in
     "$BIN" --synthetic 300 --seed 1 --out-dir "$OUT/independent" > "$OUT/independent.txt"
     "$BIN" --synthetic 300 --seed 2 --rho-side 0.25 --out-dir "$OUT/correlated" > "$OUT/correlated.txt"
     grep -q '^PASS census-CSV reader round trip' "$OUT/independent.txt" || fail "census CSV round trip"
+    if python3 -c "import pandas" 2>/dev/null; then
+      python3 "$HERE/v0_pair_correlation.py" --selftest | tee "$OUT/pair_correlation_selftest.txt"
+      grep -q '^PASS pair-correlation closure' "$OUT/pair_correlation_selftest.txt" || fail "pair-correlation closure"
+    else echo "pandas missing: pair-correlation closure test skipped"; fi
     echo "PASS synthetic self-test (estimator checks only, not NA60+ data) -> $OUT";;
   schema)
     [[ -x "$BIN" && -s "$DEV" ]] || fail "need built binary and $DEV"

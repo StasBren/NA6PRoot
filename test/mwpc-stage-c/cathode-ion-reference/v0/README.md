@@ -56,11 +56,15 @@ P(|A| > 0.9); conditional correlation profiles; within-avalanche ion-birth times
 collecting anode vs anode nearest the PRIMARY START; 1800 V LUT500 vs 2100 V (labelled, comparison only).
 Bands are 68% muon-bootstrap intervals; cells with fewer than 20 primaries are blank.
 
-`v0_plots_summary.txt` also has the repaired correlation estimator `rho_w` (between-primary residual correlation
-within muons, leave-muon-out conditioning on 12 x 12 signed start cells x yield tercile, flagged when outside the
-admissible range). Synthetic checks: independent law, rho_w(A) = +0.0015 [-0.011, +0.015]; correlated law
-(`--rho-side 0.25`, expected about 0.2 to 0.24 from the generating law), rho_w(A) = +0.212 [+0.178, +0.247].
-Residual synthetic bias on the delay estimate: -0.022 [-0.040, -0.003], so differences below about 0.03 are not resolved.
+`v0_plots_summary.txt` also has the between-primary residual correlation `rho` from `v0_pair_correlation.py`
+(model, assumptions and limits in its docstring). Summary: leave-muon-out conditional means on 12 x 12 signed start
+cells x yield tercile, exact-yield weights, noise-corrected conditional sd; only quantities with zero or known reservoir
+noise (exact A, A with se_A, exact delay, exact onset). The admissible range is [max_m(-A_m/B_m), 1], set by the muon
+with the most effective primaries (not -1/(n_eff-1) at the median, which the first version used). Estimates outside it
+are flagged INVALID, never clipped. Closure test (`python3 v0_pair_correlation.py --selftest`, Gaussian, known rho in
+{-0.01, 0, 0.05, 0.2, 0.5}, 24 replicas of 300 muons): all biases within 3 standard errors or 0.01. On the C++ synthetic
+V0 law the delay estimate is -0.022 [-0.042, -0.002] with no correlation built in; this is not resolved, so values
+below about 0.03 in magnitude should not be interpreted.
 
 New CSV columns: `v0_primaries.csv` start_nearest_wire, exact_delay_ns, exact_sigt_prim_ns, exact_onset_ns,
 collected_frac_max_wire; `v0_fragments.csv` exact_onset_ns, exact_sigt_collected_ns.

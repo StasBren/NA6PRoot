@@ -9,7 +9,7 @@ of one muon are not independent). Exact-census columns (microscopic_wire_seed.cs
 Coordinates: start_du_mm = primary START u minus nearest anode (signed), start_v_mm = start normal coordinate.
 If v0_manifest.txt says SYNTHETIC, every figure is stamped SYNTHETIC.
 
-Also writes correlation_estimator.txt: the repaired between-primary residual correlation (see pair_correlation()).
+Also reports the between-primary residual correlation (v0_pair_correlation.py) in v0_plots_summary.txt.
 """
 import argparse
 from pathlib import Path
@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from matplotlib.colors import LinearSegmentedColormap  # noqa: E402
+from v0_pair_correlation import format_result, pair_correlation  # noqa: E402
 
 C1, C2, C3 = "#2a78d6", "#eb6834", "#1baf7a"
 INK, MUTED = "#2b2b29", "#8a8984"
@@ -113,58 +114,6 @@ def show_map(ax, Z, N, xe, ye, cmap, label, vmin=None, vmax=None, fmt="{:.2g}"):
 def band(ax, x, est, lo, hi, color, label):
     ax.fill_between(x, lo, hi, color=color, alpha=0.22, lw=0)
     ax.plot(x, est, color=color, label=label, marker="o", ms=3.5)
-
-
-def pair_correlation(P, ycol, secol, cond_cols, wcol):
-    """Repaired between-primary residual correlation of descriptor y within muons.
-
-    r_i = y_i - m(c_i), m = population conditional mean in the fine start cell c (12 signed-du x 12 v cells = the
-    72-cell |du| x v grid unfolded in sign) x log-yield tercile. Reservoir noise of different primaries is independent,
-    so cross-products r_i r_j (i != j, same muon) are unbiased for the physical covariance; no subtraction of the
-    reservoir variance enters the numerator. Denominator uses the noise-corrected conditional sd:
-    s_c^2 = var_c(y) - mean_c(se^2), floored at 0.
-      rho_w = sum_{i!=j} w_i w_j r_i r_j / sum_{i!=j} w_i w_j s_i s_j     (w = ion yield, the muon-level weighting)
-    Reported with a muon bootstrap and the admissible lower bound -1/(n_eff - 1). An estimate outside
-    [-1/(n_eff-1), 1] is FLAGGED, never clipped silently.
-    The conditional mean is leave-muon-out, so a muon's own primaries do not enter m(c) (in-sample means bias rho by
-    about -1/n_cell). Primaries in cells populated by one muon only are dropped.
-    """
-    d = P.dropna(subset=[ycol, wcol] + cond_cols).copy()
-    d = d[d[wcol] > 0]
-    d["_ly"] = pd.qcut(np.log(d[wcol]), 3, labels=False, duplicates="drop")
-    d["_c"] = d.groupby(cond_cols + ["_ly"]).ngroup()
-    g = d.groupby("_c")
-    # leave-muon-out conditional mean: removes the -1/n_cell bias of an in-sample mean (own residual inside m(c))
-    sc, nc = g[ycol].transform("sum"), g[ycol].transform("size")
-    gm = d.groupby(["_c", "muon_slot"])[ycol]
-    scm, ncm = gm.transform("sum"), gm.transform("size")
-    mu = ((sc - scm) / (nc - ncm)).where(nc > ncm)
-    var = g[ycol].transform("var")
-    se2 = g[secol].transform(lambda s: np.nanmean(s ** 2)) if secol else 0.0
-    s = np.sqrt(np.maximum(var - se2, 0))
-    d["_r"] = d[ycol] - mu
-    d["_s"] = s
-    d = d.dropna(subset=["_r", "_s"])
-    per = []
-    for m, x in d.groupby("muon_slot"):
-        w = x[wcol].to_numpy(); r = x["_r"].to_numpy(); sd = x["_s"].to_numpy()
-        wr, ws = w * r, w * sd
-        num = wr.sum() ** 2 - (wr ** 2).sum()
-        den = ws.sum() ** 2 - (ws ** 2).sum()
-        neff = w.sum() ** 2 / (w ** 2).sum()
-        per.append((num, den, neff, len(x)))
-    per = np.array(per)
-    est = per[:, 0].sum() / per[:, 1].sum()
-    bs = []
-    for _ in range(2000):
-        k = RNG.integers(0, len(per), len(per))
-        bs.append(per[k, 0].sum() / per[k, 1].sum())
-    neff = np.median(per[:, 2])
-    lb = -1.0 / max(neff - 1, 1e-9)
-    lo, hi = np.percentile(bs, [2.5, 97.5])
-    flag = "OK" if lb <= est <= 1 else "OUT OF BOUNDS (estimator or model invalid; do not use)"
-    return dict(y=ycol, est=est, ci95=(lo, hi), neff_median=neff, lower_bound=lb, muons=len(per),
-                primaries=len(d), cells=int(d["_c"].nunique()), flag=flag)
 
 
 def main():
@@ -363,13 +312,15 @@ def main():
         txt.append("plot 8 skipped: v0_transport_map.csv has no LUT500 columns (run V0 with MWPC_LUT500_DIR)")
 
     # repaired correlation estimator
-    txt.append("\n# Between-primary residual correlation within muons (pair_correlation docstring)")
+    txt.append("\n# Between-primary residual correlation within muons (assumptions and bounds: v0_pair_correlation.py)")
+    txt.append("# context = 12 signed-du x 12 v start cells x yield tercile; weight = exact ion yield; leave-muon-out means")
     P["_cu"] = np.digitize(P["start_du_mm"], DU_EDGES); P["_cv"] = np.digitize(P["start_v_mm"], V_EDGES)
-    for yc, sc in (("A", "se_A"), ("exact_A", None), ("sin", None), ("delay_ns", None)):
+    P["_wN"] = P["ion_births_exact"].astype(float)
+    # exact-census quantities have no reservoir noise; reservoir A carries its own se_A. Reservoir <sin> etc. are
+    # omitted because v0_primaries.csv has no per-primary standard error for them (denominator would be biased).
+    for yc, sc in (("exact_A", None), ("A", "se_A"), ("exact_delay_ns", None), ("exact_onset_ns", None)):
         if yc in P and P[yc].notna().sum() > 100:
-            r = pair_correlation(P, yc, sc, ["_cu", "_cv"], "N_hat")
-            txt.append(f"rho_w[{r['y']}] = {r['est']:+.4f}  CI95=[{r['ci95'][0]:+.4f},{r['ci95'][1]:+.4f}]  bound>={r['lower_bound']:+.4f} "
-                       f"n_eff(median)={r['neff_median']:.1f} muons={r['muons']} primaries={r['primaries']} cells={r['cells']}  {r['flag']}")
+            txt.append(format_result(pair_correlation(P, yc, sc, ["_cu", "_cv"], "_wN", rng=RNG)))
     (a.plotdir / "v0_plots_summary.txt").write_text("\n".join(txt) + "\n")
     print("\n".join(txt))
 

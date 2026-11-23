@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
-"""Avalanche-electron (prompt) term for a path export, on the replay's 10 ns grid and channel set.
+"""APPROXIMATE avalanche-electron term: an instantaneous step at the ion birth time.
 
-The frozen replay (p3_replay_full_spectral_muon.py) is ION-ONLY: Q_ion,k(t) = +q [phi_k(r_ion(t)) - phi_k(r_birth)].
-The avalanche electron paired with each ion moves from r_birth to the anode (phi_k(anode) = 0 for a cathode strip)
-in well under 1 ns, adding Q_e,k = +q phi_k(r_birth) as a step at the birth time (frozen sign convention,
-chargeSign = +1). Total = +q phi_k(r_ion(t)). Moving a birth time therefore moves BOTH terms; the T-ladder compare
-uses ion + prompt.
+What is exact and what is not
+* The frozen replay (p3_replay_full_spectral_muon.py) is ION-ONLY and, for the frozen RKF paths and spectral LUT, it is
+  the time-dependent Shockley-Ramo ion signal: Q_ion,k(t) = +q [phi_k(r_ion(t)) - phi_k(r_birth)] (chargeSign = +1).
+* The true electron signal is also time dependent. In the same convention (carrier charge -q), each avalanche
+  electron gives Q_e,k(t) = -q [phi_k(r_e(t)) - phi_k(r_e(t_create))], following its own path to the anode; the
+  primary electron's drift adds one more such term. Summed over the avalanche and taken to completion this is
+  +q phi_k(r_birth) per ion/electron pair (phi_k = 0 on the anode; electron created where its partner ion is born). The archives do not contain avalanche-electron
+  trajectories, so this integral is all that can be formed from them.
+* THIS helper replaces i_e(t) by its integral, deposited as a step in the 10 ns bin of the ion birth time. Neglected:
+  the electron transit/avalanche development time (sub-ns to ns scale, not measured here), the primary-electron drift
+  current (one electron, not multiplied), and any shape of the electron current inside the bin.
+  Use it only AFTER the ion-only comparison, and report both. Sum ion + step = +q phi_k(r_ion(t)) at bin resolution.
 
-Uses the replay's own LUT, query() and channel frame (imported from --replay-dir), so the channel labels and strip
-bases are identical to waveforms.csv. Approximation: the electron term is a step at birth_ns (electron transit time
-neglected; it is below the 10 ns bin).
+Uses the replay's own LUT, query() and channel frame (imported from --replay-dir), so labels and strip bases match
+waveforms.csv.
 """
 import argparse
 import csv
@@ -54,9 +60,9 @@ def main():
                np.column_stack((rp.EDGES[:-1] + rp.DT / 2, total.reshape(rp.NBINS, -1) / rp.DT)),
                delimiter=",", header="time_center_ns," + ",".join(labels), comments="")
     summ = {"rows": len(rows), "exact_ions": exact, "prompt_charge_fC": dict(zip(labels, sum_birth.ravel().tolist())),
-            "convention": "Q_e,k = +q phi_k(r_birth) at birth_ns; replay ion term + this = +q phi_k(r_ion(t))"}
+            "approximation": "instantaneous electron step: integral +q phi_k(r_birth) placed in the 10 ns bin of birth_ns; true time-dependent electron current not available from the archives"}
     (a.out / "prompt_summary.json").write_text(json.dumps(summ, indent=1) + "\n")
-    print(f"prompt term: {len(rows)} rows, plane sums U={sum_birth[0].sum():.6g} fC V={sum_birth[1].sum():.6g} fC")
+    print(f"instantaneous electron-step approximation: {len(rows)} rows, plane sums U={sum_birth[0].sum():.6g} fC V={sum_birth[1].sum():.6g} fC")
 
 
 if __name__ == "__main__":
