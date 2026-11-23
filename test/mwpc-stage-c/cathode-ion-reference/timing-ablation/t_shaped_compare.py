@@ -6,7 +6,7 @@ Input layout (written by run_t_ladder.sh):
   ROOT/<muon>/<variant>/prompt/prompt_waveforms.csv   APPROXIMATE electron term: instantaneous step at birth time
 Run ion-only (--no-prompt) first. The ion term is the time-dependent Shockley-Ramo signal of the frozen RKF paths; the
 electron step is only an approximation of the time-dependent electron signal (see t_prompt_electron_term.py).
-"T0" is the identity export (byte-identical to the frozen export) and is the reference.
+The FIRST variant is the reference (T0 for the T-ladder: identity export; S0 for the S-ladder: T1 frozen replay).
 
 Shaping times 100/200 ns are PROVISIONAL until the NA60+ VMM3a configuration is verified. Default shaper: unit-peak
 CR-RC^n stand-in, h(t) ~ (t/tau)^n exp(-t/tau), tau = Tp/n, n = 3 -- NOT the VMM3a transfer function. --impulse FILE
@@ -181,7 +181,8 @@ def plot_muon(path, muon, tp, labels, shaped, res, variants, dt, title):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    cols_v = {"T0": "#2b2b29", "T1": "#2a78d6", "TW": "#eb6834", "TC": "#1baf7a", "TM": "#e87ba4"}
+    pal = ["#2a78d6", "#eb6834", "#1baf7a", "#e87ba4", "#8a5cf6", "#c99a06", "#0fa3b1", "#b5332b", "#6b7c1a", "#d65db1", "#555"]
+    cols_v = {variants[0]: "#2b2b29", **{v: pal[i % len(pal)] for i, v in enumerate(variants[1:])}}
     fig, ax = plt.subplots(2, 2, figsize=(12, 7), sharex=True)
     t = np.arange(shaped[variants[0]].shape[0]) * dt
     tmax = min(t[-1], 8 * tp + 400)
@@ -192,15 +193,15 @@ def plot_muon(path, muon, tp, labels, shaped, res, variants, dt, title):
         for j in top:
             for v in variants:
                 y = shaped[v][:, cols[j]]
-                ax[0, k].plot(t, y, color=cols_v.get(v, "#888"), lw=1.6 if v == "T0" else 1.1,
-                              ls="-" if v == "T0" else "--", label=f"{v}" if j == top[0] else None)
+                ax[0, k].plot(t, y, color=cols_v.get(v, "#888"), lw=1.6 if v == variants[0] else 1.1,
+                              ls="-" if v == variants[0] else "--", label=f"{v}" if j == top[0] else None)
                 if v != variants[0]:
                     ax[1, k].plot(t, y - shaped[variants[0]][:, cols[j]], color=cols_v.get(v, "#888"), lw=1.0,
-                                  label=f"{v}-T0, strip {idx[j]}")
+                                  label=f"{v}-{variants[0]}, strip {idx[j]}")
         for f, thr in res[variants[0]][side]["thresholds_fCeq"].items():
             ax[0, k].axhline(res[variants[0]][side]["sign"] * thr, color="#bbb", lw=0.6)
         ax[0, k].set(title=f"{side}: 3 largest strips (signed, fC-eq.)", xlim=(0, tmax))
-        ax[1, k].set(xlabel="time [ns]", ylabel="variant - T0 [fC-eq.]", xlim=(0, tmax))
+        ax[1, k].set(xlabel="time [ns]", ylabel=f"variant - {variants[0]} [fC-eq.]", xlim=(0, tmax))
         ax[0, k].legend(frameon=False, fontsize=7); ax[1, k].legend(frameon=False, fontsize=6)
     fig.suptitle(f"muon {muon}, Tp={tp:g} ns: {title}", fontsize=9)
     fig.tight_layout(rect=(0, 0, 1, 0.95))
@@ -224,8 +225,7 @@ def main():
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
     variants = a.variants.split(",")
-    if variants[0] != "T0":
-        raise SystemExit("first variant must be T0")
+    REF = variants[0]   # reference variant: T0 for the T-ladder, S0 (= T1 frozen replay) for the S-ladder
     fracs = [float(x) for x in a.fracs.split(",")]
     muons = sorted(p.name for p in a.root.iterdir()
                    if p.is_dir() and all((p / v / "replay" / "waveforms.csv").exists() for v in variants))
@@ -237,7 +237,7 @@ def main():
     rng = np.random.default_rng(12345)
     signal = "ION TERM ONLY (time-dependent Shockley-Ramo, frozen RKF paths)" if a.no_prompt else \
         "ion term + INSTANTANEOUS electron-step APPROXIMATION"
-    report = {"muons": muons, "variants": variants, "signal": signal, "fracs_of_T0_lead": fracs,
+    report = {"muons": muons, "variants": variants, "reference": REF, "signal": signal, "fracs_of_reference_lead": fracs,
               "shaping_status": "PROVISIONAL (NA60+ VMM3a peaking time and transfer function unverified)", "Tp": {}}
     lines = []
     for tp in [float(x) for x in a.tp.split(",")]:
@@ -259,23 +259,23 @@ def main():
                     waves[v] = cur
                 res, shaped = analyse_muon(waves, labels, a.dt, fracs, h, a.window_ns, dt_in)
                 for v in variants[1:]:
-                    d = diffs(res[v], res["T0"], fracs)
+                    d = diffs(res[v], res[REF], fracs)
                     per[v].append(d)
                     fo.write(json.dumps({"muon": m, "variant": v, "Tp_ns": tp, **d}) + "\n")
-                fo.write(json.dumps({"muon": m, "variant": "T0", "Tp_ns": tp,
-                                     **{f"{s}_{k}": res["T0"][s][k] for s in ("U", "V")
+                fo.write(json.dumps({"muon": m, "variant": REF, "Tp_ns": tp,
+                                     **{f"{s}_{k}": res[REF][s][k] for s in ("U", "V")
                                         for k in ("lead_index", "lead_peak", "lead_peak_time", "charge", "amplitude",
                                                   "centroid_strip", "sign")},
-                                     "w_mm": res["T0"]["w_mm"], "u_mm": res["T0"]["u_mm"],
-                                     "thresholds_fCeq": {s: res["T0"][s]["thresholds_fCeq"] for s in ("U", "V")}}) + "\n")
+                                     "w_mm": res[REF]["w_mm"], "u_mm": res[REF]["u_mm"],
+                                     "thresholds_fCeq": {s: res[REF][s]["thresholds_fCeq"] for s in ("U", "V")}}) + "\n")
                 if a.plots:
                     plot_muon(a.out / f"{m}_Tp{tp:g}.png", m, tp, labels, shaped, res, variants, a.dt,
                               f"{signal}; {hlabel}")
         summ = {v: {k: summarize([d[k] for d in per[v]], a.bootstrap, rng) for k in per[v][0]} for v in variants[1:]}
-        report["Tp"][f"{tp:g}"] = {"shaper": hlabel, "differences_vs_T0": summ}
-        lines.append(f"== Tp={tp:g} ns  {hlabel}\n   signal: {signal}; muons={len(muons)}; thresholds = f x T0 lead peak, fixed from T0")
+        report["Tp"][f"{tp:g}"] = {"shaper": hlabel, "reference": REF, "differences_vs_reference": summ}
+        lines.append(f"== Tp={tp:g} ns  {hlabel}\n   signal: {signal}; muons={len(muons)}; thresholds = f x {REF} lead peak, fixed from {REF}")
         for v in variants[1:]:
-            lines.append(f"-- {v} minus T0")
+            lines.append(f"-- {v} minus {REF}")
             for k, s in summ[v].items():
                 if s.get("n"):
                     ci = f" CI95=[{s['mean_ci95'][0]:+.3g},{s['mean_ci95'][1]:+.3g}]" if "mean_ci95" in s else ""
