@@ -288,3 +288,16 @@ See `CLAUDE_HANDOFF_1800V_PER_WIRE.md`. Ask Claude to review the
 ROOT-native distributions and sampling/normalization only after a WIPP
 compile succeeds or when a specific physics discrepancy is identified;
 do not run competing unverified physics simulations.
+
+### WIPP routing queue IO minimum (confirmed 2026-11-23)
+
+The `N` queue is a **route** queue to `longE`, `shortE`, `normE`,
+`gpuE`, with mandatory `resources_min.io=0.1`. Direct access to
+`normE` was denied, and the first analysis `N` submission without
+an explicit IO resource failed with
+`Job violates queue and/or server resource limits`.
+The *successful frozen 1800V production worker* declares
+`#PBS -q N` and `#PBS -l io=0.1`; the independent analysis worker and
+`qsub` now do the same. The first new pilot remains only 60 muons from
+three original chunks. If PBS rejects it again, capture the exact PBS error
+and `qstat -Qf N`; do not guess at compute resource changes.
