@@ -210,3 +210,15 @@ When the user returns data, ChatGPT compares these real 1800V
 distributions to validated 2100V data only with aligned input/geometry
 and decides which missing phase-space cells or uncertainty justify
 new microscopic jobs.
+
+## Scheduler fix (confirmed from original production)
+
+On 2026-11-23, WIPP's `N` queue was shown to be a routing queue with
+`resources_min.io=0.1` and destinations longE/shortE/normE/gpuE.
+Original successful 1800V worker `pbs_wiretruth30k_chunk_v1.sh`
+explicitly requested `#PBS -l io=0.1` in addition to `#PBS -q N`.
+The first analysis `normE` submission was denied access; the second
+`N` submission omitted IO and was rejected by queue resource limits.
+The new launcher and analysis worker now request `io=0.1` explicitly.
+No analysis result has yet been reported; wait for a real PBS job ID and
+completed SHA-verified pilot before interpreting gain-versus-asymmetry plots.
