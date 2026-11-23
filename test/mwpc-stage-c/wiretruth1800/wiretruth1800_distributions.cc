@@ -68,6 +68,19 @@ long long Count(const std::vector<std::string>&r,const Header&h,const std::strin
   const auto s=Get(r,h,key);Need(!s.empty(),"missing count "+key);
   const auto n=std::stoll(s);Need(n>=0,"negative count "+key);return n;
 }
+void CheckNativeAsym(const std::vector<std::string>&r,const Header&h,
+                     const char* field,long long positive,long long negative){
+  const std::string recorded=Get(r,h,field);
+  if(positive+negative==0){
+    Need(recorded.empty(),std::string("undefined native ion sector A must be empty: ")+field);
+    return;
+  }
+  const double predicted=MWPC1800Asym::SignedAsym(positive,negative);
+  Need(!recorded.empty(),std::string("native sector A is missing: ")+field);
+  const double actual=std::stod(recorded);
+  Need(std::isfinite(actual) && std::abs(predicted-actual)<1e-9,
+       std::string("native ion sector A differs from independent exact census: ")+field);
+}
 std::string Lower(std::string s) {
   std::transform(s.begin(),s.end(),s.begin(),
                  [](unsigned char x){return std::tolower(x);});
@@ -413,6 +426,7 @@ int main(int argc,char**argv) {
       std::map<WireKey,std::array<long long,2>> bySeedWire;
       std::map<WireKey,Moments> seedWireMoments;
       std::map<WireKey,std::array<long long,6>> seedWireSectors;
+      std::map<std::pair<std::string,int>,std::array<long long,6>> byMuonWireSectors;
       std::map<std::pair<std::string,int>,std::array<long long,2>> byMuonWire;
       std::map<SeedKey,Seed> originalSeeds;
       {
@@ -474,6 +488,10 @@ int main(int argc,char**argv) {
           Need(sectors[0]+sectors[1]+sectors[2]==n &&
                sectors[3]+sectors[4]+sectors[5]==n,
                "native per-Heed-primary physical-wire ion asymmetry census mismatch");
+          CheckNativeAsym(r,h,"A_ion_hemi",sectors[0],sectors[1]);
+          CheckNativeAsym(r,h,"A_ion_TB",sectors[3],sectors[4]);
+          auto& pooled=byMuonWireSectors[{cid,k}];
+          for(int j=0;j<6;++j)pooled[j]+=sectors[j];
           Need(seedWireSectors.emplace(WireKey{cid,pi,k},sectors).second,
                "duplicate primary wire ion sectors");
         }
@@ -517,6 +535,11 @@ int main(int argc,char**argv) {
           const long long side=Count(r,h,"ion_side");
           Need(up+down+boundary==n && top+bottom+side==n,
                "native angular ion birth census per anode inconsistent");
+          CheckNativeAsym(r,h,"A_ion_hemi",up,down);
+          CheckNativeAsym(r,h,"A_ion_TB",top,bottom);
+          Need(byMuonWireSectors.at({cid,k})==
+                    (std::array<long long,6>{up,down,boundary,top,bottom,side}),
+               "per-muon physical-wire A sector counts disagree with sum of original Heed primaries");
           const std::size_t slot=std::size_t(off+4);
           m.q[slot]=q;m.ions[slot]=n;
           m.up[slot]=up;m.down[slot]=down;m.boundary[slot]=boundary;
@@ -736,6 +759,15 @@ int main(int argc,char**argv) {
        "n_primary_ion_wires,n_primary_wire_defined_A,"
        "n_primary_ion_wires_zero_collected,n_primary_wire_positive_gain_and_A\n";
     for(const auto&[scope,a]:study.asym){
+      Need(a->muonsWithGainAndA<=a->muonsWithDefinedA &&
+           a->wireWithA<=a->ionWireRows &&
+           a->wireWithTB<=a->ionWireRows &&
+           a->wireWithGainAndA<=a->wireWithA &&
+           a->wireWithZeroQ<=a->ionWireRows &&
+           a->seedWireWithA<=a->seedWireRows &&
+           a->seedWireWithGainAndA<=a->seedWireWithA &&
+           a->seedWireWithZeroQ<=a->seedWireRows,
+           "asymmetry analysis included unphysical or uncounted populations in scope "+scope);
       asymCensus<<scope<<","<<a->muonsWithDefinedA<<","
         <<a->muonsWithGainAndA<<","<<a->ionWireRows<<","
         <<a->wireWithA<<","<<a->wireWithTB<<","
