@@ -160,9 +160,9 @@ submit(){
     local_jobname=w1800pil
     local_walltime=01:00:00
   fi
-  echo "Using PBS queue=$PBS_QUEUE, name=$local_jobname, mem=4gb, walltime=$local_walltime"
+  echo "Using PBS queue=$PBS_QUEUE, name=$local_jobname, mem=4gb, walltime=$local_walltime, io=0.1"
   JOB=$(/opt/pbs/bin/qsub -q "$PBS_QUEUE" -N "$local_jobname" \
-    -l select=1:ncpus=1:mem=4gb -l "walltime=$local_walltime" \
+    -l select=1:ncpus=1:mem=4gb -l "walltime=$local_walltime" -l io=0.1 \
     -v "MWPC_1800_ROOT=$ROOT,MWPC_1800_OLD_ROOT=$OLD,MWPC_1800_ANALYSIS_OUT=$OUT,MWPC_1800_ANALYSIS_REPO=$REPO,MWPC_1800_CHUNKS_PER_CHANNEL=$CHUNK_LIMIT,MWPC_1800_PBS_QUEUE=$PBS_QUEUE" \
     -o "$REPO/test_runs/pbs-logs" -e "$REPO/test_runs/pbs-logs" \
     "$HERE/pbs_wiretruth1800_analysis.sh")
