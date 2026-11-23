@@ -277,10 +277,24 @@ void MergeTrees(const std::vector<std::string>&dirs,const fs::path&out,
   Need(mu&&wr&&seed&&seedWire,"merged physics ROOT TTrees missing");
   Need(mu->GetEntries()==expectedMuonCount,
        "merged independent Geant4 muon count does not equal frozen total");
-  Need(wr->GetEntries()>=expectedMuonCount &&
-       seed->GetEntries()>=expectedMuonCount &&
-       seedWire->GetEntries()>=seed->GetEntries(),
-       "merged physical per-wire or per-Heed-primary TTree entries missing");
+  // Many original Heed primaries genuinely have zero ion births and no
+  // collected charge and consequently have NO seed_wires row. Do not
+  // demand seed_wires >= seeds or anode rows >= independent muons.
+  Need(seed->GetEntries()>0 &&
+       wr->GetEntries()>=0 && seedWire->GetEntries()>=0,
+       "invalid merged original physical-primary/collection census");
+  Csv summary(out/"channel_station_summary.csv");
+  const auto sx=Columns(summary.header);
+  long long expectedWire=-1,expectedSeed=-1;
+  for(const auto& row:summary.rows){
+    if(row.front()!="all")continue;
+    expectedWire=Number(row[sx.at("n_positive_charge_wire_rows")])+
+                 Number(row[sx.at("n_ion_but_zero_e_wire_rows")]);
+    expectedSeed=Number(row[sx.at("total_heed_primaries")]);
+  }
+  Need(wr->GetEntries()==expectedWire &&
+       seed->GetEntries()==expectedSeed,
+       "merged exact anode/Heed-primary ROOT trees differ from additive summaries");
   std::set<std::string> ids;
   std::map<std::string,long long> channelMuons;
   TTreeReader reader(mu);
@@ -294,14 +308,17 @@ void MergeTrees(const std::vector<std::string>&dirs,const fs::path&out,
   }
   Need(static_cast<long long>(ids.size())==expectedMuonCount,
        "ROOT merged source crossing IDs do not conserve independent muons");
-  auto* h=Histogram("all_n_wire");
-  (void)h;
+  TH1* h=nullptr;
   file->GetObject("all_n_wire",h);
   Need(h && std::llround(h->GetEntries())==expectedMuonCount,
        "merged ROOT multiplicity histogram differs from actual Geant4 crossing IDs");
   TH1* g=nullptr;
   file->GetObject("all_asym_wire_gain_vs_A_hemi",g);
-  Need(g&&g->GetEntries()>0,"empty merged actual per-anode gain vs A ROOT histogram");
+  Need(g,"missing merged exact per-anode gain vs A histogram");
+  // An extremely inefficient gas point could have all gains zero;
+  // do not require a positive-gain population to validate the ROOT schema.
+  if(g->GetEntries()==0)
+    std::cerr<<"WARNING: all archived anodes have no positive Q & defined A\n";
   std::ofstream audit(out/"merged_root_qa.txt");
   Need(bool(audit),"cannot write exact ROOT merged physics QA");
   audit<<"NA60+ simulation 1800V P3 noFW: original SHA-frozen Garfield++ source\n"
