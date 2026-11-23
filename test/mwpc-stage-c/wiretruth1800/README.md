@@ -301,3 +301,46 @@ The *successful frozen 1800V production worker* declares
 `qsub` now do the same. The first new pilot remains only 60 muons from
 three original chunks. If PBS rejects it again, capture the exact PBS error
 and `qstat -Qf N`; do not guess at compute resource changes.
+
+
+## Real 60-muon pilot and next I/O-scaling check (2026-11-23)
+
+The **actual** WIPP 60-muon result, physical counts, gain-asymmetry
+observations and limitations are recorded in
+[REAL_PILOT60_RESULTS_20261123.md](REAL_PILOT60_RESULTS_20261123.md).
+60 muons produced 10,152,431 collected electrons, 10,149,698 positive-ion
+births, 3,148 Heed primaries, 75 populated anode groups and 10 muons with
+second-anode charge share above 5%. Job 5588743.pbs ended with exit 0,
+35m36s wall/7s CPU. Do not infer channel/station conditional asymmetry
+or a statistically significant gain-A correlation from these pilot plots.
+
+**Next controlled step:** after fetching this latest analysis branch,
+run a 180-muon I/O-scaling/physics QA pilot instead of a single full ~8k job:
+
+```bash
+cd "$HOME/NA6PRoot-wiretruth1800-analysis"
+git fetch origin feature/p3-1800v-wiretruth-8k-analysis-20261123
+git merge --ff-only FETCH_HEAD
+RUNNER=test/mwpc-stage-c/wiretruth1800/run_wiretruth1800_analysis.sh
+bash -n "$RUNNER"
+export MWPC_1800_PBS_QUEUE=N
+unset MWPC_1800_CHUNKS_PER_CHANNEL
+export MWPC_1800_ANALYSIS_OUT="$PWD/test_runs/wiretruth1800_asym_mid_$(date -u +%Y%m%dT%H%M%SZ)"
+bash "$RUNNER" pilot180
+```
+
+This submits only **9 verified 20-muon chunks** (3 Jpsi, 3 Phi, 3 Omega)
+to the N routing queue with 1 CPU, 4 GB, 4h and io=0.1. Its stage logs
+now distinguish original source SHA256 preparation, ROOT/C++ computation
++ plotting, scratch-to-output persistence and final SHA checks.
+When PBS node-local TMPDIR is available, ROOT and ~109 PNGs are
+generated on local scratch, then copied to the **new** result directory.
+If absent, the runner explicitly logs the slow-filesystem fallback.
+The original production input and results remain read-only.
+
+Before any larger campaign, obtain an Exit_status=0 and an output
+SHA256SUMS recheck and inspect W1800_STAGE_UTC lines in the PBS stdout.
+A failed/incomplete scratch copy never becomes a sealed analysis result.
+If 180 muons remain I/O-bound, partition the ~8k analysis into separate
+channel/index chunks with exact TTree/histogram merge/duplicate-checks.
+Do not submit all 8k into a single 4h PBS job.
