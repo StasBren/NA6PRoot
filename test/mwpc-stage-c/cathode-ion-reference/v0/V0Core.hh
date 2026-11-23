@@ -51,7 +51,9 @@ struct Frag {   // one (muon, primary, nearest-birth global wire)
 struct PrimRec {   // one (muon, primary), all wire fragments aggregated
   int muon = 0, prim = 0, nFrag = 0, nFragExact = 0; long long Nexact = 0, nSaved = 0, collected = 0;
   double Nhat = 0, x[kND], se[kND], tbar = kNaN, exA = kNaN, startDuMm = 0, startVmm = 0, tPrim = 0;
-  int birthWireArgmax = -999, collWireArgmax = -999;
+  int birthWireArgmax = -999, collWireArgmax = -999, startWire = -999;   // startWire: global anode nearest the PRIMARY START (Heed position)
+  // exact census (microscopic_wire_seed.csv) per primary, NaN if absent; times relative to t_primary [ns]
+  double exDelay = kNaN, exSigtPrim = kNaN, exOnset = kNaN, collFracMax = kNaN;
   PrimRec() { for (int k = 0; k < kND; ++k) { x[k] = kNaN; se[k] = kNaN; } }
 };
 
@@ -102,12 +104,23 @@ inline void buildFragments(const std::vector<Muon>& mus, std::vector<Frag>& F, s
     }
     // primary records: ALL primaries of the primaries tree, including zero-ion and zero-collected ones
     std::map<int, std::pair<long long, int>> collBest, birthBest;
-    if (m.haveSeed) for (auto& s : m.seed) { auto& c = collBest[s.prim]; if (s.collected > c.first) c = {s.collected, s.gwire}; auto& b = birthBest[s.prim]; if (s.births > b.first) b = {s.births, s.gwire}; }
+    if (m.haveSeed) for (auto& s : m.seed) {   // only wires with a positive count (a zero-count row must not create wire 0 as 'argmax')
+      if (s.collected > 0 && s.collected > collBest[s.prim].first) collBest[s.prim] = {s.collected, s.gwire};
+      if (s.births > 0 && s.births > birthBest[s.prim].first) birthBest[s.prim] = {s.births, s.gwire}; }
+    for (auto it = collBest.begin(); it != collBest.end();) it = it->second.first > 0 ? std::next(it) : collBest.erase(it);
+    for (auto it = birthBest.begin(); it != birthBest.end();) it = it->second.first > 0 ? std::next(it) : birthBest.erase(it);
     for (auto& p : m.prims) {
       PrimRec r; r.muon = (int)im; r.prim = p.idx; r.Nexact = p.Nexact; r.nSaved = p.nSaved; r.collected = p.collected; r.tPrim = p.t;
       r.startDuMm = 10. * (p.u - std::llround(p.u / m.pitch) * m.pitch); r.startVmm = 10. * p.v;
       if (collBest.count(p.idx)) r.collWireArgmax = collBest[p.idx].second;
       if (birthBest.count(p.idx)) r.birthWireArgmax = birthBest[p.idx].second;
+      r.startWire = m.base + (int)std::llround(p.u / m.pitch);
+      if (m.haveSeed) { double B = 0, Bt = 0, Bt2 = 0, C = 0, Ct = 0, Cmax = 0;
+        for (auto& s : m.seed) if (s.prim == p.idx) {
+          if (s.births > 0 && !std::isnan(s.meanT)) { const double sg = std::isnan(s.sigT) ? 0. : s.sigT; B += s.births; Bt += s.births * (s.meanT - p.t); Bt2 += s.births * ((s.meanT - p.t) * (s.meanT - p.t) + sg * sg); }
+          if (s.collected > 0) { C += s.collected; Cmax = std::max(Cmax, (double)s.collected); if (!std::isnan(s.meanTcol)) Ct += s.collected * (s.meanTcol - p.t); } }
+        if (B > 0) { r.exDelay = Bt / B; r.exSigtPrim = std::sqrt(std::max(0., Bt2 / B - r.exDelay * r.exDelay)); }
+        if (C > 0) { r.exOnset = Ct / C; r.collFracMax = Cmax / C; } }
       double S[kND] = {0}, W[kND] = {0}, V[kND] = {0}, sT = 0, wT = 0, sxA = 0, wxA = 0;
       for (size_t fi : fragsOfPrim[p.idx]) { const Frag& g = F[fi]; r.nFrag++; if (g.exBirths >= 0) r.nFragExact++; r.Nhat += g.Nhat;
         for (int k = 0; k < kND; ++k) if (!std::isnan(g.x[k])) { S[k] += g.Nhat * g.x[k]; W[k] += g.Nhat; V[k] += g.Nhat * g.Nhat * g.se[k] * g.se[k]; }

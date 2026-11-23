@@ -85,7 +85,12 @@ case "${1:-}" in
         echo "lut500_frozen_config:"; cat "$LUT500_DIR/frozen_config.json"; } >> "$OUT/provenance.txt"
       LUTARG=(--lut500 "$LUT500_DIR/garfield_electrons.csv")
     else echo "lut500=absent (set MWPC_LUT500_DIR); no 1800 V comparison" >> "$OUT/provenance.txt"; fi
-    "$BIN" --list "$LIST" --exclude-index-csv "$SEALED" "${LUTARG[@]}" --out-dir "$OUT" | tee "$OUT/console.txt"
-    echo "OUTPUT $OUT  (return v0_summary.txt, v0_manifest.txt, provenance.txt, selection_note.txt)";;
-  *) echo "usage: $0 prepare|selftest|schema|pilot|population"; exit 1;;
+    "$BIN" --list "$LIST" --exclude-index-csv "$SEALED" "${LUTARG[@]}" --ion-dump-muons "${MWPC_V0_ION_DUMP:-20}" --out-dir "$OUT" | tee "$OUT/console.txt"
+    if python3 -c "import matplotlib, pandas" 2>/dev/null; then
+      python3 "$HERE/v0_plots.py" "$OUT" "$OUT/plots" > "$OUT/plots_console.txt" 2>&1 && echo "PLOTS $OUT/plots" || echo "plotting failed: see $OUT/plots_console.txt"
+    else echo "matplotlib/pandas missing: run v0_plots.py elsewhere"; fi
+    echo "OUTPUT $OUT  (return v0_summary.txt, v0_manifest.txt, provenance.txt, selection_note.txt, plots/)";;
+  plots)
+    D="${2:?V0 output dir}"; python3 "$HERE/v0_plots.py" "$D" "$D/plots_$(date +%H%M%S)";;
+  *) echo "usage: $0 prepare|selftest|schema|pilot|population|plots DIR"; exit 1;;
 esac
