@@ -222,3 +222,33 @@ The first analysis `normE` submission was denied access; the second
 The new launcher and analysis worker now request `io=0.1` explicitly.
 No analysis result has yet been reported; wait for a real PBS job ID and
 completed SHA-verified pilot before interpreting gain-versus-asymmetry plots.
+
+
+## Verified real 60-muon outcome; next performance gate
+
+See [REAL_PILOT60_RESULTS_20261123.md](REAL_PILOT60_RESULTS_20261123.md)
+for source-anchored counts, actual visual findings and appropriate
+limits on gain-versus-ion-hemisphere-A statements.
+
+The user's genuine WIPP 60-muon job `5588743.pbs` exited 0,
+with 35m36s walltime but only 7s CPU. Source manifest and exact
+wire/primary electron and ion conservation passed. At muon level 15/60
+had exactly two collecting anodes; 10/60 had Q2/Qtotal>5%;
+75 physically ion-bearing anode rows, 2661 per-Heed-primary/anode
+ion-bearing rows and only one ion-bearing primary-wire with zero Q.
+Total effective gain Q/N_Heed=3225.04 at 1800 V. No physical cathode
+current, reconstruction efficiency, or calibrated sign of U/V waveform
+follows from this result. The supplied result tar omitted the TTree ROOT
+file and 18 other named products; all 112 included files passed SHA.
+
+Because CPU/wall ratio suggests I/O wait, the GitHub analysis launcher
+now supports `pilot180` (3 original 20-muon chunks per channel,
+180 actual muons, resource 1 core/4 GB/4h/io=.1) and optional node
+TMPDIR staging of ROOT and PNG output. Its stdout stage timestamp
+markers isolate bottlenecks while preserving the full metadata/sha
+verifications.
+
+Do not advise a single full ~8k 4h PBS job before the 180 resource
+gate. If physical correlation is requested now, insist on original
+per-event ROOT tree; visual scatter cannot give slope, Pearson r,
+bootstrap confidence interval, or channel/station adjustment.
