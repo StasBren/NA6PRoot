@@ -297,8 +297,10 @@ int main(int argc,char**argv) {
     TTree wires("wires","Positive electron and/or positive ion per physical anode");
     TTree seeds("seeds","Per-Heed-primary collected electrons, ion birth census and sharing");
     TTree seedWires("seed_wires","Per-Heed-primary exact physical-wire collected electrons and ion birth census");
-    muons.SetDirectory(root.get());wires.SetDirectory(root.get());
-    seeds.SetDirectory(root.get());seedWires.SetDirectory(root.get());
+    // Stack-owned TTrees must not be deleted by TFile::Close().
+    // Their entries are explicitly written to the ROOT output below.
+    muons.SetDirectory(nullptr);wires.SetDirectory(nullptr);
+    seeds.SetDirectory(nullptr);seedWires.SetDirectory(nullptr);
     TRow mrow,wrow,srow,swrow;
     Branches(muons,mrow);Branches(wires,wrow);Branches(seeds,srow);
     Branches(seedWires,swrow);
