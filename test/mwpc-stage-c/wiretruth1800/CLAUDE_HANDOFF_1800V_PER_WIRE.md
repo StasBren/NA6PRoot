@@ -108,6 +108,66 @@ If/when code review is needed, focus on:
 Do not swap in a toy strip weighting field or reinterpret the ion
 hemisphere asymmetry as measured cathode U/V signal.
 
+## New analysis requested: gain versus true ion-birth asymmetry per anode
+
+The same analysis branch now includes
+`wiretruth1800_asymmetry.hh`, integrated into the ROOT/C++ executable.
+Do not run Garfield again or invent plots before completed WIPP output.
+
+**Exact definitions:** For every native `microscopic_wire_muon.csv` physical
+anode row, `A_ion_hemi = (ion_up-ion_down)/(ion_up+ion_down)`,
+and `A_ion_TB=(ion_top-ion_bottom)/(ion_top+ion_bottom)`.
+Hemisphere `up/down` means birth azimuth above/below the anode x-axis;
+`top/bottom` are the restricted 45°–135° and -135°– -45° sectors.
+Exact boundary/side counts are excluded from the respective denominators.
+When denominator is zero, A is undefined (NaN); never set to zero.
+Anode ions are assigned by **ion birth location**, electrons by
+**actual Garfield collection endpoint**. These wire populations differ.
+
+**Gain denominators:**
+- `G_{muon}=Q_{muon}/N_{Heed,muon}` (effective gain);
+- `G_{muon,wire}=Q_{muon,wire}/N_{Heed,muon}` (effective contribution
+  of one collecting anode);
+- `G_{primary,wire}=Q_{primary,wire}` (collected endpoints produced from
+  one initial Heed electron);
+- `Q=0` is a physically valid response and must stay in the ROOT trees
+  and `asymmetry_denominators.csv`, though it has undefined log10 gain.
+
+New PNGs under output include
+`asym_gain_vs_A_hemi_wire_all.png`,
+`asym_gain_vs_A_hemi_muon_all.png`,
+`asym_gain_vs_A_hemi_primary_wire_all.png`,
+`asym_gain_vs_A_TB_wire_all.png`,
+`asym_A_hemi_vs_A_TB_all.png`,
+`asym_A_hemi_vs_local_wire_all.png`,
+`asym_A_hemi_vs_signed_impact_all.png`,
+`asym_A_hemi_vs_theta_u_all.png`,
+`asym_A_hemi_vs_theta_w_all.png`,
+`asym_muon_sharing_vs_A_hemi_all.png`,
+`asym_charge_fraction_vs_A_hemi_wire_all.png`,
+`asym_ion_births_vs_A_hemi_wire_all.png`,
+and `asym_zero_collected_ion_wires_A_hemi_all.png`.
+Every channel has equivalent figures, and 18 station/channel subsets
+have station-resolved gain-A and A-local-wire plots plus all ROOT histograms.
+
+The baseline reads only files independently locked to the original
+1800 V Geant4/Heed/Garfield SHA-verified campaign.
+`asymmetry_denominators.csv` specifies the actual per-wire/per-muon/
+per-primary-wire population of each graph.
+
+**Interpretation caution:** h2 densities have one entry per ion-bearing
+physical wire (or per primary wire), not per independent muon, except
+specifically labeled muon plots. A large-gain primary can contribute
+several wires. TProfile ROOT bin errors are not event-cluster bootstrap
+uncertainties. The comparison to 2100V needs common crossing/geometry
+and real Garfield, not a plot from weighted hypothetical strip ions.
+
+Before model decisions, request WIPP job `Exit_status=0`,
+`asymmetry_denominators.csv`, and 4–6 key PNGs.
+Scientific hypothesis: whether per-wire collected gain and Q2 sharing
+retain a conditional dependence on ion-birth asymmetry once anode
+offset, station, incident theta_u/theta_w, and channel are accounted for.
+
 ## Future detector strategy
 
 First obtain a coherent current-geometry baseline (even though numerical
