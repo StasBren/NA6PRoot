@@ -203,9 +203,25 @@ bash "$RUNNER" build
 export MWPC_1800_ANALYSIS_OUT="$PWD/test_runs/wiretruth1800_snapshot_$(date -u +%Y%m%dT%H%M%SZ)"
 echo "RESULT_DIR=$MWPC_1800_ANALYSIS_OUT"
 
-# ROOT-only analysis and file SHA audit in an independent PBS job.
+# Smoke test: 1 SHA-verified chunk x 20 genuine Geant4 muons per
+# physics channel (60 muons); no Garfield/Heed reruns.
+bash "$RUNNER" pilot
+```
+
+First check the `w1800pil` PBS job (`normE`, 1 CPU, 4 GB,
+1 hour). Only after its `Exit_status=0` and the produced 60-muon
+`asymmetry_denominators.csv` and PNGs pass checks, submit the **full
+available ~8k snapshot** into a DIFFERENT unique folder:
+
+```bash
+export MWPC_1800_ANALYSIS_OUT="$PWD/test_runs/wiretruth1800_full_$(date -u +%Y%m%dT%H%M%SZ)"
+unset MWPC_1800_CHUNKS_PER_CHANNEL
 bash "$RUNNER" submit
 ```
+
+The full PBS job `w1800ana` requests one CPU/4GB/4h; the unbounded
+snapshot includes all complete SHA-verified original chunks at that time.
+No held/ongoing physics jobs are altered.
 
 PBS job `w1800ana`, `normE`, one CPU/4GB/4h, no Garfield++ physics.
 If the queue rejects the resource request, inspect `qstat -Qf`
@@ -234,6 +250,12 @@ To inspect stdout/stderr, list `$PWD/test_runs/pbs-logs` and use the real
 PBS job ID (avoid placeholder paths). If file I/O proves too slow under
 PBS, preserve logs and benchmark the source path before extending walltime
 or weakening the SHA checks.
+
+For the first 60-muon pilot, send its `PASS ... real muons=60` log,
+`asymmetry_denominators.csv` and
+`asym_gain_vs_A_hemi_wire_all.png` /
+`asym_A_hemi_vs_local_wire_all.png`. If the smoke test fails, do NOT
+submit the full ~8k array; return the exact error to ChatGPT for a code fix.
 
 **Files to send back for physical interpretation**: job stdout with final
 `PASS ... muons=` counts, `channel_station_summary.csv`, the
