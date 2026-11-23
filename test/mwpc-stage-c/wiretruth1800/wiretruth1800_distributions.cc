@@ -82,10 +82,15 @@ std::string Identity(const std::vector<std::string>&r,const Header&h) {
   const std::array<std::string,7> f={
     "source","chunk","event","hit_index","track_id","station","det_id"
   };
-  std::string id;
-  for(const auto&key:f){
-    if(!id.empty())id+="|";
-    id+=Get(r,h,key);
+  std::string id=Get(r,h,"source");
+  // Garfield's crossing ID formats the six numeric fields using
+  // std::to_string(integer). The original selection may have zero padding.
+  for(std::size_t i=1;i<f.size();++i){
+    const auto raw=Get(r,h,f[i]);
+    std::size_t end=0;
+    const auto value=std::stoll(raw,&end);
+    Need(end==raw.size(),"invalid original integer crossing ID");
+    id+="|"+std::to_string(value);
   }
   return id;
 }
