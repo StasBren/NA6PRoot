@@ -10,6 +10,7 @@
 #include <TH2D.h>
 #include <TProfile.h>
 #include <TProfile2D.h>
+#include "wiretruth1800_asymmetry.hh"
 #include <TCanvas.h>
 #include <TLegend.h>
 #include <TLatex.h>
@@ -99,7 +100,8 @@ struct Muon {
   std::string id,channel;
   int station=0,det=0,pdg=0,base=0,heed=0;
   double u=0,w=0,thetaU=0,thetaW=0,path=0,momentum=0,impact=0;
-  long long q[9]={},ions[9]={},up[9]={},down[9]={},boundary[9]={};
+  long long q[9]={},ions[9]={},up[9]={},down[9]={},boundary[9]={},
+            top[9]={},bottom[9]={},side[9]={};
   std::array<std::array<double,6>,9> wireMoments{};
   long long nExpected=-1,qExpected=-1,nHeed=-1,capped=0,failed=0;
   bool crossingSeen=false;
@@ -179,6 +181,12 @@ struct TRow {
          mean_t_collected_ns=std::numeric_limits<double>::quiet_NaN(),
          sigma_t_collected_ns=std::numeric_limits<double>::quiet_NaN();
   Long64_t q=0,ions=0,heed_primaries=0,q_total=0,ion_total=0;
+  Long64_t ion_up=0,ion_down=0,ion_boundary=0,
+           ion_top=0,ion_bottom=0,ion_side=0;
+  double ion_A_TB=std::numeric_limits<double>::quiet_NaN(),
+         gain_mu_e_per_heed=std::numeric_limits<double>::quiet_NaN(),
+         gain_wire_e_per_heed=std::numeric_limits<double>::quiet_NaN(),
+         wire_charge_fraction=std::numeric_limits<double>::quiet_NaN();
 };
 void Branches(TTree& t,TRow&r){
   t.Branch("crossing_id",&r.crossing_id);
@@ -195,6 +203,14 @@ void Branches(TTree& t,TRow&r){
   t.Branch("q2_fraction",&r.q2_fraction);t.Branch("q2_over_q1",&r.q2_over_q1);
   t.Branch("nearest_q_fraction",&r.nearest_q_fraction);
   t.Branch("ion_A",&r.ion_A);
+  t.Branch("ion_A_TB",&r.ion_A_TB);
+  t.Branch("ion_up",&r.ion_up);t.Branch("ion_down",&r.ion_down);
+  t.Branch("ion_boundary",&r.ion_boundary);
+  t.Branch("ion_top",&r.ion_top);t.Branch("ion_bottom",&r.ion_bottom);
+  t.Branch("ion_side",&r.ion_side);
+  t.Branch("gain_mu_e_per_heed",&r.gain_mu_e_per_heed);
+  t.Branch("gain_wire_e_per_heed",&r.gain_wire_e_per_heed);
+  t.Branch("wire_charge_fraction",&r.wire_charge_fraction);
   t.Branch("mean_w_birth_global_mm",&r.mean_w_birth_global_mm);
   t.Branch("sigma_w_birth_mm",&r.sigma_w_birth_mm);
   t.Branch("mean_t_birth_ns",&r.mean_t_birth_ns);
@@ -208,16 +224,19 @@ void Branches(TTree& t,TRow&r){
 struct Session {
   std::map<std::string,std::unique_ptr<Hist>> hist;
   std::map<std::string,Counts> counts;
+  std::map<std::string,std::unique_ptr<MWPC1800Asym::Plots>> asym;
   Session(){
     for(const auto&channel:{"all","jpsi","phi","omega"}){
       hist.emplace(channel,std::make_unique<Hist>(channel));
       counts[channel]=Counts{};
+      asym.emplace(channel,std::make_unique<MWPC1800Asym::Plots>(channel));
     }
     for(const auto&channel:{"jpsi","phi","omega"})
       for(int st=0;st<6;++st){
         const std::string key=std::string(channel)+"_station"+std::to_string(st);
         hist.emplace(key,std::make_unique<Hist>(key));
         counts[key]=Counts{};
+        asym.emplace(key,std::make_unique<MWPC1800Asym::Plots>(key));
       }
   }
   std::vector<std::string> Keys(const Muon&m) {
@@ -393,6 +412,7 @@ int main(int argc,char**argv) {
       }
       std::map<WireKey,std::array<long long,2>> bySeedWire;
       std::map<WireKey,Moments> seedWireMoments;
+      std::map<WireKey,std::array<long long,6>> seedWireSectors;
       std::map<std::pair<std::string,int>,std::array<long long,2>> byMuonWire;
       std::map<SeedKey,Seed> originalSeeds;
       {
@@ -447,6 +467,15 @@ int main(int argc,char**argv) {
           }
           Need(seedWireMoments.emplace(WireKey{cid,pi,k},t).second,
                "duplicate per-seed wire moments");
+          const std::array<long long,6> sectors={
+            Count(r,h,"ion_up"),Count(r,h,"ion_down"),
+            Count(r,h,"ion_boundary"),Count(r,h,"ion_top"),
+            Count(r,h,"ion_bottom"),Count(r,h,"ion_side")};
+          Need(sectors[0]+sectors[1]+sectors[2]==n &&
+               sectors[3]+sectors[4]+sectors[5]==n,
+               "native per-Heed-primary physical-wire ion asymmetry census mismatch");
+          Need(seedWireSectors.emplace(WireKey{cid,pi,k},sectors).second,
+               "duplicate primary wire ion sectors");
         }
       }
       std::map<SeedKey,std::array<long long,2>> seedSums;
@@ -483,10 +512,15 @@ int main(int argc,char**argv) {
           const long long up=Count(r,h,"ion_up");
           const long long down=Count(r,h,"ion_down");
           const long long boundary=Count(r,h,"ion_boundary");
-          Need(up+down+boundary==n,"signed positive-ion birth population inconsistent");
+          const long long top=Count(r,h,"ion_top");
+          const long long bottom=Count(r,h,"ion_bottom");
+          const long long side=Count(r,h,"ion_side");
+          Need(up+down+boundary==n && top+bottom+side==n,
+               "native angular ion birth census per anode inconsistent");
           const std::size_t slot=std::size_t(off+4);
           m.q[slot]=q;m.ions[slot]=n;
           m.up[slot]=up;m.down[slot]=down;m.boundary[slot]=boundary;
+          m.top[slot]=top;m.bottom[slot]=bottom;m.side[slot]=side;
           auto& t=m.wireMoments[slot];
           t.fill(std::numeric_limits<double>::quiet_NaN());
           if(n){
@@ -508,6 +542,12 @@ int main(int argc,char**argv) {
         Need(m.crossingSeen,"missing original Garfield crossing");
         const auto qsum=std::accumulate(std::begin(m.q),std::end(m.q),0LL);
         const auto nsum=std::accumulate(std::begin(m.ions),std::end(m.ions),0LL);
+        auto sumSectors=[&](const long long (&a)[9]){
+          return std::accumulate(std::begin(a),std::end(a),0LL);
+        };
+        Need(sumSectors(m.up)+sumSectors(m.down)+sumSectors(m.boundary)==nsum
+             && sumSectors(m.top)+sumSectors(m.bottom)+sumSectors(m.side)==nsum,
+             "muon ion angular sectors do not sum to exact callbacks");
         Need(qsum==m.qExpected&&nsum==m.nExpected,
              "per-muon real physical wire electron/ion census mismatch");
         long long qSeeds=0,nSeeds=0;int nPrimary=0;
@@ -533,10 +573,20 @@ int main(int argc,char**argv) {
         base.q2_fraction=qsum?f2:std::numeric_limits<double>::quiet_NaN();
         base.q2_over_q1=qsum?f21:std::numeric_limits<double>::quiet_NaN();
         base.nearest_q_fraction=near;
+        base.gain_mu_e_per_heed=m.nHeed>0?
+          double(qsum)/m.nHeed:std::numeric_limits<double>::quiet_NaN();
+        base.ion_up=sumSectors(m.up);base.ion_down=sumSectors(m.down);
+        base.ion_boundary=sumSectors(m.boundary);
+        base.ion_top=sumSectors(m.top);base.ion_bottom=sumSectors(m.bottom);
+        base.ion_side=sumSectors(m.side);
+        base.ion_A=MWPC1800Asym::SignedAsym(base.ion_up,base.ion_down);
+        base.ion_A_TB=MWPC1800Asym::SignedAsym(base.ion_top,base.ion_bottom);
         mrow=base;mrow.q=qsum;mrow.ions=nsum;muons.Fill();
         for(auto&key:study.Keys(m)){
           auto&c=study.counts.at(key);auto&h=*study.hist.at(key);
           ++c.nMuon;c.nCharge+=qsum;c.nIons+=nsum;c.nHeed+=m.nHeed;
+          study.asym.at(key)->FillMuon(base.ion_up,base.ion_down,qsum,
+                                    static_cast<int>(m.nHeed));
           c.nZero+=(nw==0);c.nSingle+=(nw==1);c.nDouble+=(nw==2);c.nMany+=(nw>=3);
           c.nShare5+=sharing;
           h.hNWire->Fill(nw);
@@ -559,6 +609,14 @@ int main(int argc,char**argv) {
           wrow.global_wire=k;wrow.local_wire=i-4;
           wrow.wire_u_global_mm=(m.station==0?1.5:0.)+3.*k;
           wrow.q=m.q[i];wrow.ions=m.ions[i];
+          wrow.ion_up=m.up[i];wrow.ion_down=m.down[i];
+          wrow.ion_boundary=m.boundary[i];
+          wrow.ion_top=m.top[i];wrow.ion_bottom=m.bottom[i];
+          wrow.ion_side=m.side[i];
+          wrow.gain_wire_e_per_heed=m.nHeed>0?
+            double(wrow.q)/m.nHeed:std::numeric_limits<double>::quiet_NaN();
+          wrow.wire_charge_fraction=qsum>0?
+            double(wrow.q)/qsum:std::numeric_limits<double>::quiet_NaN();
           const auto& mom=m.wireMoments[i];
           wrow.mean_w_birth_global_mm=mom[0];
           wrow.sigma_w_birth_mm=mom[1];
@@ -566,12 +624,15 @@ int main(int argc,char**argv) {
           wrow.sigma_t_birth_ns=mom[3];
           wrow.mean_t_collected_ns=mom[4];
           wrow.sigma_t_collected_ns=mom[5];
-          wrow.ion_A=(m.up[i]+m.down[i])?
-            double(m.up[i]-m.down[i])/(m.up[i]+m.down[i]):
-            std::numeric_limits<double>::quiet_NaN();
+          wrow.ion_A=MWPC1800Asym::SignedAsym(m.up[i],m.down[i]);
+          wrow.ion_A_TB=MWPC1800Asym::SignedAsym(m.top[i],m.bottom[i]);
           wires.Fill();
           for(auto&key:study.Keys(m)){
             auto&c=study.counts.at(key);auto&h=*study.hist.at(key);
+            study.asym.at(key)->FillWire(
+              m.up[i],m.down[i],m.top[i],m.bottom[i],
+              wrow.q,wrow.ions,qsum,static_cast<int>(m.nHeed),
+              i-4,m.impact,m.thetaU,m.thetaW);
             if(wrow.q){++c.nWireQPositive;h.hLogQWire->Fill(std::log10(double(wrow.q)));
               h.hOffset->Fill(i-4,double(wrow.q)/std::max(1LL,qsum));
             }
@@ -614,6 +675,15 @@ int main(int argc,char**argv) {
             swrow.global_wire=wire;swrow.local_wire=wire-m.base;
             swrow.wire_u_global_mm=(m.station==0?1.5:0.)+3.*wire;
             swrow.q=wIt->second[0];swrow.ions=wIt->second[1];
+            swrow.gain_wire_e_per_heed=double(swrow.q);
+            swrow.wire_charge_fraction=s.q>0?
+              double(swrow.q)/s.q:std::numeric_limits<double>::quiet_NaN();
+            const auto& sectors=seedWireSectors.at(wIt->first);
+            swrow.ion_up=sectors[0];swrow.ion_down=sectors[1];
+            swrow.ion_boundary=sectors[2];swrow.ion_top=sectors[3];
+            swrow.ion_bottom=sectors[4];swrow.ion_side=sectors[5];
+            swrow.ion_A=MWPC1800Asym::SignedAsym(sectors[0],sectors[1]);
+            swrow.ion_A_TB=MWPC1800Asym::SignedAsym(sectors[3],sectors[4]);
             const auto& moment=seedWireMoments.at(wIt->first);
             swrow.mean_w_birth_global_mm=moment[0];
             swrow.sigma_w_birth_mm=moment[1];
@@ -622,6 +692,9 @@ int main(int argc,char**argv) {
             swrow.mean_t_collected_ns=moment[4];
             swrow.sigma_t_collected_ns=moment[5];
             seedWires.Fill();
+            for(auto&group:study.Keys(m))
+              study.asym.at(group)->FillPrimaryWire(
+                sectors[0],sectors[1],swrow.q,swrow.ions);
           }
           if(s.q)
             for(auto&group:study.Keys(m))
@@ -632,6 +705,7 @@ int main(int argc,char**argv) {
     Need(nChunks>0,"no completed 1800V physics chunks in manifest");
     root->cd();muons.Write();wires.Write();seeds.Write();seedWires.Write();
     for(auto&[key,h]:study.hist)h->Write();
+    for(auto&[key,h]:study.asym)h->Write();
     root->Write();root->Close();
     std::ofstream summary(out/"channel_station_summary.csv");
     Need(bool(summary),"cannot write per-channel/station independent-muon summary");
@@ -654,7 +728,24 @@ int main(int argc,char**argv) {
              <<c.nWireIonOnly<<"\n";
     }
     summary.close();
+    std::ofstream asymCensus(out/"asymmetry_denominators.csv");
+    Need(bool(asymCensus),"cannot create per-scope asymmetry denominator QA");
+    asymCensus<<"scope,n_muons_defined_A,n_muons_positive_gain_and_A,"
+       "n_ion_wires,n_wire_defined_A_hemi,n_wire_defined_A_TB,"
+       "n_ion_wires_zero_collected,n_wire_positive_gain_and_A,"
+       "n_primary_ion_wires,n_primary_wire_defined_A,"
+       "n_primary_ion_wires_zero_collected,n_primary_wire_positive_gain_and_A\n";
+    for(const auto&[scope,a]:study.asym){
+      asymCensus<<scope<<","<<a->muonsWithDefinedA<<","
+        <<a->muonsWithGainAndA<<","<<a->ionWireRows<<","
+        <<a->wireWithA<<","<<a->wireWithTB<<","
+        <<a->wireWithZeroQ<<","<<a->wireWithGainAndA<<","
+        <<a->seedWireRows<<","<<a->seedWireWithA<<","
+        <<a->seedWireWithZeroQ<<","<<a->seedWireWithGainAndA<<"\n";
+    }
+    asymCensus.close();
     Drawing(out,study);
+    MWPC1800Asym::Draw(out,study.asym);
     std::ofstream status(out/"analysis_readme.txt");
     status<<"NA60+ Simulation: verified 1800 V, P3 noFW, ArCO2 70:30, Penning 0.57\n"
           <<"Frozen original Geant4 crossings, TrackHeed and microscopic Garfield++\n"
@@ -670,6 +761,15 @@ int main(int argc,char**argv) {
           <<"no systematic error or correlated-channel uncertainty estimated.\n"
           <<"Muon wire/seed/parent and complete original counts independently agree.\n"
           <<"Only SHA-frozen completed chunks enter; no cap/failure in accepted events.\n"
+          <<"Asymmetries A_hemi and A_TB use exact ion birth azimuth sectors.\n"
+          <<"A_hemi excludes boundary births; A_TB excludes side sector.\n"
+          <<"Gain per muon/wire divides collected endpoints by muon's Heed primary count.\n"
+          <<"Individual primary-wire gain is collected endpoints from one Heed electron.\n"
+          <<"2D histograms count physical wire or primary-wire rows, not muons,\n"
+          <<"unless explicitly labeled muon; within-muon rows are correlated.\n"
+          <<"Ion-bearing zero-collected wires are kept and have undefined log-gain.\n"
+          <<"Binned ROOT profiles are exploratory; their error bars are not\n"
+          <<"cluster-bootstrap independent-muon statistical uncertainties.\n"
           <<"No strip weighting field, ion transport, electronics, or detection threshold.\n"
           <<"WARNING: 1800 V historical code labels P3 but numerical geometry is\n"
           <<"3mm pitch and symmetric +/-3mm cathodes; not the as-built chamber.\n";
