@@ -258,7 +258,9 @@ void PlotFinal(TFile&input,const fs::path&dir){
 void MergeTrees(const std::vector<std::string>&dirs,const fs::path&out,
                 long long expectedMuonCount){
   const fs::path target=out/"wiretruth1800_full.root";
-  TFileMerger merger(kFALSE,kTRUE);
+  // Merge many ROOT files sequentially rather than retaining all histograms
+  // in memory at once (single PBS CPU / 4 GB RAM allocation).
+  TFileMerger merger(kFALSE,kFALSE);
   Need(merger.OutputFile(target.string().c_str(),"RECREATE"),
        "cannot open final ROOT merger output");
   for(const auto&dir:dirs){
