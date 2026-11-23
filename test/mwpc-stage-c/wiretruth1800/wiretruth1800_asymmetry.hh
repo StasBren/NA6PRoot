@@ -257,5 +257,14 @@ inline void Draw(const std::filesystem::path&out,const std::map<std::string,std:
     DrawProfile(out,ch,p.meanAByThetaU,"mean_A_vs_signed_theta_u");
     DrawProfile(out,ch,p.meanAByThetaW,"mean_A_vs_signed_theta_w");
   }
+  // Every channel x station also receives its own wire-resolved physics
+  // diagnostic; the full distributions/profiles remain in the ROOT file.
+  for(const std::string&ch:{"jpsi","phi","omega"})for(int station=0;station<6;++station){
+    const auto key=ch+"_station"+std::to_string(station);
+    Plots& p=*byScope.at(key);
+    const auto desc="1800 V P3 noFW; "+ch+" station "+std::to_string(station);
+    DrawOne(out,key,p.wireGainA,"gain_vs_A_hemi_wire",desc);
+    DrawOne(out,key,p.aByLocal,"A_hemi_vs_local_wire",desc);
+  }
 }
 } // namespace MWPC1800Asym
