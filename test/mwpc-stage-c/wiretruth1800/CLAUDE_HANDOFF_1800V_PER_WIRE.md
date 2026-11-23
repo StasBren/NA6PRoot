@@ -252,3 +252,55 @@ Do not advise a single full ~8k 4h PBS job before the 180 resource
 gate. If physical correlation is requested now, insist on original
 per-event ROOT tree; visual scatter cannot give slope, Pearson r,
 bootstrap confidence interval, or channel/station adjustment.
+
+
+## 2026-11-23 decision: run ALL completed original 1800V ~8k muons
+
+The user specifically requested **all ~8000 now**, without an intermediate
+180-muon performance pilot. ChatGPT implemented a new full-sample
+**read-only ROOT-only** PBS archive campaign. It selects every completed
+SHA-receipt-backed original 20-muon WIPP chunk at preparation time
+(actual number recorded, not assumed exactly 8k), then freezes its
+channel + original crossing index set.
+
+Critical GitHub files:
+- FULL_8K_CAMPAIGN_20261123.md (complete WIPP launch/merge instructions)
+- full1800.sh (build/prepare/submit/status/resume/merge-submit)
+- full_wiretruth1800_campaign.py (receipt+source SHA provenance, PBS-local
+  copies, sealed independent shard outputs, strict full merge gate)
+- pbs_wiretruth1800_full_shard.sh and pbs_wiretruth1800_full_merge.sh
+- wiretruth1800_distributions.cc (new --no-plots flag for shards; **no
+  physics changes** to gain/A definitions)
+- wiretruth1800_merge_full.cc (real C++/ROOT TFileMerger, exact
+  crossing_id uniqueness, summed integer counters, independently
+  recomputed full-population Q2 fraction and uncertainty, final
+  channel and station plot rendering)
+
+Source physics is historical 1800V P3 noFW 3mm pitch symmetric +/-3mm
+analytic nine-wire model, not the as-built chamber and NOT a 2100V
+uncapped simulation. All collected charges are genuine Garfield electron
+wire endpoints and ion A values are true callback positive-ion *birth*
+sector counts. Keep the distinction absolute.
+
+WIPP pilot job 5588743.pbs (60 genuine muons, 35m36s wall, 7s CPU,
+exit 0) demonstrated I/O domination, motivating default 6 original
+20-muon chunks per PBS array member, at most 2 simultaneous members,
+N routing queue with io=0.1, 1 CPU, 4GB, 8h per member. New stage
+copies all five input files to node TMPDIR while simultaneously verifying
+their frozen SHA, runs identical ROOT physics without redundant per-shard
+PNGs, seals each separate shard on shared storage. The final PBS job
+first validates ALL shards, merges TTrees and TH1/TProfile distributions,
+checks original crossing IDs unique and exact primary/wire population,
+and generates final PNGs once.
+
+No full simulation/analysis job is claimed launched or successful at
+the moment of this handoff. User runs the commands and returns PBS IDs
+and actual outputs. Before reporting a physical correlation from these
+anodes, check independent-muon clustering, sample conditioning by
+station/source/impact/angle and original ion count.
+
+The full 1800V campaign MUST NOT modify held/original Garfield production
+arrays, old verified source chunks, 2100V ion/strip solver, or source
+geometry. If a PBS task errors, correct the source on a *new frozen
+analysis campaign* rather than silently mixing different ROOT executable
+SHA versions within one selection.
