@@ -16,6 +16,7 @@
 #include <TROOT.h>
 #include <TMath.h>
 #include <algorithm>
+#include <cctype>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -128,12 +129,16 @@ struct Hist {
     hThetaSecond=new TH2D(name("theta_q2").c_str(),";Signed #theta_{u} [deg];Q_{2}/Q_{total}",72,-90,90,50,0,.5);
     pMultiPhase=new TProfile(name("multi_phase").c_str(),";|u_{entry}-u_{nearest wire}| [mm];P(Q_{2}/Q_{total} > 5%)",15,0,1.5);
     pMultiTheta=new TProfile(name("multi_theta").c_str(),";|#theta_{u}| [deg];P(Q_{2}/Q_{total} > 5%)",30,0,90);
-    for(TH1* h:{hNWire,hLogQ,hLogIon,hLogQWire,hLogIonWire,hSecond,hNear,hA,hSeedLogQ,hOffset,hPhaseSecond,hThetaSecond,pMultiPhase,pMultiTheta})
-      h->Sumw2();
+    const std::array<TH1*,14> all={hNWire,hLogQ,hLogIon,hLogQWire,
+      hLogIonWire,hSecond,hNear,hA,hSeedLogQ,hOffset,
+      hPhaseSecond,hThetaSecond,pMultiPhase,pMultiTheta};
+    for(TH1* h:all)h->Sumw2();
   }
   void Write()const {
-    for(TH1* h:{hNWire,hLogQ,hLogIon,hLogQWire,hLogIonWire,hSecond,hNear,hA,hSeedLogQ,hOffset,hPhaseSecond,hThetaSecond,pMultiPhase,pMultiTheta})
-      h->Write();
+    const std::array<TH1*,14> all={hNWire,hLogQ,hLogIon,hLogQWire,
+      hLogIonWire,hSecond,hNear,hA,hSeedLogQ,hOffset,
+      hPhaseSecond,hThetaSecond,pMultiPhase,pMultiTheta};
+    for(TH1* h:all)h->Write();
   }
 };
 struct TRow {
@@ -335,6 +340,7 @@ int main(int argc,char**argv) {
         Need(n==20,"Garfield crossing output missing muons");
       }
       std::map<WireKey,std::array<long long,2>> bySeedWire;
+      std::map<std::pair<std::string,int>,std::array<long long,2>> byMuonWire;
       std::map<SeedKey,Seed> originalSeeds;
       {
         std::ifstream in(cols[6]);Need(bool(in),"missing Garfield individual seeds");
@@ -372,6 +378,8 @@ int main(int argc,char**argv) {
                "real wire centre / station phase mismatch");
           Need(bySeedWire.emplace(WireKey{cid,pi,k},std::array<long long,2>{q,n}).second,
                "duplicate per-primary physical wire");
+          byMuonWire[{cid,k}][0]+=q;
+          byMuonWire[{cid,k}][1]+=n;
         }
       }
       std::map<SeedKey,std::array<long long,2>> seedSums;
@@ -412,14 +420,9 @@ int main(int argc,char**argv) {
           const std::size_t slot=std::size_t(off+4);
           m.q[slot]=q;m.ions[slot]=n;
           m.up[slot]=up;m.down[slot]=down;m.boundary[slot]=boundary;
-          const auto birth=bySeedWire.lower_bound(WireKey{cid,-1,k});
-          (void)birth;
-          long long qSeed=0,nSeed=0;
-          for(const auto&[key,v]:bySeedWire)
-            if(std::get<0>(key)==cid && std::get<2>(key)==k){
-              qSeed+=v[0];nSeed+=v[1];
-            }
-          Need(qSeed==q&&nSeed==n,"wire_muon != independently summed Heed-primary wire truth");
+          const auto& fromSeeds=byMuonWire.at({cid,k});
+          Need(fromSeeds[0]==q&&fromSeeds[1]==n,
+               "wire_muon != independently summed Heed-primary wire truth");
         }
       }
       for(auto&[cid,m]:events){
