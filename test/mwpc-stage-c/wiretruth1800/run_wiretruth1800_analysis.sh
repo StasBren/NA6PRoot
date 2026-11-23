@@ -47,12 +47,15 @@ build(){
   [[ -x "$BIN" ]] || fail "Compilation did not produce ROOT/C++ executable."
   echo "PASS compiled $BIN; no Geant4/Heed/Garfield jobs launched."
 }
+stamp(){ printf 'W1800_STAGE_UTC=%s %s\n' "$(date -u +%FT%TZ)" "$*"; }
 run(){
   check
+  stamp "BEGIN mode=run requested_per_channel_chunk_limit=$CHUNK_LIMIT output=$OUT"
   [[ -x "$BIN" ]] || fail "First run build mode (no compilation inside PBS)."
   mkdir -p "$(dirname "$OUT")"
   SNAP="$OUT.frozen_chunks.tsv"
   [[ ! -e "$SNAP" ]] || fail "Snapshot already exists: $SNAP. Choose another output prefix."
+  stamp "BEGIN verified SHA256 immutable input snapshot"
   python3 - "$ROOT" "$OLD" "$SNAP" "$CHUNK_LIMIT" <<'PY'
 import sys, os, json, hashlib
 from pathlib import Path
@@ -128,9 +131,29 @@ print("FROZEN SNAPSHOT",counts,"chunks=",total,"muons=",20*total,
       "per_channel_limit=",chunk_limit,"partial dirs=",partial,
       "manifest=",dst,flush=True)
 PY
-  echo "ROOT/C++ analysis of original 1800V physical per-wire distributions"
-  "$BIN" "$SNAP" "$OUT"
+  stamp "END input snapshot; BEGIN C++/ROOT physics and PNG"
+  # ROOT/PNG output on PBS scratch reduces many small metadata writes
+  # to slow shared /srv01. Read-only original input paths stay unchanged.
+  WORK_OUT="$OUT"
+  SCRATCH_BASE=""
+  if [[ -n "${TMPDIR:-}" && -d "$TMPDIR" && -w "$TMPDIR" ]];then
+    SCRATCH_BASE="$(mktemp -d "$TMPDIR/wiretruth1800_XXXXXX")"
+    WORK_OUT="$SCRATCH_BASE/analysis"
+    stamp "Using node-local PBS scratch for ROOT/PNG writing: $WORK_OUT"
+  else
+    stamp "No writable PBS TMPDIR; analysis writes directly to requested output"
+  fi
+  "$BIN" "$SNAP" "$WORK_OUT"
+  stamp "END C++/ROOT analysis; BEGIN persistence of scratch files"
+  if [[ "$WORK_OUT" != "$OUT" ]];then
+    [[ ! -e "$OUT" ]] || fail "Output appeared during analysis; refuse overwrite"
+    mkdir "$OUT"
+    cp -a "$WORK_OUT/." "$OUT/"
+    # Scratch is not the archival result; only post-copy SHA-sealed OUT is.
+    rm -rf "$SCRATCH_BASE"
+  fi
   cp "$SNAP" "$OUT/frozen_chunk_manifest.tsv"
+  stamp "END output copy; BEGIN immutable output SHA256"
   {
     echo "analysis_git_commit=$(git -C "$REPO" rev-parse HEAD)"
     echo "per_channel_chunk_limit=$CHUNK_LIMIT"
@@ -145,7 +168,7 @@ PY
     sha256sum *.root *.csv *.png *.txt *.tsv > SHA256SUMS
     sha256sum -c SHA256SUMS >/dev/null
   )
-  echo "PASS sealed $OUT"
+  stamp "PASS sealed original 1800V analysis output $OUT"
 }
 submit(){
   check
@@ -159,6 +182,9 @@ submit(){
   if [[ "$CHUNK_LIMIT" == "1" ]];then
     local_jobname=w1800pil
     local_walltime=01:00:00
+  elif [[ "$CHUNK_LIMIT" == "3" ]];then
+    local_jobname=w1800mid
+    local_walltime=04:00:00
   fi
   echo "Using PBS queue=$PBS_QUEUE, name=$local_jobname, mem=4gb, walltime=$local_walltime, io=0.1"
   JOB=$(/opt/pbs/bin/qsub -q "$PBS_QUEUE" -N "$local_jobname" \
@@ -180,6 +206,11 @@ case "$MODE" in
     CHUNK_LIMIT=1
     submit
     ;;
+  pilot180)
+    [[ "$CHUNK_LIMIT" == "0" ]] || fail "Set no external chunk limit when using pilot180"
+    CHUNK_LIMIT=3
+    submit
+    ;;
   status)
     echo "Original 1800V production root: $ROOT"
     echo "Output requested: $OUT"
@@ -187,5 +218,5 @@ case "$MODE" in
       (cd "$OUT" && sha256sum -c SHA256SUMS)
     else echo "No sealed analysis output at that path (yet).";fi
     ;;
-  *) fail "Usage: bash run_wiretruth1800_analysis.sh {build|run|pilot|submit|status}";;
+  *) fail "Usage: bash run_wiretruth1800_analysis.sh {build|run|pilot|pilot180|submit|status}";;
 esac
