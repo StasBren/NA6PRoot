@@ -56,11 +56,13 @@ run(){
   SNAP="$OUT.frozen_chunks.tsv"
   [[ ! -e "$SNAP" ]] || fail "Snapshot already exists: $SNAP. Choose another output prefix."
   stamp "BEGIN verified SHA256 immutable input snapshot"
-  python3 - "$ROOT" "$OLD" "$SNAP" "$CHUNK_LIMIT" <<'PY'
+  python3 - "$ROOT" "$OLD" "$SNAP" "$CHUNK_LIMIT" "$HERE" <<'PY'
 import sys, os, json, hashlib
 from pathlib import Path
 root,old,dst=map(Path,sys.argv[1:4])
 chunk_limit=int(sys.argv[4])
+sys.path.insert(0,sys.argv[5])
+from full_wiretruth1800_campaign import validate_failed_starts
 assert chunk_limit>=0
 selection=json.loads((root/"locked/selection.json").read_text())
 binary=json.loads((root/"locked/binary.json").read_text())
@@ -108,7 +110,7 @@ with dst.open("x") as out:
             assert x["git_commit"]==expected_git and x["binary_sha256"]==expected_bin,receipt
             assert x["cxx_sha256"]==selection["cxx_sha256"],receipt
             assert x["counts"]["muons"]==20 and x["counts"]["capped"]==0,receipt
-            assert x["counts"]["failed_return"]==0,receipt
+            validate_failed_starts(x,d)
             src=srcdir/f"chunk_{i:04d}.csv"
             assert x["input_sha256"]==selection["input_sha256"][f"{channel}:{i:04d}"],src
             assert hash_file(src)==x["input_sha256"],src
