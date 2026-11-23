@@ -62,6 +62,28 @@ physics/statistics are C++/ROOT.
   Ar/CO2 70:30, Penning r=.57, symmetric ±3mm cathodes,
   30µm wires at 3mm pitch. NOT the verified as-built chamber.
 
+## Updated workflow: 60-muon smoke test before ~8k full analysis
+
+The analysis branch additionally supports
+`bash test/mwpc-stage-c/wiretruth1800/run_wiretruth1800_analysis.sh pilot`.
+It submits only a 1-core/4GB/1h OpenPBS `w1800pil` job: one frozen,
+SHA256-verified 20-muon chunk from each of Jpsi, Phi and Omega
+(60 real source Geant4 muons total). The independent C++ code validates
+per-primary, per-wire and per-muon charge, birth-sector totals and
+reported asymmetries before exporting ROOT plots.
+
+Wait for `Exit_status=0`, inspect `asymmetry_denominators.csv`,
+`asym_gain_vs_A_hemi_wire_all.png` and
+`asym_A_hemi_vs_local_wire_all.png`. If all correct, the new output
+prefix with `bash .../run_wiretruth1800_analysis.sh submit` selects all
+completed chunks (roughly 8k original muons); do not alter or resume
+the production arrays just for statistics.
+
+The code has been committed but never executed at WIPP in this chat.
+A syntactically valid source cannot establish that it compiles against
+local ROOT or that the physics conservation gates pass.
+Do not report real gain/asymmetry values until user shares actual output.
+
 ## Current deliverables
 
 1. `channel_station_summary.csv`, independent muon denominator with
