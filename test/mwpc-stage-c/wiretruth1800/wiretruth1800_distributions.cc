@@ -132,7 +132,11 @@ struct Hist {
     const std::array<TH1*,14> all={hNWire,hLogQ,hLogIon,hLogQWire,
       hLogIonWire,hSecond,hNear,hA,hSeedLogQ,hOffset,
       hPhaseSecond,hThetaSecond,pMultiPhase,pMultiTheta};
-    for(TH1* h:all)h->Sumw2();
+    for(TH1* h:all) {
+      h->Sumw2();
+      // Keep histograms alive for ATLAS-like PNG rendering after TFile closes.
+      h->SetDirectory(nullptr);
+    }
   }
   void Write()const {
     const std::array<TH1*,14> all={hNWire,hLogQ,hLogIon,hLogQWire,
