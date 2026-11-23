@@ -337,7 +337,9 @@ void Drawing(const fs::path&out,Session&s){
 }
 int main(int argc,char**argv) {
   try {
-    Need(argc==3,"usage: wiretruth1800_distributions chunk_manifest.tsv output_directory");
+    Need(argc==3 || argc==4,"usage: wiretruth1800_distributions chunk_manifest.tsv output_directory [--no-plots]");
+    const bool plots=(argc==3);
+    if(argc==4)Need(std::string(argv[3])=="--no-plots","unknown optional flag (expected --no-plots)");
     const fs::path manifest=fs::absolute(argv[1]),out=fs::absolute(argv[2]);
     Need(fs::is_regular_file(manifest),"missing frozen SHA-verified manifest");
     Need(!fs::exists(out),"output directory already exists: refusing overwrite");
@@ -776,8 +778,10 @@ int main(int argc,char**argv) {
         <<a->seedWireWithZeroQ<<","<<a->seedWireWithGainAndA<<"\n";
     }
     asymCensus.close();
-    Drawing(out,study);
-    MWPC1800Asym::Draw(out,study.asym);
+    if(plots){
+      Drawing(out,study);
+      MWPC1800Asym::Draw(out,study.asym);
+    }
     std::ofstream status(out/"analysis_readme.txt");
     status<<"NA60+ Simulation: verified 1800 V, P3 noFW, ArCO2 70:30, Penning 0.57\n"
           <<"Frozen original Geant4 crossings, TrackHeed and microscopic Garfield++\n"
@@ -800,6 +804,7 @@ int main(int argc,char**argv) {
           <<"2D histograms count physical wire or primary-wire rows, not muons,\n"
           <<"unless explicitly labeled muon; within-muon rows are correlated.\n"
           <<"Ion-bearing zero-collected wires are kept and have undefined log-gain.\n"
+          <<"This stage generated "<<(plots?"PNG and ROOT":"ROOT only, plots deferred to merged output")<<".\n"
           <<"Binned ROOT profiles are exploratory; their error bars are not\n"
           <<"cluster-bootstrap independent-muon statistical uncertainties.\n"
           <<"No strip weighting field, ion transport, electronics, or detection threshold.\n"
