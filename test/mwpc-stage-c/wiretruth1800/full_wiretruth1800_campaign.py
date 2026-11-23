@@ -37,8 +37,11 @@ INPUT_FILES = {
 REPO = Path(__file__).resolve().parents[3]
 ANALYZER = REPO / "test/mwpc-stage-c/build-wiretruth1800-analysis/wiretruth1800_distributions"
 MERGER = REPO / "test/mwpc-stage-c/build-wiretruth1800-analysis/wiretruth1800_merge_full"
-REQUIRED_OUTPUT = ("wiretruth1800_8k.root", "channel_station_summary.csv",
-                   "asymmetry_denominators.csv", "analysis_readme.txt")
+SHARD_OUTPUT = ("wiretruth1800_8k.root", "channel_station_summary.csv",
+                "asymmetry_denominators.csv", "analysis_readme.txt")
+MERGED_OUTPUT = ("wiretruth1800_full.root", "channel_station_summary.csv",
+                 "asymmetry_denominators.csv", "merged_root_qa.txt",
+                 "frozen_campaign.json")
 
 
 def require(ok: bool, message: str) -> None:
@@ -287,9 +290,11 @@ def audit_files(folder: Path) -> None:
         require(f.is_file() and sha(f)==digest,
                 f"output file mutated or incomplete {f}")
         n += 1
-    require(n >= len(REQUIRED_OUTPUT), "incomplete sealed shard output")
-    for name in REQUIRED_OUTPUT:
-        require((folder/name).is_file(), f"expected C++ output absent: {name}")
+    kind = MERGED_OUTPUT if (folder/"wiretruth1800_full.root").exists() else SHARD_OUTPUT
+    require(n >= len(kind), "incomplete sealed ROOT output")
+    for name in kind:
+        require((folder/name).is_file(),
+                f"expected {('merged' if kind is MERGED_OUTPUT else 'shard')} output absent: {name}")
     require((folder / "sealed.json").is_file(), "missing sealed provenance")
 
 
@@ -373,7 +378,7 @@ def run_shard(root: Path, index: int) -> None:
         output = tmp/"output"
         subprocess.run([str(ANALYZER),str(checked),str(output),"--no-plots"],check=True)
         stage(f"SHARD_PHYSICS_PASS={index}")
-        for filename in REQUIRED_OUTPUT:
+        for filename in SHARD_OUTPUT:
             require((output/filename).is_file(),
                     f"missing post-physics ROOT/CSV output {filename}")
         with (output/"channel_station_summary.csv").open(newline="") as f:
