@@ -241,9 +241,14 @@ def main():
     Q = P.dropna(subset=["exact_onset_ns"]).copy()
     Q = Q[Q["collected_electrons"] > 0]
     Q["w"] = Q["collected_electrons"].astype(float)
+    # Use grouped sums/transform rather than groupby.apply(include_groups=False).
+    # The latter requires pandas >=2.2 and causes plotting to stop after
+    # figure 5 on older WSL pandas installations.  This is also faster.
+    Q["_weighted_onset"] = Q["exact_onset_ns"] * Q["w"]
     for key, nm in ((["muon_slot"], "mu"), (["muon_slot", "argmax_collected_wire"], "wire")):
-        m = Q.groupby(key).apply(lambda g: wmean(g["exact_onset_ns"], g["w"]), include_groups=False).rename(f"m_{nm}")
-        Q = Q.join(m, on=key)
+        sw = Q.groupby(key, sort=False)["w"].transform("sum")
+        st = Q.groupby(key, sort=False)["_weighted_onset"].transform("sum")
+        Q[f"m_{nm}"] = st / sw
         Q[f"res_{nm}"] = Q["exact_onset_ns"] - Q[f"m_{nm}"]
     fig, ax = plt.subplots(1, 3, figsize=(12, 3.8))
     rng_ = np.linspace(-50, 50, 101)
@@ -254,7 +259,9 @@ def main():
         txt.append(f"onset residual {lab}: electron-weighted RMS {rms:.3f} ns over {len(r)} primaries")
     ax[0].set(xlabel="primary onset (mean collected-electron time) residual [ns]", ylabel="fraction (electron-weighted)")
     ax[0].legend(frameon=False, fontsize=7)
-    per_mu = Q.groupby("muon_slot").apply(lambda g: np.sqrt(wmean(g["res_mu"] ** 2, g["w"])), include_groups=False)
+    Q["_weighted_res_mu2"] = Q["w"] * Q["res_mu"] ** 2
+    by_mu = Q.groupby("muon_slot")
+    per_mu = np.sqrt(by_mu["_weighted_res_mu2"].sum() / by_mu["w"].sum())
     ax[1].hist(per_mu, bins=30, color=C1)
     ax[1].set(xlabel="per-muon onset RMS [ns]", ylabel="muons", title=f"N={len(per_mu)} muons, median {per_mu.median():.2f} ns")
     x, e, lo, hi, n = binned(Q.assign(ab=Q["start_v_mm"].abs()), "ab", "exact_onset_ns", np.linspace(0, 3, 7), wcol="w")
