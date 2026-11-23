@@ -79,6 +79,12 @@ prefix with `bash .../run_wiretruth1800_analysis.sh submit` selects all
 completed chunks (roughly 8k original muons); do not alter or resume
 the production arrays just for statistics.
 
+WIPP November 23 evidence: GCC 13.1.0 / ROOT 6.43.01 compiled the
+analyzer successfully (warnings only). `qsub: Access to queue is denied`
+was caused by an inaccessible hard-coded `normE` queue, now replaced by
+`N`, with `MWPC_1800_PBS_QUEUE` override. New PBS science result still
+requires actual successful run; do not infer any asymmetry values from build.
+
 The code has been committed but never executed at WIPP in this chat.
 A syntactically valid source cannot establish that it compiles against
 local ROOT or that the physics conservation gates pass.
@@ -103,7 +109,7 @@ The source C++ has **not yet been compiled on WIPP**. First user runs:
 ```bash
 bash test/mwpc-stage-c/wiretruth1800/run_wiretruth1800_analysis.sh build
 ```
-then submits isolated `normE` 4GB/4h PBS analysis:
+then submits isolated `N` 4GB/4h PBS analysis:
 ```bash
 bash test/mwpc-stage-c/wiretruth1800/run_wiretruth1800_analysis.sh submit
 ```
