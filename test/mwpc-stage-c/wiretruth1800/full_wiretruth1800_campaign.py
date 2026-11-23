@@ -132,6 +132,51 @@ def source_path(selection, channel, index):
     return source / f"chunk_{index:04d}.csv"
 
 
+def validate_failed_starts(receipt, directory: Path) -> None:
+    """Accept only a geometrically embedded zero-avalanche anode start.
+
+    Original native seed statuses and the SHA-sealed physics files are never
+    changed. This is not a generic waiver of Garfield failed returns.
+    """
+    import math
+
+    failed = int(receipt["counts"]["failed_return"])
+    require(failed >= 0, "negative failed-return count")
+    if failed == 0:
+        return
+    path = directory / INPUT_FILES["seed"]
+    record = receipt["files"]["seed"]
+    require(path.is_file() and path.stat().st_size == int(record["bytes"]) and
+            sha(path) == record["sha256"],
+            f"failed-start seed archive SHA/size mismatch: {path}")
+    observed = 0
+    with path.open(encoding="utf-8", newline="") as inp:
+        for seed in csv.DictReader(inp):
+            if int(seed["successful"]) == 1:
+                continue
+            observed += 1
+            u = float(seed["seed_u_mm"])
+            v = float(seed["seed_v_mm"])
+            # Source physics: 30 um anode diameter; pitch 3 mm;
+            # anode axes at u=i*pitch, v=0 (w runs along the wires).
+            nearest_u = 3.0 * round(u / 3.0)
+            in_anode = (math.isfinite(u) and math.isfinite(v) and
+                        math.hypot(u - nearest_u, v) < 0.015)
+            zero_ions = all(int(seed[k]) == 0 for k in
+                            ("garfield_ni", "ion_births", "attached", "other",
+                             "capped", "ion_up", "ion_down", "ion_top",
+                             "ion_bottom"))
+            require(in_anode and zero_ions and
+                    int(seed["garfield_ne"]) == 1 and
+                    int(seed["collected_e"]) == 1 and
+                    int(seed["successful"]) == 0,
+                    f"unexplained Garfield failed seed in {path}: "
+                    f"{seed['crossing_id']} primary={seed['primary_index']}")
+    require(observed == failed,
+            f"failed-start seed count differs from receipt: {path} "
+            f"receipt={failed} actual={observed}")
+
+
 def completed_receipt(selection, binary, channel, index):
     d = SOURCE_ROOT / "results" / channel.lower() / f"chunk_{index:04d}"
     p = d / "verified_report.json"
@@ -148,9 +193,9 @@ def completed_receipt(selection, binary, channel, index):
             selection["input_sha256"][f"{channel}:{index:04d}"],
             f"Geant4 source mismatch in completed receipt {p}")
     require(x["counts"]["muons"] == 20 and
-            x["counts"]["capped"] == 0 and
-            x["counts"]["failed_return"] == 0,
+            x["counts"]["capped"] == 0,
             f"invalid incomplete 20-muon physical sample in receipt {p}")
+    validate_failed_starts(x, d)
     for key in INPUT_FILES:
         rec = x["files"][key]
         require(len(rec["sha256"]) == 64 and int(rec["bytes"]) > 0,
