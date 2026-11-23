@@ -4,6 +4,7 @@
 #PBS -j oe
 #PBS -l select=1:ncpus=1:mem=4gb
 #PBS -l walltime=04:00:00
+#PBS -l io=0.1
 # PBS ROOT/C++ analysis only: never reruns microscopic Garfield++ avalanches.
 set -Eeo pipefail
 : "${MWPC_1800_ANALYSIS_REPO:?Missing isolated analysis worktree path}"
