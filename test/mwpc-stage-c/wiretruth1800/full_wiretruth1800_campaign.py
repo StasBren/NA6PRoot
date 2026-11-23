@@ -158,7 +158,7 @@ def completed_receipt(selection, binary, channel, index):
     return x, p, d
 
 
-def job_list(root: Path):
+def job_list(root: Path, verify_all_manifests: bool = False):
     plan = load(root / "locked/campaign.json")
     require(plan["schema"] == SCHEMA, "wrong campaign manifest schema")
     require(plan["analysis_git"] == git(),
@@ -179,9 +179,13 @@ def job_list(root: Path):
     for i, shard in enumerate(shards):
         require(shard["id"] == i and shard["channel"] in CHANNELS and
                 len(shard["indices"]) >= 1, "malformed shard plan")
-        manifest = root / "locked/shards" / f"shard_{i:04d}.tsv"
-        require(sha(manifest) == shard["manifest_sha256"],
-                "shard manifest changed after preparation")
+        # Avoid rereading every frozen TSV on shared storage for each
+        # array worker. Verify the actual assigned TSV below. Final merger
+        # checks all source provenance via every completed shard seal.
+        if verify_all_manifests:
+            manifest = root / "locked/shards" / f"shard_{i:04d}.tsv"
+            require(sha(manifest) == shard["manifest_sha256"],
+                    "shard manifest changed after preparation")
         for index in shard["indices"]:
             require((shard["channel"], index) not in seen,
                     "duplicate real crossing input chunk in full plan")
@@ -332,6 +336,8 @@ def run_shard(root: Path, index: int) -> None:
     require(os.environ.get("PBS_JOBID", ""),
             "per-shard full analysis must run on PBS compute node")
     manifest = root / "locked/shards" / f"shard_{index:04d}.tsv"
+    require(sha(manifest) == shard["manifest_sha256"],
+            "assigned frozen shard input manifest SHA changed")
     rows = manifest_rows(manifest)
     require(len(rows) == len(shard["indices"]), "shard list length changed")
     claim = root / "attempts" / f"claim_{index:04d}"
@@ -438,7 +444,7 @@ def status(root: Path) -> None:
 
 
 def merge(root: Path) -> None:
-    plan, _, _ = job_list(root)
+    plan, _, _ = job_list(root, verify_all_manifests=True)
     final = root/"merged"
     require(not final.exists(), "merged final result already exists; never overwrite")
     require(os.environ.get("PBS_JOBID",""),
