@@ -100,6 +100,7 @@ struct Muon {
   int station=0,det=0,pdg=0,base=0,heed=0;
   double u=0,w=0,thetaU=0,thetaW=0,path=0,momentum=0,impact=0;
   long long q[9]={},ions[9]={},up[9]={},down[9]={},boundary[9]={};
+  std::array<std::array<double,6>,9> wireMoments{};
   long long nExpected=-1,qExpected=-1,nHeed=-1,capped=0,failed=0;
   bool crossingSeen=false;
   std::set<int> seenWire;
@@ -108,6 +109,11 @@ struct Seed {
   long long q=0,n=0;int nWireQ=0;
   int garfield=0;
 };
+// Time and longitudinal moment order:
+// mean_w_global_mm, sigma_w_mm, mean_t_birth_ns, sigma_t_birth_ns,
+// mean_t_collected_ns, sigma_t_collected_ns.
+// A physically empty population has NaN, never artificial time zero.
+using Moments=std::array<double,6>;
 using SeedKey=std::pair<std::string,int>;
 using WireKey=std::tuple<std::string,int,int>;
 struct Counts {
@@ -161,8 +167,17 @@ struct TRow {
   int station=0,det_id=0,pdg=0,primary_index=0,
       global_wire=0,local_wire=0,nearest_wire=0,n_active=0,n_active_primary=0;
   double u_entry_mm=0,w_entry_mm=0,theta_u_deg=0,theta_w_deg=0,
-         impact_mm=0,wire_u_global_mm=0,q2_fraction=0,q2_over_q1=0,
-         nearest_q_fraction=0,ion_A=0,mean_t_birth_ns=0,mean_t_collected_ns=0;
+         impact_mm=0,wire_u_global_mm=0;
+  double q2_fraction=std::numeric_limits<double>::quiet_NaN(),
+         q2_over_q1=std::numeric_limits<double>::quiet_NaN(),
+         nearest_q_fraction=std::numeric_limits<double>::quiet_NaN(),
+         ion_A=std::numeric_limits<double>::quiet_NaN();
+  double mean_w_birth_global_mm=std::numeric_limits<double>::quiet_NaN(),
+         sigma_w_birth_mm=std::numeric_limits<double>::quiet_NaN(),
+         mean_t_birth_ns=std::numeric_limits<double>::quiet_NaN(),
+         sigma_t_birth_ns=std::numeric_limits<double>::quiet_NaN(),
+         mean_t_collected_ns=std::numeric_limits<double>::quiet_NaN(),
+         sigma_t_collected_ns=std::numeric_limits<double>::quiet_NaN();
   Long64_t q=0,ions=0,heed_primaries=0,q_total=0,ion_total=0;
 };
 void Branches(TTree& t,TRow&r){
@@ -180,8 +195,12 @@ void Branches(TTree& t,TRow&r){
   t.Branch("q2_fraction",&r.q2_fraction);t.Branch("q2_over_q1",&r.q2_over_q1);
   t.Branch("nearest_q_fraction",&r.nearest_q_fraction);
   t.Branch("ion_A",&r.ion_A);
+  t.Branch("mean_w_birth_global_mm",&r.mean_w_birth_global_mm);
+  t.Branch("sigma_w_birth_mm",&r.sigma_w_birth_mm);
   t.Branch("mean_t_birth_ns",&r.mean_t_birth_ns);
+  t.Branch("sigma_t_birth_ns",&r.sigma_t_birth_ns);
   t.Branch("mean_t_collected_ns",&r.mean_t_collected_ns);
+  t.Branch("sigma_t_collected_ns",&r.sigma_t_collected_ns);
   t.Branch("q",&r.q);t.Branch("ions",&r.ions);
   t.Branch("heed_primaries",&r.heed_primaries);
   t.Branch("q_total",&r.q_total);t.Branch("ion_total",&r.ion_total);
@@ -373,6 +392,7 @@ int main(int argc,char**argv) {
         Need(n==20,"Garfield crossing output missing muons");
       }
       std::map<WireKey,std::array<long long,2>> bySeedWire;
+      std::map<WireKey,Moments> seedWireMoments;
       std::map<std::pair<std::string,int>,std::array<long long,2>> byMuonWire;
       std::map<SeedKey,Seed> originalSeeds;
       {
@@ -413,6 +433,20 @@ int main(int argc,char**argv) {
                "duplicate per-primary physical wire");
           byMuonWire[{cid,k}][0]+=q;
           byMuonWire[{cid,k}][1]+=n;
+          Moments t;
+          t.fill(std::numeric_limits<double>::quiet_NaN());
+          if(n) {
+            t[0]=Val(r,h,"mean_w_birth_global_mm");
+            t[1]=Val(r,h,"sigma_w_birth_mm");
+            t[2]=Val(r,h,"mean_t_birth_ns");
+            t[3]=Val(r,h,"sigma_t_birth_ns");
+          }
+          if(q) {
+            t[4]=Val(r,h,"mean_t_collected_ns");
+            t[5]=Val(r,h,"sigma_t_collected_ns");
+          }
+          Need(seedWireMoments.emplace(WireKey{cid,pi,k},t).second,
+               "duplicate per-seed wire moments");
         }
       }
       std::map<SeedKey,std::array<long long,2>> seedSums;
@@ -453,6 +487,18 @@ int main(int argc,char**argv) {
           const std::size_t slot=std::size_t(off+4);
           m.q[slot]=q;m.ions[slot]=n;
           m.up[slot]=up;m.down[slot]=down;m.boundary[slot]=boundary;
+          auto& t=m.wireMoments[slot];
+          t.fill(std::numeric_limits<double>::quiet_NaN());
+          if(n){
+            t[0]=Val(r,h,"mean_w_birth_global_mm");
+            t[1]=Val(r,h,"sigma_w_birth_mm");
+            t[2]=Val(r,h,"mean_t_birth_ns");
+            t[3]=Val(r,h,"sigma_t_birth_ns");
+          }
+          if(q){
+            t[4]=Val(r,h,"mean_t_collected_ns");
+            t[5]=Val(r,h,"sigma_t_collected_ns");
+          }
           const auto& fromSeeds=byMuonWire.at({cid,k});
           Need(fromSeeds[0]==q&&fromSeeds[1]==n,
                "wire_muon != independently summed Heed-primary wire truth");
@@ -513,6 +559,13 @@ int main(int argc,char**argv) {
           wrow.global_wire=k;wrow.local_wire=i-4;
           wrow.wire_u_global_mm=(m.station==0?1.5:0.)+3.*k;
           wrow.q=m.q[i];wrow.ions=m.ions[i];
+          const auto& mom=m.wireMoments[i];
+          wrow.mean_w_birth_global_mm=mom[0];
+          wrow.sigma_w_birth_mm=mom[1];
+          wrow.mean_t_birth_ns=mom[2];
+          wrow.sigma_t_birth_ns=mom[3];
+          wrow.mean_t_collected_ns=mom[4];
+          wrow.sigma_t_collected_ns=mom[5];
           wrow.ion_A=(m.up[i]+m.down[i])?
             double(m.up[i]-m.down[i])/(m.up[i]+m.down[i]):
             std::numeric_limits<double>::quiet_NaN();
@@ -561,6 +614,13 @@ int main(int argc,char**argv) {
             swrow.global_wire=wire;swrow.local_wire=wire-m.base;
             swrow.wire_u_global_mm=(m.station==0?1.5:0.)+3.*wire;
             swrow.q=wIt->second[0];swrow.ions=wIt->second[1];
+            const auto& moment=seedWireMoments.at(wIt->first);
+            swrow.mean_w_birth_global_mm=moment[0];
+            swrow.sigma_w_birth_mm=moment[1];
+            swrow.mean_t_birth_ns=moment[2];
+            swrow.sigma_t_birth_ns=moment[3];
+            swrow.mean_t_collected_ns=moment[4];
+            swrow.sigma_t_collected_ns=moment[5];
             seedWires.Fill();
           }
           if(s.q)
