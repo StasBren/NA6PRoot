@@ -6,7 +6,9 @@ shifted rigidly in time so that all ions of a group start at the group's effecti
 
   identity : no change (gate: output must be byte-identical to the source)
   primary  : group = Heed primary                -> T1 (one effective time per primary, spatial cloud kept)
-  wire     : group = nearest-birth anode         -> timing part of T4 (one time per wire, cloud kept)
+  wire     : group = anode nearest each ION BIRTH (= archive local_wire_index)            -> TW
+  collect  : group = DOMINANT COLLECTING anode of each ion's PRIMARY (exact census, needs --census)  -> TC
+             i.e. every ion of a primary is attributed to the wire that collected most of its avalanche electrons
   muon     : group = whole crossing               -> one time per muon (extreme control)
 
 Effective time = ion-weight mean of birth_ns over the group (weights = inverse inclusion weights).
@@ -39,11 +41,44 @@ def read_seal(d):
     return dict(line.split("=", 1) for line in (d / "complete.txt").read_text().splitlines() if "=" in line)
 
 
+def collecting_key(census, prim, wire_local, w):
+    """Per ion: global index of the dominant collecting wire of its primary. The local->global wire offset is found by
+    matching each primary's argmax ion-birth wire in the census with its argmax weighted birth wire in the export."""
+    rows = list(csv.DictReader(open(census, newline="")))
+    for c in ("primary_index", "wire_index_global", "collected_e", "ion_births"):
+        if c not in rows[0]:
+            raise SystemExit(f"census lacks column {c}")
+    best_c, best_b = {}, {}
+    for r in rows:
+        p, g, ce, ib = int(r["primary_index"]), int(r["wire_index_global"]), int(r["collected_e"]), int(r["ion_births"])
+        if ce > 0 and ce > best_c.get(p, (0, 0))[0]:
+            best_c[p] = (ce, g)
+        if ib > 0 and ib > best_b.get(p, (0, 0))[0]:
+            best_b[p] = (ib, g)
+    offs = []
+    for p in np.unique(prim):
+        m = prim == p
+        ws = {}
+        for x, ww in zip(wire_local[m], w[m]):
+            ws[x] = ws.get(x, 0.0) + ww
+        if p in best_b:
+            offs.append(best_b[p][1] - max(ws, key=ws.get))
+    vals, cnt = np.unique(offs, return_counts=True)
+    offset = int(vals[np.argmax(cnt)]); agree = float(cnt.max() / cnt.sum())
+    if agree < 0.95:
+        raise SystemExit(f"local/global wire offset ambiguous (agreement {agree:.3f})")
+    # a primary with ion births but no collected electron (not expected) falls back to its argmax ion-birth wire
+    key = {p: (best_c[p][1] if p in best_c else best_b[p][1]) for p in np.unique(prim)}
+    nfall = sum(p not in best_c for p in key)
+    return np.array([key[p] for p in prim]), offset, {"offset_agreement": agree, "primaries_without_collected_e": nfall}
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("source", type=Path, help="frozen export directory (ions.csv, vertices.f64, complete.txt)")
     ap.add_argument("out", type=Path, help="NEW output directory")
-    ap.add_argument("--mode", choices=["identity", "primary", "wire", "muon"], required=True)
+    ap.add_argument("--mode", choices=["identity", "primary", "wire", "collect", "muon"], required=True)
+    ap.add_argument("--census", type=Path, help="microscopic_wire_seed.csv of the same muon (mode collect)")
     a = ap.parse_args()
     src, out = a.source, a.out
     if out.exists():
@@ -69,7 +104,18 @@ def main():
     if np.any(np.abs(V[first, 0] - tb) > 1e-7):
         raise SystemExit("first vertex time != birth_ns")
     wire = np.rint(V[first, 1] / PITCH_MM).astype(int)     # nearest anode to the ion birth (u in mm, patch frame)
-    key = {"identity": np.arange(n), "primary": prim, "wire": wire, "muon": np.zeros(n, int)}[a.mode]
+    coll_note = None
+    if a.mode == "collect":
+        if not a.census:
+            raise SystemExit("--census required for mode collect")
+        coll, offset, agree = collecting_key(a.census, prim, wire, w)
+        coll_note = {"census": str(a.census), "census_sha256": sha256(a.census), "global_minus_local_wire": offset,
+                     "checks": agree,
+                     "ions_whose_birth_wire_differs_from_collecting_wire_weighted_frac":
+                         float(np.sum(w[coll != wire + offset]) / np.sum(w))}
+        key = coll
+    else:
+        key = {"identity": np.arange(n), "primary": prim, "wire": wire, "muon": np.zeros(n, int)}[a.mode]
     shift = np.zeros(n)
     if a.mode != "identity":
         for g in np.unique(key):
@@ -102,7 +148,10 @@ def main():
             "weighted_rms_shift_ns": float(np.sqrt(np.sum(w * shift ** 2) / wsum)),
             "max_abs_shift_ns": float(np.max(np.abs(shift))),
             "nearest_birth_wires": sorted(set(int(x) for x in wire)),
-            "assumption": "static field, time-independent mobility: path depends only on start point"}
+            "assumption": "static field, time-independent mobility: path depends only on start point",
+            "group_definition": {"identity": "none", "primary": "Heed primary", "wire": "anode nearest each ion birth",
+                                 "collect": "dominant collecting anode of the ion's primary (exact census)",
+                                 "muon": "whole crossing"}[a.mode], "collect": coll_note}
     (out / "ablation.json").write_text(json.dumps(meta, indent=2) + "\n")
     if a.mode == "identity":
         same = sha256(out / "vertices.f64") == meta["source_vertices_sha256"] and sha256(out / "ions.csv") == meta["source_ions_sha256"]

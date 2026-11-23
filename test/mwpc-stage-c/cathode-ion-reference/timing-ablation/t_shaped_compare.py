@@ -1,25 +1,31 @@
 #!/usr/bin/env python3
-"""Compare shaped signed U/V strip signals between T-ladder variants and T0.
+"""Compare shaped, signed U/V strip signals of T-ladder variants with T0 (same frozen paths, LUT and replay).
 
 Input layout (written by run_t_ladder.sh):
-  ROOT/<muon>/<variant>/replay/waveforms.csv          frozen replay, ion term (fC/ns per 10 ns bin)
+  ROOT/<muon>/<variant>/replay/waveforms.csv          frozen replay: ion term, fC/ns per 10 ns bin, signed
   ROOT/<muon>/<variant>/prompt/prompt_waveforms.csv   APPROXIMATE electron term: instantaneous step at birth time
-Run ion-only (--no-prompt) first; the ion term is the time-dependent Shockley-Ramo signal of the frozen paths, the
-electron step is an approximation of the time-dependent electron signal (see t_prompt_electron_term.py).
-Variant "T0" is the identity export (byte-identical to the frozen export) and is the reference.
+Run ion-only (--no-prompt) first. The ion term is the time-dependent Shockley-Ramo signal of the frozen RKF paths; the
+electron step is only an approximation of the time-dependent electron signal (see t_prompt_electron_term.py).
+"T0" is the identity export (byte-identical to the frozen export) and is the reference.
 
-Shaping times 100/200 ns are PROVISIONAL until the NA60+ VMM3a configuration is verified.
-Shaper: by default a unit-peak CR-RC^n stand-in, h(t) ~ (t/tau)^n exp(-t/tau), tau = Tp/n (n = 3).
-THIS IS NOT THE VMM3a IMPULSE RESPONSE (the VMM3a user guide gives a 3rd-order 1 real + 2 complex-pole shaper without
-pole values). Supply --impulse FILE (two columns: t_ns, h; any normalization; renormalized to unit peak) when a
-measured or vendor response is available; the output is labelled with the shaper used.
+Shaping times 100/200 ns are PROVISIONAL until the NA60+ VMM3a configuration is verified. Default shaper: unit-peak
+CR-RC^n stand-in, h(t) ~ (t/tau)^n exp(-t/tau), tau = Tp/n, n = 3 -- NOT the VMM3a transfer function. --impulse FILE
+(t_ns, h) replaces it. Output unit: "fC-equivalent peak" (a 1 fC delta charge gives peak 1).
 
-Per muon, plane and strip: main-polarity peak (sign of the plane's largest |extreme|), peak time (parabolic
-refinement on a 1 ns grid), opposite-polarity excursion, threshold-crossing times at fractions of the plane's leading
-peak and at absolute thresholds in fC-equivalent. Per plane: leading strip, second/leading ratio, multiplicity above
-each threshold, peak-weighted centroid of strips above the lowest threshold (strip units), and w, u from U/V
-(U = w - A u, V = w + A u on the exporter's unnormalized strip coordinate, pitch 1.7 mm, A = 0.1).
-Paired differences vs T0, with bootstrap over muons (percentile 68% and 95% intervals).
+Thresholds are ABSOLUTE and fixed from T0: thr_f = f x (T0 leading-strip peak of that plane), and the SAME value is
+applied to every variant, so discrete hit changes near threshold are counted, not normalized away.
+
+Per muon, Tp and plane:
+  * normalized L2 of the signed shaped waveforms over all strips: ||y_v - y_0|| / ||y_0|| (window 0..--window-ns)
+  * leading strip: index change, peak (relative change), peak time, leading-edge times at each threshold
+  * all strips with T0 peak >= 5% of the T0 lead: peak changes relative to the T0 lead peak
+  * strip multiplicity above each threshold and the number of strips whose above/below status flips
+  * plane amplitude (sum of main-polarity peaks over strips above the lowest threshold), U/V amplitude ratio,
+    unshaped plane charge in the window (U/V charge)
+  * peak-weighted centroid (strip units) -> stereo w, u with U = w - A u, V = w + A u on the exporter's strip
+    coordinate (pitch 1.7 mm, A = 0.1)
+Differences vs T0 per muon (jsonl), and over muons: mean, rms, max |d| and a muon bootstrap when >= 3 muons.
+--plots writes per-muon PNGs: shaped waveforms of the 3 largest strips per plane, variants over T0, and residuals.
 """
 import argparse
 import json
@@ -43,22 +49,21 @@ def impulse(tp, n, dt, tmax, table=None):
     if table is None:
         tau = tp / n
         h = (t / tau) ** n * np.exp(-t / tau)
-        label = f"CR-RC^{n} stand-in, Tp={tp:g} ns (NOT VMM3a poles)"
+        label = f"CR-RC^{n} stand-in, Tp={tp:g} ns (PROVISIONAL; not VMM3a poles)"
     else:
-        tt, hh = np.loadtxt(table, delimiter=None, unpack=True)
+        tt, hh = np.loadtxt(table, unpack=True)
         h = np.interp(t, tt, hh, left=0.0, right=0.0)
-        label = f"impulse table {table}"
+        label = f"impulse table {table}, Tp label {tp:g} ns"
     return h / h.max(), label
 
 
 def shape(current, dt_in, h, dt):
-    """current: (nbins, nch) fC/ns on dt_in bins (piecewise constant). Returns shaped (unit-peak per fC) on dt grid."""
+    """current (nbins, nch) in fC/ns, piecewise constant on dt_in bins -> shaped output on a dt grid."""
     k = int(round(dt_in / dt))
-    up = np.repeat(current, k, axis=0) * dt          # charge per fine sample, fC
+    up = np.repeat(current, k, axis=0) * dt
     n = up.shape[0] + len(h)
     nf = 1 << int(np.ceil(np.log2(n)))
-    H = np.fft.rfft(h, nf)
-    out = np.fft.irfft(np.fft.rfft(up, nf, axis=0) * H[:, None], nf, axis=0)[:up.shape[0]]
+    out = np.fft.irfft(np.fft.rfft(up, nf, axis=0) * np.fft.rfft(h, nf)[:, None], nf, axis=0)[:up.shape[0]]
     return out
 
 
@@ -77,165 +82,204 @@ def first_cross(y, thr, dt):
     if len(idx) == 0:
         return np.nan
     i = idx[0]
-    if i == 0:
-        return 0.0
-    return (i - 1 + (thr - y[i - 1]) / (y[i] - y[i - 1])) * dt
+    return 0.0 if i == 0 else (i - 1 + (thr - y[i - 1]) / (y[i] - y[i - 1])) * dt
 
 
-def observables(labels, y, dt, fracs, abs_thr):
-    res = {}
-    planes = {}
+def plane_cols(labels, side):
+    cols = [j for j, l in enumerate(labels) if l.startswith(side + "_")]
+    return cols, np.array([int(labels[j].split("_")[1]) for j in cols])
+
+
+def plane_obs(Y, idx, dt, sgn, thr, charge):
+    """Y: shaped (nt, nstrip) of one plane; sgn: main polarity (fixed from T0); thr: dict name -> absolute value."""
+    S = sgn * Y
+    pk = np.empty(S.shape[1]); tpk = np.empty(S.shape[1])
+    for c in range(S.shape[1]):
+        x, v = parabolic(S[:, c], int(np.argmax(S[:, c])))
+        pk[c], tpk[c] = v, x * dt
+    lead = int(np.argmax(pk))
+    o = dict(lead_index=int(idx[lead]), lead_peak=float(pk[lead]), lead_peak_time=float(tpk[lead]),
+             peaks=pk, peak_times=tpk, charge=float(charge))
+    o["thr_time"] = {k: first_cross(S[:, lead], v, dt) for k, v in thr.items()}
+    o["above"] = {k: pk >= v for k, v in thr.items()}
+    o["mult"] = {k: int(np.sum(a)) for k, a in o["above"].items()}
+    sel = pk >= min(thr.values())
+    o["amplitude"] = float(np.sum(pk[sel]))
+    o["centroid_strip"] = float(np.sum(pk[sel] * idx[sel]) / np.sum(pk[sel])) if sel.any() else np.nan
+    sk = np.sort(pk)
+    o["second_over_lead"] = float(sk[-2] / sk[-1]) if len(sk) > 1 else np.nan
+    return o
+
+
+def analyse_muon(waves, labels, dt, fracs, h, window_ns, dt_in):
+    """waves: dict variant -> (nbins, nch) current; first key is T0. Returns per-variant observables and shaped arrays."""
+    nb = int(round(window_ns / dt_in))
+    shaped = {v: shape(c[:nb], dt_in, h, dt) for v, c in waves.items()}
+    charge = {v: c[:nb].sum(0) * dt_in for v, c in waves.items()}
+    ref = next(iter(waves))
+    res = {v: {} for v in waves}
     for side in ("U", "V"):
-        cols = [j for j, l in enumerate(labels) if l.startswith(side + "_")]
-        idx = np.array([int(labels[j].split("_")[1]) for j in cols])
-        Y = y[:, cols]
-        ext = np.where(np.abs(Y.max(0)) >= np.abs(Y.min(0)), Y.max(0), Y.min(0))
-        lead = int(np.argmax(np.abs(ext)))
-        sgn = 1.0 if ext[lead] > 0 else -1.0
-        S = sgn * Y
-        pk = np.empty(len(cols)); tpk = np.empty(len(cols)); opp = S.min(0)
-        for c in range(len(cols)):
-            i = int(np.argmax(S[:, c]))
-            x, v = parabolic(S[:, c], i)
-            pk[c], tpk[c] = v, x * dt
-        lead_pk = pk[lead]
-        thr_t = {}
-        mult = {}
+        cols, idx = plane_cols(labels, side)
+        Y0 = shaped[ref][:, cols]
+        ext = np.where(np.abs(Y0.max(0)) >= np.abs(Y0.min(0)), Y0.max(0), Y0.min(0))
+        sgn = 1.0 if ext[int(np.argmax(np.abs(ext)))] > 0 else -1.0
+        lead0 = float(np.max(sgn * Y0))
+        thr = {f"f{f:g}": f * lead0 for f in fracs}
+        for v in waves:
+            Y = shaped[v][:, cols]
+            o = plane_obs(Y, idx, dt, sgn, thr, charge[v][cols].sum())
+            o["sign"] = sgn
+            o["thresholds_fCeq"] = thr
+            o["l2_rel_vs_T0"] = float(np.linalg.norm(Y - Y0) / np.linalg.norm(Y0))
+            res[v][side] = o
+    for v in waves:
+        U, V = res[v]["U"], res[v]["V"]
+        res[v]["w_mm"] = 0.5 * PITCH_STRIP * (U["centroid_strip"] + V["centroid_strip"])
+        res[v]["u_mm"] = PITCH_STRIP * (V["centroid_strip"] - U["centroid_strip"]) / (2 * A_STEREO)
+        res[v]["UV_amp_ratio"] = U["amplitude"] / V["amplitude"] if V["amplitude"] else np.nan
+        res[v]["UV_charge_ratio"] = U["charge"] / V["charge"] if V["charge"] else np.nan
+    return res, shaped
+
+
+def diffs(r, r0, fracs):
+    d = {"w_mm": r["w_mm"] - r0["w_mm"], "u_mm": r["u_mm"] - r0["u_mm"],
+         "UV_amp_ratio_rel": r["UV_amp_ratio"] / r0["UV_amp_ratio"] - 1,
+         "UV_charge_ratio_rel": r["UV_charge_ratio"] / r0["UV_charge_ratio"] - 1}
+    for s in ("U", "V"):
+        a, b = r[s], r0[s]
+        d[f"{s}_L2_rel"] = a["l2_rel_vs_T0"]
+        d[f"{s}_lead_index_changed"] = int(a["lead_index"] != b["lead_index"])
+        d[f"{s}_lead_peak_rel"] = a["lead_peak"] / b["lead_peak"] - 1
+        d[f"{s}_lead_peak_time_ns"] = a["lead_peak_time"] - b["lead_peak_time"]
+        d[f"{s}_charge_rel"] = a["charge"] / b["charge"] - 1
+        d[f"{s}_amplitude_rel"] = a["amplitude"] / b["amplitude"] - 1
+        d[f"{s}_second_over_lead"] = a["second_over_lead"] - b["second_over_lead"]
+        d[f"{s}_centroid_strip"] = a["centroid_strip"] - b["centroid_strip"]
+        big = b["peaks"] >= 0.05 * b["lead_peak"]
+        d[f"{s}_strip_peak_maxabs_over_T0lead"] = float(np.max(np.abs(a["peaks"][big] - b["peaks"][big])) / b["lead_peak"])
         for f in fracs:
-            thr = f * lead_pk
-            thr_t[f"frac{f:g}"] = [first_cross(S[:, c], thr, dt) for c in range(len(cols))]
-            mult[f"frac{f:g}"] = int(np.sum(pk >= thr))
-        for q in abs_thr:
-            thr_t[f"abs{q:g}fC"] = [first_cross(S[:, c], q, dt) for c in range(len(cols))]
-            mult[f"abs{q:g}fC"] = int(np.sum(pk >= q))
-        sel = pk >= min(fracs) * lead_pk
-        cen = float(np.sum(pk[sel] * idx[sel]) / np.sum(pk[sel]))
-        sec = np.sort(pk)[-2] / lead_pk if len(pk) > 1 else np.nan
-        planes[side] = dict(sign=sgn, lead_index=int(idx[lead]), lead_peak=float(lead_pk),
-                            lead_peak_time=float(tpk[lead]), second_over_lead=float(sec), centroid_strip=cen,
-                            mult=mult, thr_time_lead={k: v[lead] for k, v in thr_t.items()},
-                            peaks=pk.tolist(), peak_times=tpk.tolist(), opposite=(-opp).tolist() if sgn < 0 else opp.tolist(),
-                            strip_index=idx.tolist(), thr_times=thr_t)
-    Umm = planes["U"]["centroid_strip"] * PITCH_STRIP
-    Vmm = planes["V"]["centroid_strip"] * PITCH_STRIP
-    res["planes"] = planes
-    res["w_mm"] = 0.5 * (Umm + Vmm)
-    res["u_mm"] = (Vmm - Umm) / (2 * A_STEREO)
-    return res
+            k = f"f{f:g}"
+            d[f"{s}_t_{k}_ns"] = a["thr_time"][k] - b["thr_time"][k]
+            d[f"{s}_mult_{k}"] = a["mult"][k] - b["mult"][k]
+            d[f"{s}_hitflips_{k}"] = int(np.sum(a["above"][k] != b["above"][k]))
+    return d
 
 
-def scalar_rows(o):
-    r = {"w_mm": o["w_mm"], "u_mm": o["u_mm"]}
-    for s, p in o["planes"].items():
-        r[f"{s}_lead_peak"] = p["lead_peak"]
-        r[f"{s}_lead_peak_time_ns"] = p["lead_peak_time"]
-        r[f"{s}_second_over_lead"] = p["second_over_lead"]
-        r[f"{s}_centroid_strip"] = p["centroid_strip"]
-        for k, v in p["thr_time_lead"].items():
-            r[f"{s}_t_{k}_ns"] = v
-        for k, v in p["mult"].items():
-            r[f"{s}_mult_{k}"] = v
-        r[f"{s}_sign"] = p["sign"]
-    return r
-
-
-def boot(x, nb, rng):
-    x = np.asarray(x, float)
+def summarize(vals, nb, rng):
+    x = np.asarray(vals, float)
     x = x[np.isfinite(x)]
     if len(x) == 0:
         return dict(n=0)
-    m = rng.integers(0, len(x), (nb, len(x)))
-    means = x[m].mean(1)
-    rms = np.sqrt((x[m] ** 2).mean(1))
-    q = lambda a, p: float(np.percentile(a, p))
-    return dict(n=int(len(x)), mean=float(x.mean()), mean_ci68=[q(means, 16), q(means, 84)],
-                mean_ci95=[q(means, 2.5), q(means, 97.5)], rms=float(np.sqrt((x ** 2).mean())),
-                rms_ci95=[q(rms, 2.5), q(rms, 97.5)], max_abs=float(np.max(np.abs(x))))
+    s = dict(n=int(len(x)), mean=float(x.mean()), rms=float(np.sqrt((x ** 2).mean())), max_abs=float(np.abs(x).max()))
+    if len(x) >= 3:
+        m = rng.integers(0, len(x), (nb, len(x)))
+        s["mean_ci95"] = [float(np.percentile(x[m].mean(1), 2.5)), float(np.percentile(x[m].mean(1), 97.5))]
+    return s
+
+
+def plot_muon(path, muon, tp, labels, shaped, res, variants, dt, title):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    cols_v = {"T0": "#2b2b29", "T1": "#2a78d6", "TW": "#eb6834", "TC": "#1baf7a", "TM": "#e87ba4"}
+    fig, ax = plt.subplots(2, 2, figsize=(12, 7), sharex=True)
+    t = np.arange(shaped[variants[0]].shape[0]) * dt
+    tmax = min(t[-1], 8 * tp + 400)
+    for k, side in enumerate(("U", "V")):
+        cols, idx = plane_cols(labels, side)
+        pk0 = res[variants[0]][side]["peaks"]
+        top = np.argsort(pk0)[::-1][:3]
+        for j in top:
+            for v in variants:
+                y = shaped[v][:, cols[j]]
+                ax[0, k].plot(t, y, color=cols_v.get(v, "#888"), lw=1.6 if v == "T0" else 1.1,
+                              ls="-" if v == "T0" else "--", label=f"{v}" if j == top[0] else None)
+                if v != variants[0]:
+                    ax[1, k].plot(t, y - shaped[variants[0]][:, cols[j]], color=cols_v.get(v, "#888"), lw=1.0,
+                                  label=f"{v}-T0, strip {idx[j]}")
+        for f, thr in res[variants[0]][side]["thresholds_fCeq"].items():
+            ax[0, k].axhline(res[variants[0]][side]["sign"] * thr, color="#bbb", lw=0.6)
+        ax[0, k].set(title=f"{side}: 3 largest strips (signed, fC-eq.)", xlim=(0, tmax))
+        ax[1, k].set(xlabel="time [ns]", ylabel="variant - T0 [fC-eq.]", xlim=(0, tmax))
+        ax[0, k].legend(frameon=False, fontsize=7); ax[1, k].legend(frameon=False, fontsize=6)
+    fig.suptitle(f"muon {muon}, Tp={tp:g} ns: {title}", fontsize=9)
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("root", type=Path)
-    ap.add_argument("--variants", default="T0,T1,TW,TM")
+    ap.add_argument("--variants", default="T0,T1,TW")
     ap.add_argument("--tp", default="100,200")
     ap.add_argument("--order", type=int, default=3)
     ap.add_argument("--impulse", type=Path, default=None)
-    ap.add_argument("--fracs", default="0.02,0.05,0.1,0.2")
-    ap.add_argument("--abs-thr-fC", default="", help="absolute thresholds on the unit-peak (fC-equivalent) output")
+    ap.add_argument("--fracs", default="0.02,0.05,0.1,0.2,0.5")
     ap.add_argument("--window-ns", type=float, default=6000.0)
     ap.add_argument("--dt", type=float, default=1.0)
-    ap.add_argument("--no-prompt", action="store_true", help="ion term only (diagnostic)")
+    ap.add_argument("--no-prompt", action="store_true", help="ion term only")
+    ap.add_argument("--plots", action="store_true")
     ap.add_argument("--bootstrap", type=int, default=2000)
     ap.add_argument("--out", type=Path, required=True)
     a = ap.parse_args()
     variants = a.variants.split(",")
+    if variants[0] != "T0":
+        raise SystemExit("first variant must be T0")
     fracs = [float(x) for x in a.fracs.split(",")]
-    abs_thr = [float(x) for x in a.abs_thr_fC.split(",") if x]
-    muons = sorted(p.name for p in a.root.iterdir() if p.is_dir() and (p / variants[0] / "replay" / "waveforms.csv").exists())
+    muons = sorted(p.name for p in a.root.iterdir()
+                   if p.is_dir() and all((p / v / "replay" / "waveforms.csv").exists() for v in variants))
     if not muons:
-        raise SystemExit("no muons found")
+        raise SystemExit("no muon directory has replay outputs for all variants " + a.variants)
     if a.out.exists():
         raise SystemExit(f"refusing: {a.out} exists")
     a.out.mkdir(parents=True)
     rng = np.random.default_rng(12345)
-    report = {"muons": muons, "variants": variants, "signal": "ion_only" if a.no_prompt else "ion_plus_instantaneous_electron_step", "shaping_status": "provisional (NA60+ VMM3a peaking time unverified)", "shapers": {}}
+    signal = "ION TERM ONLY (time-dependent Shockley-Ramo, frozen RKF paths)" if a.no_prompt else \
+        "ion term + INSTANTANEOUS electron-step APPROXIMATION"
+    report = {"muons": muons, "variants": variants, "signal": signal, "fracs_of_T0_lead": fracs,
+              "shaping_status": "PROVISIONAL (NA60+ VMM3a peaking time and transfer function unverified)", "Tp": {}}
     lines = []
     for tp in [float(x) for x in a.tp.split(",")]:
         h, hlabel = impulse(tp, a.order, a.dt, max(12 * tp, 2000.0), a.impulse)
-        report["shapers"][f"{tp:g}"] = hlabel
-        per = {v: [] for v in variants}
-        for m in muons:
-            for v in variants:
-                labels, tc, cur = load_wave(a.root / m / v / "replay" / "waveforms.csv")
-                if not a.no_prompt:
-                    l2, tc2, pc = load_wave(a.root / m / v / "prompt" / "prompt_waveforms.csv")
-                    if l2 != labels or not np.array_equal(tc, tc2):
-                        raise SystemExit(f"{m}/{v}: prompt and replay grids differ")
-                    cur = cur + pc
-                dt_in = tc[1] - tc[0]
-                nb = int(round(a.window_ns / dt_in))
-                y = shape(cur[:nb], dt_in, h, a.dt)
-                o = observables(labels, y, a.dt, fracs, abs_thr)
-                o["muon"] = m
-                per[v].append(o)
-        ref = per[variants[0]]
-        with open(a.out / f"per_muon_Tp{tp:g}.jsonl", "w") as f:
-            for v in variants:
-                for o in per[v]:
-                    f.write(json.dumps({"variant": v, "muon": o["muon"], **scalar_rows(o),
-                                        "U_peaks": o["planes"]["U"]["peaks"], "V_peaks": o["planes"]["V"]["peaks"]}) + "\n")
-        summ = {}
+        per = {v: [] for v in variants[1:]}
+        with open(a.out / f"per_muon_Tp{tp:g}.jsonl", "w") as fo:
+            for m in muons:
+                waves, labels, dt_in = {}, None, None
+                for v in variants:
+                    lab, tc, cur = load_wave(a.root / m / v / "replay" / "waveforms.csv")
+                    if not a.no_prompt:
+                        l2, tc2, pc = load_wave(a.root / m / v / "prompt" / "prompt_waveforms.csv")
+                        if l2 != lab or not np.array_equal(tc, tc2):
+                            raise SystemExit(f"{m}/{v}: prompt and replay grids differ")
+                        cur = cur + pc
+                    if labels is not None and lab != labels:
+                        raise SystemExit(f"{m}/{v}: channel set differs from T0")
+                    labels, dt_in = lab, tc[1] - tc[0]
+                    waves[v] = cur
+                res, shaped = analyse_muon(waves, labels, a.dt, fracs, h, a.window_ns, dt_in)
+                for v in variants[1:]:
+                    d = diffs(res[v], res["T0"], fracs)
+                    per[v].append(d)
+                    fo.write(json.dumps({"muon": m, "variant": v, "Tp_ns": tp, **d}) + "\n")
+                fo.write(json.dumps({"muon": m, "variant": "T0", "Tp_ns": tp,
+                                     **{f"{s}_{k}": res["T0"][s][k] for s in ("U", "V")
+                                        for k in ("lead_index", "lead_peak", "lead_peak_time", "charge", "amplitude",
+                                                  "centroid_strip", "sign")},
+                                     "w_mm": res["T0"]["w_mm"], "u_mm": res["T0"]["u_mm"],
+                                     "thresholds_fCeq": {s: res["T0"][s]["thresholds_fCeq"] for s in ("U", "V")}}) + "\n")
+                if a.plots:
+                    plot_muon(a.out / f"{m}_Tp{tp:g}.png", m, tp, labels, shaped, res, variants, a.dt,
+                              f"{signal}; {hlabel}")
+        summ = {v: {k: summarize([d[k] for d in per[v]], a.bootstrap, rng) for k in per[v][0]} for v in variants[1:]}
+        report["Tp"][f"{tp:g}"] = {"shaper": hlabel, "differences_vs_T0": summ}
+        lines.append(f"== Tp={tp:g} ns  {hlabel}\n   signal: {signal}; muons={len(muons)}; thresholds = f x T0 lead peak, fixed from T0")
         for v in variants[1:]:
-            d = {}
-            keys = scalar_rows(ref[0]).keys()
-            for k in keys:
-                if k.endswith("_sign"):
-                    d[k + "_flips"] = int(sum(scalar_rows(x)[k] != scalar_rows(y_)[k] for x, y_ in zip(per[v], ref)))
-                    continue
-                diff = [scalar_rows(x)[k] - scalar_rows(y_)[k] for x, y_ in zip(per[v], ref)]
-                if k.endswith("_lead_peak"):
-                    diff = [dd / scalar_rows(y_)[k] for dd, y_ in zip(diff, ref)]
-                    k = k + "_rel"
-                d[k] = boot(diff, a.bootstrap, rng)
-            # all-strip relative peak differences (strips with |T0 peak| >= 5% of lead)
-            for s in ("U", "V"):
-                rel = []
-                for x, y_ in zip(per[v], ref):
-                    px, py = np.array(x["planes"][s]["peaks"]), np.array(y_["planes"][s]["peaks"])
-                    sel = py >= 0.05 * py.max()
-                    rel += ((px[sel] - py[sel]) / py.max()).tolist()
-                d[f"{s}_strip_peak_minus_T0_over_T0_lead"] = boot(rel, a.bootstrap, rng)
-            summ[v] = d
-        report[f"Tp{tp:g}"] = summ
-        lines.append(f"== PROVISIONAL shaper: {hlabel}; muons={len(muons)}; signal = " + ("ion term + INSTANTANEOUS electron-step approximation" if not a.no_prompt else "ION TERM ONLY (time-dependent Shockley-Ramo, frozen paths)"))
-        for v, d in summ.items():
-            lines.append(f"-- {v} minus {variants[0]}")
-            for k, s in d.items():
-                if isinstance(s, dict) and s.get("n"):
-                    lines.append(f"   {k:34s} n={s['n']:3d} mean={s['mean']:+.4g} CI95=[{s['mean_ci95'][0]:+.3g},{s['mean_ci95'][1]:+.3g}]"
-                                 f" rms={s['rms']:.4g} max|d|={s['max_abs']:.4g}")
-                elif isinstance(s, int):
-                    lines.append(f"   {k:34s} {s}")
+            lines.append(f"-- {v} minus T0")
+            for k, s in summ[v].items():
+                if s.get("n"):
+                    ci = f" CI95=[{s['mean_ci95'][0]:+.3g},{s['mean_ci95'][1]:+.3g}]" if "mean_ci95" in s else ""
+                    lines.append(f"   {k:34s} n={s['n']:2d} mean={s['mean']:+.4g}{ci} rms={s['rms']:.4g} max|d|={s['max_abs']:.4g}")
     (a.out / "t_ladder_summary.json").write_text(json.dumps(report, indent=1) + "\n")
     (a.out / "t_ladder_summary.txt").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))

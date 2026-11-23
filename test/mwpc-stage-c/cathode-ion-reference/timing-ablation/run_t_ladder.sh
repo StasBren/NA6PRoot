@@ -8,7 +8,9 @@
 #   bash run_t_ladder.sh run N                 # first N development muons (only after one muon has been reviewed)
 #   bash run_t_ladder.sh compare DIR           # ion-only comparison FIRST, then ion + instantaneous electron step
 #
-# Variants: MWPC_TLADDER_VARIANTS (default T0,T1,TW; TM = one time per muon is an optional extreme control).
+# Variants: MWPC_TLADDER_VARIANTS (default T0,T1,TW,TC). TW groups ions by the anode nearest each ION BIRTH
+# (archive local_wire_index); TC groups each primary's ions by its DOMINANT COLLECTING anode (exact census
+# microscopic_wire_seed.csv). TM = one time per muon, optional extreme control.
 # Shaping 100/200 ns is PROVISIONAL (NA60+ VMM3a peaking time not yet verified); CR-RC^3 is a stand-in.
 #
 # Required environment (no defaults are guessed for physics inputs):
@@ -28,7 +30,7 @@ SELECTION="${MWPC_SIGNAL40_OUTPUT:-$HOME/NA6PRoot-signal40-2100/test_runs/mwpc_s
 DEV="$SELECTION/development20.csv"; SEALED="$SELECTION/sealed_validation20.csv"
 OUTROOT="${MWPC_TLADDER_OUT:-$REPO/test_runs/mwpc_stage_c/t_ladder_2100}"
 HS="${MWPC_HALF_STRIPS:-5}"
-VARIANTS="${MWPC_TLADDER_VARIANTS:-T0,T1,TW}"
+VARIANTS="${MWPC_TLADDER_VARIANTS:-T0,T1,TW,TC}"
 fail(){ echo "T-LADDER FAILED: $*" >&2; exit 2; }
 need(){ [[ -n "${!1:-}" ]] || fail "set $1"; [[ -e "${!1}" ]] || fail "$1=${!1} does not exist"; }
 idx(){ awk -F, 'NR==1{for(i=1;i<=NF;i++)if($i=="index")c=i; if(!c)exit 3; next} NF{printf "%04d\n",$c}' "$1"; }
@@ -42,21 +44,27 @@ one_muon(){ # $1 index, $2 run dir
   verified "$m" || { echo "skip $m: archive not verified"; return 0; }
   mkdir -p "$R"
   t0=$(date +%s.%N)
-  "$MWPC_EXPORT_BIN" "$ARCHIVE/muon_$m/ion_births.root" "$MWPC_ION_MOBILITY" "$R/frozen_export" > "$R/export.log" 2>&1
+  "$MWPC_EXPORT_BIN" "$ARCHIVE/muon_$m/ion_births.root" "$MWPC_ION_MOBILITY" "$R/frozen_export" > "$R/export.log" 2>&1 \
+    || fail "exporter failed for muon $m (see $R/export.log)"
+  grep -q '^PASS archive census' "$R/export.log" || fail "exporter did not report PASS for muon $m"
   t1=$(date +%s.%N); echo "export_s=$(echo "$t1-$t0"|bc)" >> "$R/timing.txt"
-  declare -A MODE=([T0]=identity [T1]=primary [TW]=wire [TM]=muon)
+  declare -A MODE=([T0]=identity [T1]=primary [TW]=wire [TC]=collect [TM]=muon)
   for v in ${VARIANTS//,/ }; do
     [[ -n "${MODE[$v]:-}" ]] || fail "unknown variant $v"
-    python3 "$HERE/t_time_collapse_export.py" "$R/frozen_export" "$R/$v/export" --mode "${MODE[$v]}" > "$R/$v.collapse.log"
+    CENSUS=(); [[ $v == TC ]] && CENSUS=(--census "$ARCHIVE/muon_$m/microscopic_wire_seed.csv")
+    python3 "$HERE/t_time_collapse_export.py" "$R/frozen_export" "$R/$v/export" --mode "${MODE[$v]}" "${CENSUS[@]}" > "$R/$v.collapse.log" \
+      || fail "collapse $v for muon $m (see $R/$v.collapse.log)"
     [[ $v != T0 ]] || grep -q '^PASS identity' "$R/$v.collapse.log" || fail "identity gate $m"
     t0=$(date +%s.%N)
-    (cd "$MWPC_NUMW_DIR" && python3 p3_replay_full_spectral_muon.py "$MWPC_SPECTRAL_LUT" "$R/$v/export" "$R/$v/replay" --half-strips "$HS") > "$R/$v.replay.log" 2>&1
+    (cd "$MWPC_NUMW_DIR" && python3 p3_replay_full_spectral_muon.py "$MWPC_SPECTRAL_LUT" "$R/$v/export" "$R/$v/replay" --half-strips "$HS") > "$R/$v.replay.log" 2>&1 \
+      || fail "replay $v failed for muon $m (see $R/$v.replay.log)"
     t1=$(date +%s.%N); echo "replay_${v}_s=$(echo "$t1-$t0"|bc)" >> "$R/timing.txt"
     if [[ $v == T0 && -n "${MWPC_FROZEN_REPLAY_DIR:-}" ]]; then
       if cmp -s "$R/T0/replay/waveforms.csv" "$MWPC_FROZEN_REPLAY_DIR/waveforms.csv"; then echo "PASS T0 waveforms identical to frozen replay" | tee -a "$R/gates.txt"
       else echo "FAIL T0 waveforms differ from $MWPC_FROZEN_REPLAY_DIR (different LUT, mobility or replay?)" | tee -a "$R/gates.txt"; fi
     fi
-    python3 "$HERE/t_prompt_electron_term.py" "$MWPC_SPECTRAL_LUT" "$R/$v/export" "$R/$v/prompt" --replay-dir "$MWPC_NUMW_DIR" --half-strips "$HS" > "$R/$v.prompt.log" 2>&1
+    python3 "$HERE/t_prompt_electron_term.py" "$MWPC_SPECTRAL_LUT" "$R/$v/export" "$R/$v/prompt" --replay-dir "$MWPC_NUMW_DIR" --half-strips "$HS" > "$R/$v.prompt.log" 2>&1 \
+      || fail "electron-step term $v failed for muon $m (see $R/$v.prompt.log)"
   done
   rm -rf "$R/frozen_export/vertices.f64" "$R"/T?/export/vertices.f64   # bulky intermediates, regenerable; SHA kept in ablation.json
   echo "done $m"
@@ -65,9 +73,23 @@ one_muon(){ # $1 index, $2 run dir
 case "${1:-}" in
   check)
     for v in MWPC_EXPORT_BIN MWPC_ION_MOBILITY MWPC_SPECTRAL_LUT MWPC_NUMW_DIR; do need $v; done
+    command -v bc >/dev/null || fail "bc missing"
     python3 -c "import numpy, scipy" || fail "numpy/scipy"
+    usage=$("$MWPC_EXPORT_BIN" 2>&1 || true)
+    [[ $usage == *"usage: PROGRAM frozen.root MOBILITY NEW_DIR"* ]] || fail "MWPC_EXPORT_BIN is not the full-spectral path exporter"
+    (cd "$MWPC_NUMW_DIR" && python3 -c "import p3_replay_full_spectral_muon") || fail "replay module does not import from $MWPC_NUMW_DIR"
+    python3 - "$MWPC_SPECTRAL_LUT" <<'PY' || fail "LUT check"
+import json, sys, numpy as np
+z = np.load(sys.argv[1], allow_pickle=False); m = json.loads(z["meta"].item())
+print("LUT meta:", json.dumps(m))
+assert m["model"] == "P3_9wire_infinite_plates_ideal_contiguous_strips" and m["pitch_mm"] == 3.0 and m["strip_mm"] == 1.7 \
+    and m["gap_mm"] == 3.0 and m["stereo_tan"] == 0.1 and m["radius_mm"] == 0.015, "LUT geometry differs from the 2100 V reference"
+PY
     m=$(dev_list | head -1); [[ -n "$m" ]] || fail "no development muon"
-    echo "PASS tools present; first development muon $m (sealed excluded: $(idx "$SEALED" | wc -l))";;
+    verified "$m" || fail "archive muon_$m not SHA-verified"
+    [[ -s "$ARCHIVE/muon_$m/microscopic_wire_seed.csv" ]] || echo "WARNING: no census for muon_$m: variant TC impossible"
+    echo "mobility sha256=$(sha256sum "$MWPC_ION_MOBILITY"|cut -d' ' -f1)  lut sha256=$(sha256sum "$MWPC_SPECTRAL_LUT"|cut -d' ' -f1)"
+    echo "PASS dependencies present; first development muon $m (sealed excluded: $(idx "$SEALED" | wc -l)); variants $VARIANTS";;
   one|run)
     for v in MWPC_EXPORT_BIN MWPC_ION_MOBILITY MWPC_SPECTRAL_LUT MWPC_NUMW_DIR; do need $v; done
     command -v bc >/dev/null || fail "bc missing (sudo apt install bc)"
@@ -94,8 +116,8 @@ case "${1:-}" in
     D="${2:?run dir}"
     V=$(sed -n 's/^variants=//p' "$D/provenance.txt"); V="${V:-$VARIANTS}"; S=$(date +%H%M%S)
     # 1) ion term only (exact for the frozen RKF paths + spectral LUT), 2) plus the instantaneous electron-step approximation
-    python3 "$HERE/t_shaped_compare.py" "$D" --variants "$V" --tp 100,200 --no-prompt --out "$D/compare_1_ion_only_$S"
-    python3 "$HERE/t_shaped_compare.py" "$D" --variants "$V" --tp 100,200 --out "$D/compare_2_ion_plus_electron_step_$S"
+    python3 "$HERE/t_shaped_compare.py" "$D" --variants "$V" --tp 100,200 --no-prompt --plots --out "$D/compare_1_ion_only_$S"
+    python3 "$HERE/t_shaped_compare.py" "$D" --variants "$V" --tp 100,200 --plots --out "$D/compare_2_ion_plus_electron_step_$S"
     echo "return: $D/compare_1_ion_only_$S/t_ladder_summary.txt and $D/compare_2_ion_plus_electron_step_$S/t_ladder_summary.txt";;
   *) sed -n 2,22p "$0"; exit 1;;
 esac
