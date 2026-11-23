@@ -586,7 +586,7 @@ int main(int argc,char**argv) {
           auto&c=study.counts.at(key);auto&h=*study.hist.at(key);
           ++c.nMuon;c.nCharge+=qsum;c.nIons+=nsum;c.nHeed+=m.nHeed;
           study.asym.at(key)->FillMuon(base.ion_up,base.ion_down,qsum,
-                                    static_cast<int>(m.nHeed));
+                                    static_cast<int>(m.nHeed),base.q2_fraction);
           c.nZero+=(nw==0);c.nSingle+=(nw==1);c.nDouble+=(nw==2);c.nMany+=(nw>=3);
           c.nShare5+=sharing;
           h.hNWire->Fill(nw);
