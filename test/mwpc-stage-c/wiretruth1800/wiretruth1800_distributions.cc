@@ -9,6 +9,7 @@
 #include <TH1D.h>
 #include <TH2D.h>
 #include <TProfile.h>
+#include <TProfile2D.h>
 #include <TCanvas.h>
 #include <TLegend.h>
 #include <TLatex.h>
@@ -118,6 +119,7 @@ struct Hist {
   TH1D *hNWire,*hLogQ,*hLogIon,*hLogQWire,*hLogIonWire,*hSecond,*hNear,*hA,*hSeedLogQ,*hOffset;
   TH2D *hPhaseSecond,*hThetaSecond;
   TProfile *pMultiPhase,*pMultiTheta;
+  TProfile2D *pQShare,*pIonShare;
   explicit Hist(const std::string&tag) {
     auto name=[&](const char*s){return tag+"_"+s;};
     hNWire=new TH1D(name("n_wire").c_str(),";Anodes with collected electrons per muon;Muons",11,-.5,10.5);
@@ -134,9 +136,13 @@ struct Hist {
     hThetaSecond=new TH2D(name("theta_q2").c_str(),";Signed #theta_{u} [deg];Q_{2}/Q_{total}",72,-90,90,50,0,.5);
     pMultiPhase=new TProfile(name("multi_phase").c_str(),";|u_{entry}-u_{nearest wire}| [mm];P(Q_{2}/Q_{total} > 5%)",15,0,1.5);
     pMultiTheta=new TProfile(name("multi_theta").c_str(),";|#theta_{u}| [deg];P(Q_{2}/Q_{total} > 5%)",30,0,90);
-    const std::array<TH1*,14> all={hNWire,hLogQ,hLogIon,hLogQWire,
+    pQShare=new TProfile2D(name("q_fraction_by_wire").c_str(),
+      ";Signed impact relative to nearest wire [mm];Collecting-wire offset;Mean Q_{wire}/Q_{muon}",30,-1.5,1.5,9,-4.5,4.5);
+    pIonShare=new TProfile2D(name("ion_fraction_by_wire").c_str(),
+      ";Signed impact relative to nearest wire [mm];Ion-birth nearest-wire offset;Mean N_{ion,wire}/N_{ion,muon}",30,-1.5,1.5,9,-4.5,4.5);
+    const std::array<TH1*,16> all={hNWire,hLogQ,hLogIon,hLogQWire,
       hLogIonWire,hSecond,hNear,hA,hSeedLogQ,hOffset,
-      hPhaseSecond,hThetaSecond,pMultiPhase,pMultiTheta};
+      hPhaseSecond,hThetaSecond,pMultiPhase,pMultiTheta,pQShare,pIonShare};
     for(TH1* h:all) {
       h->Sumw2();
       // Keep histograms alive for ATLAS-like PNG rendering after TFile closes.
@@ -144,9 +150,9 @@ struct Hist {
     }
   }
   void Write()const {
-    const std::array<TH1*,14> all={hNWire,hLogQ,hLogIon,hLogQWire,
+    const std::array<TH1*,16> all={hNWire,hLogQ,hLogIon,hLogQWire,
       hLogIonWire,hSecond,hNear,hA,hSeedLogQ,hOffset,
-      hPhaseSecond,hThetaSecond,pMultiPhase,pMultiTheta};
+      hPhaseSecond,hThetaSecond,pMultiPhase,pMultiTheta,pQShare,pIonShare};
     for(TH1* h:all)h->Write();
   }
 };
@@ -264,6 +270,18 @@ void Drawing(const fs::path&out,Session&s){
     label.SetTextSize(.024);label.DrawLatex(.16,.86,"Measured two-wire share > 5% of muon charge");
     canvas.SaveAs((out/("share_probability_vs_"+kind+".png")).string().c_str());
   }
+  for(const auto&channel:{"all","jpsi","phi","omega"}){
+    for(const std::string&kind:{"collected_electrons","ion_births"}){
+      TCanvas canvas(("c_2d_"+std::string(channel)+"_"+kind).c_str(),"",1000,710);
+      canvas.SetLeftMargin(.13);canvas.SetRightMargin(.16);canvas.SetBottomMargin(.13);
+      TProfile2D* h=kind=="collected_electrons"?
+        s.hist.at(channel)->pQShare:s.hist.at(channel)->pIonShare;
+      h->SetMinimum(0);h->SetMaximum(1);h->Draw("COLZ");
+      TLatex label;label.SetNDC();label.SetTextFont(42);
+      label.SetTextSize(.038);label.DrawLatex(.17,.92,"NA60+ Simulation");
+      canvas.SaveAs((out/(std::string(channel)+"_per_wire_fraction_"+kind+".png")).string().c_str());
+    }
+  }
 }
 }
 int main(int argc,char**argv) {
@@ -278,8 +296,12 @@ int main(int argc,char**argv) {
     TTree muons("muons","Exact collected-anode endpoints per Geant4 crossing");
     TTree wires("wires","Positive electron and/or positive ion per physical anode");
     TTree seeds("seeds","Per-Heed-primary collected electrons, ion birth census and sharing");
-    muons.SetDirectory(root.get());wires.SetDirectory(root.get());seeds.SetDirectory(root.get());
-    TRow mrow,wrow,srow;Branches(muons,mrow);Branches(wires,wrow);Branches(seeds,srow);
+    TTree seedWires("seed_wires","Per-Heed-primary exact physical-wire collected electrons and ion birth census");
+    muons.SetDirectory(root.get());wires.SetDirectory(root.get());
+    seeds.SetDirectory(root.get());seedWires.SetDirectory(root.get());
+    TRow mrow,wrow,srow,swrow;
+    Branches(muons,mrow);Branches(wires,wrow);Branches(seeds,srow);
+    Branches(seedWires,swrow);
     Session study;
     std::ifstream mf(manifest);Need(bool(mf),"cannot open snapshot manifest");
     std::string line;std::getline(mf,line);
@@ -476,6 +498,12 @@ int main(int argc,char**argv) {
             h.pMultiTheta->Fill(std::abs(m.thetaU),sharing);c.sumQ2+=f2;
           }
           if(nsum)h.hLogIon->Fill(std::log10(double(nsum)));
+          // Zero-charge wires MUST participate in the conditional mean:
+          // one independent Geant4 muon contributes all nine fractions.
+          for(int i=0;i<9;++i){
+            if(qsum)h.pQShare->Fill(m.impact,i-4,double(m.q[i])/qsum);
+            if(nsum)h.pIonShare->Fill(m.impact,i-4,double(m.ions[i])/nsum);
+          }
         }
         for(int i=0;i<9;++i){
           if(!m.q[i]&&!m.ions[i])continue;
@@ -499,9 +527,40 @@ int main(int argc,char**argv) {
         }
         for(const auto&[key,s]:originalSeeds){
           if(key.first!=cid)continue;
-          srow=base;srow.primary_index=key.second;
-          srow.q=s.q;srow.ions=s.n;srow.n_active_primary=s.nWireQ;
+          std::vector<std::pair<long long,int>> rankedPrimary;
+          long long primaryNearest=0;
+          auto it=bySeedWire.lower_bound(WireKey{cid,key.second,std::numeric_limits<int>::min()});
+          const auto begin=it;
+          for(;it!=bySeedWire.end()&&std::get<0>(it->first)==cid&&
+                       std::get<1>(it->first)==key.second;++it){
+            const int wire=std::get<2>(it->first);
+            const long long q=it->second[0];
+            if(q)rankedPrimary.push_back({q,wire});
+            if(wire==m.base)primaryNearest=q;
+          }
+          std::sort(rankedPrimary.begin(),rankedPrimary.end(),std::greater<>());
+          const double fp2=rankedPrimary.size()>1?
+            double(rankedPrimary[1].first)/s.q:0.;
+          const double fp21=rankedPrimary.size()>1?
+            double(rankedPrimary[1].first)/rankedPrimary[0].first:0.;
+          srow=base;
+          srow.primary_index=key.second;
+          srow.q=s.q;srow.ions=s.n;
+          srow.q_total=s.q;srow.ion_total=s.n;
+          srow.n_active=s.nWireQ;srow.n_active_primary=s.nWireQ;
+          srow.q2_fraction=s.q?fp2:std::numeric_limits<double>::quiet_NaN();
+          srow.q2_over_q1=s.q?fp21:std::numeric_limits<double>::quiet_NaN();
+          srow.nearest_q_fraction=s.q?
+            double(primaryNearest)/s.q:std::numeric_limits<double>::quiet_NaN();
           seeds.Fill();
+          for(auto wIt=begin;wIt!=it;++wIt) {
+            const int wire=std::get<2>(wIt->first);
+            swrow=srow;
+            swrow.global_wire=wire;swrow.local_wire=wire-m.base;
+            swrow.wire_u_global_mm=(m.station==0?1.5:0.)+3.*wire;
+            swrow.q=wIt->second[0];swrow.ions=wIt->second[1];
+            seedWires.Fill();
+          }
           if(s.q)
             for(auto&group:study.Keys(m))
               study.hist.at(group)->hSeedLogQ->Fill(std::log10(double(s.q)));
@@ -509,7 +568,7 @@ int main(int argc,char**argv) {
       }
     }
     Need(nChunks>0,"no completed 1800V physics chunks in manifest");
-    root->cd();muons.Write();wires.Write();seeds.Write();
+    root->cd();muons.Write();wires.Write();seeds.Write();seedWires.Write();
     for(auto&[key,h]:study.hist)h->Write();
     root->Write();root->Close();
     std::ofstream summary(out/"channel_station_summary.csv");
