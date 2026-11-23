@@ -208,7 +208,7 @@ echo "RESULT_DIR=$MWPC_1800_ANALYSIS_OUT"
 bash "$RUNNER" pilot
 ```
 
-First check the `w1800pil` PBS job (`normE`, 1 CPU, 4 GB,
+First check the `w1800pil` PBS job (`N`, 1 CPU, 4 GB,
 1 hour). Only after its `Exit_status=0` and the produced 60-muon
 `asymmetry_denominators.csv` and PNGs pass checks, submit the **full
 available ~8k snapshot** into a DIFFERENT unique folder:
@@ -219,11 +219,16 @@ unset MWPC_1800_CHUNKS_PER_CHANNEL
 bash "$RUNNER" submit
 ```
 
+PBS queue: `N` (used by the earlier MWPC jobs), configurable with
+`MWPC_1800_PBS_QUEUE` if your account has a different permitted queue.
+If PBS denies access, check `/opt/pbs/bin/qstat -Qf N` before trying again;
+never alter production jobs or use the WIPP login node for full analysis.
+
 The full PBS job `w1800ana` requests one CPU/4GB/4h; the unbounded
 snapshot includes all complete SHA-verified original chunks at that time.
 No held/ongoing physics jobs are altered.
 
-PBS job `w1800ana`, `normE`, one CPU/4GB/4h, no Garfield++ physics.
+PBS job `w1800ana`, `N`, one CPU/4GB/4h, no Garfield++ physics.
 If the queue rejects the resource request, inspect `qstat -Qf`
 before choosing a legal queue. For any SHA mismatch, source inconsistency
 or job wall-time failure, the job returns nonzero; do not claim results.
