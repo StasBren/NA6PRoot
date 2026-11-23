@@ -345,71 +345,78 @@ def run_shard(root: Path, index: int) -> None:
     (claim/"owner_job_id").write_text(os.environ["PBS_JOBID"]+"\n",encoding="utf-8")
     # On abnormal termination keep claim for operator diagnosis; no mutation
     # to original physics products, no hidden duplicate PBS reruns.
-    with tempfile.TemporaryDirectory(prefix=f"w1800_{index:04d}_",dir=scratch) as tmp:
-        tmp = Path(tmp)
-        safe_rows = []
-        stage(f"SHARD_BEGIN={index} n_chunks={len(rows)} channel={shard['channel']} "
-              f"scratch={tmp}")
-        for j, row in enumerate(rows):
-            channel = shard["channel"]
-            chunkid = int(row["chunk"])
-            require(channel.lower() == row["channel"] and
-                    chunkid == shard["indices"][j],
-                    "shard original source index differs from frozen manifest")
-            receipt_item = completed_receipt(selection,binary,channel,chunkid)
-            require(receipt_item is not None, "source verified receipt disappeared")
-            receipt, p, _ = receipt_item
-            require(sha(p) == shard["receipt_sha256"][j],
-                    "original completed receipt changed after snapshot")
-            local = tmp / "inputs" / f"{channel.lower()}_{chunkid:04d}"
-            source = source_path(selection,channel,chunkid)
-            require(str(source) == row["original_input"], "original path mismatch")
-            target = local/"original_input.csv"
-            copyhash(source,target,receipt["input_sha256"])
-            staged = {"original_input":target}
-            for key,filename in INPUT_FILES.items():
-                origin = Path(row[key])
-                require(origin == p.parent/filename,
-                        "physical archive path changed after frozen manifest")
-                t = local/filename
-                expected = receipt["files"][key]
-                copyhash(origin,t,expected["sha256"],int(expected["bytes"]))
-                staged[key] = t
-            safe_rows.append([channel.lower(),chunkid,
-                              *(staged[key] for key in MANIFEST_HEADER[2:])])
-            stage(f"SHARD_SOURCE_SHA_PASS={index} {channel}:{chunkid:04d}")
-        checked = tmp/"checked_manifest.tsv"
-        make_manifest(checked,safe_rows)
-        stage(f"SHARD_PHYSICS_BEGIN={index}")
-        output = tmp/"output"
-        subprocess.run([str(ANALYZER),str(checked),str(output),"--no-plots"],check=True)
-        stage(f"SHARD_PHYSICS_PASS={index}")
-        for filename in SHARD_OUTPUT:
-            require((output/filename).is_file(),
-                    f"missing post-physics ROOT/CSV output {filename}")
-        with (output/"channel_station_summary.csv").open(newline="") as f:
-            counts = {r["scope"]:r for r in csv.DictReader(f)}
-        require(int(counts["all"]["n_muons"])==shard["n_muons"],
-                "C++ output independent Geant4 muon count differs from shard plan")
-        shutil.copy2(manifest,output/"frozen_original_source_manifest.tsv")
-        save_json(output/"sealed.json",{
-            "schema":SCHEMA,"shard":index,"channel":shard["channel"],
-            "indices":shard["indices"],"n_muons":shard["n_muons"],
-            "manifest_sha256":shard["manifest_sha256"],
-            "analysis_git":plan["analysis_git"],
-            "analysis_binary_sha256":plan["analysis_binary_sha256"],
-            "source_physics_binary_sha256":plan["original_physics_binary_sha256"],
-            "pbs_job_id":os.environ["PBS_JOBID"],"sealed_utc":timestamp()
-        })
-        write_checksums(output)
-        temp = root/"attempts"/f"staging_{index:04d}_{os.getpid()}"
-        stage(f"SHARD_COPY_BEGIN={index}")
-        copytree_verify(output,temp)
-        require(not final.exists(), "another worker created same original shard")
-        temp.rename(final)
-        stage(f"SHARD_PERSIST_PASS={index} muons={shard['n_muons']}")
-    (claim/"owner_job_id").unlink()
-    claim.rmdir()
+    try:
+        with tempfile.TemporaryDirectory(prefix=f"w1800_{index:04d}_",dir=scratch) as tmp:
+            tmp = Path(tmp)
+            safe_rows = []
+            stage(f"SHARD_BEGIN={index} n_chunks={len(rows)} channel={shard['channel']} "
+                  f"scratch={tmp}")
+            for j, row in enumerate(rows):
+                channel = shard["channel"]
+                chunkid = int(row["chunk"])
+                require(channel.lower() == row["channel"] and
+                        chunkid == shard["indices"][j],
+                        "shard original source index differs from frozen manifest")
+                receipt_item = completed_receipt(selection,binary,channel,chunkid)
+                require(receipt_item is not None, "source verified receipt disappeared")
+                receipt, p, _ = receipt_item
+                require(sha(p) == shard["receipt_sha256"][j],
+                        "original completed receipt changed after snapshot")
+                local = tmp / "inputs" / f"{channel.lower()}_{chunkid:04d}"
+                source = source_path(selection,channel,chunkid)
+                require(str(source) == row["original_input"], "original path mismatch")
+                target = local/"original_input.csv"
+                copyhash(source,target,receipt["input_sha256"])
+                staged = {"original_input":target}
+                for key,filename in INPUT_FILES.items():
+                    origin = Path(row[key])
+                    require(origin == p.parent/filename,
+                            "physical archive path changed after frozen manifest")
+                    t = local/filename
+                    expected = receipt["files"][key]
+                    copyhash(origin,t,expected["sha256"],int(expected["bytes"]))
+                    staged[key] = t
+                safe_rows.append([channel.lower(),chunkid,
+                                  *(staged[key] for key in MANIFEST_HEADER[2:])])
+                stage(f"SHARD_SOURCE_SHA_PASS={index} {channel}:{chunkid:04d}")
+            checked = tmp/"checked_manifest.tsv"
+            make_manifest(checked,safe_rows)
+            stage(f"SHARD_PHYSICS_BEGIN={index}")
+            output = tmp/"output"
+            subprocess.run([str(ANALYZER),str(checked),str(output),"--no-plots"],check=True)
+            stage(f"SHARD_PHYSICS_PASS={index}")
+            for filename in SHARD_OUTPUT:
+                require((output/filename).is_file(),
+                        f"missing post-physics ROOT/CSV output {filename}")
+            with (output/"channel_station_summary.csv").open(newline="") as f:
+                counts = {r["scope"]:r for r in csv.DictReader(f)}
+            require(int(counts["all"]["n_muons"])==shard["n_muons"],
+                    "C++ output independent Geant4 muon count differs from shard plan")
+            shutil.copy2(manifest,output/"frozen_original_source_manifest.tsv")
+            save_json(output/"sealed.json",{
+                "schema":SCHEMA,"shard":index,"channel":shard["channel"],
+                "indices":shard["indices"],"n_muons":shard["n_muons"],
+                "manifest_sha256":shard["manifest_sha256"],
+                "analysis_git":plan["analysis_git"],
+                "analysis_binary_sha256":plan["analysis_binary_sha256"],
+                "source_physics_binary_sha256":plan["original_physics_binary_sha256"],
+                "pbs_job_id":os.environ["PBS_JOBID"],"sealed_utc":timestamp()
+            })
+            write_checksums(output)
+            temp = root/"attempts"/f"staging_{index:04d}_{os.getpid()}"
+            stage(f"SHARD_COPY_BEGIN={index}")
+            copytree_verify(output,temp)
+            require(not final.exists(), "another worker created same original shard")
+            temp.rename(final)
+            stage(f"SHARD_PERSIST_PASS={index} muons={shard['n_muons']}")
+    finally:
+        # Recover naturally from ordinary exceptions; only a hard kill
+        # can leave a stale claim that requires an operator qstat check.
+        owner=claim/"owner_job_id"
+        if owner.exists() and owner.read_text(encoding="utf-8").strip()==os.environ["PBS_JOBID"]:
+            owner.unlink()
+        if claim.is_dir() and not any(claim.iterdir()):
+            claim.rmdir()
 
 
 def status(root: Path) -> None:
