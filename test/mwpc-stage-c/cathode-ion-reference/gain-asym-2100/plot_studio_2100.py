@@ -325,10 +325,16 @@ def fig_style(fig,title,xlabel,ylabel,custom):
         paper_bgcolor="white",plot_bgcolor="white",height=630,
         margin=dict(l=75,r=40,t=85,b=78),showlegend=custom["legend"],
         legend=dict(bgcolor="rgba(255,255,255,.8)",borderwidth=0),
-        xaxis=dict(title=xlabel,showline=True,linewidth=1.5,linecolor="black",mirror=True,ticks="inside",
-                   showgrid=False,zeroline=False),
-        yaxis=dict(title=ylabel,showline=True,linewidth=1.5,linecolor="black",mirror=True,ticks="inside",
-                   showgrid=False,zeroline=False))
+        # Force black axis TITLE, numeric TICK LABELS, tick marks, and frame.
+        # plotly_white's axis tick/title font defaults can override layout.font.
+        xaxis=dict(title=dict(text=xlabel,font=dict(color="#000000")),
+                   tickfont=dict(color="#000000"),tickcolor="#000000",
+                   showline=True,linewidth=1.5,linecolor="#000000",
+                   mirror=True,ticks="inside",showgrid=False,zeroline=False),
+        yaxis=dict(title=dict(text=ylabel,font=dict(color="#000000")),
+                   tickfont=dict(color="#000000"),tickcolor="#000000",
+                   showline=True,linewidth=1.5,linecolor="#000000",
+                   mirror=True,ticks="inside",showgrid=False,zeroline=False))
     fig.update_xaxes(type="log" if custom["xscale"]=="Log" else "linear")
     fig.update_yaxes(type="log" if custom["yscale"]=="Log" else "linear")
     if custom["xmin"] is not None and custom["xmax"] is not None:
