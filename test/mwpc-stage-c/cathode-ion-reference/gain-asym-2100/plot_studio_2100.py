@@ -254,11 +254,14 @@ def prepared(root:Path):
     mu.loc[(mu["collected_electrons"]==0)&mu["wire_census_ok"],"f2"]=np.nan
     mu["share5"]=np.where(mu["wire_census_ok"],(mu["f2"].fillna(0)>.05).astype(float),np.nan)
     mu.loc[~mu["wire_census_ok"],["f2","n_collecting_wires"]]=np.nan
-    for d in (pr,fr):
-        d.drop(columns=[c for c in ("channel","station","theta_u_deg","abs_theta_u") if c in d],inplace=True)
-        d=d.merge(mu[["muon_slot","channel","station","theta_u_deg","abs_theta_u"]],on="muon_slot",how="left")
-        if d is pr:pr=d
-        else:fr=d
+    # Restore exact parent-muon labels on both hierarchical levels.
+    # Keep the two dataframes separate when reassigning after merge.
+    for level,d in (("primary",pr),("fragment",fr)):
+        d=d.drop(columns=[c for c in ("channel","station","theta_u_deg","abs_theta_u") if c in d])
+        d=d.merge(mu[["muon_slot","channel","station","theta_u_deg","abs_theta_u"]],
+                  on="muon_slot",how="left",validate="many_to_one")
+        if level=="primary": pr=d
+        else: fr=d
     return {"mu":mu,"primary":pr,"fragment":fr,"wire":wi}
 
 def st_filter(datasets,channels,stations):
@@ -348,14 +351,21 @@ def draw(frame,spec,custom):
     x=df[spec.x].to_numpy(float)
     col=custom["color"];fig=go.Figure(); export=df
     if spec.chart=="hist":
-        hist,_=np.histogram(x,bins=custom["bins"])
-        fig.add_trace(go.Histogram(x=x,nbinsx=custom["bins"],marker_color=col,
-             marker_line_color="black",marker_line_width=.4,name="Entries"))
-        # Histogram normalization changes y only, not the recorded entries.
-        if custom["normalization"]=="Probability":
-            fig.update_traces(histnorm="probability")
-        elif custom["normalization"]=="Density":
-            fig.update_traces(histnorm="probability density")
+        # Bin *in physical coordinates*; geometric edges give correct log-scale bins.
+        lo,hi=float(x.min()),float(x.max())
+        if hi<=lo:hi=lo+max(1e-6,abs(lo)*.01)
+        edges=(np.geomspace(lo,hi*(1+1e-9),custom["bins"]+1)
+               if custom["xscale"]=="Log" else
+               np.linspace(lo,hi+max(1e-9,abs(hi)*1e-9),custom["bins"]+1))
+        counts,_=np.histogram(x,bins=edges)
+        heights=counts.astype(float)
+        if custom["normalization"]=="Probability":heights/=max(1.,heights.sum())
+        if custom["normalization"]=="Density":heights/=np.maximum(1.,heights.sum())*np.diff(edges)
+        centers=np.sqrt(edges[:-1]*edges[1:]) if custom["xscale"]=="Log" else (edges[:-1]+edges[1:])/2
+        fig.add_trace(go.Bar(x=centers,y=heights,width=np.diff(edges),
+              marker_color=col,marker_line_color="black",marker_line_width=.4,name="Entries"))
+        export=pd.DataFrame({"bin_lo":edges[:-1],"bin_hi":edges[1:],
+                             "n":counts,"height":heights})
     elif spec.chart=="density":
         yy=df[spec.y].to_numpy(float)
         fig.add_trace(go.Histogram2d(x=x,y=yy,nbinsx=custom["bins"],nbinsy=custom["bins"],
@@ -445,6 +455,8 @@ def main():
     lw=st.sidebar.slider("Line width",1.,5.,2.,.5,key=f"lw_{name}")
     normalization=st.sidebar.selectbox("Histogram normalization",["Counts","Probability","Density"],key=f"norm_{name}")
     legend=st.sidebar.checkbox("Show legend",False,key=f"legend_{name}")
+    legend_text=st.sidebar.text_input("Legend entry", "Entries" if spec.chart!="profile" else "Muon-bootstrap mean",
+                                       key=f"legendname_{name}")
     with st.sidebar.expander("Fonts and axis limits"):
         title_font=st.slider("Title font size",14,34,21,key=f"titlefont_{name}")
         axis_font=st.slider("Axes font size",10,22,15,key=f"axisfont_{name}")
@@ -462,6 +474,8 @@ def main():
     st.subheader(spec.title)
     fig,displayed,n,omitted=draw(data[spec.dataset],spec,custom)
     if fig is None:st.warning("No finite data for these filters and axis scales.");st.stop()
+    if fig.data:
+        fig.data[0].name=legend_text
     left,right=st.columns([3.6,1.45])
     with left:
         st.plotly_chart(fig,use_container_width=True,config={"displaylogo":False,"scrollZoom":True})
