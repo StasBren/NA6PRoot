@@ -3,14 +3,18 @@
 # READ-ONLY on archives; frozen exporter, frozen replay and frozen LUT unchanged; no new avalanche.
 #
 #   bash run_s_ladder.sh check
-#   bash run_s_ladder.sh prepare [INDEX]   one non-sealed development muon: frozen export -> T1 export -> S0 replay
-#   bash run_s_ladder.sh green RUN         Green grid paths (frozen transport code) + single-ion table, sized from RUN
-#   bash run_s_ladder.sh synth RUN         S-variants from the Green table for every prepared muon
-#   bash run_s_ladder.sh compare RUN       shaped comparison vs S0: 1) ion only  2) + instantaneous electron step
+#   bash run_s_ladder.sh prepare [INDEX]        one non-sealed development muon: frozen export -> T1 export -> S0 replay
+#   bash run_s_ladder.sh validate RUN           grid executable vs frozen exporter: same start points -> same paths
+#   bash run_s_ladder.sh green RUN [TAG]        Green grid paths + single-ion table into RUN/green_TAG (never overwritten)
+#   bash run_s_ladder.sh closure RUN [TAG]      G only (numerical closure) -> RUN/muon_*/G_TAG
+#   bash run_s_ladder.sh closure-compare RUN TAG[,TAG2,...]   S0 vs G_TAG(s): shaped AND unshaped, ion only + electron step
+#   bash run_s_ladder.sh synth RUN [TAG]        full S-variant set from green_TAG -> RUN/muon_*/<variant>_TAG
+#   bash run_s_ladder.sh compare RUN [TAG]      S0 vs all variants of TAG: 1) ion only  2) + instantaneous electron step
+# TAG defaults to r${MWPC_S_NR:-14}t${MWPC_S_NTHETA:-72}; a different grid = a different TAG, so results coexist.
 #
 # Environment: as run_t_ladder.sh (MWPC_EXPORT_BIN, MWPC_ION_MOBILITY, MWPC_SPECTRAL_LUT, MWPC_NUMW_DIR) plus
 #   MWPC_GREEN_BIN   built p3_green_grid_paths (spatial-ablation/CMakeLists.txt, FROZEN_DIR = wire branch)
-# Optional: MWPC_S_NR (radial nodes, 14), MWPC_S_NTHETA (72), MWPC_S_VARIANTS, MWPC_SLADDER_OUT, MWPC_HALF_STRIPS (5)
+# Optional: MWPC_S_NR (14), MWPC_S_NTHETA (72), MWPC_S_DSUB (10), MWPC_S_VARIANTS, MWPC_SLADDER_OUT, MWPC_HALF_STRIPS (5)
 # Shaping 100/200 ns PROVISIONAL; CR-RC^3 stand-in.
 set -Eeo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,8 +26,10 @@ ARCHIVE="${MWPC_ARCHIVE_2100_K256:-$HOME/na6p/cathode-overnight-2100/test_runs/m
 SELECTION="${MWPC_SIGNAL40_OUTPUT:-$HOME/NA6PRoot-signal40-2100/test_runs/mwpc_stage_c/phase_space_2100_signal40_v1}"
 DEV="$SELECTION/development20.csv"; SEALED="$SELECTION/sealed_validation20.csv"
 OUTROOT="${MWPC_SLADDER_OUT:-$REPO/test_runs/mwpc_stage_c/s_ladder_2100}"
-HS="${MWPC_HALF_STRIPS:-5}"; NR="${MWPC_S_NR:-14}"; NTH="${MWPC_S_NTHETA:-72}"
+HS="${MWPC_HALF_STRIPS:-5}"; NR="${MWPC_S_NR:-14}"; NTH="${MWPC_S_NTHETA:-72}"; DSUB="${MWPC_S_DSUB:-10}"
+DEFTAG="r${NR}t${NTH}"; [[ $DSUB == 10 ]] || DEFTAG="${DEFTAG}d${DSUB}"
 VARS="${MWPC_S_VARIANTS:-G,S1,S2,S3,SR,S2R,S3R,SW,SWW,K1,K2}"
+suffixed(){ local o="" v; for v in ${1//,/ }; do o="$o,${v}_$2"; done; echo "${o#,}"; }
 fail(){ echo "S-LADDER FAILED: $*" >&2; exit 2; }
 need(){ [[ -n "${!1:-}" ]] || fail "set $1"; [[ -e "${!1}" ]] || fail "$1=${!1} does not exist"; }
 idx(){ awk -F, 'NR==1{for(i=1;i<=NF;i++)if($i=="index")c=i; if(!c)exit 3; next} NF{printf "%04d\n",$c}' "$1"; }
@@ -56,29 +62,44 @@ case "${1:-}" in
     python3 "$TA/t_prompt_electron_term.py" "$MWPC_SPECTRAL_LUT" "$R/T1_export" "$R/S0/prompt" --replay-dir "$MWPC_NUMW_DIR" --half-strips "$HS" > "$R/S0.prompt.log" 2>&1 || fail "S0 electron step"
     rm -rf "$R/frozen_export/vertices.f64"      # T1_export keeps its own vertices (needed by synth)
     echo "PREPARED $R"; echo "RUN DIR $RUN  (prepare more muons with MWPC_S_RUN=$RUN bash $0 prepare INDEX)";;
+  validate)
+    envs MWPC_GREEN_BIN; RUN="${2:?RUN dir}"
+    for R in "$RUN"/muon_*; do
+      V="$R/transport_validation_$(date +%H%M%S)"; mkdir -p "$V"
+      python3 "$HERE/s_validate_transport.py" points "$R/T1_export" 200 "$V/points.csv"
+      "$MWPC_GREEN_BIN" "$MWPC_ION_MOBILITY" "$V/paths" --points "$V/points.csv" > "$V/paths.log" 2>&1 || fail "grid tool ($V/paths.log)"
+      python3 "$HERE/s_validate_transport.py" compare "$R/T1_export" "$V/points.csv" "$V/paths" | tee "$V/result.txt"
+      grep -q '^PASS' "$V/result.txt" || fail "grid executable does not reproduce the frozen export ($V/result.txt)"
+    done;;
   green)
-    envs MWPC_GREEN_BIN; RUN="${2:?RUN dir}"; [[ ! -e "$RUN/green" ]] || fail "$RUN/green exists"
-    python3 "$HERE/s_grid_spec.py" "$RUN"/muon_*/T1_export --nr "$NR" --half-strips "$HS" | tee "$RUN/grid_spec.txt"
-    W=$(sed -n 's/^--wires \([^ ]*\) --r-um.*/\1/p' "$RUN/grid_spec.txt"); RU=$(sed -n 's/.*--r-um \([^ ]*\)$/\1/p' "$RUN/grid_spec.txt")
-    DM=$(sed -n 's/.*--d-max-mm \([0-9.]*\)$/\1/p' "$RUN/grid_spec.txt")
+    envs MWPC_GREEN_BIN; RUN="${2:?RUN dir}"; TAG="${3:-$DEFTAG}"; GD="$RUN/green_$TAG"
+    [[ ! -e "$GD" && ! -e "$RUN/green_paths_$TAG" ]] || fail "$GD exists (choose another TAG)"
+    python3 "$HERE/s_grid_spec.py" "$RUN"/muon_*/T1_export --nr "$NR" --half-strips "$HS" | tee "$RUN/grid_spec_$TAG.txt"
+    W=$(sed -n 's/^--wires \([^ ]*\) --r-um.*/\1/p' "$RUN/grid_spec_$TAG.txt"); RU=$(sed -n 's/.*--r-um \([^ ]*\)$/\1/p' "$RUN/grid_spec_$TAG.txt")
+    DM=$(sed -n 's/.*--d-max-mm \([0-9.]*\)$/\1/p' "$RUN/grid_spec_$TAG.txt")
     [[ -n "$W" && -n "$RU" && -n "$DM" ]] || fail "grid spec parse"
     t0=$(date +%s)
-    "$MWPC_GREEN_BIN" "$MWPC_ION_MOBILITY" "$RUN/green_paths" --wires "$W" --r-um "$RU" --ntheta "$NTH" > "$RUN/green_paths.log" 2>&1 || fail "grid paths ($RUN/green_paths.log)"
-    grep -q '^PASS green grid' "$RUN/green_paths.log" || fail "grid paths did not PASS"
-    echo "green_paths_s=$(( $(date +%s) - t0 ))" >> "$RUN/timing.txt"
-    python3 "$HERE/s_green_table.py" "$MWPC_SPECTRAL_LUT" "$RUN/green_paths" "$RUN/green" --replay-dir "$MWPC_NUMW_DIR" --d-max-mm "$DM" | tee "$RUN/green_table.log"
-    echo "green_table_s=$(( $(date +%s) - t0 ))" >> "$RUN/timing.txt";;
-  synth)
-    RUN="${2:?RUN dir}"; [[ -s "$RUN/green/axes.json" ]] || fail "run green first"
+    "$MWPC_GREEN_BIN" "$MWPC_ION_MOBILITY" "$RUN/green_paths_$TAG" --wires "$W" --r-um "$RU" --ntheta "$NTH" > "$RUN/green_paths_$TAG.log" 2>&1 || fail "grid paths ($RUN/green_paths_$TAG.log)"
+    grep -q '^PASS green grid' "$RUN/green_paths_$TAG.log" || fail "grid paths did not PASS"
+    t1=$(date +%s); echo "green_paths_${TAG}_s=$((t1 - t0))" >> "$RUN/timing.txt"
+    python3 "$HERE/s_green_table.py" "$MWPC_SPECTRAL_LUT" "$RUN/green_paths_$TAG" "$GD" --replay-dir "$MWPC_NUMW_DIR" --d-max-mm "$DM" --d-sub "$DSUB" | tee "$RUN/green_table_$TAG.log"
+    echo "green_table_${TAG}_s=$(( $(date +%s) - t1 ))" >> "$RUN/timing.txt";;
+  closure|synth)
+    RUN="${2:?RUN dir}"; TAG="${3:-$DEFTAG}"; GD="$RUN/green_$TAG"; [[ -s "$GD/axes.json" ]] || fail "run: green $RUN $TAG"
+    V="G"; [[ $1 == synth ]] && V="$VARS"
     for R in "$RUN"/muon_*; do
-      [[ -e "$R/S/G" ]] && { echo "skip $R (S exists)"; continue; }
-      python3 "$HERE/s_synthesize.py" "$RUN/green" "$R/T1_export" "$R/S0/replay/waveforms.csv" "$R/S" --variants "$VARS" | tee "$R/synth.log"
-      for v in ${VARS//,/ }; do mv "$R/S/$v" "$R/$v"; done
+      python3 "$HERE/s_synthesize.py" "$GD" "$R/T1_export" "$R/S0/replay/waveforms.csv" "$R" --variants "$V" --suffix "_$TAG" | tee -a "$R/synth_$TAG.log"
     done;;
+  closure-compare)
+    RUN="${2:?RUN dir}"; TAGS="${3:-$DEFTAG}"; S=$(date +%H%M%S); V="S0"
+    for t in ${TAGS//,/ }; do V="$V,G_$t"; done
+    python3 "$TA/t_shaped_compare.py" "$RUN" --variants "$V" --tp 100,200 --no-prompt --plots --out "$RUN/closure_1_ion_only_${TAGS//,/+}_$S"
+    python3 "$TA/t_shaped_compare.py" "$RUN" --variants "$V" --tp 100,200 --plots --out "$RUN/closure_2_ion_plus_electron_step_${TAGS//,/+}_$S"
+    echo "return: $RUN/closure_*_$S/t_ladder_summary.txt and the PNGs";;
   compare)
-    RUN="${2:?RUN dir}"; S=$(date +%H%M%S)
-    python3 "$TA/t_shaped_compare.py" "$RUN" --variants "S0,$VARS" --tp 100,200 --no-prompt --plots --out "$RUN/compare_1_ion_only_$S"
-    python3 "$TA/t_shaped_compare.py" "$RUN" --variants "S0,$VARS" --tp 100,200 --plots --out "$RUN/compare_2_ion_plus_electron_step_$S"
-    echo "return: $RUN/compare_*_$S/t_ladder_summary.txt, $RUN/grid_spec.txt, $RUN/green/axes.json, $RUN/muon_*/S/s_synthesize.json";;
-  *) sed -n 2,16p "$0"; exit 1;;
+    RUN="${2:?RUN dir}"; TAG="${3:-$DEFTAG}"; S=$(date +%H%M%S); V="S0,$(suffixed "$VARS" "$TAG")"
+    python3 "$TA/t_shaped_compare.py" "$RUN" --variants "$V" --tp 100,200 --no-prompt --plots --out "$RUN/compare_1_ion_only_${TAG}_$S"
+    python3 "$TA/t_shaped_compare.py" "$RUN" --variants "$V" --tp 100,200 --plots --out "$RUN/compare_2_ion_plus_electron_step_${TAG}_$S"
+    echo "return: $RUN/compare_*_${TAG}_$S/t_ladder_summary.txt, $RUN/grid_spec_$TAG.txt, $RUN/green_$TAG/axes.json, $RUN/muon_*/s_synthesize_*.json";;
+  *) sed -n 2,20p "$0"; exit 1;;
 esac

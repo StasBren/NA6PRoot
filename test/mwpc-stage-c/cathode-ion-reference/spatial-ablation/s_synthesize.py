@@ -87,6 +87,7 @@ def main():
     ap.add_argument("out", type=Path)
     ap.add_argument("--variants", default="G,S1,S2,S3,SR,S2R,S3R,SW,SWW,K1,K2")
     ap.add_argument("--window-ns", type=float, default=7000.0)
+    ap.add_argument("--suffix", default="", help="appended to every variant directory name (e.g. _r14t72)")
     a = ap.parse_args()
     ax = json.loads((a.green / "axes.json").read_text())
     G = np.load(a.green / "G.npy", mmap_mode="r")
@@ -95,6 +96,7 @@ def main():
     M, dD, dsub = len(ax["theta_deg"]), ax["dD_mm"], ax["d_sub"]
     with open(a.reference_waveforms) as f:
         labels = f.readline().strip().split(",")[1:]
+    ref_cur = np.loadtxt(a.reference_waveforms, delimiter=",", skiprows=1, ndmin=2)[:, 1:]
     offs = {s: [int(l.split("_")[1]) for l in labels if l.startswith(s + "_")] for s in ("U", "V")}
     rows, p0, w, prim = read_export(a.export)
     base = {"U": int(rows[0]["upper_index"]), "V": int(rows[0]["lower_index"])}
@@ -126,7 +128,10 @@ def main():
     r_eff = np.exp(gmean(np.log(r), cloud, q))
     tgroups, tg = np.unique(np.round(t, 9), return_inverse=True)
     edges = np.arange(nb + 1) * DT
-    a.out.mkdir(parents=True, exist_ok=False)
+    a.out.mkdir(parents=True, exist_ok=True)
+    for var in a.variants.split(","):
+        if (a.out / (var + a.suffix)).exists():
+            raise SystemExit(f"refusing to overwrite {a.out / (var + a.suffix)}")
     for var in a.variants.split(","):
         t0w = time.perf_counter()
         nmax = {"G": None, "S1": 0, "S2": 1, "S3": 2, "SR": None, "S2R": 1, "S3R": 2, "SW": None, "SWW": None,
@@ -183,16 +188,32 @@ def main():
         lab = [f"U_{base['U'] + o}" for o in off["U"]] + [f"V_{base['V'] + o}" for o in off["V"]]
         if lab != labels:
             raise SystemExit("channel labels do not match the reference")
+        # consistency checks against the reference (frozen replay of the same export): charge, polarity, mapping
+        qref = ref_cur[:nb].reshape(nb, 2, -1).sum(0) * DT          # (side, strip) window charge, fC
+        qv = total.sum(0)
+        big = np.abs(qref) >= 0.01 * np.abs(qref).max()
+        checks = {"plane_window_charge_rel_U": float(qv[0].sum() / qref[0].sum() - 1),
+                  "plane_window_charge_rel_V": float(qv[1].sum() / qref[1].sum() - 1),
+                  "strip_charge_sign_disagreements": int(np.sum(np.sign(qv[big]) != np.sign(qref[big]))),
+                  "lead_strip_same_U": bool(np.argmax(np.abs(qv[0])) == np.argmax(np.abs(qref[0]))),
+                  "lead_strip_same_V": bool(np.argmax(np.abs(qv[1])) == np.argmax(np.abs(qref[1])))}
+        if var == "G" and (abs(checks["plane_window_charge_rel_U"]) > 0.01 or abs(checks["plane_window_charge_rel_V"]) > 0.01
+                           or checks["strip_charge_sign_disagreements"] or not checks["lead_strip_same_U"]
+                           or not checks["lead_strip_same_V"]):
+            raise SystemExit(f"G closure consistency FAILED (charge, polarity or mapping): {checks}")
         for sub, arr, fn in (("replay", total, "waveforms.csv"), ("prompt", prompt, "prompt_waveforms.csv")):
-            (a.out / var / sub).mkdir(parents=True)
-            np.savetxt(a.out / var / sub / fn, np.column_stack((tc, arr.reshape(nb, -1) / DT)), delimiter=",",
+            (a.out / (var + a.suffix) / sub).mkdir(parents=True)
+            np.savetxt(a.out / (var + a.suffix) / sub / fn, np.column_stack((tc, arr.reshape(nb, -1) / DT)), delimiter=",",
                        header="time_center_ns," + ",".join(labels), comments="")
         rep["variants"][var] = {"wall_s": time.perf_counter() - t0w, "contributions": int(len(WT)),
                                 "unique_nodes_last_side": int(len(uk)), "time_groups": int(len(tgroups)),
-                                "window_charge_fC_U": float(total[:, 0].sum()), "window_charge_fC_V": float(total[:, 1].sum())}
-        print(f"{var}: {rep['variants'][var]['wall_s']:.1f} s, nodes {len(uk)}, time groups {len(tgroups)}", flush=True)
+                                "window_charge_fC_U": float(total[:, 0].sum()), "window_charge_fC_V": float(total[:, 1].sum()),
+                                "checks_vs_reference": checks}
+        print(f"{var}{a.suffix}: {rep['variants'][var]['wall_s']:.1f} s, nodes {len(uk)}, time groups {len(tgroups)}, "
+              f"window charge vs ref U {checks['plane_window_charge_rel_U']:+.2e} V {checks['plane_window_charge_rel_V']:+.2e}", flush=True)
     rep["green_axes_sha"] = {k_: ax[k_] for k_ in ("lut_sha256", "grid_ions_sha256", "grid_vertices_sha256")}
-    (a.out / "s_synthesize.json").write_text(json.dumps(rep, indent=1) + "\n")
+    rep["suffix"] = a.suffix
+    (a.out / f"s_synthesize{a.suffix}_{time.strftime('%Y%m%d_%H%M%S')}.json").write_text(json.dumps(rep, indent=1) + "\n")
 
 
 if __name__ == "__main__":

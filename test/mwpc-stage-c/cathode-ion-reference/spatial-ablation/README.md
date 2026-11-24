@@ -40,16 +40,32 @@ The comparison reuses `timing-ablation/t_shaped_compare.py` with S0 as reference
 waveforms, leading-strip peak / time, threshold times and hit flips at thresholds fixed from S0, multiplicities, U/V
 charge and amplitude ratios, stereo w, u.
 
-**Gate:** G must agree with S0 far better than the effects under test (target L2 < 1e-3 and threshold-time shifts
-well below 1 ns). If not, refine the grid (MWPC_S_NR, MWPC_S_NTHETA, `--d-sub`, `--ntau`) before reading S1..K2.
-S5 (shaped kernels and their runtime vs the replay) follows only after the ladder identifies the description.
+## Closure assessment (practical, not a fixed 0.1% gate)
+G vs S0 measures only the numerical error of the Green-table description (grid in r, theta, D, tau; same ions, same
+T1 times, same frozen LUT). Spatial-model error is every S-variant minus G, not minus S0. Procedure:
+1. **Hard consistency checks** (enforced by `s_synthesize.py` for G, the run stops otherwise): plane window charge
+   within 1% of S0, no strip with |Q| >= 1% of the largest whose sign differs, same leading strip in both planes;
+   no ion outside the radial grid, all wires covered, D range inside the table; channel labels identical to S0.
+2. **Run G alone** (`closure`) and report, per plane: unshaped current and cumulative-charge L2, shaped L2 at 100 and
+   200 ns, leading-peak change, threshold times, hit flips, U/V ratios and w, u under every centroid definition.
+3. **Decide by the question being asked.** Call eps_G(X) the closure error of observable X and Delta_k(X) the
+   difference variant k - G. A ranking or rejection of variant k is unambiguous when |Delta_k(X)| >= 3 eps_G(X)
+   for the observables that decide it (and the two variants being compared differ by more than 3 eps_G). Examples:
+   eps_G = 0.3% easily rejects a 10% distortion; it cannot separate 0.4% from 0.7%.
+   For acceptance, eps_G must also be below the observable tolerance that matters (e.g. a fraction of the
+   expected u, w resolution, sub-ns threshold timing, no hit flips attributable to the grid).
+4. **Refine only if a decision is ambiguous**: one targeted refinement (MWPC_S_NR, MWPC_S_NTHETA or MWPC_S_DSUB),
+   under a new TAG, compared with `closure-compare RUN TAG1,TAG2`. The two closures give a convergence estimate for
+   that grid direction; stop when the decision no longer changes.
+Results from different grids never overwrite each other (directories and variant names carry the TAG).
 
 ## Files
 * `p3_green_grid_paths.cc`, `CMakeLists.txt` — grid paths with the frozen transport (build against the wire branch).
 * `s_grid_spec.py` — wires, radius grid and D range from the muon's actual ion births.
 * `s_green_table.py` — Green table with the frozen LUT and the replay's own path validation.
-* `s_synthesize.py` — the variants above; writes replay-format waveforms and electron-step files.
-* `run_s_ladder.sh` — check / prepare / green / synth / compare; development muons only.
+* `s_synthesize.py` — the variants above (`--variants G` for closure only, `--suffix _TAG`); consistency checks.
+* `s_validate_transport.py` — grid executable vs frozen exporter on the same start points (`validate`).
+* `run_s_ladder.sh` — check / prepare / validate / green / closure / closure-compare / synth / compare.
 * `synthetic_paths.py` — SYNTHETIC toy transport for pipeline tests only.
 
 ## WSL (after review)
@@ -59,23 +75,43 @@ SA=test/mwpc-stage-c/cathode-ion-reference/spatial-ablation
 source ~/t_ladder_deps.env            # MWPC_EXPORT_BIN, MWPC_ION_MOBILITY, MWPC_SPECTRAL_LUT, MWPC_NUMW_DIR
 source ~/na6p/env.sh 2>/dev/null; source ~/na6p/install/garfieldpp/share/Garfield/setupGarfield.sh 2>/dev/null
 cmake -S $SA -B ~/na6p/build-spatial -DFROZEN_DIR=$HOME/na6p/wt-wire/test/mwpc-stage-c/cathode-ion-reference
-cmake --build ~/na6p/build-spatial -j4
+cmake --build ~/na6p/build-spatial -j4         # prints the frozen exporter source sha256
 export MWPC_GREEN_BIN=~/na6p/build-spatial/p3_green_grid_paths
 bash $SA/run_s_ladder.sh check
-bash $SA/run_s_ladder.sh prepare                # first non-sealed development muon; prints RUN DIR
-bash $SA/run_s_ladder.sh green   <RUN DIR>      # ~3 wires x 14 radii x 72 angles RKF paths + table
-bash $SA/run_s_ladder.sh synth   <RUN DIR>
-bash $SA/run_s_ladder.sh compare <RUN DIR>
+bash $SA/run_s_ladder.sh prepare               # first non-sealed development muon; prints RUN DIR
+bash $SA/run_s_ladder.sh validate <RUN>        # 200 archived start points: grid tool must reproduce the frozen paths
+bash $SA/run_s_ladder.sh green <RUN>           # TAG r14t72
+bash $SA/run_s_ladder.sh closure <RUN>
+bash $SA/run_s_ladder.sh closure-compare <RUN> r14t72
+# only if the closure leaves a decision ambiguous, one refinement, e.g.:
+#   MWPC_S_NR=20 bash $SA/run_s_ladder.sh green <RUN>; MWPC_S_NR=20 bash $SA/run_s_ladder.sh closure <RUN>
+#   bash $SA/run_s_ladder.sh closure-compare <RUN> r14t72,r20t72
+# when the closure is interpretable:
+bash $SA/run_s_ladder.sh synth <RUN>
+bash $SA/run_s_ladder.sh compare <RUN>
 ```
-Return `compare_*/t_ladder_summary.txt`, the PNGs, `grid_spec.txt`, `green/axes.json`, `green_paths.log`,
-`timing.txt`, `muon_*/S/s_synthesize.json`, `provenance_prepare_*.txt`.
+Return `transport_validation_*/result.txt`, `closure_*/t_ladder_summary.txt` (+ PNGs), `grid_spec_*.txt`,
+`green_*/axes.json`, `green_paths_*.log`, `timing.txt`, `muon_*/s_synthesize_*.json`, `provenance_prepare_*.txt`.
 
 ## Synthetic pipeline test (toy transport, real spectral LUT; NOT physics)
 One toy muon (960 ions, 40 primaries), grid 3 wires x 12 radii x 72 angles, D step 0.17 mm, 200 tau nodes; table
 439 MiB, 125 s on a 2-core VM; all 11 variants synthesized in 2.6 s. Tp = 100 ns, ion only, L2 vs S0 (U / V):
 G closure 0.16% / 0.31%; S1 10% / 9.3%; S2 0.68% / 0.78%; S3 0.65% / 0.60%; SR 2.6% / 5.7%; SW 0.16% / 0.31%;
-K1 3.0% / 5.7%. The closure is above the 1e-3 target on V: on real data refine the grid before interpreting
-variants. These numbers only show that the tools run and resolve differences; the toy radial time law is not physics.
+K1 3.0% / 5.7%. Here a 0.3% closure is ample to reject S1 or SR-type errors but would not separate S2 from S3
+(0.7% vs 0.6%), which is exactly the case where the closure procedure above asks for one refinement. These numbers only show that the tools run and resolve differences; the toy radial time law is not physics.
+
+## Dependency separation for later design studies
+The S-ladder already factorizes the response the way a configurable engine needs:
+* **Transport** (gas, E/B field, wire geometry, voltage): the grid paths `green_paths_*`. Valid only for the frozen
+  9-wire 2100 V zero-B field; its 2D symmetry (path independent of w and t) is what allows one path per (k, r, theta).
+* **Electrode weighting** (strip pitch, width, gap, stereo angle, segmentation): the LUT applied in `s_green_table.py`.
+  New strip geometry with the same drift field = new LUT + rebuilt table from the SAME grid paths.
+* **Electronics** (impulse response, thresholds): applied only in `t_shaped_compare.py`; G/PHI0 and all variant
+  waveforms are unshaped, so a new shaper reuses everything.
+* **Placement / incidence**: enters only through the ion start points (archived or generated) and the strip frame.
+A B field, a 3D field or finite strips break the w-translation and/or 2D path symmetry; then paths must be indexed by
+the extra coordinates. The frozen P3 tools stay hard-coded; the production engine should key caches on explicit,
+versioned configuration hashes (transport, weighting, electronics).
 
 ## Limits
 * Same frozen-model limits as the T-ladder: ideal 9-wire plane, provisional Ar+ mobility, ideal contiguous strips,

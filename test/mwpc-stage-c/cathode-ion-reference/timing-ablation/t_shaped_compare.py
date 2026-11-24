@@ -22,7 +22,9 @@ Per muon, Tp and plane:
   * strip multiplicity above each threshold and the number of strips whose above/below status flips
   * plane amplitude (sum of main-polarity peaks over strips above the lowest threshold), U/V amplitude ratio,
     unshaped plane charge in the window (U/V charge)
-  * peak-weighted centroid (strip units) -> stereo w, u with U = w - A u, V = w + A u on the exporter's strip
+  * unshaped normalized L2 of the current and of the cumulative charge (numerical closure without the shaper)
+  * peak-weighted centroid (strip units) -> stereo w, u; also alternative centroids for diagnostics: membership fixed
+    from the reference, lead +-1, lead +-2, all positive strips (u_mm_<def>, w_mm_<def>) with U = w - A u, V = w + A u on the exporter's strip
     coordinate (pitch 1.7 mm, A = 0.1)
 Differences vs T0 per muon (jsonl), and over muons: mean, rms, max |d| and a muon bootstrap when >= 3 muons.
 --plots writes per-muon PNGs: shaped waveforms of the 3 largest strips per plane, variants over T0, and residuals.
@@ -125,17 +127,38 @@ def analyse_muon(waves, labels, dt, fracs, h, window_ns, dt_in):
         sgn = 1.0 if ext[int(np.argmax(np.abs(ext)))] > 0 else -1.0
         lead0 = float(np.max(sgn * Y0))
         thr = {f"f{f:g}": f * lead0 for f in fracs}
+        I0 = waves[ref][:nb][:, cols]
+        Q0 = np.cumsum(I0, 0)
+        ref_obs = None
         for v in waves:
             Y = shaped[v][:, cols]
             o = plane_obs(Y, idx, dt, sgn, thr, charge[v][cols].sum())
             o["sign"] = sgn
             o["thresholds_fCeq"] = thr
             o["l2_rel_vs_T0"] = float(np.linalg.norm(Y - Y0) / np.linalg.norm(Y0))
+            I = waves[v][:nb][:, cols]
+            o["l2_unshaped_I"] = float(np.linalg.norm(I - I0) / np.linalg.norm(I0))
+            o["l2_unshaped_Q"] = float(np.linalg.norm(np.cumsum(I, 0) - Q0) / np.linalg.norm(Q0))
+            if ref_obs is None:
+                ref_obs = o
+            # alternative centroid definitions (strip units); 'thr' (default) = strips above the lowest threshold
+            pk, pk0 = o["peaks"], ref_obs["peaks"]
+            memb = pk0 >= min(thr.values())                      # membership fixed from the reference
+            l0 = int(np.argmax(pk0))
+            def cen(sel):
+                return float(np.sum(pk[sel] * idx[sel]) / np.sum(pk[sel])) if np.sum(pk[sel]) > 0 else np.nan
+            near = lambda h: (np.abs(np.arange(len(pk)) - l0) <= h)
+            o["centroids"] = {"thr": o["centroid_strip"], "fixed_ref_membership": cen(memb),
+                              "lead3": cen(near(1) & (pk > 0)), "lead5": cen(near(2) & (pk > 0)), "all_positive": cen(pk > 0)}
+            o["membership_changes_at_inclusion"] = int(np.sum((pk >= min(thr.values())) != memb))
             res[v][side] = o
     for v in waves:
         U, V = res[v]["U"], res[v]["V"]
         res[v]["w_mm"] = 0.5 * PITCH_STRIP * (U["centroid_strip"] + V["centroid_strip"])
         res[v]["u_mm"] = PITCH_STRIP * (V["centroid_strip"] - U["centroid_strip"]) / (2 * A_STEREO)
+        res[v]["u_mm_by_centroid"] = {k: PITCH_STRIP * (V["centroids"][k] - U["centroids"][k]) / (2 * A_STEREO)
+                                      for k in U["centroids"]}
+        res[v]["w_mm_by_centroid"] = {k: 0.5 * PITCH_STRIP * (V["centroids"][k] + U["centroids"][k]) for k in U["centroids"]}
         res[v]["UV_amp_ratio"] = U["amplitude"] / V["amplitude"] if V["amplitude"] else np.nan
         res[v]["UV_charge_ratio"] = U["charge"] / V["charge"] if V["charge"] else np.nan
     return res, shaped
@@ -145,9 +168,16 @@ def diffs(r, r0, fracs):
     d = {"w_mm": r["w_mm"] - r0["w_mm"], "u_mm": r["u_mm"] - r0["u_mm"],
          "UV_amp_ratio_rel": r["UV_amp_ratio"] / r0["UV_amp_ratio"] - 1,
          "UV_charge_ratio_rel": r["UV_charge_ratio"] / r0["UV_charge_ratio"] - 1}
+    for k in r["u_mm_by_centroid"]:
+        if k != "thr":
+            d[f"u_mm_{k}"] = r["u_mm_by_centroid"][k] - r0["u_mm_by_centroid"][k]
+            d[f"w_mm_{k}"] = r["w_mm_by_centroid"][k] - r0["w_mm_by_centroid"][k]
     for s in ("U", "V"):
         a, b = r[s], r0[s]
         d[f"{s}_L2_rel"] = a["l2_rel_vs_T0"]
+        d[f"{s}_L2_unshaped_current"] = a["l2_unshaped_I"]
+        d[f"{s}_L2_unshaped_charge"] = a["l2_unshaped_Q"]
+        d[f"{s}_membership_changes_at_inclusion"] = a["membership_changes_at_inclusion"]
         d[f"{s}_lead_index_changed"] = int(a["lead_index"] != b["lead_index"])
         d[f"{s}_lead_peak_rel"] = a["lead_peak"] / b["lead_peak"] - 1
         d[f"{s}_lead_peak_time_ns"] = a["lead_peak_time"] - b["lead_peak_time"]
@@ -261,12 +291,15 @@ def main():
                 for v in variants[1:]:
                     d = diffs(res[v], res[REF], fracs)
                     per[v].append(d)
-                    fo.write(json.dumps({"muon": m, "variant": v, "Tp_ns": tp, **d}) + "\n")
+                    fo.write(json.dumps({"muon": m, "variant": v, "Tp_ns": tp, **d,
+                                         "U_peaks": res[v]["U"]["peaks"].tolist(), "V_peaks": res[v]["V"]["peaks"].tolist()}) + "\n")
                 fo.write(json.dumps({"muon": m, "variant": REF, "Tp_ns": tp,
                                      **{f"{s}_{k}": res[REF][s][k] for s in ("U", "V")
                                         for k in ("lead_index", "lead_peak", "lead_peak_time", "charge", "amplitude",
                                                   "centroid_strip", "sign")},
                                      "w_mm": res[REF]["w_mm"], "u_mm": res[REF]["u_mm"],
+                                     "U_peaks": res[REF]["U"]["peaks"].tolist(), "V_peaks": res[REF]["V"]["peaks"].tolist(),
+                                     "U_strip_index": plane_cols(labels, "U")[1].tolist(), "V_strip_index": plane_cols(labels, "V")[1].tolist(),
                                      "thresholds_fCeq": {s: res[REF][s]["thresholds_fCeq"] for s in ("U", "V")}}) + "\n")
                 if a.plots:
                     plot_muon(a.out / f"{m}_Tp{tp:g}.png", m, tp, labels, shaped, res, variants, a.dt,
