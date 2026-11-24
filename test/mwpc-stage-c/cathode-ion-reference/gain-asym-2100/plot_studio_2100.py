@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from per_anode_census_2100 import read_per_anode
 
 st.set_page_config(page_title="NA60+ | 2100 V Plot Studio", layout="wide",
                    page_icon="📈", initial_sidebar_state="expanded")
@@ -178,6 +179,116 @@ SPECS = [
       "Connection between up/down ion-birth localization and the along-wire cloud width.",
       "Both exact from original per-(primary, nearest ion-birth wire) census.",
       "One entry per physical ion-birth wire fragment; the sample is not an ion-weighted angular distribution."),
+ # One exact original Garfield CSV row per (Heed primary, local anode).
+ Spec("anode_fragment_A","Individual anodes","Ion-birth A_UD — each primary × anode",
+      "anode_fragment","A_UD_exact",None,"hist",
+      "A_UD (exact up/down births)","Primary–anode fragments",
+      "Hemispheric asymmetry of ion births attributed to one physical anode in a single primary avalanche.",
+      "Original microscopic_wire_seed.csv exact ion_up/ion_down/ion_boundary counters; A=(up-down)/(up+down), with dividing-axis births excluded from A only.",
+      "Anode assignment is the wire nearest ion births, not necessarily the wire collecting avalanche electrons."),
+ Spec("anode_muon_A","Individual anodes","Ion-birth A_UD — each muon × anode",
+      "anode","A_UD_exact",None,"hist",
+      "A_UD (exact sum of up/down births)","Muon–anode records",
+      "Net ion-birth hemisphere preference on a given anode over all primary avalanches from one muon.",
+      "For each (muon, global anode), sum exact N_up and N_down across its primaries, then form (up-down)/(up+down).",
+      "Exact ratio-of-sums, not the mean of fragment A values; ion-birth assignment, not collected cathode current."),
+ Spec("anode_fragment_t","Individual anodes","Primary → mean ion-birth time (per avalanche–anode)",
+      "anode_fragment","ion_birth_delay_ns",None,"hist",
+      "Mean ion-birth delay from primary [ns]","Primary–anode fragments",
+      "Time elapsed between creation of a Heed primary electron and the mean formation time of its avalanche ions near an anode.",
+      "The original exact per-wire mean Garfield ion birth timestamp minus this primary's t_primary_ns.",
+      "This is a mean ion-production delay, not the first ion birth, not ion drift to the cathode and not electronics latency."),
+ Spec("anode_fragment_sigma_t","Individual anodes","Ion-production time spread within an avalanche–anode",
+      "anode_fragment","sigma_t_birth_ns",None,"hist",
+      "Within-fragment sigma_t [ns]","Primary–anode fragments",
+      "Microscopic temporal extent of positive-ion production during one avalanche.",
+      "Original exact sigma_t_birth_ns from the microscopic per-primary/per-wire counters.",
+      "Do not confuse this sub-avalanche spread with across-primary arrival-time spread on an anode."),
+ Spec("anode_fragment_coll_t","Individual anodes","Primary → mean collected-electron time",
+      "anode_fragment","electron_collection_delay_ns",None,"hist",
+      "Mean electron collection delay [ns]","Primary–anode fragments with collected electrons",
+      "Mean time for electrons produced by a primary avalanche to reach this physical collecting anode.",
+      "Original exact mean_t_collected_ns minus the original primary's t_primary_ns.",
+      "Only wires actually collecting electrons contribute; electron collection is not positive-ion collection."),
+ Spec("anode_fragment_time_compare","Individual anodes","Ion formation versus electron collection delay",
+      "anode_fragment","ion_birth_delay_ns","electron_collection_delay_ns","density",
+      "Mean ion-birth delay from primary [ns]","Mean collected-electron delay [ns]",
+      "Compare the two physically distinct microscopic avalanche timing observables.",
+      "Both delays are computed from original exact source means using the same Heed primary timestamp.",
+      "Requires a wire with both positive ion births and actual collected electrons; does not include ion drift."),
+ Spec("anode_fragment_t_gain","Individual anodes","Ion-birth delay versus primary ionization gain",
+      "anode_fragment","G_ion_primary","ion_birth_delay_ns","profile",
+      "Ion births per Heed primary","Mean ion-birth delay [ns]",
+      "Tests whether larger avalanche ion yields are associated with later ion formation.",
+      "Exact per-primary ionization gain, exact per-(primary,wire) mean ion-birth delay. One entry per primary–anode fragment; muon bootstrap.",
+      "If a primary's births span multiple anodes, the full primary yield is used on the x-axis for each fragment.",True),
+ Spec("anode_fragment_A_gain","Individual anodes","Per-anode |A_UD| versus primary ionization gain",
+      "anode_fragment","G_ion_primary","absA_UD_exact","profile",
+      "Ion births per Heed primary","Mean |A_UD|",
+      "How ion production hemisphere localization varies with individual avalanche yield.",
+      "Absolute exact up/down ratio for each primary–anode record, binned by exact ion births across that primary.",
+      "Equal fragment weighting, not ion weighting; muon bootstrap accounts for shared parents.",True),
+ Spec("anode_fragment_A_time","Individual anodes","Anode ion-birth asymmetry versus production delay",
+      "anode_fragment","ion_birth_delay_ns","A_UD_exact","density",
+      "Mean ion-birth delay [ns]","A_UD",
+      "Joint distribution of signed ion-birth hemisphere and elapsed avalanche formation time.",
+      "Exact per-primary–anode A and exact mean ion production delay from original Garfield counters.",
+      "Does not resolve a within-avalanche time-dependent A(t); this is a correlation of summaries."),
+ Spec("anode_fragment_w_gain","Individual anodes","Within-avalanche longitudinal spread versus gain",
+      "anode_fragment","G_ion_primary","sigma_w_birth_mm","profile",
+      "Ion births per Heed primary","Within-fragment sigma_w [mm]",
+      "Longitudinal ion-birth extent along the anode, rather than across the chamber gap.",
+      "Exact sigma_w_birth_mm, original source per (primary, nearest-birth wire), against exact primary ion yield.",
+      "Not the spatial width of the entire muon or the collection charge sharing.",True),
+ # One exact aggregation per (muon, physical/nearest-birth anode).
+ Spec("anode_muon_births","Individual anodes","Total ion births on one anode per muon",
+      "anode","ion_births",None,"hist",
+      "Total ion births on anode","Muon–anode records",
+      "How many positive ions in a muon were produced nearest to a given anode.",
+      "Exact ion_births summed over all contributing primaries on (muon, global_wire).",
+      "Counts are birth locations, not ions arriving at that wire or at the cathode.",True),
+ Spec("anode_muon_collected","Individual anodes","Total electrons collected on one anode per muon",
+      "anode","collected_e",None,"hist",
+      "Electrons collected at anode","Muon–anode records",
+      "Physical electron charge collecting on one anode for a given muon.",
+      "Exact collected_e counts summed over all Heed primary avalanches.",
+      "Not induced signal charge. Zero-electron wires with ions remain in the denominator.",True),
+ Spec("anode_muon_t","Individual anodes","Mean ion-birth delay on each anode",
+      "anode","ion_birth_delay_ns",None,"hist",
+      "Ion-weighted mean delay from primary [ns]","Muon–anode records",
+      "Typical delay between each ion's originating Heed primary and the ion creation, pooled on one anode.",
+      "Birth-count-weighted mean of per-primary–anode (t_ion_mean-t_primary). Different primary time origins are individually subtracted.",
+      "Not a common-event-clock arrival time; it excludes all positive-ion drift to cathodes."),
+ Spec("anode_muon_sigma_t","Individual anodes","Ion-birth timing RMS on each anode",
+      "anode","sigma_t_birth_relative_ns",None,"hist",
+      "RMS of (t_ion−t_primary) [ns]","Muon–anode records",
+      "Overall distribution width of ion production delays relative to each ion's own Heed primary.",
+      "Combine exact within-fragment sigma_t and between-fragment mean-delay variance with ion-birth count weights.",
+      "Unlike within-avalanche sigma_t, this includes differences between primaries contributing to the same anode."),
+ Spec("anode_muon_share","Individual anodes","Muon ion-birth fraction on one anode",
+      "anode","ion_share_muon",None,"hist",
+      "Births on anode / births in muon","Muon–anode records",
+      "Ionization charge-sharing fraction among wires defined by nearest ion-birth positions.",
+      "Exact total ion births near a given wire divided by the muon's total exact ion births.",
+      "Not equal to collected-electron anode sharing, nor induced U/V cathode-strip sharing."),
+ Spec("anode_muon_e_share","Individual anodes","Muon collected-electron fraction on one anode",
+      "anode","electron_share_muon",None,"hist",
+      "Collected electrons on anode / muon total","Muon–anode records",
+      "Fraction of actual anode-collected avalanche electrons on a given physical wire.",
+      "Exact per-wire collecting electron counts normalized by total collected electron count for this muon.",
+      "Zero-collected-electron muons have undefined fractions."),
+ Spec("anode_muon_A_t","Individual anodes","Muon–anode A_UD versus ion-birth delay",
+      "anode","ion_birth_delay_ns","A_UD_exact","density",
+      "Ion-weighted mean birth delay [ns]","A_UD for muon–anode",
+      "How whole-muon ion-birth timing and hemispheric preference vary across individual anodes.",
+      "Both derived from exact original per-wire ion-birth counters, after aggregating over Heed primaries.",
+      "Temporal mean is relative to each primary; this is not a strip response."),
+ Spec("anode_muon_A_gain","Individual anodes","Muon–anode |A_UD| versus ion yield",
+      "anode","ion_births","absA_UD_exact","profile",
+      "Ion births on anode in one muon","Mean |A_UD| across muon–anode records",
+      "Does a heavily ionizing anode have more or less hemispheric birth localization?",
+      "Exact per-(muon,wire) ratio of summed ion-up/down counts; binned by exact anode ion births.",
+      "Equal muon–anode record weighting; uncertainty resamples whole muons.",True),
 ]
 BY_KEY={s.key:s for s in SPECS}
 SECTIONS=list(dict.fromkeys(s.section for s in SPECS))
@@ -262,7 +373,11 @@ def prepared(root:Path):
                   on="muon_slot",how="left",validate="many_to_one")
         if level=="primary": pr=d
         else: fr=d
-    return {"mu":mu,"primary":pr,"fragment":fr,"wire":wi}
+    # Anode-specific observables are read from the *original* exact Garfield
+    # per-wire census, with strict ROOT/CSV closure (not from K256 samples).
+    anode_frag,anode=read_per_anode(root,pr,mu)
+    return {"mu":mu,"primary":pr,"fragment":fr,"wire":wi,
+            "anode_fragment":anode_frag,"anode":anode}
 
 @st.cache_data(show_spinner="Joining the original 2100 V census levels…")
 def prepared_cached(directory: str, signatures: tuple):
@@ -492,6 +607,26 @@ def main():
     selected_stations=st.sidebar.multiselect("Detector station",stations,default=stations)
     if not selected_channels or not selected_stations:st.info("Select at least one channel and station.");st.stop()
     data=st_filter(datasets,selected_channels,selected_stations)
+    sec=st.selectbox("Physics section",SECTIONS,index=SECTIONS.index("Individual anodes"))
+    if sec=="Individual anodes":
+        st.sidebar.subheader("Individual anode selection")
+        detector_ids=sorted(data["mu"]["det_id"].dropna().unique().tolist())
+        selected_det=st.sidebar.multiselect("Detector identifier",detector_ids,
+                                            default=detector_ids)
+        allowed_ids=set(data["mu"].loc[data["mu"]["det_id"].isin(selected_det),
+                                         "muon_slot"])
+        data={k:(d.loc[d["muon_slot"].isin(allowed_ids)].copy()
+                 if "muon_slot" in d else d.copy()) for k,d in data.items()}
+        candidates=sorted(data["anode"]["global_wire"].dropna().astype(int).unique().tolist())
+        anode_idx=st.sidebar.selectbox("Global anode ID",
+                        ["All anodes"]+candidates,format_func=str)
+        if anode_idx!="All anodes":
+            for lev in ("anode_fragment","anode"):
+                data[lev]=data[lev].loc[data[lev]["global_wire"]==anode_idx].copy()
+        st.sidebar.caption("The global wire index must be interpreted within the "
+                           "chosen station/detector. Source ions are assigned to "
+                           "their nearest anode at birth; collected electrons refer "
+                           "to their actual collecting wire.")
     mu=data["mu"];pr=data["primary"];fr=data["fragment"]
     count_mu=len(mu);count_pr=len(pr)
     if not count_mu:st.info("No muons match these filters.");st.stop()
@@ -508,7 +643,6 @@ def main():
     k4.metric("Global collected gain",f"{avg_col:,.1f}")
     bad=int((~mu["wire_census_ok"]).sum())
     if bad:st.warning(f"Physical collecting-wire totals do not close for {bad} muons. Those entries are excluded from wire-sharing observables.")
-    sec=st.selectbox("Physics section",SECTIONS,index=4)
     in_section=[s for s in SPECS if s.section==sec]
     spec=BY_KEY[st.selectbox("Observable",[s.key for s in in_section],
                             format_func=lambda key:BY_KEY[key].title,
@@ -587,6 +721,30 @@ def main():
         st.write(spec.limitations)
         if spec.chart=="profile":st.caption("Error bars are muon-cluster bootstrap standard deviations, not fit errors.")
         st.caption("Numerical definitions: ion *births* at Garfield callback; electron endpoints at actual physical anodes.")
+    if sec=="Individual anodes":
+        with st.expander("Per-anode summary table — exact Garfield counters",expanded=True):
+            st.caption("One row per (station, detector, global wire). Statistics across "
+                       "muon–anode records are equal-record means; summed ion/electron "
+                       "counts are exact. Mean delays are referenced to the corresponding "
+                       "Heed primary, not to cathode collection.")
+            adata=data["anode"]
+            if len(adata):
+                groupkeys=["station","det_id","global_wire"]
+                table=(adata.groupby(groupkeys,dropna=False)
+                       .agg(n_muon_anode_records=("muon_slot","nunique"),
+                            ion_births_total=("ion_births","sum"),
+                            collected_e_total=("collected_e","sum"),
+                            mean_A_UD=("A_UD_exact","mean"),
+                            mean_absA_UD=("absA_UD_exact","mean"),
+                            mean_birth_delay_ns=("ion_birth_delay_ns","mean"),
+                            mean_birth_sigma_ns=("sigma_t_birth_relative_ns","mean"))
+                       .reset_index().sort_values(["station","det_id","global_wire"]))
+                st.dataframe(table,use_container_width=True,hide_index=True)
+                st.download_button("Download exact per-anode summary CSV",
+                    table.to_csv(index=False).encode("utf-8"),
+                    file_name=f"NA60_2100_anodes_{selected}.csv",mime="text/csv")
+            else:
+                st.info("No exact anode-census rows match these filters.")
     with st.expander("Population statistics and provenance",expanded=False):
         st.write({"selected_muons":count_mu,"Heed_primaries":count_pr,
                   "zero_ion_primaries":int((pr["ion_births_exact"]==0).sum()),

@@ -19,7 +19,8 @@ case "$MODE" in
    echo "PASS Plot Studio Python dependencies installed in $VENV";;
  check)
    [[ -x "$VENV/bin/python" ]] || fail "run '$0 install' first"
-   "$VENV/bin/python" -m py_compile "$HERE/plot_studio_2100.py"
+   "$VENV/bin/python" -m py_compile "$HERE/plot_studio_2100.py" "$HERE/per_anode_census_2100.py" "$HERE/test_per_anode_2100.py"
+   "$VENV/bin/python" -m unittest discover -s "$HERE" -p "test_per_anode_2100.py" -q
    "$VENV/bin/python" -c 'import streamlit,plotly,pandas,numpy; print("PASS Streamlit",streamlit.__version__,"Plotly",plotly.__version__)'
    [[ -d "$DATA" ]] || fail "no analysis results found in $DATA; run gain-asym pilot first"
    count=0
