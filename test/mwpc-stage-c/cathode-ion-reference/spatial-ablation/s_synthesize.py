@@ -22,6 +22,9 @@ Variants (comma list via --variants):
   SWW   longitudinal: all ions on one wire at that wire's mean D_s (all primaries)             (S4, one bin per wire)
   K1    r_eff + n <= 1 + cloud mean D   = (N, <cos>, <sin>, r_eff, D) per cloud: the candidate kernel description
   K2    r_eff + n <= 2 + cloud mean D
+  ...A  (S1A, S2A, S3A, K1A, K2A) add the hemisphere term: the exact +v/-v split of every ion/cloud is kept on top of
+        the retained harmonics (see angular_nodes); K2A = (N, <cos>, <sin>, <cos2>, <sin2>, A, r_eff, D) per cloud
+  SRW   r_eff + cloud mean D, exact angle;   S3W  n <= 2 + cloud mean D, radius per ion   (decomposition aids)
 Signed weights (S2, S3, ...) are a moment-matched surrogate distribution, not a positive charge density; each weight
 still multiplies a physical single-ion response, and the total charge is exact.
 
@@ -64,10 +67,20 @@ def radial_weights(r, rn):
     return j, f
 
 
-def angular_nodes(theta, M, nmax):
-    """theta in rad. nmax=None: periodic linear interpolation (2 nodes); nmax=0: uniform; else Fourier truncation."""
+def angular_nodes(theta, M, nmax, hemi=False):
+    """theta in rad. nmax=None: periodic linear interpolation (2 nodes); nmax=0: uniform; else Fourier truncation.
+
+    hemi=True adds the hemisphere term: weights a_m + beta * s_perp_m, with s_m = sign(sin theta_m) (+v / -v half of
+    the wire) and s_perp = s minus its projection on the retained harmonics n <= nmax. s_perp has zero sum and is
+    orthogonal to every retained harmonic, so charge and the retained moments are unchanged, while beta is chosen so
+    that sum_m (a_m + beta s_perp_m) s_m = sign(sin theta_i): each ion (hence each cloud, by linearity) keeps its exact
+    up/down split. Rationale: which cathode an ion drifts to is a step function of its birth azimuth, and truncated
+    harmonics do not preserve the step.
+    """
     th_m = (np.arange(M) + 0.5) * 2 * np.pi / M
     if nmax is None:
+        if hemi:
+            raise ValueError("hemisphere term only with a harmonic truncation")
         x = theta / (2 * np.pi / M) - 0.5
         j0 = np.floor(x).astype(int)
         f = x - j0
@@ -76,7 +89,33 @@ def angular_nodes(theta, M, nmax):
     wts = np.ones((len(theta), M))
     for n in range(1, nmax + 1):
         wts = wts + 2 * np.cos(n * (th_m[None, :] - theta[:, None]))
-    return idx, wts / M
+    wts = wts / M
+    if hemi:
+        sm = np.sign(np.sin(th_m))
+        sp = sm - sm.mean()
+        for n in range(1, nmax + 1):
+            for b in (np.cos(n * th_m), np.sin(n * th_m)):
+                sp = sp - b * (sp @ b) / (b @ b)
+        target = np.sign(np.sin(theta))
+        beta = (target - wts @ sm) / (sp @ sm)
+        wts = wts + beta[:, None] * sp[None, :]
+    return idx, wts
+
+
+# variant -> (radius: per 'ion' or per 'cloud' r_eff, angular nmax (None = exact angle), hemisphere term,
+#             longitudinal D: per 'ion', per 'cloud' mean, per 'wire' mean)
+VARIANTS = {
+    "G": ("ion", None, False, "ion"),
+    "S1": ("ion", 0, False, "ion"), "S1A": ("ion", 0, True, "ion"),
+    "S2": ("ion", 1, False, "ion"), "S2A": ("ion", 1, True, "ion"),
+    "S3": ("ion", 2, False, "ion"), "S3A": ("ion", 2, True, "ion"),
+    "SR": ("cloud", None, False, "ion"),
+    "S2R": ("cloud", 1, False, "ion"), "S3R": ("cloud", 2, False, "ion"),
+    "SW": ("ion", None, False, "cloud"), "SWW": ("ion", None, False, "wire"),
+    "SRW": ("cloud", None, False, "cloud"), "S3W": ("ion", 2, False, "cloud"),
+    "K1": ("cloud", 1, False, "cloud"), "K2": ("cloud", 2, False, "cloud"),
+    "K1A": ("cloud", 1, True, "cloud"), "K2A": ("cloud", 2, True, "cloud"),
+}
 
 
 def main():
@@ -85,7 +124,7 @@ def main():
     ap.add_argument("export", type=Path, help="path export of the muon (T1 timing), with vertices.f64")
     ap.add_argument("reference_waveforms", type=Path, help="S0 waveforms.csv (frozen replay of the same export)")
     ap.add_argument("out", type=Path)
-    ap.add_argument("--variants", default="G,S1,S2,S3,SR,S2R,S3R,SW,SWW,K1,K2")
+    ap.add_argument("--variants", default="G,S1,S2,S3,SR,S2R,S3R,SW,SWW,K1,K2")  # see VARIANTS
     ap.add_argument("--window-ns", type=float, default=7000.0)
     ap.add_argument("--suffix", default="", help="appended to every variant directory name (e.g. _r14t72)")
     a = ap.parse_args()
@@ -138,18 +177,19 @@ def main():
             raise SystemExit(f"refusing to overwrite {a.out / (var + a.suffix)}")
     for var in a.variants.split(","):
         t0w = time.perf_counter()
-        nmax = {"G": None, "S1": 0, "S2": 1, "S3": 2, "SR": None, "S2R": 1, "S3R": 2, "SW": None, "SWW": None,
-                "K1": 1, "K2": 2}[var]
-        rr = r_eff if var in ("SR", "S2R", "S3R", "K1", "K2") else r
+        if var not in VARIANTS:
+            raise SystemExit(f"unknown variant {var}; known: {','.join(VARIANTS)}")
+        rmode, nmax, hemi, lmode = VARIANTS[var]
+        rr = r_eff if rmode == "cloud" else r
         jr, fr = radial_weights(rr, rn)
-        ja, fa = angular_nodes(th, M, nmax)
+        ja, fa = angular_nodes(th, M, nmax, hemi)
         total = np.zeros((nb, 2, len(off["U"])))
         prompt = np.zeros_like(total)
         for si, s in enumerate(("U", "V")):
             Ds = p0[:, 3 + si]
-            if var in ("SW", "K1", "K2"):
+            if lmode == "cloud":
                 Ds = gmean(Ds, cloud, q)
-            elif var == "SWW":
+            elif lmode == "wire":
                 Ds = gmean(Ds, wire_g, q)
             x = (Ds - D[0]) / dD
             jd = np.floor(x).astype(int)

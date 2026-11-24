@@ -10,6 +10,10 @@
 #   bash run_s_ladder.sh closure-compare RUN TAG[,TAG2,...]   S0 vs G_TAG(s): shaped AND unshaped, ion only + electron step
 #   bash run_s_ladder.sh synth RUN [TAG]        full S-variant set from green_TAG -> RUN/muon_*/<variant>_TAG
 #   bash run_s_ladder.sh compare RUN [TAG]      S0 vs all variants of TAG: 1) ion only  2) + instantaneous electron step
+#   bash run_s_ladder.sh kernel RUN [TAG]       harmonic kernels from green_TAG; K1/K2/K1A/K2A from cloud moments only,
+#                                               timed (s_kernel.py); outputs <model>kern_TAG next to the S-variants
+#   bash run_s_ladder.sh report RUN [TAG]       compare vs S0 AND vs G_TAG (ion only, + electron step) -> s_ladder_report.md
+#   bash run_s_ladder.sh plan RUN [TAG]         choose representative non-sealed development muons + cost estimate
 # TAG defaults to r${MWPC_S_NR:-14}t${MWPC_S_NTHETA:-72}; a different grid = a different TAG, so results coexist.
 #
 # Environment: as run_t_ladder.sh (MWPC_EXPORT_BIN, MWPC_ION_MOBILITY, MWPC_SPECTRAL_LUT, MWPC_NUMW_DIR) plus
@@ -28,7 +32,8 @@ DEV="$SELECTION/development20.csv"; SEALED="$SELECTION/sealed_validation20.csv"
 OUTROOT="${MWPC_SLADDER_OUT:-$REPO/test_runs/mwpc_stage_c/s_ladder_2100}"
 HS="${MWPC_HALF_STRIPS:-5}"; NR="${MWPC_S_NR:-14}"; NTH="${MWPC_S_NTHETA:-72}"; DSUB="${MWPC_S_DSUB:-10}"
 DEFTAG="r${NR}t${NTH}"; [[ $DSUB == 10 ]] || DEFTAG="${DEFTAG}d${DSUB}"
-VARS="${MWPC_S_VARIANTS:-G,S1,S2,S3,SR,S2R,S3R,SW,SWW,K1,K2}"
+VARS="${MWPC_S_VARIANTS:-G,S1,S1A,S2,S2A,S3,S3A,SR,S2R,S3R,SW,SWW,SRW,S3W,K1,K1A,K2,K2A}"
+KMODELS="K1,K2,K1A,K2A"
 suffixed(){ local o="" v; for v in ${1//,/ }; do o="$o,${v}_$2"; done; echo "${o#,}"; }
 fail(){ echo "S-LADDER FAILED: $*" >&2; exit 2; }
 need(){ [[ -n "${!1:-}" ]] || fail "set $1"; [[ -e "${!1}" ]] || fail "$1=${!1} does not exist"; }
@@ -88,7 +93,9 @@ case "${1:-}" in
     RUN="${2:?RUN dir}"; TAG="${3:-$DEFTAG}"; GD="$RUN/green_$TAG"; [[ -s "$GD/axes.json" ]] || fail "run: green $RUN $TAG"
     V="G"; [[ $1 == synth ]] && V="$VARS"
     for R in "$RUN"/muon_*; do
-      python3 "$HERE/s_synthesize.py" "$GD" "$R/T1_export" "$R/S0/replay/waveforms.csv" "$R" --variants "$V" --suffix "_$TAG" | tee -a "$R/synth_$TAG.log"
+      MISS=""; for v in ${V//,/ }; do [[ -e "$R/${v}_$TAG" ]] || MISS="$MISS,$v"; done; MISS="${MISS#,}"
+      [[ -n "$MISS" ]] || { echo "$R: all variants of $TAG present"; continue; }
+      python3 "$HERE/s_synthesize.py" "$GD" "$R/T1_export" "$R/S0/replay/waveforms.csv" "$R" --variants "$MISS" --suffix "_$TAG" | tee -a "$R/synth_$TAG.log"
     done;;
   closure-compare)
     RUN="${2:?RUN dir}"; TAGS="${3:-$DEFTAG}"; S=$(date +%H%M%S); V="S0"
@@ -96,10 +103,38 @@ case "${1:-}" in
     python3 "$TA/t_shaped_compare.py" "$RUN" --variants "$V" --tp 100,200 --no-prompt --plots --out "$RUN/closure_1_ion_only_${TAGS//,/+}_$S"
     python3 "$TA/t_shaped_compare.py" "$RUN" --variants "$V" --tp 100,200 --plots --out "$RUN/closure_2_ion_plus_electron_step_${TAGS//,/+}_$S"
     echo "return: $RUN/closure_*_$S/t_ladder_summary.txt and the PNGs";;
+  kernel)
+    RUN="${2:?RUN dir}"; TAG="${3:-$DEFTAG}"; GD="$RUN/green_$TAG"; KD="$RUN/kernel_$TAG"
+    [[ -s "$GD/axes.json" ]] || fail "run: green $RUN $TAG"
+    [[ -e "$KD" ]] || python3 "$HERE/s_kernel.py" build "$GD" "$KD" | tee "$RUN/kernel_build_$TAG.log"
+    for R in "$RUN"/muon_*; do
+      python3 "$HERE/s_kernel.py" moments "$R/T1_export" "$R/cloud_moments.csv"
+      for m in ${KMODELS//,/ }; do
+        python3 "$HERE/s_kernel.py" apply "$KD" "$R/cloud_moments.csv" "$R/S0/replay/waveforms.csv" "$R" --model "$m" --suffix "_$TAG" --repeat 5 \
+          | tee -a "$R/kernel_$TAG.log"
+      done
+      python3 -c "import json,sys; print('S0 frozen replay wall_s', json.load(open(sys.argv[1]))['wall_s'])" "$R/S0/replay/summary.json" | tee -a "$R/kernel_$TAG.log"
+    done;;
+  report)
+    RUN="${2:?RUN dir}"; TAG="${3:-$DEFTAG}"; S=$(date +%H%M%S)
+    V="$(suffixed "$VARS" "$TAG")"
+    [[ -e "$(ls -d "$RUN"/muon_*/K2kern_"$TAG" 2>/dev/null | head -1)" ]] && V="$V,$(suffixed "$(echo "$KMODELS" | sed 's/\([A-Z0-9]*\)/\1kern/g')" "$TAG")"
+    VG="G_$TAG,$(echo "$V" | tr ',' '\n' | grep -v "^G_$TAG\$" | paste -sd,)"
+    for sig in ion_only electron_step; do
+      NP=(); [[ $sig == ion_only ]] && NP=(--no-prompt)
+      python3 "$TA/t_shaped_compare.py" "$RUN" --variants "S0,$V" --tp 100,200 "${NP[@]}" --out "$RUN/report_${TAG}_${S}/vs_S0_$sig"
+      python3 "$TA/t_shaped_compare.py" "$RUN" --variants "$VG" --tp 100,200 "${NP[@]}" --out "$RUN/report_${TAG}_${S}/vs_G_$sig"
+      python3 "$HERE/s_ladder_report.py" --vs-s0 "$RUN/report_${TAG}_${S}/vs_S0_$sig" --vs-g "$RUN/report_${TAG}_${S}/vs_G_$sig" \
+        --tag "$TAG" --out "$RUN/report_${TAG}_${S}/s_ladder_report_$sig.md"
+    done
+    echo "return: $RUN/report_${TAG}_${S}/s_ladder_report_*.md (+ the vs_* directories)";;
+  plan)
+    RUN="${2:?RUN dir}"; TAG="${3:-$DEFTAG}"
+    python3 "$HERE/s_plan_expansion.py" "$ARCHIVE" "$DEV" "$SEALED" "$RUN" --tag "$TAG" --nr "$NR" --ntheta "$NTH" | tee "$RUN/plan_$TAG.txt";;
   compare)
     RUN="${2:?RUN dir}"; TAG="${3:-$DEFTAG}"; S=$(date +%H%M%S); V="S0,$(suffixed "$VARS" "$TAG")"
     python3 "$TA/t_shaped_compare.py" "$RUN" --variants "$V" --tp 100,200 --no-prompt --plots --out "$RUN/compare_1_ion_only_${TAG}_$S"
     python3 "$TA/t_shaped_compare.py" "$RUN" --variants "$V" --tp 100,200 --plots --out "$RUN/compare_2_ion_plus_electron_step_${TAG}_$S"
     echo "return: $RUN/compare_*_${TAG}_$S/t_ladder_summary.txt, $RUN/grid_spec_$TAG.txt, $RUN/green_$TAG/axes.json, $RUN/muon_*/s_synthesize_*.json";;
-  *) sed -n 2,20p "$0"; exit 1;;
+  *) sed -n 2,24p "$0"; exit 1;;
 esac

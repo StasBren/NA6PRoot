@@ -34,6 +34,9 @@ avalanche-electron term, for the approximate electron step).
 | SW | one D per cloud (charge-weighted mean) | longitudinal: one bin per avalanche |
 | SWW | one D per wire (all primaries) | longitudinal: one bin per wire |
 | K1, K2 | r_eff + n <= 1 (2) + one D per cloud = (N, <cos>, <sin>, [<cos2>, <sin2>], r_eff, D) per cloud | candidate kernel input |
+| S1A, S2A, S3A, K1A, K2A | as S1/S2/S3/K1/K2 plus the hemisphere term: each ion's (cloud's) exact +v/-v split A is kept | does the U/V charge split need A explicitly? |
+| SRW, S3W | radial + longitudinal / angular + longitudinal compression | decomposition of K2 |
+| K1kern ... K2Akern | K-models evaluated from per-cloud moments with precomputed harmonic kernels (`s_kernel.py`) | runtime path; must equal K1..K2A |
 
 Cloud = (Heed primary, wire nearest ion birth). Every variant preserves the total ion weight exactly.
 The comparison reuses `timing-ablation/t_shaped_compare.py` with S0 as reference: normalized L2 of signed shaped
@@ -59,6 +62,16 @@ T1 times, same frozen LUT). Spatial-model error is every S-variant minus G, not 
    that grid direction; stop when the decision no longer changes.
 Results from different grids never overwrite each other (directories and variant names carry the TAG).
 
+## Why a hemisphere term (hypothesis to test on real data)
+Which cathode an ion drifts to is, near the wire, a step function of its birth azimuth (v > 0 or v < 0). A truncated
+Fourier series does not preserve the step: the fraction of charge in the upper half of a truncated density is
+1/2 + (2/pi) (S1 + S3/3 + S5/5 + ...), so keeping n <= 2 drops S3, S5, ... and shifts charge between the U-side
+(+v) and V-side (-v) drift. That would appear exactly as a U/V integrated-charge-ratio error of K2. The ...A variants
+add one basis function, the part of sign(sin theta) orthogonal to the retained harmonics, with the coefficient that
+restores each cloud's exact A; charge and all retained moments are unchanged (checked to 1e-15). The decomposition
+table of `s_ladder_report.py` (vs G: S3, SR, SW, pairs, K2, K2A) tells whether this is the origin of the real K2
+discrepancy or whether radial compression dominates.
+
 ## Files
 * `p3_green_grid_paths.cc`, `CMakeLists.txt` — grid paths with the frozen transport (build against the wire branch).
 * `s_grid_spec.py` — wires, radius grid and D range from the muon's actual ion births. Innermost node =
@@ -70,33 +83,44 @@ Results from different grids never overwrite each other (directories and variant
 * `s_green_table.py` — Green table with the frozen LUT and the replay's own path validation.
 * `s_synthesize.py` — the variants above (`--variants G` for closure only, `--suffix _TAG`); consistency checks.
 * `s_validate_transport.py` — grid executable vs frozen exporter on the same start points (`validate`).
-* `run_s_ladder.sh` — check / prepare / validate / green / closure / closure-compare / synth / compare.
+* `s_kernel.py` — harmonic kernels (build), per-cloud moments (moments), evaluation from moments only (apply, timed);
+  apply reproduces the s_synthesize K-variants to float32 rounding (4e-8 relative, synthetic test).
+* `s_ladder_report.py` — focused report: every variant vs S0 (total) and vs G (spatial model), per event, worst cases,
+  K2 charge-ratio decomposition with additivity check.
+* `s_plan_expansion.py` — representative non-sealed development muons from the census only + cost/memory estimate.
+* `run_s_ladder.sh` — check / prepare / validate / green / closure / closure-compare / synth / kernel / report / plan.
 * `synthetic_paths.py` — SYNTHETIC toy transport for pipeline tests only.
 
 ## WSL (after review)
+First-time setup and the one-muon closure are as in earlier commits (cmake against FROZEN_DIR, `check`, `prepare`,
+`validate`, `green`, `closure`, `closure-compare`). Current sequence on the existing prepared run:
 ```bash
 cd ~/na6p/wt-validation && git pull
 SA=test/mwpc-stage-c/cathode-ion-reference/spatial-ablation
-source ~/t_ladder_deps.env            # MWPC_EXPORT_BIN, MWPC_ION_MOBILITY, MWPC_SPECTRAL_LUT, MWPC_NUMW_DIR
-source ~/na6p/env.sh 2>/dev/null; source ~/na6p/install/garfieldpp/share/Garfield/setupGarfield.sh 2>/dev/null
-cmake -S $SA -B ~/na6p/build-spatial -DFROZEN_DIR=$HOME/na6p/wt-wire/test/mwpc-stage-c/cathode-ion-reference
-cmake --build ~/na6p/build-spatial -j4         # prints the frozen exporter source sha256
-export MWPC_GREEN_BIN=~/na6p/build-spatial/p3_green_grid_paths
-bash $SA/run_s_ladder.sh check
-bash $SA/run_s_ladder.sh prepare               # first non-sealed development muon; prints RUN DIR
-bash $SA/run_s_ladder.sh validate <RUN>        # 200 archived start points: grid tool must reproduce the frozen paths
-bash $SA/run_s_ladder.sh green <RUN>           # TAG r14t72
-bash $SA/run_s_ladder.sh closure <RUN>
-bash $SA/run_s_ladder.sh closure-compare <RUN> r14t72
-# only if the closure leaves a decision ambiguous, one refinement, e.g.:
-#   MWPC_S_NR=20 bash $SA/run_s_ladder.sh green <RUN>; MWPC_S_NR=20 bash $SA/run_s_ladder.sh closure <RUN>
-#   bash $SA/run_s_ladder.sh closure-compare <RUN> r14t72,r20t72
-# when the closure is interpretable:
-bash $SA/run_s_ladder.sh synth <RUN>
-bash $SA/run_s_ladder.sh compare <RUN>
+source ~/t_ladder_deps.env; export MWPC_GREEN_BIN=~/na6p/build-spatial/p3_green_grid_paths
+RUN=test_runs/mwpc_stage_c/s_ladder_2100/run_20261124_124740
+# A. muon 0000, existing table r14t72edge: add the decomposition and hemisphere variants (existing ones are skipped),
+#    the kernel path and the focused report
+bash $SA/run_s_ladder.sh synth  $RUN r14t72edge
+bash $SA/run_s_ladder.sh kernel $RUN r14t72edge
+bash $SA/run_s_ladder.sh report $RUN r14t72edge
+# B. plan the expansion (census only, nothing prepared yet): prints the chosen muons and the cost estimate
+bash $SA/run_s_ladder.sh plan   $RUN r14t72edge
+# C. after reviewing B: prepare the chosen muons into the SAME run, one shared Green table under a NEW tag
+for m in <chosen indices except 0000>; do MWPC_S_RUN=$RUN bash $SA/run_s_ladder.sh prepare $m; done
+bash $SA/run_s_ladder.sh validate $RUN
+bash $SA/run_s_ladder.sh green    $RUN r14t72edge5      # union of all prepared muons; r14t72edge stays as it is
+bash $SA/run_s_ladder.sh closure  $RUN r14t72edge5
+bash $SA/run_s_ladder.sh closure-compare $RUN r14t72edge5
+bash $SA/run_s_ladder.sh synth  $RUN r14t72edge5
+bash $SA/run_s_ladder.sh kernel $RUN r14t72edge5
+bash $SA/run_s_ladder.sh report $RUN r14t72edge5
 ```
-Return `transport_validation_*/result.txt`, `closure_*/t_ladder_summary.txt` (+ PNGs), `grid_spec_*.txt`,
-`green_*/axes.json`, `green_paths_*.log`, `timing.txt`, `muon_*/s_synthesize_*.json`, `provenance_prepare_*.txt`.
+Tables are shared, never copied: one `green_<TAG>` per transport/geometry domain (frozen 2100 V field, wires and
+radius range of the prepared muons), referenced by all muons of that run. A new muon outside the existing table's
+coverage gets a new TAG (the strict coverage checks refuse silently extrapolating). Results of different tags
+coexist. Return `report_*/s_ladder_report_*.md`, `plan_*.txt`, `muon_*/kernel_*.log`, `closure_*/t_ladder_summary.txt`,
+`grid_spec_*.txt`, `green_*/axes.json`, `timing.txt`.
 
 ## Synthetic pipeline test (toy transport, real spectral LUT; NOT physics)
 One toy muon (960 ions, 40 primaries), grid 3 wires x 12 radii x 72 angles, D step 0.17 mm, 200 tau nodes; table
