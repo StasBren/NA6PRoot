@@ -28,11 +28,11 @@ from pi_penning057_original2m_cluster10k_v1 import (
 )
 
 CHANNELS=("Jpsi","Phi","Omega")
-ROOT_DEFAULT=Path("/storage/cgrp/stanis/mwpc_penning057_wiretruth30k_v1")
+ROOT_DEFAULT=Path("/storage/cgrp/stanis/mwpc_penning057_wiretruth2100_3x1000_v1")
 OLD_DEFAULT=Path("/storage/cgrp/stanis/mwpc_penning057")
 REPO=Path(__file__).resolve().parents[2]
 SOURCE=REPO/"test/mwpc-avalanche/phaseB_native_muon_p3_noFW_penning057_wiretruth_v1.cxx"
-BINARY=REPO/"test/mwpc-avalanche/build-wiretruth30k-cvmfs/mwpc_p3_noFW_penning057_wiretruth_v1"
+BINARY=REPO/"test/mwpc-avalanche/build-wiretruth2100-cvmfs/mwpc_p3_noFW_penning057_wiretruth_v1"
 SCHEMA="NA60_WIRETRUTH30K_PENNING057_PRODUCTION_V1"
 PARTS=("crossing","seed","ion_birth_sample","heed_primaries","heed_clusters",
        "timing","muon_timing","wire_seed","wire_muon")
@@ -169,7 +169,7 @@ def prepare(root,old):
         "physics":{
             "geometry":"p3_noFW 9-wire analytic local patch",
             "pitch_mm":3.,"anode_diameter_um":30.,"cathode_v_mm":[-3.,3.],
-            "anode_voltage_V":1800.,"gas":{"Ar":70,"CO2":30},
+            "anode_voltage_V":2100.,"gas":{"Ar":70,"CO2":30},
             "penning_r":0.57,"penning_lambda_cm":0.,
             "magnetic_field_T":0.,"track":"TrackHeed delta transport",
             "microscopic":"Garfield::AvalancheMicroscopic",
@@ -673,8 +673,7 @@ def gate(root,gate_name):
     if gate_name=="20":
         requested={"Jpsi":[0]}
     elif gate_name=="1000":
-        requested={"Jpsi":list(range(20)),"Phi":list(range(15)),
-                   "Omega":list(range(15))}
+        requested={ch:list(range(50)) for ch in CHANNELS}
     elif gate_name=="full":
         requested={c:list(range(500)) for c in CHANNELS}
     else:
