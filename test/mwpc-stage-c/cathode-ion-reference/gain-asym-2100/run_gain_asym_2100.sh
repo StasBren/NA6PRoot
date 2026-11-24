@@ -59,11 +59,17 @@ case "$MODE" in
    locate_drift;;
  prepare)
    command -v root-config >/dev/null || fail "ROOT not available in PATH"
-   command -v cmake >/dev/null || fail "cmake not installed"
-   cmake -S "$REPO/test/mwpc-avalanche" -B "$BUILD"
-   cmake --build "$BUILD" --target mwpc_v0_archive_stats -j2
+   command -v c++ >/dev/null || fail "C++ compiler not available"
+   # Compile the ROOT-only archive reader directly. CMake for the avalanche
+   # project globally calls find_package(Garfield), which is unnecessary here.
+   # Include "V0Core.hh" resolves next to v0_archive_stats.cc.
+   mkdir -p "$BUILD"
+   SRC="$REPO/test/mwpc-stage-c/cathode-ion-reference/v0/v0_archive_stats.cc"
+   [[ -s "$SRC" ]] || fail "missing existing V0 C++ reader: $SRC"
+   c++ -std=c++17 -O2 -DV0_ROOT $(root-config --cflags) "$SRC" \
+       -o "$BIN" $(root-config --libs)
    [[ -x "$BIN" ]] || fail "ROOT executable was not built"
-   echo "PASS compiled existing ROOT/C++ v0 archive reader (no physics rerun).";;
+   echo "PASS compiled existing ROOT/C++ v0 archive reader without Garfield/CMake (no physics rerun).";;
  pilot|population)
    [[ -x "$BIN" ]] || fail "run 'bash $0 prepare' first"
    command -v root >/dev/null || fail "ROOT not available"
