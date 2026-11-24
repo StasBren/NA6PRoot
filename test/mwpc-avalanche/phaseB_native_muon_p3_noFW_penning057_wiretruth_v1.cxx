@@ -274,7 +274,7 @@ std::vector<Primary> HeedPrimaries(Garfield::MediumMagboltz& gas,
   // original crossing, inside a valid ionisable gas volume. This weak
   // placeholder uniform field defines medium lookup ONLY; it is NOT
   // used for Garfield avalanche transport, which uses each chamber's
-  // actual 1800V analytic wire field.
+  // actual 2100V analytic wire field.
   HeedSourceVolume volume(gas,c);
   Garfield::TrackHeed heed;
   heed.SetSensor(&volume.sensor);
@@ -344,7 +344,7 @@ void RunGeometry(Garfield::MediumMagboltz& gas,const Geometry& geom,
   Garfield::ComponentAnalyticField field;
   field.SetMedium(&gas);
   constexpr int half=4;
-  for(int i=-half;i<=half;++i)field.AddWire(i*p,0.,.003,1800.,"anode");
+  for(int i=-half;i<=half;++i)field.AddWire(i*p,0.,.003,2100.,"anode");
   if(fw>0)for(int i=-half;i<half;++i)
     field.AddWire((i+.5)*p,0.,fw,0.,"field_wire");
   field.AddPlaneY(-.3,0.,"cathode_minus");
