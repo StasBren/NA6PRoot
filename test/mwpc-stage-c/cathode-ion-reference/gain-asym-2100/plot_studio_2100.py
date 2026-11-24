@@ -136,8 +136,8 @@ SPECS = [
  Spec("A_muon","Up/down hemisphere","Muon A_UD distribution","mu","A_exact",None,"hist",
       "A_UD","Muons with defined A",
       "Net up/down birth asymmetry after summing a muon's avalanches.",
-      "Exact ion-yield-weighted aggregation of original per-wire hemispheric counts.",
-      "Not a cathode-induced-charge asymmetry."),
+      "V0 exports the ion-birth-weighted mean of primary exact hemisphere asymmetries, A_exact = sum(Nbirth_primary*A_primary)/sum(Nbirth_primary).",
+      "This is not cathode-induced charge. With births on the dividing boundary, the V0 weighted mean can differ from a direct ratio of globally summed N_up and N_down; inspect boundary counts before treating them as strictly identical."),
  Spec("A_gain","Up/down hemisphere","Mean signed A versus ion gain","primary","G_ion","A_exact","profile",
       "Ion births / primary","Mean A_UD",
       "Does avalanche ion yield correlate with a preferred up/down birth hemisphere?",
@@ -263,6 +263,11 @@ def prepared(root:Path):
         if level=="primary": pr=d
         else: fr=d
     return {"mu":mu,"primary":pr,"fragment":fr,"wire":wi}
+
+@st.cache_data(show_spinner="Joining the original 2100 V census levels…")
+def prepared_cached(directory: str, signatures: tuple):
+    # Signatures make data changes explicit, so cached results are not stale.
+    return prepared(Path(directory))
 
 def st_filter(datasets,channels,stations):
     mu=datasets["mu"]
@@ -404,7 +409,9 @@ def main():
     paths={p.name:p for p in found}
     selected=st.sidebar.selectbox("Saved analysis",list(paths),index=0)
     folder=paths[selected]
-    try: datasets=prepared(folder)
+    required_files=("v0_muons.csv","v0_primaries.csv","v0_fragments.csv","v0_wires.csv")
+    signatures=tuple((folder/"census"/n).stat().st_mtime_ns for n in required_files)
+    try: datasets=prepared_cached(str(folder),signatures)
     except Exception as exc:
         st.error(f"Could not load this analysis: {exc}")
         st.stop()
