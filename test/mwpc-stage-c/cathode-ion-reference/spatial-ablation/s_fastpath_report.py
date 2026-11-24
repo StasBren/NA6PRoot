@@ -59,7 +59,7 @@ def main():
     files = ["", "## File sizes per event [MiB]", "",
              "| muon | ion_births.root | frozen_export (no vertices) | T1_export | S0 | births moments |", "|---|---|---|---|---|---|"]
     for R in sorted(a.run.glob("muon_*")):
-        bds = sorted(R.glob("births_*"), reverse=True)
+        bds = sorted((d for d in R.glob("births_*") if (d / f"K2Akern_{T}_births").exists()), reverse=True)
         if not bds:
             continue
         B = bds[0]

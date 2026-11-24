@@ -19,6 +19,12 @@
 #                                               waveforms; never overwrites (RUN/muon_IDX/births_<time>/)
 #   bash run_s_ladder.sh fastpath-report RUN TAG    validation + timing + memory + file-size summary of `births`
 #   (births needs MWPC_BIRTHS_BIN = built p3_birth_moments)
+#   bash run_s_ladder.sh freeze RUN TAG          manifest of the validated state (new directory; nothing modified)
+#   bash run_s_ladder.sh engine RUN TAG          response engine on all muons with births_*: batch birth reader (one
+#                                                process) + engine (one process, kernel opened once), implementations
+#                                                vector / compiled / loop; full-precision comparison with the existing
+#                                                K2Akern outputs; timings, memory, scaling (needs NA60_KERNEL_EVAL_LIB)
+#   bash run_s_ladder.sh cleanup-inventory RUN   sizes + reconstruction requirements of every product (deletes nothing)
 # TAG defaults to r${MWPC_S_NR:-14}t${MWPC_S_NTHETA:-72}; a different grid = a different TAG, so results coexist.
 #
 # Environment: as run_t_ladder.sh (MWPC_EXPORT_BIN, MWPC_ION_MOBILITY, MWPC_SPECTRAL_LUT, MWPC_NUMW_DIR) plus
@@ -159,6 +165,41 @@ case "${1:-}" in
   fastpath-report)
     RUN="${2:?RUN dir}"; TAG="${3:?TAG}"
     python3 "$HERE/s_fastpath_report.py" "$RUN" "$TAG" --archive "$ARCHIVE" --out "$RUN/fastpath_report_${TAG}_$(date +%H%M%S).md";;
+  freeze)
+    RUN="${2:?RUN dir}"; TAG="${3:?TAG}"
+    python3 "$HERE/s_freeze_validation.py" "$RUN" "$TAG" --archive "$ARCHIVE" --repo "$REPO" --out "$RUN/frozen_validation_${TAG}_$(date +%Y%m%d_%H%M%S)";;
+  engine)
+    need MWPC_BIRTHS_BIN; need NA60_KERNEL_EVAL_LIB; RUN="${2:?RUN dir}"; TAG="${3:?TAG}"; KD="$RUN/kernel_$TAG"
+    E="$RUN/engine_${TAG}_$(date +%Y%m%d_%H%M%S)"; mkdir -p "$E/compare"; : > "$E/events.txt"
+    for R in "$RUN"/muon_*; do
+      M=${R##*/muon_}; ls -d "$R"/births_*/K2Akern_"${TAG}"_births >/dev/null 2>&1 || continue
+      dev_list | grep -qx "$M" || fail "$M is not a non-sealed development muon"; verified "$M" || fail "archive muon_$M not verified"
+      echo "muon_$M $ARCHIVE/muon_$M/ion_births.root" >> "$E/events.txt"
+    done
+    [[ -s "$E/events.txt" ]] || fail "no muon with births_* results"
+    "$MWPC_BIRTHS_BIN" --batch "$E/events.txt" "$E/moments" | tee "$E/births_batch.log"
+    grep -q '^PASS birth moments batch' "$E/births_batch.log" || fail "batch birth reader"
+    EC="$HERE/engine/engine_cli.py"
+    KID=$(python3 "$EC" info "$KD" | python3 -c "import json,sys; print(json.load(sys.stdin)['kernel_id'])"); echo "kernel_id=$KID" | tee "$E/kernel_id.txt"
+    for impl in vector compiled loop; do
+      python3 "$EC" run --kernel "$KD" --kernel-id "$KID" --moments-dir "$E/moments" --out "$E/replay_$impl" --impl "$impl" --format replay
+      python3 "$EC" run --kernel "$KD" --kernel-id "$KID" --moments-dir "$E/moments" --out "$E/bench_$impl" --impl "$impl" --format npz --repeat 5
+    done
+    for line in $(cut -d' ' -f1 "$E/events.txt"); do
+      R="$RUN/$line"; B=$(ls -d "$R"/births_*/K2Akern_"${TAG}"_births 2>/dev/null | tail -1); B="${B%/K2Akern_*}"
+      [[ -n "$B" ]] || fail "$R has no completed births_* run for $TAG"
+      python3 "$HERE/s_compare_moments.py" "$R/cloud_moments.csv" "$E/moments/$line.moments.csv" --report "$E/compare/${line}_moments.md" > /dev/null || fail "moments $line"
+      for impl in vector compiled loop; do
+        python3 "$HERE/s_compare_waveforms.py" "$R/K2Akern_$TAG" "$E/replay_$impl/$line" --report "$E/compare/${line}_wave_${impl}_vs_exportpath.md" > /dev/null || fail "waveforms $line $impl vs export path"
+        python3 "$HERE/s_compare_waveforms.py" "$B/K2Akern_${TAG}_births" "$E/replay_$impl/$line" --report "$E/compare/${line}_wave_${impl}_vs_birthpath.md" > /dev/null || fail "waveforms $line $impl vs birth path"
+      done
+    done
+    BIG=$(python3 -c "import json,sys; e=json.load(open(sys.argv[1]))['events']; print(max(e, key=lambda x: x['clouds'])['id'])" "$E/moments/batch_timing.json")
+    python3 "$EC" bench --kernel "$KD" --moments "$E/moments/$BIG.moments.csv" --scales 1,2,4,8 --repeat 5 --out "$E/scaling.json"
+    python3 "$HERE/s_engine_report.py" "$E" --out "$E/engine_report.md" > /dev/null
+    echo "PASS engine validation: all muons, implementations vector/compiled/loop; report $E/engine_report.md";;
+  cleanup-inventory)
+    RUN="${2:?RUN dir}"; python3 "$HERE/s_cleanup_inventory.py" "$RUN" --out "$RUN/cleanup_inventory_$(date +%Y%m%d_%H%M%S).md";;
   plan)
     RUN="${2:?RUN dir}"; TAG="${3:-$DEFTAG}"
     python3 "$HERE/s_plan_expansion.py" "$ARCHIVE" "$DEV" "$SEALED" "$RUN" --tag "$TAG" --nr "$NR" --ntheta "$NTH" | tee "$RUN/plan_$TAG.txt";;
@@ -167,5 +208,5 @@ case "${1:-}" in
     python3 "$TA/t_shaped_compare.py" "$RUN" --variants "$V" --tp 100,200 --no-prompt --plots --out "$RUN/compare_1_ion_only_${TAG}_$S"
     python3 "$TA/t_shaped_compare.py" "$RUN" --variants "$V" --tp 100,200 --plots --out "$RUN/compare_2_ion_plus_electron_step_${TAG}_$S"
     echo "return: $RUN/compare_*_${TAG}_$S/t_ladder_summary.txt, $RUN/grid_spec_$TAG.txt, $RUN/green_$TAG/axes.json, $RUN/muon_*/s_synthesize_*.json";;
-  *) sed -n 2,30p "$0"; exit 1;;
+  *) sed -n 2,37p "$0"; exit 1;;
 esac

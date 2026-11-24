@@ -158,6 +158,14 @@ only to rebuild kernels (new strip geometry reuses the paths, new shaping reuses
 validated development muons; they could be dropped for production events once the five-muon birth-path validation
 has passed and is archived. Nothing is deleted by any tool.
 
+## Response engine (consolidated birth -> K2A path)
+See `engine/README.md`: `KernelTable` (explicit kernel identity, opened once), `CathodeResponseEngine.evaluate`
+(ion and approximate electron terms, unshaped), interchangeable `Electronics`; `p3_birth_moments --batch` for many
+events per process; `run_s_ladder.sh engine RUN TAG` revalidates all muons with births results against the existing
+K2Akern outputs (export path and birth path) for the loop, vector and compiled implementations and benchmarks them;
+`freeze RUN TAG` writes a manifest (commit, input hashes, kernel id, metrics) to a new directory;
+`cleanup-inventory RUN` lists sizes and reconstruction requirements (deletes nothing).
+
 ## Dependency separation for later design studies
 The S-ladder already factorizes the response the way a configurable engine needs:
 * **Transport** (gas, E/B field, wire geometry, voltage): the grid paths `green_paths_*`. Valid only for the frozen

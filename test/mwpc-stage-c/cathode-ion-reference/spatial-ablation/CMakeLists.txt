@@ -21,3 +21,8 @@ add_executable(p3_birth_moments p3_birth_moments.cc)
 target_include_directories(p3_birth_moments PRIVATE "${FROZEN_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(p3_birth_moments PRIVATE Garfield::Garfield ROOT::Core ROOT::RIO ROOT::Tree)
 target_compile_features(p3_birth_moments PRIVATE cxx_std_17)
+
+# Compiled K-model evaluator for the response engine (plain C ABI, loaded with ctypes; no external dependencies).
+add_library(kernel_eval SHARED engine/kernel_eval.cc)
+target_compile_features(kernel_eval PRIVATE cxx_std_17)
+target_compile_options(kernel_eval PRIVATE -O3)
