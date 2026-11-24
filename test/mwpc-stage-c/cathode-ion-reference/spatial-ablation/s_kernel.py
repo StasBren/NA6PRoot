@@ -21,6 +21,7 @@ The kernels are UNSHAPED (fC per unit charge vs tau); shaping stays a separate, 
 import argparse
 import csv
 import json
+import resource
 import time
 from pathlib import Path
 
@@ -106,6 +107,7 @@ def moments(a):
 
 
 def apply(a):
+    tl0 = time.perf_counter()
     meta = json.loads((a.kernel / "kernel.json").read_text())
     ax = meta["green_axes"]
     K = np.load(a.kernel / "K.npy", mmap_mode="r")
@@ -144,6 +146,7 @@ def apply(a):
     lr, ln = np.log(X["r_eff_um"]), np.log(rn)
     jr = np.clip(np.searchsorted(ln, lr) - 1, 0, len(rn) - 2)
     fr = (lr - ln[jr]) / (ln[jr + 1] - ln[jr])
+    load_s = time.perf_counter() - tl0           # kernel table open (memory-mapped) + moments CSV + set-up
     timings = []
     for rep in range(a.repeat):
         t0 = time.perf_counter()
@@ -179,6 +182,7 @@ def apply(a):
                    header="time_center_ns," + ",".join(labels), comments="")
     res = {"model": a.model, "clouds": len(mom), "basis_rows_per_cloud": len(bidx), "repeat": a.repeat,
            "wall_s_median": float(np.median(timings)), "wall_s_min": float(np.min(timings)),
+           "load_setup_s": load_s, "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
            "implementation": "numpy, single thread, per-cloud Python loop (not optimized)"}
     (a.out / name / "kernel_apply.json").write_text(json.dumps(res, indent=1) + "\n")
     print(f"{name}: {len(mom)} clouds, {len(bidx)} kernel rows/cloud, median {res['wall_s_median'] * 1e3:.2f} ms "

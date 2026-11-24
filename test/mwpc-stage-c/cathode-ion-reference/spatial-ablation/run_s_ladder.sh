@@ -14,6 +14,11 @@
 #                                               timed (s_kernel.py); outputs <model>kern_TAG next to the S-variants
 #   bash run_s_ladder.sh report RUN [TAG]       compare vs S0 AND vs G_TAG (ion only, + electron step) -> s_ladder_report.md
 #   bash run_s_ladder.sh plan RUN [TAG]         choose representative non-sealed development muons + cost estimate
+#   bash run_s_ladder.sh births RUN TAG IDX..   birth-record moments (p3_birth_moments, no transport) for the listed
+#                                               prepared muons; compare with the export-path moments and K2A/K2 kernel
+#                                               waveforms; never overwrites (RUN/muon_IDX/births_<time>/)
+#   bash run_s_ladder.sh fastpath-report RUN TAG    validation + timing + memory + file-size summary of `births`
+#   (births needs MWPC_BIRTHS_BIN = built p3_birth_moments)
 # TAG defaults to r${MWPC_S_NR:-14}t${MWPC_S_NTHETA:-72}; a different grid = a different TAG, so results coexist.
 #
 # Environment: as run_t_ladder.sh (MWPC_EXPORT_BIN, MWPC_ION_MOBILITY, MWPC_SPECTRAL_LUT, MWPC_NUMW_DIR) plus
@@ -128,6 +133,32 @@ case "${1:-}" in
         --tag "$TAG" --out "$RUN/report_${TAG}_${S}/s_ladder_report_$sig.md"
     done
     echo "return: $RUN/report_${TAG}_${S}/s_ladder_report_*.md (+ the vs_* directories)";;
+  births)
+    need MWPC_BIRTHS_BIN; RUN="${2:?RUN dir}"; TAG="${3:?TAG}"; shift 3; [[ $# -ge 1 ]] || fail "list muon indices (start with 0000)"
+    KD="$RUN/kernel_$TAG"; [[ -s "$KD/kernel.json" ]] || fail "run: kernel $RUN $TAG"
+    for M in "$@"; do
+      M=$(printf %04d "$((10#$M))"); R="$RUN/muon_$M"
+      dev_list | grep -qx "$M" || fail "$M is not a non-sealed development muon"
+      verified "$M" || fail "archive muon_$M not verified"
+      [[ -s "$R/cloud_moments.csv" && -d "$R/K2Akern_$TAG" && -d "$R/K2kern_$TAG" ]] || fail "$R lacks export-path moments/kernels (run: kernel $RUN $TAG)"
+      B="$R/births_$(date +%Y%m%d_%H%M%S)"; mkdir -p "$B"
+      { echo "git_sha=$(git -C "$REPO" rev-parse HEAD)"; echo "births_bin_sha256=$(sha256sum "$MWPC_BIRTHS_BIN"|cut -d' ' -f1)"
+        echo "archive=$ARCHIVE/muon_$M/ion_births.root"; echo "archive_sha256=$(sha256sum "$ARCHIVE/muon_$M/ion_births.root"|cut -d' ' -f1)"
+        echo "kernel=$KD"; } > "$B/provenance.txt"
+      "$MWPC_BIRTHS_BIN" "$ARCHIVE/muon_$M/ion_births.root" "$B/birth_moments.csv" --repeat 5 | tee "$B/births.log"
+      grep -q '^PASS birth moments' "$B/births.log" || fail "p3_birth_moments failed for $M"
+      python3 "$HERE/s_compare_moments.py" "$R/cloud_moments.csv" "$B/birth_moments.csv" --report "$B/compare_moments.md" > /dev/null \
+        || { cat "$B/compare_moments.md"; fail "moments of $M differ from the export path: stop (do not run other muons)"; }
+      for m in K2A K2; do
+        python3 "$HERE/s_kernel.py" apply "$KD" "$B/birth_moments.csv" "$R/S0/replay/waveforms.csv" "$B" --model "$m" --suffix "_${TAG}_births" --repeat 5
+        python3 "$HERE/s_compare_waveforms.py" "$R/${m}kern_$TAG" "$B/${m}kern_${TAG}_births" --report "$B/compare_waveforms_$m.md" > /dev/null \
+          || { cat "$B/compare_waveforms_$m.md"; fail "$m waveforms of $M differ: stop"; }
+      done
+      echo "PASS muon $M: birth moments and K2A/K2 waveforms reproduce the export path ($B)"
+    done;;
+  fastpath-report)
+    RUN="${2:?RUN dir}"; TAG="${3:?TAG}"
+    python3 "$HERE/s_fastpath_report.py" "$RUN" "$TAG" --archive "$ARCHIVE" --out "$RUN/fastpath_report_${TAG}_$(date +%H%M%S).md";;
   plan)
     RUN="${2:?RUN dir}"; TAG="${3:-$DEFTAG}"
     python3 "$HERE/s_plan_expansion.py" "$ARCHIVE" "$DEV" "$SEALED" "$RUN" --tag "$TAG" --nr "$NR" --ntheta "$NTH" | tee "$RUN/plan_$TAG.txt";;
@@ -136,5 +167,5 @@ case "${1:-}" in
     python3 "$TA/t_shaped_compare.py" "$RUN" --variants "$V" --tp 100,200 --no-prompt --plots --out "$RUN/compare_1_ion_only_${TAG}_$S"
     python3 "$TA/t_shaped_compare.py" "$RUN" --variants "$V" --tp 100,200 --plots --out "$RUN/compare_2_ion_plus_electron_step_${TAG}_$S"
     echo "return: $RUN/compare_*_${TAG}_$S/t_ladder_summary.txt, $RUN/grid_spec_$TAG.txt, $RUN/green_$TAG/axes.json, $RUN/muon_*/s_synthesize_*.json";;
-  *) sed -n 2,24p "$0"; exit 1;;
+  *) sed -n 2,30p "$0"; exit 1;;
 esac

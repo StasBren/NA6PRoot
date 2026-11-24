@@ -129,6 +129,35 @@ G closure 0.16% / 0.31%; S1 10% / 9.3%; S2 0.68% / 0.78%; S3 0.65% / 0.60%; SR 2
 K1 3.0% / 5.7%. Here a 0.3% closure is ample to reject S1 or SR-type errors but would not separate S2 from S3
 (0.7% vs 0.6%), which is exactly the case where the closure procedure above asks for one refinement. These numbers only show that the tools run and resolve differences; the toy radial time law is not physics.
 
+## Birth-record fast path (no ion-trajectory export)
+**Audit (from the frozen sources, re-checked at run time by the tool).** The frozen exporter starts every RKF path at
+the archived birth (`points.front() = {b.u, b.v, b.w, b.t}`) and writes its first vertex as
+`(t, 10 u, 10 v, wU, wV)` with `wU/wV = 10 (w + w_in - 0.1 patch_shift -+ ... - 0.17 u/vCentralIndex)`. Everything the
+K2A moments use is therefore in `ion_births.root`, with no transport:
+| need | branch (tree) |
+|---|---|
+| ion birth position | `u_patch_cm`, `v_absolute_cm`, `w_relative_cm` (ions) |
+| charge / weight | `inverse_inclusion_weight` (ions), checked = `ion_births_exact / ion_births_saved` (primaries) |
+| Heed primary | `primary_index` (ions, primaries; `successful` checked) |
+| T1 time | `t_birth_ns` (ions) -> ion-weight mean per primary |
+| wire | derived: `rint(10 u_patch_cm / 3 mm)` (same as the export-path moments) |
+| strip frame | `patch_shift_cm`, `u_in_mm`, `w_in_mm` (muons) -> u/vCentralIndex; `u_chamber_cm`, `w_chamber_cm` (ions) cross-check |
+No field is missing for K2A, K2 or the electron step. `p3_birth_moments` fails if any of these branches is absent.
+
+**Tools.** `BirthMoments.hh` (pure C++ moments, same definitions as `s_kernel.py moments`), `p3_birth_moments.cc`
+(frozen `Plane2100Archive.hh` reader + frame metadata, timings, peak RSS), `s_compare_moments.py`,
+`s_compare_waveforms.py`, `s_fastpath_report.py`, `run_s_ladder.sh births / fastpath-report`.
+Synthetic test `test_birth_moments.sh DIR LUT NUMW` (no ROOT): 7,295 births incl. one ion 1 nm above the wire and
+two primaries split over neighbouring wires; core vs export -> T1 -> moments path: N, r_eff, D, A identical,
+t 3e-14 ns, harmonics <= 1.1e-16; K2A kernel waveforms from the two moment files: rel L2 7e-16 (ion), 2e-19 (electron).
+
+**Which intermediates could later be removed (not now).** For production K2A only `ion_births.root` and
+`kernel_<TAG>` are read per event. `green_paths_<TAG>` (transport) and `green_<TAG>` (weighting applied) are needed
+only to rebuild kernels (new strip geometry reuses the paths, new shaping reuses everything). `frozen_export`,
+`T1_export/vertices.f64`, S0 replays and the S-variant waveforms are reference/validation products: keep them for the
+validated development muons; they could be dropped for production events once the five-muon birth-path validation
+has passed and is archived. Nothing is deleted by any tool.
+
 ## Dependency separation for later design studies
 The S-ladder already factorizes the response the way a configurable engine needs:
 * **Transport** (gas, E/B field, wire geometry, voltage): the grid paths `green_paths_*`. Valid only for the frozen
