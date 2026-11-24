@@ -61,7 +61,12 @@ Results from different grids never overwrite each other (directories and variant
 
 ## Files
 * `p3_green_grid_paths.cc`, `CMakeLists.txt` — grid paths with the frozen transport (build against the wire branch).
-* `s_grid_spec.py` — wires, radius grid and D range from the muon's actual ion births.
+* `s_grid_spec.py` — wires, radius grid and D range from the muon's actual ion births. Innermost node =
+  r_min - min(0.005 r_min, (r_min - 15 um)/2): never above the innermost ion, never on or inside the anode; full
+  precision radii; prints the clearance distribution and charge per radial interval and fails unless coverage is
+  complete. (Fix 2026-11-24: the old lower bound 15.05 um excluded 1.99% of the charge of muon 0000.)
+* `test_edge_coverage.sh LUT NUMW [DIR]` — SYNTHETIC regression: ions 0.001 um above the wire are covered, the
+  strict no-extrapolation check still rejects the old 15.05 um grid.
 * `s_green_table.py` — Green table with the frozen LUT and the replay's own path validation.
 * `s_synthesize.py` — the variants above (`--variants G` for closure only, `--suffix _TAG`); consistency checks.
 * `s_validate_transport.py` — grid executable vs frozen exporter on the same start points (`validate`).

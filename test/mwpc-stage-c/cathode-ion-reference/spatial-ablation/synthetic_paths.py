@@ -5,7 +5,8 @@ A deterministic toy 'field': the path depends only on the start point (as for RK
 r0, theta) the ion moves radially to r = 0.4 mm with r^2 = r0^2 (1 + t/tau0), then straight to the cathode at
 u = 3k + 1.6 cos(theta), v = +-3 mm, continuing the same time law in distance from the wire.
   synthetic_paths.py grid  OUT --wires -1,0,1 --r-um 15.5,...  --ntheta 72     (same format as p3_green_grid_paths)
-  synthetic_paths.py muon  OUT --seed 1                                         (T1-like timing: one time per primary)
+  synthetic_paths.py muon  OUT --seed 1 [--edge-ions N]                         (T1-like timing: one time per primary;
+                                                                                N ions 0.001 um above the wire surface)
 """
 import argparse
 from pathlib import Path
@@ -45,7 +46,7 @@ def write(out, recs, extra=None):
             blocks.append(blk); off += len(t)
     np.concatenate(blocks).astype("<f8").tofile(out / "vertices.f64")
     tot = sum(r[1] for r in recs)
-    (out / "complete.txt").write_text(f"rows={len(recs)}\nexact_ions={int(round(tot))}\nweight_sum={tot!r}\nvertices={off}\nstep_mm=0.005\n")
+    (out / "complete.txt").write_text(f"rows={len(recs)}\nexact_ions={int(round(tot))}\nweight_sum={float(tot)!r}\nvertices={off}\nstep_mm=0.005\n")
     if extra:
         (out / "grid.csv").write_text(extra)
 
@@ -58,6 +59,7 @@ def main():
     ap.add_argument("--r-um", default="")
     ap.add_argument("--ntheta", type=int, default=72)
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--edge-ions", type=int, default=0, help="muon mode: extra ions of primary 0 born 0.001 um above the 15 um wire")
     a = ap.parse_args()
     if a.mode == "grid":
         recs, g = [], ["row,wire,r_um,theta_deg,u_mm,v_mm,end_u_mm,end_v_mm,end_ns"]
@@ -66,7 +68,7 @@ def main():
                 for m in range(a.ntheta):
                     th = (m + 0.5) * 2 * np.pi / a.ntheta
                     t, pts = path(k, r / 1000, th, 0.0)
-                    g.append(f"{len(recs)},{k},{r!r},{th * 180 / np.pi!r},{pts[0,0]!r},{pts[0,1]!r},{pts[-1,0]!r},{pts[-1,1]!r},{t[-1]!r}")
+                    g.append(",".join([str(len(recs)), str(k)] + [repr(float(x)) for x in (r, th * 180 / np.pi, pts[0, 0], pts[0, 1], pts[-1, 0], pts[-1, 1], t[-1])]))
                     recs.append((len(recs), 1.0, t, pts, 0.0, 0.0))
         write(a.out, recs, "\n".join(g) + "\n")
     else:
@@ -80,9 +82,9 @@ def main():
             side = rng.choice([-1, 1])
             n = 24
             gain = rng.lognormal(np.log(3e4), 0.9)
-            for i in range(n):
+            for i in range(n + (a.edge_ions if p == 0 else 0)):
                 th = np.mod(rng.normal(side * np.pi / 2, 1.0), 2 * np.pi)
-                r0 = 0.0152 + rng.exponential(0.012)
+                r0 = 0.015 + 1e-6 if i >= n else 0.0152 + rng.exponential(0.012)
                 t, pts = path(k, r0, th, tp)
                 wv = wtrack + rng.normal(0, 0.05)
                 recs.append((p, gain / n, t, pts, wv, wv))

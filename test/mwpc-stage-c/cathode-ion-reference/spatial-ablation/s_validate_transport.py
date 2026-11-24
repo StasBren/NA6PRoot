@@ -2,7 +2,8 @@
 """Validate the Green-grid executable against the frozen exporter: same start point -> same trajectory.
 
   s_validate_transport.py points  EXPORT N POINTS.csv        pick N ion rows of a frozen/T1 export (spread over the
-                                                             file), write their start points (u_mm, v_mm, t_ns)
+                                                             file) plus the 10 closest to the anode surface, write
+                                                             their start points (u_mm, v_mm, t_ns)
   p3_green_grid_paths MOBILITY OUT --points POINTS.csv       drift them with the grid tool
   s_validate_transport.py compare EXPORT POINTS.csv OUT      vertex-by-vertex comparison
 
@@ -37,12 +38,18 @@ def main():
     a = ap.parse_args()
     if a.cmd == "points":
         rows, V = load(a.export)
-        sel = np.unique(np.linspace(0, len(rows) - 1, min(a.n, len(rows))).astype(int))
+        sel = np.linspace(0, len(rows) - 1, min(a.n, len(rows))).astype(int)
+        # always include the 10 births closest to the anode surface (hardest start points for the transport)
+        p0 = np.asarray(V[np.array([int(r["first_vertex"]) for r in rows])])
+        k = np.rint(p0[:, 1] / 3)
+        clear = 1000 * np.hypot(p0[:, 1] - 3 * k, p0[:, 2]) - 15.0
+        sel = np.unique(np.r_[sel, np.argsort(clear)[:10]])
+        print(f"min clearance among selected start points {clear[sel].min():.6g} um")
         with open(a.out, "w") as f:
             f.write("u_mm,v_mm,t_ns\n")
             for i in sel:
-                p0 = path(rows, V, i)[0]
-                f.write(f"{p0[1]!r},{p0[2]!r},{p0[0]!r}\n")
+                s0 = [float(x) for x in path(rows, V, i)[0]]
+                f.write(f"{s0[1]!r},{s0[2]!r},{s0[0]!r}\n")
         (a.out.with_suffix(".rows")).write_text("\n".join(map(str, sel)) + "\n")
         print(f"wrote {len(sel)} start points")
         return

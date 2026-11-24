@@ -113,8 +113,12 @@ def main():
     if not set(np.unique(k)) <= set(wires):
         raise SystemExit(f"ions on wires {sorted(set(np.unique(k)) - set(wires))} not in the Green table")
     out_r = (r < rn[0]) | (r > rn[-1])
+    clear = r - 15.0
+    print(f"ion birth clearance from the 15 um wire surface: min {clear.min():.6g} um; grid r in [{float(rn[0])!r}, {float(rn[-1])!r}] um "
+          f"(innermost node clearance {rn[0] - 15.0:.6g} um); ions outside the grid: {int(out_r.sum())}", flush=True)
     rep = {"rows": len(rows), "charge_fC": float(q.sum()), "frac_charge_r_outside_grid": float(q[out_r].sum() / q.sum()),
-           "r_um_q01_q50_q99": np.percentile(r, [1, 50, 99]).tolist(), "variants": {}}
+           "r_um_q01_q50_q99": np.percentile(r, [1, 50, 99]).tolist(), "min_clearance_um": float(clear.min()),
+           "grid_r_um": [float(rn[0]), float(rn[-1])], "variants": {}}
     if out_r.any():
         raise SystemExit(f"{out_r.sum()} ions ({100 * rep['frac_charge_r_outside_grid']:.3f}% charge) outside the radial "
                          f"grid [{rn[0]}, {rn[-1]}] um: rebuild the grid (s_grid_spec.py)")
