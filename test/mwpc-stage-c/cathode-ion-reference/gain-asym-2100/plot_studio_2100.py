@@ -416,6 +416,54 @@ def draw(frame,spec,custom):
     fig=fig_style(fig,custom["title"],custom["xlabel"],custom["ylabel"],custom)
     return fig,export,int(len(df)),omitted
 
+def plotted_values(frame,spec,custom):
+    """The same finite, scale-eligible ORIGINAL observations used by draw().
+    These are unbinned physical values, never histogram centers or profile means.
+    """
+    df=numeric_subset(frame,spec)
+    if custom["xscale"]=="Log":
+        df=df.loc[df[spec.x]>0]
+    if custom["yscale"]=="Log" and spec.y:
+        df=df.loc[df[spec.y]>0]
+    return df
+
+
+def mean_and_rms(values):
+    """ROOT TH1 GetMean/GetRMS convention: RMS is about the mean (ddof=0)."""
+    a=np.asarray(values,dtype=np.float64)
+    a=a[np.isfinite(a)]
+    if not len(a): return float("nan"),float("nan")
+    mean=float(np.mean(a))
+    # Centre before squaring to avoid catastrophic cancellation.
+    rms=float(np.sqrt(np.mean(np.square(a-mean))))
+    return mean,rms
+
+
+def format_plot_stats(frame,spec,custom):
+    """Text appended to a legend entry, computed before plotting/binning.
+
+    For histograms, stats describe x; for profile/scatter plots, stats describe
+    y (original, unbinned observations); for 2D densities both x and y.
+    Numeric moments stay in the original physical units even on logarithmic axes.
+    """
+    df=plotted_values(frame,spec,custom)
+    n=len(df)
+    if not n:return ""
+    if spec.chart=="hist":
+        axes=[("x",spec.x)]
+    elif spec.chart=="density":
+        axes=[("x",spec.x),("y",spec.y)]
+    else:
+        axes=[("y",spec.y)]
+    lines=[f"N = {n:,}"]
+    for axis,col in axes:
+        mean,rms=mean_and_rms(df[col].to_numpy())
+        prefix=f"{axis}: " if len(axes)>1 else ""
+        lines.append(f"{prefix}Mean = {mean:.4g}")
+        lines.append(f"{prefix}RMS = {rms:.4g}")
+    return "<br>".join(lines)
+
+
 def as_html(fig):
     return fig.to_html(full_html=True,include_plotlyjs=True).encode("utf-8")
 
@@ -483,7 +531,10 @@ def main():
     marker_size=st.sidebar.slider("Marker size",4,15,7,key=f"marker_{name}")
     lw=st.sidebar.slider("Line width",1.,5.,2.,.5,key=f"lw_{name}")
     normalization=st.sidebar.selectbox("Histogram normalization",["Counts","Probability","Density"],key=f"norm_{name}")
-    legend=st.sidebar.checkbox("Show legend",False,key=f"legend_{name}")
+    legend=st.sidebar.checkbox("Show legend",True,key=f"legend_{name}")
+    show_stats=st.sidebar.checkbox("Show N, mean and RMS in legend",True,
+                                   key=f"legendstats_{name}",
+                                   help="Uses the original unbinned values (after filtering). For profiles this is y, not the plotted bin means. RMS is the spread around the mean.")
     legend_text=st.sidebar.text_input("Legend entry", "Entries" if spec.chart!="profile" else "Muon-bootstrap mean",
                                        key=f"legendname_{name}")
     legend_position=st.sidebar.selectbox("Legend position",
@@ -500,7 +551,7 @@ def main():
     custom=dict(title=title,xlabel=xlabel,ylabel=ylabel,xscale=xscale,yscale=yscale,bins=bins,
         min_bin=minbin,color=col,mono=mono,lines=lines,errors=errors,marker_size=marker_size,
         line_width=lw,normalization=normalization,legend=legend,
-        legend_position=legend_position,title_font=title_font,
+        show_stats=show_stats,legend_position=legend_position,title_font=title_font,
         axis_font=axis_font,xmin=xmin if xmin!=0 or xmax!=0 else None,
         xmax=xmax if xmin!=0 or xmax!=0 else None,
         ymin=ymin if ymin!=0 or ymax!=0 else None,
@@ -509,8 +560,18 @@ def main():
     fig,displayed,n,omitted=draw(data[spec.dataset],spec,custom)
     if fig is None:st.warning("No finite data for these filters and axis scales.");st.stop()
     if fig.data:
-        # Setting showlegend at trace level also works reliably for a single trace.
-        fig.update_traces(name=legend_text or " ",showlegend=legend)
+        details=format_plot_stats(data[spec.dataset],spec,custom) if show_stats else ""
+        plot_legend=(legend_text or "Entries")+(("<br>"+details) if details else "")
+        if spec.chart=="density":
+            # Histogram2d uses a colorbar; add a separate legend-only marker
+            # so its exact underlying x/y moments are visible and exportable.
+            fig.data[0].showlegend=False
+            if legend:
+                fig.add_trace(go.Scatter(x=[None],y=[None],mode="markers",
+                    marker=dict(color=col,size=8,symbol="square"),
+                    name=plot_legend,showlegend=True,hoverinfo="skip"))
+        else:
+            fig.update_traces(name=plot_legend,showlegend=legend)
     left,right=st.columns([3.6,1.45])
     with left:
         st.plotly_chart(fig,use_container_width=True,config={"displaylogo":False,"scrollZoom":True})
