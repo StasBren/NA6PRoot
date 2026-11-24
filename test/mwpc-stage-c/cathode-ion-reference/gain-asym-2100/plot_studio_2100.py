@@ -320,11 +320,27 @@ def bootstrap_profile(frame,spec,bins,log_bins,min_entries,seed=2100):
     return result.loc[allowed].copy(),int(n)
 
 def fig_style(fig,title,xlabel,ylabel,custom):
+    # Explicit legend typography is required: plotly_white's legend font
+    # otherwise overrides the black global font for a single-trace figure.
+    legend_positions = {
+        "Inside upper right": dict(x=.98, y=.98, xanchor="right", yanchor="top"),
+        "Inside upper left": dict(x=.02, y=.98, xanchor="left", yanchor="top"),
+        "Inside lower right": dict(x=.98, y=.02, xanchor="right", yanchor="bottom"),
+        "Inside lower left": dict(x=.02, y=.02, xanchor="left", yanchor="bottom"),
+        "Outside right": dict(x=1.02, y=1., xanchor="left", yanchor="top"),
+        "Above plot": dict(x=.5, y=1.02, xanchor="center", yanchor="bottom"),
+    }
+    legend_position = custom.get("legend_position", "Inside upper right")
+    legend_layout = legend_positions[legend_position]
     fig.update_layout(template="plotly_white",title={"text":title,"x":.02,"font":{"size":custom["title_font"],"color":"#000000"}},
-        font={"family":"Arial, Helvetica, sans-serif","size":custom["axis_font"],"color":"black"},
+        font={"family":"Arial, Helvetica, sans-serif","size":custom["axis_font"],"color":"#000000"},
         paper_bgcolor="white",plot_bgcolor="white",height=630,
-        margin=dict(l=75,r=40,t=85,b=78),showlegend=custom["legend"],
-        legend=dict(bgcolor="rgba(255,255,255,.8)",borderwidth=0),
+        margin=dict(l=75,r=165 if legend_position == "Outside right" and custom["legend"] else 40,t=95,b=78),
+        showlegend=custom["legend"],
+        legend=dict(bgcolor="rgba(255,255,255,0.92)",borderwidth=0,
+                    font=dict(family="Arial, Helvetica, sans-serif",
+                              size=custom["axis_font"],color="#000000"),
+                    **legend_layout),
         # Force black axis TITLE, numeric TICK LABELS, tick marks, and frame.
         # plotly_white's axis tick/title font defaults can override layout.font.
         xaxis=dict(title=dict(text=xlabel,font=dict(color="#000000")),
@@ -470,6 +486,10 @@ def main():
     legend=st.sidebar.checkbox("Show legend",False,key=f"legend_{name}")
     legend_text=st.sidebar.text_input("Legend entry", "Entries" if spec.chart!="profile" else "Muon-bootstrap mean",
                                        key=f"legendname_{name}")
+    legend_position=st.sidebar.selectbox("Legend position",
+        ["Inside upper right","Inside upper left","Inside lower right",
+         "Inside lower left","Outside right","Above plot"],
+        key=f"legendpos_{name}")
     with st.sidebar.expander("Fonts and axis limits"):
         title_font=st.slider("Title font size",14,34,21,key=f"titlefont_{name}")
         axis_font=st.slider("Axes font size",10,22,15,key=f"axisfont_{name}")
@@ -479,7 +499,8 @@ def main():
         ymax=st.number_input("Y max (0 = auto)",value=0.,format="%.6g",key=f"ymax_{name}")
     custom=dict(title=title,xlabel=xlabel,ylabel=ylabel,xscale=xscale,yscale=yscale,bins=bins,
         min_bin=minbin,color=col,mono=mono,lines=lines,errors=errors,marker_size=marker_size,
-        line_width=lw,normalization=normalization,legend=legend,title_font=title_font,
+        line_width=lw,normalization=normalization,legend=legend,
+        legend_position=legend_position,title_font=title_font,
         axis_font=axis_font,xmin=xmin if xmin!=0 or xmax!=0 else None,
         xmax=xmax if xmin!=0 or xmax!=0 else None,
         ymin=ymin if ymin!=0 or ymax!=0 else None,
@@ -488,7 +509,8 @@ def main():
     fig,displayed,n,omitted=draw(data[spec.dataset],spec,custom)
     if fig is None:st.warning("No finite data for these filters and axis scales.");st.stop()
     if fig.data:
-        fig.data[0].name=legend_text
+        # Setting showlegend at trace level also works reliably for a single trace.
+        fig.update_traces(name=legend_text or " ",showlegend=legend)
     left,right=st.columns([3.6,1.45])
     with left:
         st.plotly_chart(fig,use_container_width=True,config={"displaylogo":False,"scrollZoom":True})
