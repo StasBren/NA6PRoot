@@ -4,6 +4,11 @@ set -Eeo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../../.." && pwd)"
 if [[ -f "$HOME/na6p/env.sh" ]]; then source "$HOME/na6p/env.sh"; fi
+# Activate the existing WSL CERN ROOT installation rather than requiring CMake/Garfield.
+# PATH alone is insufficient when rootcling/libRIO or ROOT-dependent libraries need the runtime setup.
+if [[ -f "$HOME/na6p/install/root/bin/thisroot.sh" ]]; then
+  source "$HOME/na6p/install/root/bin/thisroot.sh"
+fi
 export PATH="$HOME/na6p/install/root/bin:$PATH"
 export LD_LIBRARY_PATH="$HOME/na6p/install/root/lib:${LD_LIBRARY_PATH:-}"
 set -u
