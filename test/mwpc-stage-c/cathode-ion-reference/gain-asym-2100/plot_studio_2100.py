@@ -320,7 +320,7 @@ def bootstrap_profile(frame,spec,bins,log_bins,min_entries,seed=2100):
     return result.loc[allowed].copy(),int(n)
 
 def fig_style(fig,title,xlabel,ylabel,custom):
-    fig.update_layout(template="plotly_white",title={"text":title,"x":.02,"font":{"size":custom["title_font"]}},
+    fig.update_layout(template="plotly_white",title={"text":title,"x":.02,"font":{"size":custom["title_font"],"color":"#000000"}},
         font={"family":"Arial, Helvetica, sans-serif","size":custom["axis_font"],"color":"black"},
         paper_bgcolor="white",plot_bgcolor="white",height=630,
         margin=dict(l=75,r=40,t=85,b=78),showlegend=custom["legend"],
