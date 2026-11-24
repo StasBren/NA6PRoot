@@ -104,18 +104,21 @@ def read_moments_csv(path) -> Moments:
     return Moments(cols, int(rows[0]["base_U"]), int(rows[0]["base_V"]), str(path))
 
 
-def moments_from_births(primary, u_cm, v_cm, w_cm, t_ns, weight, patch_shift_cm, u_in_mm, w_in_mm) -> Moments:
-    """numpy version of BirthMoments.hh (T1 per primary; cloud = (primary, wire); same frame formulas)."""
+def moments_from_births(primary, u_cm, v_cm, w_cm, t_ns, weight, patch_shift_cm, u_in_mm, w_in_mm,
+                        stereo_tan: float = .1, strip_pitch_mm: float = 1.7) -> Moments:
+    """numpy version of BirthMoments.hh (T1 per primary; cloud = (primary, wire); same frame formulas).
+    stereo_tan / strip_pitch_mm: readout strip geometry of the strip frame (defaults = frozen reference)."""
+    A, Pc = stereo_tan, .1 * strip_pitch_mm
     primary = np.asarray(primary, int); w = np.asarray(weight, float)
     uIn, wIn = .1 * u_in_mm, .1 * w_in_mm
     llround = lambda x: int(np.sign(x) * np.floor(abs(x) + 0.5))      # C++ std::llround (half away from zero)
-    bu, bv = llround((wIn - .1 * uIn) / .17), llround((wIn + .1 * uIn) / .17)
+    bu, bv = llround((wIn - A * uIn) / Pc), llround((wIn + A * uIn) / Pc)
     up, inv = np.unique(primary, return_inverse=True)
     tm = (np.bincount(inv, w * t_ns) / np.bincount(inv, w))[inv]
     t = t_ns + (tm - t_ns)
     u, v = 10 * np.asarray(u_cm), 10 * np.asarray(v_cm)
-    wu = 10. * (np.asarray(w_cm) + wIn - .1 * patch_shift_cm - .17 * bu)
-    wv = 10. * (np.asarray(w_cm) + wIn + .1 * patch_shift_cm - .17 * bv)
+    wu = 10. * (np.asarray(w_cm) + wIn - A * patch_shift_cm - Pc * bu)
+    wv = 10. * (np.asarray(w_cm) + wIn + A * patch_shift_cm - Pc * bv)
     k = np.rint(u / 3).astype(int)
     du = u - 3 * k
     r = 1000 * np.hypot(du, v)

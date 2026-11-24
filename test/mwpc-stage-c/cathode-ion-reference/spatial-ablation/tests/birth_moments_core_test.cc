@@ -6,7 +6,9 @@
 #include "../BirthMoments.hh"
 int main(int argc, char** argv) {
   try {
-    BirthMoments::Require(argc == 4, "usage: birth_moments_core_test births.csv frame.csv out.csv");
+    BirthMoments::Require(argc == 4 || argc == 6, "usage: birth_moments_core_test births.csv frame.csv out.csv [stereo_tan pitch_mm]");
+    BirthMoments::StripGeometry g;
+    if (argc == 6) { g.stereo_tan = std::stod(argv[4]); g.pitch_cm = .1 * std::stod(argv[5]); }
     std::ifstream b(argv[1]), f(argv[2]);
     std::string line; std::getline(b, line);
     std::vector<BirthMoments::Birth> v;
@@ -19,7 +21,7 @@ int main(int argc, char** argv) {
     std::getline(f, line); std::getline(f, line);
     std::stringstream ss(line); std::string x; std::vector<double> fr;
     while (std::getline(ss, x, ',')) fr.push_back(std::stod(x));
-    const auto r = BirthMoments::Compute(v, {fr.at(0), fr.at(1), fr.at(2)});
+    const auto r = BirthMoments::Compute(v, {fr.at(0), fr.at(1), fr.at(2)}, g);
     std::ofstream o(argv[3]); BirthMoments::Write(o, r);
     std::cout << "core: rows=" << r.rows << " clouds=" << r.clouds.size() << "\n";
     return 0;

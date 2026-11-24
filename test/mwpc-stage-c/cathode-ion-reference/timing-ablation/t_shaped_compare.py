@@ -240,6 +240,7 @@ def plot_muon(path, muon, tp, labels, shaped, res, variants, dt, title):
 
 
 def main():
+    global PITCH_STRIP, A_STEREO                 # stereo reconstruction w, u of every variant uses this geometry
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("root", type=Path)
     ap.add_argument("--variants", default="T0,T1,TW")
@@ -253,7 +254,10 @@ def main():
     ap.add_argument("--plots", action="store_true")
     ap.add_argument("--bootstrap", type=int, default=2000)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--strip-pitch-mm", type=float, default=PITCH_STRIP, help="readout geometry of ALL variants (default frozen 1.7)")
+    ap.add_argument("--stereo-tan", type=float, default=A_STEREO, help="readout geometry of ALL variants (default frozen 0.1)")
     a = ap.parse_args()
+    PITCH_STRIP, A_STEREO = a.strip_pitch_mm, a.stereo_tan
     variants = a.variants.split(",")
     REF = variants[0]   # reference variant: T0 for the T-ladder, S0 (= T1 frozen replay) for the S-ladder
     fracs = [float(x) for x in a.fracs.split(",")]
@@ -268,7 +272,8 @@ def main():
     signal = "ION TERM ONLY (time-dependent Shockley-Ramo, frozen RKF paths)" if a.no_prompt else \
         "ion term + INSTANTANEOUS electron-step APPROXIMATION"
     report = {"muons": muons, "variants": variants, "reference": REF, "signal": signal, "fracs_of_reference_lead": fracs,
-              "shaping_status": "PROVISIONAL (NA60+ VMM3a peaking time and transfer function unverified)", "Tp": {}}
+              "shaping_status": "PROVISIONAL (NA60+ VMM3a peaking time and transfer function unverified)", "Tp": {},
+              "readout_geometry": {"strip_pitch_mm": PITCH_STRIP, "stereo_tan": A_STEREO}}
     lines = []
     for tp in [float(x) for x in a.tp.split(",")]:
         h, hlabel = impulse(tp, a.order, a.dt, max(12 * tp, 2000.0), a.impulse)

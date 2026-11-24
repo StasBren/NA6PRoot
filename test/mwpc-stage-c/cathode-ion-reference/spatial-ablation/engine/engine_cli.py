@@ -49,6 +49,12 @@ def cmd_run(a):
     for i, f in enumerate(files):
         name = f.name[:-len(".moments.csv")]
         t0 = time.perf_counter(); m = ce.read_moments_csv(f); t1 = time.perf_counter()
+        fj = f.with_name(f.name + ".frame.json")            # written by p3_birth_moments (strip geometry of D_U/D_V)
+        if fj.exists():
+            g = json.loads(fj.read_text())
+            if abs(g["stereo_tan"] - k.stereo_tan) > 1e-12 or abs(g["strip_pitch_mm"] - k.pitch_mm) > 1e-12:
+                raise SystemExit(f"{f}: moments use stereo {g['stereo_tan']} / pitch {g['strip_pitch_mm']} mm, kernel "
+                                 f"{k.stereo_tan} / {k.pitch_mm}: readout geometries differ")
         best = None
         for _ in range(a.repeat):
             s = time.perf_counter(); r = eng.evaluate(m, a.impl); e = time.perf_counter() - s

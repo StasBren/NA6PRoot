@@ -28,6 +28,10 @@ constexpr double kWireRadiusUm = 15.0;
 
 struct Birth { int primary; double u_cm, v_cm, w_cm, t_ns, weight; };
 struct Frame { double patch_shift_cm, u_in_mm, w_in_mm; };
+// Readout strip geometry entering the strip frame (weighting side only). Defaults = the frozen 2100 V reference
+// (tan(stereo) = 0.1, contiguous strips of pitch 0.17 cm); with the defaults every expression below is the same
+// double arithmetic as before this parameter existed.
+struct StripGeometry { double stereo_tan = .1; double pitch_cm = .17; };
 struct Cloud {
   int primary = 0, wire = 0;
   double t_ns = 0, t_rms_ns = 0, t_raw_rms_ns = 0, N_fC = 0, r_eff_um = 0, D_U_mm = 0, D_V_mm = 0;
@@ -38,11 +42,11 @@ struct Result { std::vector<Cloud> clouds; int base_U = 0, base_V = 0; long long
 
 inline void Require(bool ok, const std::string& m) { if (!ok) throw std::runtime_error(m); }
 
-inline Result Compute(const std::vector<Birth>& births, const Frame& f) {
+inline Result Compute(const std::vector<Birth>& births, const Frame& f, const StripGeometry& g = StripGeometry{}) {
   Result res;
   const double uIn = .1 * f.u_in_mm, wIn = .1 * f.w_in_mm;
-  res.base_U = int(std::llround((wIn - .1 * uIn) / .17));
-  res.base_V = int(std::llround((wIn + .1 * uIn) / .17));
+  res.base_U = int(std::llround((wIn - g.stereo_tan * uIn) / g.pitch_cm));
+  res.base_V = int(std::llround((wIn + g.stereo_tan * uIn) / g.pitch_cm));
   // T1: ion-weight mean birth time per primary, then the same per-ion shift as the collapse tool (t + (mean - t))
   std::map<int, std::pair<double, double>> pt;   // primary -> (sum w t, sum w)
   for (const auto& b : births) { auto& a = pt[b.primary]; a.first += b.weight * b.t_ns; a.second += b.weight; }
@@ -53,8 +57,8 @@ inline Result Compute(const std::vector<Birth>& births, const Frame& f) {
     Require(std::isfinite(b.u_cm) && std::isfinite(b.v_cm) && std::isfinite(b.w_cm) && std::isfinite(b.t_ns) &&
             b.weight > 0, "invalid birth record");
     const double u = 10 * b.u_cm, v = 10 * b.v_cm;
-    const double wu = 10. * (b.w_cm + wIn - .1 * f.patch_shift_cm - .17 * res.base_U);
-    const double wv = 10. * (b.w_cm + wIn + .1 * f.patch_shift_cm - .17 * res.base_V);
+    const double wu = 10. * (b.w_cm + wIn - g.stereo_tan * f.patch_shift_cm - g.pitch_cm * res.base_U);
+    const double wv = 10. * (b.w_cm + wIn + g.stereo_tan * f.patch_shift_cm - g.pitch_cm * res.base_V);
     const auto& p = pt[b.primary];
     const double tm = p.first / p.second;
     const double t = b.t_ns + (tm - b.t_ns);

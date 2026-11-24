@@ -29,6 +29,7 @@ def main():
     ap.add_argument("exports", type=Path, nargs="+")
     ap.add_argument("--nr", type=int, default=14)
     ap.add_argument("--half-strips", type=int, default=5)
+    ap.add_argument("--strip-pitch-mm", type=float, default=PITCH, help="readout strip pitch (geometry study; default frozen 1.7)")
     a = ap.parse_args()
     R, Q, K, DU = [], [], [], []
     for d in a.exports:
@@ -52,7 +53,7 @@ def main():
     rstr = ",".join(repr(float(x)) for x in radii)
     back = np.array([float(x) for x in rstr.split(",")])
     out = (r < back[0]) | (r > back[-1])
-    dmax = float(np.abs(dcol).max() + a.half_strips * PITCH + 0.5)
+    dmax = float(np.abs(dcol).max() + a.half_strips * a.strip_pitch_mm + 0.5)
     wires = sorted(set(k.tolist()))
     print(f"exports={len(a.exports)} rows={len(r)} wires={wires} charge by wire="
           + ", ".join(f"{w_}:{q[k == w_].sum() / q.sum():.4f}" for w_ in wires))

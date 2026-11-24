@@ -1,6 +1,9 @@
 // Read-only birth-record -> K2A cloud moments for one archived 2100 V muon, WITHOUT ion transport.
 //
 //   p3_birth_moments ion_births.root OUT_MOMENTS.csv [--repeat N]
+//   options (single and batch): --stereo-tan T --strip-pitch-mm P   readout strip geometry of the strip frame
+//                               (default 0.1 / 1.7 = frozen reference); each output also gets <out>.frame.json
+//                               (patch_shift_cm, u_in_mm, w_in_mm, base_U/V, geometry) for re-striping exports
 //   p3_birth_moments --batch LIST.txt OUTDIR            persistent process over many events: LIST lines are
 //                                                       "EVENT_ID PATH/ion_births.root"; writes OUTDIR/EVENT_ID.moments.csv
 //                                                       and OUTDIR/batch_timing.json (process start-up, per-event cold/warm)
@@ -23,7 +26,18 @@
 #include "Plane2100Archive.hh"
 
 namespace {
-struct OneResult { BirthMoments::Result res; double readS = 0, momS = 0; long long nTrue = 0; };
+struct OneResult { BirthMoments::Result res; double readS = 0, momS = 0; long long nTrue = 0; BirthMoments::Frame frame{}; };
+
+BirthMoments::StripGeometry gGeom;
+double gPitchMm = 1.7;   // as given on the command line (10 * pitch_cm is not exactly 1.7 in double)
+
+void WriteFrame(const std::string& path, const OneResult& r) {
+  std::ofstream f(path);
+  f << std::setprecision(17) << "{\"patch_shift_cm\": " << r.frame.patch_shift_cm << ", \"u_in_mm\": " << r.frame.u_in_mm
+    << ", \"w_in_mm\": " << r.frame.w_in_mm << ", \"base_U\": " << r.res.base_U << ", \"base_V\": " << r.res.base_V
+    << ", \"stereo_tan\": " << gGeom.stereo_tan << ", \"strip_pitch_mm\": " << gPitchMm << "}\n";
+  BirthMoments::Require(bool(f), "frame write failed");
+}
 
 OneResult ProcessOne(const std::string& in) {
   using clk = std::chrono::steady_clock;
@@ -59,7 +73,8 @@ OneResult ProcessOne(const std::string& in) {
   }
   archive.CheckComplete();
   const auto t1 = clk::now();
-  o.res = BirthMoments::Compute(births, fr);
+  o.res = BirthMoments::Compute(births, fr, gGeom);
+  o.frame = fr;
   const auto t2 = clk::now();
   o.readS = std::chrono::duration<double>(t1 - t0).count();
   o.momS = std::chrono::duration<double>(t2 - t1).count();
@@ -75,6 +90,18 @@ long RssKiB() { rusage ru{}; getrusage(RUSAGE_SELF, &ru); return ru.ru_maxrss; }
 int main(int argc, char** argv) {
   const auto tProcess = std::chrono::steady_clock::now();
   try {
+    std::vector<std::string> args;
+    for (int i = 1; i < argc; ++i) {
+      const std::string x = argv[i];
+      if (x == "--stereo-tan" && i + 1 < argc) gGeom.stereo_tan = std::stod(argv[++i]);
+      else if (x == "--strip-pitch-mm" && i + 1 < argc) { gPitchMm = std::stod(argv[++i]); gGeom.pitch_cm = .1 * gPitchMm; }
+      else args.push_back(x);
+    }
+    BirthMoments::Require(gGeom.stereo_tan > 0 && gGeom.stereo_tan < 1 && gGeom.pitch_cm > 0, "bad strip geometry");
+    argc = int(args.size()) + 1;
+    std::vector<char*> av{argv[0]};
+    for (auto& x : args) av.push_back(x.data());
+    argv = av.data();
     if (argc >= 4 && std::string(argv[1]) == "--batch") {
       const std::string list = argv[2]; const std::filesystem::path outdir = argv[3];
       BirthMoments::Require(!std::filesystem::exists(outdir), "output directory exists");
@@ -89,6 +116,7 @@ int main(int argc, char** argv) {
         const auto out = outdir / (id + ".moments.csv");
         BirthMoments::Require(!std::filesystem::exists(out), "duplicate event id " + id);
         std::ofstream o(out); BirthMoments::Write(o, r.res); o.close(); BirthMoments::Require(bool(o), "write failed");
+        WriteFrame(out.string() + ".frame.json", r);
         j << (n ? ",\n" : "") << "  {\"id\": \"" << id << "\", \"archive\": \"" << path << "\", \"archive_bytes\": "
           << std::filesystem::file_size(path) << ", \"rows\": " << r.res.rows << ", \"clouds\": " << r.res.clouds.size()
           << ", \"read_validate_s\": " << r.readS << ", \"moments_s\": " << r.momS << ", \"warm\": " << (n ? "true" : "false")
@@ -110,10 +138,12 @@ int main(int argc, char** argv) {
     BirthMoments::Require(!std::filesystem::exists(out), "output exists");
     double readS = 1e300, momS = 1e300;
     BirthMoments::Result res;
+    OneResult last;
     for (int rep = 0; rep < repeat; ++rep) {
       auto r = ProcessOne(in);
-      readS = std::min(readS, r.readS); momS = std::min(momS, r.momS); res = std::move(r.res);
+      readS = std::min(readS, r.readS); momS = std::min(momS, r.momS); last = r; res = std::move(r.res);
     }
+    WriteFrame(out + ".frame.json", last);
     std::ofstream o(out);
     BirthMoments::Write(o, res);
     o.close();
