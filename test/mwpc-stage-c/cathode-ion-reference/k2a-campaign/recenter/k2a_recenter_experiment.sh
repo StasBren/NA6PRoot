@@ -21,13 +21,15 @@
 #   MWPC_SPECTRAL_LUT  sha256 must equal RUN/green_TAG/axes.json lut_sha256 and RUN/provenance_prepare_<M>.txt
 #   MWPC_NUMW_DIR      p3_replay_full_spectral_muon.py sha256 must equal replay_sha256 in provenance_prepare_<M>.txt
 #   far mode also: MWPC_EXPORT_BIN (export_bin_sha256), MWPC_ION_MOBILITY (mobility_sha256), ROOT/Garfield runtime
+#   MWPC_K2A_LATE_STEPS (far mode group replays: frozen --late-step-ns ladder, default 100,50,20,10; only the frozen
+#   time-compression rejection is retried, see k2a_timing_ladder.py)
 #   MWPC_K2A_OUT (output root), MWPC_HALF_STRIPS (5), MWPC_K2A_KERNEL_ID (default: latest RUN/engine_TAG_*/kernel_id.txt)
 set -Eeo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; TA="$HERE/../../timing-ablation"; SA="$HERE/../../spatial-ablation"
 REPO="$(cd "$HERE/../../../../.." && pwd)"
 set -u
 umask 077
-HS="${MWPC_HALF_STRIPS:-5}"; OUTROOT="${MWPC_K2A_OUT:-$REPO/test_runs/mwpc_stage_c/k2a_campaign_2100}"
+HS="${MWPC_HALF_STRIPS:-5}"; LATE_STEPS="${MWPC_K2A_LATE_STEPS:-100,50,20,10}"; OUTROOT="${MWPC_K2A_OUT:-$REPO/test_runs/mwpc_stage_c/k2a_campaign_2100}"
 ARCHIVE="${MWPC_ARCHIVE_2100_K256:-$HOME/na6p/cathode-overnight-2100/test_runs/mwpc_stage_c/overnight_2100_weighted_k256_v1}"
 fail(){ echo "RECENTER EXPERIMENT ABORTED: $*" >&2; exit 4; }
 need(){ [[ -n "${!1:-}" && -e "${!1}" ]] || fail "set $1 to an existing path (validated setup, e.g. source ~/t_ladder_deps.env)"; }
@@ -146,6 +148,23 @@ e2(){ # R E HAVE_BASE_S0
   step "$E" E2_groups OK "$(tail -1 "$E/groups.log")" "$E/groups/groups.json"
   mkdir -p "$E/S0groups"; local bad=0
   for g in "$E"/groups/g_*; do
+    if [[ $MODE == far ]]; then
+      # far mode: frozen replay with the late-step convergence ladder (retries ONLY the frozen time-compression
+      # rejection, each attempt in a new directory; replay -> chosen attempt is a symlink), then the electron step
+      local G="$E/S0groups/${g##*/}"; mkdir -p "$G"; rc=0
+      python3 "$HERE/k2a_timing_ladder.py" "$g" "$G" --lut "$MWPC_SPECTRAL_LUT" --numw "$MWPC_NUMW_DIR" \
+          --steps "$LATE_STEPS" --half-strips "$HS" --link-replay > "$G.ladder.log" 2>&1 || rc=$?
+      if [[ $rc -eq 0 ]]; then
+        python3 "$TA/t_prompt_electron_term.py" "$MWPC_SPECTRAL_LUT" "$g" "$G/prompt" --replay-dir "$MWPC_NUMW_DIR" --half-strips "$HS" > "$G.prompt.log" 2>&1 || rc=4
+      fi
+      case $rc in
+        0) step "$E" "E2_replay_${g##*/}" OK "$(tail -1 "$G.ladder.log" | head -c 300)" "$G/timing_attempts.json";;
+        3) bad=1; step "$E" "E2_replay_${g##*/}" INCONCLUSIVE "$(tail -1 "$G.ladder.log" | head -c 300)" "$G/timing_attempts.json";;
+        4) bad=1; step "$E" "E2_replay_${g##*/}" FAIL "electron step failed ($G.prompt.log)" "$G/timing_attempts.json";;
+        *) bad=1; step "$E" "E2_replay_${g##*/}" FAIL "$(tail -1 "$G.ladder.log" | head -c 300)" "$G/timing_attempts.json";;
+      esac
+      continue
+    fi
     rc=0; replay "$g" "$E/S0groups/${g##*/}" || rc=$?
     if [[ $rc -ne 0 ]]; then bad=1; step "$E" "E2_replay_${g##*/}" "$([[ $rc -eq 3 ]] && echo INCONCLUSIVE || echo FAIL)" "$(why "$E/S0groups/${g##*/}.replay.log")"; fi
   done

@@ -372,3 +372,61 @@ A wrong mobility file and a sealed slot are refused in the synthetic test.
 1. Compact-moment accumulation inside the avalanche generator, from all births before K256 sampling.
 2. Moving the per-primary recentering and absolute-strip accumulation into the compiled evaluator (`kernel_eval.cc`):
    output as a sparse (first strip, n strips, samples) per plane.
+
+### 9.3 Late-time-step convergence for recentred groups (after ω 0560 stopped at g_4_3)
+
+**What happened.** Group g_4_3 of 0560 (256 rows, 6.83 M queries, 4.35 s) ran completely, and its census and endpoint
+closure passed. The frozen time-compression pilot then rejected `--late-step-ns 100`:
+- V-plane subset L2 over 0–100 000 ns was 0.567671 % against the provisional 0.5 % gate;
+- the 0–10 000 ns V error was 0.162685 %.
+
+The frozen replay's own response to this case is "REVIEW: refine late-step-ns in a new output directory; preserve
+paths." It exits with code 2, which the E2b runner treated as a generic failure.
+
+**The frozen interface** (`p3_replay_full_spectral_muon.py`, unchanged):
+- `--late-step-ns` must be an integer multiple of 10 in [10, 200]. **25 ns is not accepted**, so the ladder after 50
+  is 20, then 10. 10 ns is the native event clock, i.e. no compression: the pilot's coarse and fine samples coincide.
+- Within 1000 ns of birth and of collection, every 10 ns edge is a knot; in between, every late-step-th edge.
+- The output is **always** the fixed 10 000 × 10 ns clock, independent of the late step. Groups replayed with different
+  late steps are therefore summable on identical grids.
+- The pilot compares this compression with the native clock on 32 weighted rows, over windows 100/1000/10 000/
+  100 000 ns per plane.
+- The electron step (`t_prompt_electron_term.py`) has no late step and is unaffected.
+
+**Smallest retry: `recenter/k2a_timing_ladder.py`.**
+- It runs the frozen replay with steps 100 → 50 → 20 → 10. Each attempt goes to a **new** directory
+  `S0groups/<g>/late<step>/`.
+- It retries **only** when an attempt is exactly the time-compression rejection: exit 2, the REVIEW line, and
+  `summary.json` with `time_grid_pilot_pass: false` while window and endpoint closure ≤ 1e-7.
+- A closure or census error, any other exception, or a refusal (landing strip, phase range or cross-section) stops at
+  once as FAIL or REFUSED.
+- If all steps are rejected the status is FAIL and nothing is chosen.
+- `S0groups/<g>/replay` becomes a relative symlink to the chosen attempt; nothing is copied or moved.
+- `timing_attempts.json` records every attempt: step, exit code, the pilot L2 per window, pass flag, wall time,
+  queries, closures and outcome, plus the chosen step and the output clock.
+
+**Summation gate (`k2a_local_sum.py`, both modes).**
+- Every group's replay must have `time_grid_pilot_pass: true` and match its group census.
+- Every group must have the same output dt and an identical time grid.
+- The late step per group is written to `local_sum.json`.
+
+**Aggregate (far mode).** One `E2_replay_<g>` step is required per group in `groups.json`. It must be OK, with
+`timing_attempts.json` status OK.
+
+The gate, LUT, paths and frozen code are unchanged. The ladder is only in far mode; the refs mode that passed for
+0000/0858 is unchanged.
+
+**Synthetic checks** (`tests/test_timing_ladder.py`):
+- Ladder logic against a stub that reproduces the frozen messages and exit codes:
+  - 100 ns rejected at 0.567671 %, then 50 ns chosen, both attempts recorded;
+  - a closure failure or a refusal stops without retry;
+  - all steps rejected gives FAIL with nothing chosen;
+  - 25 ns, increasing or repeated ladders are refused.
+- Real frozen replay on two toy groups at 100 and 50 ns:
+  - summed on the identical clock;
+  - the mixed sum differs from all-100 by 7.8e-4 relative L2, below the 0.5 % gate;
+  - a replay whose pilot did not pass is refused by the sum.
+
+**Isolated test on the real g_4_3 first** (WSL commands in the reply). It runs the ladder on
+`muon_0560/groups/g_4_3` alone into a new directory, with steps 50 then 20 (instead of 25), and changes nothing in the
+stopped experiment. Only after it passes is E2b on 0560 rerun with the ladder.

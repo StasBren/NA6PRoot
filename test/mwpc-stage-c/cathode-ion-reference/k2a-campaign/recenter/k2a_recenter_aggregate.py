@@ -14,7 +14,8 @@ comparison step names. Required content per mode (anything missing -> INCONCLUSI
              FAIL -> FAIL; anything else -> INCONCLUSIVE
         E2:  E2_groups, E2_S0_local_census, E2_K2A_local, E2_K2Alocal_vs_S0local, E2_truncation, E2_far_analysis
              (with truncation.json / far_analysis.json whose status equals the step's), and, only if base_centred_S0
-             is OK, E2_S0local_vs_S0 and E2_K2Alocal_vs_S0; archive sha256 before == after
+             is OK, E2_S0local_vs_S0 and E2_K2Alocal_vs_S0; archive sha256 before == after; one E2_replay_<g>
+             step per group of groups.json, OK, with a timing_attempts.json (late-step ladder) whose status is OK
 Every comparison step must point to an existing cmp_*.json whose own status equals the step's status (missing report ->
 INCONCLUSIVE; disagreement -> FAIL). Every muon listed in env_check.json must have a muon_* directory with steps.tsv.
 Duplicate step names -> INCONCLUSIVE. Per muon: FAIL if anything FAILs, else INCONCLUSIVE if anything is missing or
@@ -114,6 +115,20 @@ def evaluate_muon(E, mode):
             problems.append(("INCONCLUSIVE", "archive sha256 before/after missing"))
         elif ab.read_text() != aa.read_text():
             problems.append(("FAIL", "archive file changed during the experiment"))
+    if mode == "far":                                 # every group: a ladder replay step whose record says OK
+        gj = E / "groups" / "groups.json"
+        if gj.exists():
+            for g in json.loads(gj.read_text())["groups"]:
+                n = f"E2_replay_{g}"
+                req.append(n)
+                ta = E / "S0groups" / g / "timing_attempts.json"
+                if n in by and by[n]["status"] == "OK":
+                    if not ta.exists():
+                        problems.append(("INCONCLUSIVE", f"{n}: timing_attempts.json missing"))
+                    elif json.loads(ta.read_text()).get("status") != "OK":
+                        problems.append(("FAIL", f"{n}: step OK but timing ladder status {json.loads(ta.read_text()).get('status')}"))
+        elif "E2_groups" in by:
+            problems.append(("INCONCLUSIVE", "groups/groups.json missing"))
     for n in req:
         if n not in by:
             problems.append(("INCONCLUSIVE", f"required E2 step {n} missing"))
