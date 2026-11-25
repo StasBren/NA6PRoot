@@ -5,7 +5,7 @@
 # (geometry-study/tests/test_pipeline_geometry.sh produces such a run in WORK/base). The toy run is not modified: a
 # scratch copy of its directory structure (symlinks + a provenance file) is used as the "reference run".
 # 1. environment check: a wrong LUT must abort before anything runs
-# 2. refs mode: E1 both shifts PASS; E2 single group: S0_local == S0 (identity PASS), K2A_local == K2A base (PASS);
+# 2. refs mode: E1 both shifts PASS; 2b. aggregate completeness negatives (13 variants); E2 single group: S0_local == S0 (identity PASS), K2A_local == K2A base (PASS);
 #    aggregate PASS; reference files unchanged
 # 3. compare negatives: zero common strips -> INCONCLUSIVE, nonfinite -> FAIL, perturbed e1 candidate -> FAIL,
 #    missing files -> INCONCLUSIVE; none can exit 0
@@ -47,6 +47,56 @@ assert c["E2_K2Alocal_vs_K2Abase"]["status"] == "PASS"
 assert c["E2_K2Alocal_vs_S0local"]["status"] in ("OK", "WARN")      # coarse toy kernel: WARN expected
 print(f"PASS refs (toy): E1 {m['E1']}, S0_local==S0 and K2A_local==K2A base (identity PASS), K2A vs S0 "
       f"{c['E2_K2Alocal_vs_S0local']['status']} (coarse toy kernel), references unchanged, overall {r['overall']}")
+PY
+# 2b. aggregate completeness negatives (copies of the real experiment directory, never the original)
+python3 - "$X" "$RC/k2a_recenter_aggregate.py" "$W/agg" <<'PY'
+import json, shutil, subprocess, sys
+from pathlib import Path
+X, AGG, W = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3]); W.mkdir()
+def variant(name, edit):
+    d = W / name; shutil.copytree(X, d, symlinks=True)
+    for f in d.rglob("steps.tsv"):                    # step json paths point into X: retarget to the copy
+        f.write_text(f.read_text().replace(str(X), str(d)))
+    edit(d)
+    for f in ("results.json", "results.md"):
+        (d / f).unlink(missing_ok=True)
+    rc = subprocess.run([sys.executable, AGG, str(d)], capture_output=True, text=True).returncode
+    return rc, json.loads((d / "results.json").read_text())["overall"]
+def drop(prefixes):
+    def e(d):
+        t = d / "muon_0001" / "steps.tsv"
+        t.write_text("".join(l + "\n" for l in t.read_text().splitlines() if not any(l.startswith(p) for p in prefixes)))
+    return e
+def setstatus(step, st):
+    def e(d):
+        t = d / "muon_0001" / "steps.tsv"
+        t.write_text("".join((l.split("\t")[0] + "\t" + st + "\t" + "\t".join(l.split("\t")[2:]) if l.startswith(step + "\t") else l) + "\n"
+                             for l in t.read_text().splitlines()))
+    return e
+def envedit(fn):
+    def e(d):
+        j = json.loads((d / "env_check.json").read_text()); fn(j); (d / "env_check.json").write_text(json.dumps(j))
+    return e
+cases = [
+    ("baseline_copy", lambda d: None, 0, "PASS"),
+    ("no_E1", drop(["E1_"]), 3, "INCONCLUSIVE"),
+    ("one_E1", drop(["E1_shift_-1"]), 3, "INCONCLUSIVE"),
+    ("no_E2_K2Abase", drop(["E2_K2Abase_vs_S0"]), 3, "INCONCLUSIVE"),
+    ("no_E2_at_all", drop(["E2_"]), 3, "INCONCLUSIVE"),
+    ("empty_steps", lambda d: (d / "muon_0001" / "steps.tsv").write_text(""), 3, "INCONCLUSIVE"),
+    ("missing_report", lambda d: (d / "muon_0001" / "cmp_E2_K2Alocal_vs_S0local.json").unlink(), 3, "INCONCLUSIVE"),
+    ("status_mismatch", setstatus("E2_K2Alocal_vs_S0local", "OK"), 1, "FAIL"),   # toy report says WARN
+    ("missing_integrity", lambda d: (d / "muon_0001" / "reference_sha256_after.txt").unlink(), 3, "INCONCLUSIVE"),
+    ("changed_reference", lambda d: (d / "muon_0001" / "reference_sha256_after.txt").write_text("x\n"), 1, "FAIL"),
+    ("missing_muon", envedit(lambda j: j["provenance"].update({"0099": "x"})), 3, "INCONCLUSIVE"),
+    ("env_not_pass", envedit(lambda j: j.update(status="FAIL")), 1, "FAIL"),
+    ("far_with_E1", envedit(lambda j: j.update(mode="far")), 3, "INCONCLUSIVE"),
+]
+for name, edit, rc_want, st_want in cases:
+    rc, st = variant(name, edit)
+    assert (rc, st) == (rc_want, st_want), (name, rc, st)
+print(f"PASS aggregate completeness: {len(cases)} variants (missing E1 / E2 steps / reports / integrity / muons, status "
+      "mismatch, changed reference, wrong mode) give the expected FAIL or INCONCLUSIVE; the unmodified copy PASSes")
 PY
 # 3. compare negatives
 CMP="$RC/k2a_recenter_compare.py"; N="$W/neg"; mkdir -p "$N"

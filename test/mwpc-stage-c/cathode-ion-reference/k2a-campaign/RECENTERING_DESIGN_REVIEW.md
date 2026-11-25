@@ -274,3 +274,55 @@ Synthetic test `tests/test_recenter_synthetic.sh` (toy run):
 3. φ 0133 is deferred: it still has R_EFF_HIGH and cannot be evaluated with the unchanged kernel.
 
 No Green table is enlarged and the 2100 V field is unchanged.
+
+### 9.1 Final corrections before the reference runs (review of 9af160a)
+
+**Completeness in the aggregate.** `k2a_recenter_aggregate.py` now requires the content of the mode. Missing pieces
+give INCONCLUSIVE, never PASS.
+- **refs:**
+  - exactly `E1_shift_1` and `E1_shift_-1`, both PASS;
+  - all eight E2 steps: groups, S0_local census, K2A_local, K2Alocal_vs_S0local, S0local_vs_S0, K2Alocal_vs_S0,
+    K2Abase_vs_S0, K2Alocal_vs_K2Abase;
+  - reference checksum lists present, non-empty and identical.
+- **far:**
+  - no E1 steps;
+  - `base_centred_S0` present (a refusal, INCONCLUSIVE, is acceptable);
+  - the four E2 core steps, plus S0local_vs_S0 and K2Alocal_vs_S0 when the base-centred S0 ran.
+- **Every comparison step** must point to its `cmp_<step>.json`. A missing report is INCONCLUSIVE. A report status
+  that disagrees with the step status is FAIL.
+- **Every muon** in `env_check.json` needs an output directory, and outputs not listed there are flagged.
+- **Duplicate steps** give INCONCLUSIVE.
+- **Overall:** FAIL > INCONCLUSIVE > PASS. Exit code 0 only for PASS (1 FAIL, 3 INCONCLUSIVE).
+- **Synthetic negatives** (`tests/test_recenter_synthetic.sh`, 13 variants on copies of a real toy experiment). Each
+  gives the expected FAIL or INCONCLUSIVE, and the unmodified copy PASSes:
+  - no E1, or only one E1 relabelling;
+  - one E2 comparison missing, or no E2 at all;
+  - empty `steps.tsv`;
+  - a deleted report;
+  - a status mismatch;
+  - a missing or changed reference checksum list;
+  - a muon missing;
+  - environment not PASS;
+  - wrong mode.
+
+**Bounded-memory group export.** `k2a_group_export.py` previously stacked every selected path in memory; in shift
+mode it held the whole export several times.
+- It now reads the source with explicit `pread`s (no mmap) and writes each ion path's block as it goes.
+- The per-block arithmetic is unchanged (copy as <f8, column 3 −= P·m_U, column 4 −= P·m_V), and the (t, u, v)
+  checksum is accumulated over the same bytes.
+- `tests/test_group_export_equivalence.py` compares against the 9af160a implementation on synthetic exports with
+  strip columns spread from −14 to +21 mm and integer per-primary census. Every output file is **byte-identical** in
+  both modes (vertices, ions.csv, complete.txt, groups.json; 70–76 files).
+- Peak RSS:
+
+  | synthetic export | mode | new | old (9af160a) |
+  |---|---|---|---|
+  | 57 MiB | primary | 103 MiB | 164 MiB |
+  | 57 MiB | shift | 105 MiB | 283 MiB |
+  | 229 MiB | primary | 123 MiB | 559 MiB |
+  | 229 MiB | shift | 131 MiB | 1038 MiB |
+
+  The remaining growth is the ions.csv row list, not vertices.
+- Disk: about 3 × T1_export per reference muon (two relabelled copies plus the groups). The runner checks free
+  space before starting a muon.
+- The frozen replay still reads each export the way it did for the original S0 runs; it is unchanged.

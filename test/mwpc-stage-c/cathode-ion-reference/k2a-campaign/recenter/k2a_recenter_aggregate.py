@@ -1,95 +1,211 @@
 #!/usr/bin/env python3
-"""Aggregate a recenter_experiment_* directory into results.json / results.md with explicit acceptance.
+"""Aggregate a recenter_experiment_* directory into results.json / results.md with explicit COMPLETENESS and acceptance.
 
   k2a_recenter_aggregate.py EXPERIMENT_DIR
 
-Reads env_check.json, thresholds.json and muon_*/steps.tsv (+ the cmp_*.json each step names).
-E1 acceptance (per muon): both relabellings PASS. Any FAIL -> E1 FAIL; otherwise any INCONCLUSIVE -> E1 INCONCLUSIVE.
-E2 (per muon): FAIL if any step FAILs (numerical breakage, census, identity violated, missing data), INCONCLUSIVE if a
-step is inconclusive, WARN if any documented warning threshold is exceeded, else OK. Reference integrity: the
-sha256 of every reference file read (T1_export, S0, cloud_moments.csv, K2Akern_TAG) before == after; else FAIL.
-Key metrics of each comparison are tabulated (rel L2 unshaped/shaped, window charge, U/V ratio, lead strip,
-missing-strip charge), with the non-OK checks listed verbatim.
-Exit: 0 when E1 PASS and E2 OK/WARN for every muon and references intact; 1 otherwise.
+Inputs: env_check.json (mode, muons, environment status), thresholds.json, muon_*/steps.tsv and the cmp_*.json each
+comparison step names. Required content per mode (anything missing -> INCONCLUSIVE, never PASS):
+  refs  E1:  exactly E1_shift_1 and E1_shift_-1, both PASS (FAIL if either FAILs, else INCONCLUSIVE)
+        E2:  E2_groups, E2_S0_local_census, E2_K2A_local, E2_K2Alocal_vs_S0local, E2_S0local_vs_S0, E2_K2Alocal_vs_S0,
+             E2_K2Abase_vs_S0, E2_K2Alocal_vs_K2Abase
+        reference integrity: sha256 lists before and after present, non-empty and identical (else FAIL / INCONCLUSIVE)
+  far   E1:  not applicable (any E1 step present -> INCONCLUSIVE: wrong mode)
+        base_centred_S0 (OK, or INCONCLUSIVE = frozen replay refused, both acceptable; FAIL -> FAIL)
+        E2:  E2_groups, E2_S0_local_census, E2_K2A_local, E2_K2Alocal_vs_S0local, and, only if base_centred_S0 is OK,
+             E2_S0local_vs_S0 and E2_K2Alocal_vs_S0
+Every comparison step must point to an existing cmp_*.json whose own status equals the step's status (missing report ->
+INCONCLUSIVE; disagreement -> FAIL). Every muon listed in env_check.json must have a muon_* directory with steps.tsv.
+Duplicate step names -> INCONCLUSIVE. Per muon: FAIL if anything FAILs, else INCONCLUSIVE if anything is missing or
+inconclusive, else PASS (E2 WARNs are allowed and listed). Overall: FAIL > INCONCLUSIVE > PASS; the environment check
+must be PASS. Exit: 0 only for overall PASS; 1 FAIL; 3 INCONCLUSIVE.
 """
 import json
 import sys
 from pathlib import Path
 
 ORDER = {"PASS": 0, "OK": 0, "WARN": 1, "INCONCLUSIVE": 2, "FAIL": 3}
-
-
-def worst(sts, default="INCONCLUSIVE"):
-    return max(sts, key=lambda s: ORDER.get(s, 3)) if sts else default
+E2_REFS = ["E2_groups", "E2_S0_local_census", "E2_K2A_local", "E2_K2Alocal_vs_S0local", "E2_S0local_vs_S0",
+           "E2_K2Alocal_vs_S0", "E2_K2Abase_vs_S0", "E2_K2Alocal_vs_K2Abase"]
+E2_FAR = ["E2_groups", "E2_S0_local_census", "E2_K2A_local", "E2_K2Alocal_vs_S0local"]
+E2_FAR_WITH_BASE = ["E2_S0local_vs_S0", "E2_K2Alocal_vs_S0"]
+E1_REQ = ["E1_shift_1", "E1_shift_-1"]
 
 
 def fmt(x, spec=".3g"):
-    return "n/a" if x is None else (f"{x:{spec}}" if isinstance(x, (int, float)) else str(x))
+    return "n/a" if x is None else (f"{x:{spec}}" if isinstance(x, (int, float)) and not isinstance(x, bool) else str(x))
+
+
+def reduce3(sts):
+    """FAIL > INCONCLUSIVE > PASS (OK/PASS/WARN count as PASS)."""
+    if "FAIL" in sts:
+        return "FAIL"
+    if "INCONCLUSIVE" in sts or not sts:
+        return "INCONCLUSIVE"
+    return "PASS"
+
+
+def evaluate_muon(E, mode):
+    problems = []          # (status, text)
+    steps = []
+    if not (E / "steps.tsv").exists():
+        return {"status": "INCONCLUSIVE", "problems": [("INCONCLUSIVE", "steps.tsv missing")], "steps": [], "comparisons": {}}
+    for line in (E / "steps.tsv").read_text().splitlines():
+        if not line.strip():
+            continue
+        parts = (line.split("\t") + ["", "", "", ""])[:4]
+        steps.append({"step": parts[0], "status": parts[1], "detail": parts[2], "json": parts[3]})
+    names = [s["step"] for s in steps]
+    for n in sorted({n for n in names if names.count(n) > 1}):
+        problems.append(("INCONCLUSIVE", f"duplicate step {n}"))
+    by = {s["step"]: s for s in steps}
+    for s in steps:
+        if s["status"] not in ORDER:
+            problems.append(("FAIL", f"{s['step']}: unknown status {s['status']!r}"))
+        elif s["status"] in ("FAIL", "INCONCLUSIVE") and not (mode == "far" and s["step"] == "base_centred_S0" and s["status"] == "INCONCLUSIVE"):
+            problems.append((s["status"], f"{s['step']}: {s['status']} - {s['detail'][:200]}"))
+    # E1
+    e1_steps = [n for n in names if n.startswith("E1_")]
+    if mode == "refs":
+        for n in E1_REQ:
+            if n not in by:
+                problems.append(("INCONCLUSIVE", f"required E1 step {n} missing"))
+        extra = sorted(set(e1_steps) - set(E1_REQ))
+        if extra:
+            problems.append(("INCONCLUSIVE", f"unexpected E1 steps {extra}"))
+        e1 = ("FAIL" if any(by[n]["status"] == "FAIL" for n in E1_REQ if n in by)
+              else "PASS" if all(n in by and by[n]["status"] == "PASS" for n in E1_REQ) and not extra else "INCONCLUSIVE")
+        if e1 == "INCONCLUSIVE" and all(n in by for n in E1_REQ):
+            problems.append(("INCONCLUSIVE", "E1 not PASS on both relabellings: " + ", ".join(f"{n} {by[n]['status']}" for n in E1_REQ)))
+    else:
+        e1 = "NOT_APPLICABLE"
+        if e1_steps:
+            problems.append(("INCONCLUSIVE", f"E1 steps present in far mode: {e1_steps}"))
+    # E2 completeness
+    if mode == "refs":
+        req = list(E2_REFS)
+    else:
+        req = list(E2_FAR)
+        b = by.get("base_centred_S0")
+        if b is None:
+            problems.append(("INCONCLUSIVE", "base_centred_S0 step missing"))
+        elif b["status"] == "OK":
+            req += E2_FAR_WITH_BASE
+    for n in req:
+        if n not in by:
+            problems.append(("INCONCLUSIVE", f"required E2 step {n} missing"))
+    # comparison reports
+    comps = {}
+    for s in steps:
+        is_cmp = s["step"].startswith("E1_") or "_vs_" in s["step"]
+        if not is_cmp:
+            continue
+        jp = Path(s["json"]) if s["json"] else None
+        if jp is None or jp.name != f"cmp_{s['step']}.json" or not jp.exists():
+            if s["status"] not in ("FAIL", "INCONCLUSIVE") or s["step"].startswith("E2"):
+                problems.append(("INCONCLUSIVE", f"{s['step']}: comparison report missing ({s['json'] or 'none'})"))
+            continue
+        try:
+            c = json.loads(jp.read_text())
+        except json.JSONDecodeError:
+            problems.append(("FAIL", f"{s['step']}: unreadable report {jp}")); continue
+        if c.get("status") != s["status"]:
+            problems.append(("FAIL", f"{s['step']}: step status {s['status']} != report status {c.get('status')}"))
+        comps[s["step"]] = c
+    # integrity
+    b, a = E / "reference_sha256_before.txt", E / "reference_sha256_after.txt"
+    if mode == "refs":
+        if not (b.exists() and a.exists()):
+            integrity = "INCONCLUSIVE"; problems.append(("INCONCLUSIVE", "reference sha256 lists missing"))
+        elif not b.read_text().strip():
+            integrity = "INCONCLUSIVE"; problems.append(("INCONCLUSIVE", "reference sha256 list empty"))
+        elif a.read_text() != b.read_text():
+            integrity = "FAIL"; problems.append(("FAIL", "reference files changed during the experiment"))
+        else:
+            integrity = "PASS"
+    else:
+        integrity = "NOT_APPLICABLE"
+    e2_sts = [by[n]["status"] for n in req if n in by]
+    e2 = ("FAIL" if "FAIL" in e2_sts else "INCONCLUSIVE" if ("INCONCLUSIVE" in e2_sts or len(e2_sts) < len(req))
+          else "WARN" if "WARN" in e2_sts else "OK")
+    status = reduce3([p[0] for p in problems] + ([] if e1 in ("PASS", "NOT_APPLICABLE") else [e1])
+                     + ([] if e2 in ("OK", "WARN") else [e2]) + ([] if integrity in ("PASS", "NOT_APPLICABLE") else [integrity])
+                     + ["PASS"])
+    return {"status": status, "E1": e1, "E2": e2, "reference_integrity": integrity, "required_E2": req,
+            "problems": problems, "steps": steps, "comparisons": comps}
 
 
 def main():
     X = Path(sys.argv[1])
-    env = json.loads((X / "env_check.json").read_text()) if (X / "env_check.json").exists() else {"status": "missing"}
-    th = json.loads((X / "thresholds.json").read_text())
-    res = {"experiment": str(X), "environment": env, "thresholds": th, "muons": {}}
-    L = [f"# Recentering experiment results: {X.name}", "",
+    envp = X / "env_check.json"
+    env = json.loads(envp.read_text()) if envp.exists() else {"status": "missing"}
+    mode = env.get("mode")
+    th = json.loads((X / "thresholds.json").read_text()) if (X / "thresholds.json").exists() else None
+    res = {"experiment": str(X), "mode": mode, "environment": env, "thresholds": th, "muons": {}, "problems": []}
+    if env.get("status") != "PASS":
+        res["problems"].append(("FAIL", "environment check not PASS"))
+    if mode not in ("refs", "far"):
+        res["problems"].append(("INCONCLUSIVE", f"unknown mode {mode!r}"))
+    if th is None:
+        res["problems"].append(("INCONCLUSIVE", "thresholds.json missing"))
+    expected = sorted(env.get("provenance", {}).keys())
+    present = sorted(p.name[5:] for p in X.glob("muon_*") if p.is_dir())
+    if not expected:
+        res["problems"].append(("INCONCLUSIVE", "no muons listed in env_check.json"))
+    for m in expected:
+        if m not in present:
+            res["problems"].append(("INCONCLUSIVE", f"muon {m}: no output directory"))
+    for m in present:
+        if m not in expected:
+            res["problems"].append(("INCONCLUSIVE", f"muon {m}: output not listed in env_check.json"))
+    L = [f"# Recentering experiment results: {X.name} (mode {mode})", "", "",
          f"environment: {env.get('status')} (LUT {str(env.get('lut_sha256', ''))[:16]}, replay {str(env.get('replay_sha256', ''))[:16]}, "
          f"kernel {str(env.get('kernel_id', ''))[:16]}, half-strips {env.get('half_strips')}); "
          f"source {(X / 'SOURCE_GIT_SHA.txt').read_text().strip() if (X / 'SOURCE_GIT_SHA.txt').exists() else '?'}", ""]
-    overall_ok = env.get("status") == "PASS"
-    for E in sorted(X.glob("muon_*")):
-        steps = []
-        if (E / "steps.tsv").exists():
-            for line in (E / "steps.tsv").read_text().splitlines():
-                parts = (line.split("\t") + ["", "", "", ""])[:4]
-                steps.append({"step": parts[0], "status": parts[1], "detail": parts[2], "json": parts[3]})
-        e1 = [s for s in steps if s["step"].startswith("E1_")]
-        e2 = [s for s in steps if not s["step"].startswith("E1_")]
-        e1_status = ("PASS" if len(e1) == 2 and all(s["status"] == "PASS" for s in e1)
-                     else "FAIL" if any(s["status"] == "FAIL" for s in e1) else "INCONCLUSIVE") if e1 else None
-        e2_core = [s for s in e2 if s["step"] != "base_centred_S0"]
-        e2_status = worst([s["status"] for s in e2_core]) if e2_core else "INCONCLUSIVE"
-        b, a = E / "reference_sha256_before.txt", E / "reference_sha256_after.txt"
-        integrity = (None if not b.exists() else
-                     "PASS" if a.exists() and a.read_text() == b.read_text() and b.read_text().strip() else "FAIL")
-        m = {"E1": e1_status, "E2": e2_status, "reference_integrity": integrity, "steps": steps, "comparisons": {}}
-        L += [f"## {E.name}", "", f"E1 {e1_status or '(not run)'} | E2 {e2_status} | reference files unchanged: "
-              f"{integrity or '(far event: new files only)'}", "",
-              "| step | status | detail |", "|---|---|---|"]
-        L += [f"| {s['step']} | {s['status']} | {s['detail'][:180]} |" for s in steps]
+    statuses = [p[0] for p in res["problems"]]
+    for m in present:
+        E = X / f"muon_{m}"
+        r = evaluate_muon(E, mode) if mode in ("refs", "far") else {"status": "INCONCLUSIVE", "problems": [], "steps": [], "comparisons": {}}
+        statuses.append(r["status"])
+        res["muons"][E.name] = {k: v for k, v in r.items() if k != "comparisons"}
+        res["muons"][E.name]["comparisons"] = {k: {"status": c.get("status"), "kind": c.get("kind"), "worst_L2_rel": c.get("worst_L2_rel"),
+                                                   "error": c.get("error"), "non_ok_checks": [x for x in c.get("checks", []) if x["status"] != "OK"]}
+                                               for k, c in r["comparisons"].items()}
+        L += [f"## {E.name}: {r['status']}", "", f"E1 {r.get('E1')} | E2 {r.get('E2')} | reference files unchanged: {r.get('reference_integrity')}", ""]
+        if r["problems"]:
+            L += ["Problems:", ""] + [f"* {s}: {t}" for s, t in r["problems"]] + [""]
+        L += ["| step | status | detail |", "|---|---|---|"] + [f"| {s['step']} | {s['status']} | {s['detail'][:180]} |" for s in r["steps"]]
         rows = []
-        for s in steps:
-            if s["json"].endswith(".json") and Path(s["json"]).name.startswith("cmp_") and Path(s["json"]).exists():
-                c = json.loads(Path(s["json"]).read_text())
-                m["comparisons"][s["step"]] = {k: c.get(k) for k in ("status", "kind", "worst_L2_rel", "error")}
-                m["comparisons"][s["step"]]["non_ok_checks"] = [x for x in c.get("checks", []) if x["status"] != "OK"]
-                for term, T in c.get("terms", {}).items():
-                    for side in ("U", "V"):
-                        o = T.get(side, {})
-                        rows.append(f"| {s['step']} | {term} | {side} | {o.get('common_strips')} | {fmt(o.get('unshaped_L2_rel'))} | "
-                                    f"{fmt(o.get('shaped_L2_rel_Tp100'))} | {fmt(o.get('shaped_L2_rel_Tp200'))} | "
-                                    f"{fmt(o.get('window_charge_rel_diff'), '+.3g')} | {fmt(T.get('UV_charge_ratio_rel_diff'), '+.3g')} | "
-                                    f"{'same' if o.get('lead_identical') else str(o.get('lead_ref')) + '->' + str(o.get('lead_cand'))} | "
-                                    f"{fmt(o.get('max_strip_charge_diff_over_lead'))} | {fmt(o.get('ref_charge_on_ref_only_strips_frac'))} / "
-                                    f"{fmt(o.get('cand_charge_on_cand_only_strips_frac'))} |")
+        for name, c in r["comparisons"].items():
+            for term, T in c.get("terms", {}).items():
+                for side in ("U", "V"):
+                    o = T.get(side, {})
+                    rows.append(f"| {name} | {term} | {side} | {o.get('common_strips')} | {fmt(o.get('unshaped_L2_rel'))} | "
+                                f"{fmt(o.get('shaped_L2_rel_Tp100'))} | {fmt(o.get('shaped_L2_rel_Tp200'))} | "
+                                f"{fmt(o.get('window_charge_rel_diff'), '+.3g')} | {fmt(T.get('UV_charge_ratio_rel_diff'), '+.3g')} | "
+                                f"{'same' if o.get('lead_identical') else str(o.get('lead_ref')) + '->' + str(o.get('lead_cand'))} | "
+                                f"{fmt(o.get('max_strip_charge_diff_over_lead'))} | {fmt(o.get('ref_charge_on_ref_only_strips_frac'))} / "
+                                f"{fmt(o.get('cand_charge_on_cand_only_strips_frac'))} |")
         if rows:
             L += ["", "| comparison | term | plane | common strips | unshaped L2 | shaped L2 100 | shaped L2 200 | ΔQ/Q | Δ(U/V) | lead | max strip ΔQ/lead | charge on ref-only / cand-only strips |",
                   "|---|---|---|---|---|---|---|---|---|---|---|---|"] + rows
-        nonok = [(k, x) for k, v in m["comparisons"].items() for x in v["non_ok_checks"]]
+        nonok = [(k, x) for k, v in res["muons"][E.name]["comparisons"].items() for x in v["non_ok_checks"]]
         if nonok:
-            L += ["", "Non-OK checks:", ""] + [f"* {k}: {x['check']} = {x['value']} (limit {x['limit']}) -> {x['status']}" for k, x in nonok[:60]]
+            L += ["", "Non-OK checks:", ""] + [f"* {k}: {x['check']} = {x['value']} (limit {x['limit']}) -> {x['status']}" for k, x in nonok[:80]]
         L.append("")
-        res["muons"][E.name] = m
-        ok = (e1_status in (None, "PASS")) and e2_status in ("OK", "WARN", "PASS") and integrity in (None, "PASS")
-        overall_ok &= ok
-    res["overall"] = "PASS" if overall_ok and res["muons"] else "NOT PASSED"
-    L.insert(2, f"**overall: {res['overall']}** (E1 must PASS; E2 must have no FAIL/INCONCLUSIVE; WARN listed for inspection)")
+    res["overall"] = reduce3(statuses) if present else "INCONCLUSIVE"
+    L[2] = (f"**overall: {res['overall']}** (refs: E1 both relabellings PASS, all E2 steps and reports present, no FAIL/"
+            "INCONCLUSIVE, references unchanged; WARN listed for inspection)")
+    if res["problems"]:
+        L[3:3] = ["Experiment-level problems:", ""] + [f"* {s}: {t}" for s, t in res["problems"]] + [""]
     (X / "results.json").write_text(json.dumps(res, indent=1, default=str) + "\n")
     (X / "results.md").write_text("\n".join(L) + "\n")
-    print("\n".join(L[:3]))
+    print(L[0]); print(L[2])
+    for p in res["problems"]:
+        print(f"  {p[0]}: {p[1]}")
     for k, v in res["muons"].items():
-        print(f"  {k}: E1 {v['E1']}  E2 {v['E2']}  references {v['reference_integrity']}")
-    return 0 if res["overall"] == "PASS" else 1
+        print(f"  {k}: {v['status']}  E1 {v.get('E1')}  E2 {v.get('E2')}  references {v.get('reference_integrity')}"
+              + (f"  ({len(v['problems'])} problems)" if v["problems"] else ""))
+    return {"PASS": 0, "FAIL": 1, "INCONCLUSIVE": 3}[res["overall"]]
 
 
 if __name__ == "__main__":

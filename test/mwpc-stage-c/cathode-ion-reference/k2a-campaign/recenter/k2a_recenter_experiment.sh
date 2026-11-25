@@ -14,8 +14,9 @@
 # E2  per-primary groups -> frozen replay + electron step per group -> S0_local (absolute strips, census checked);
 #     K2A_local with the unchanged engine and the validated kernel (kernel id checked); comparisons with documented
 #     warning thresholds (thresholds.json): OK / WARN / FAIL / INCONCLUSIVE
-# Every step is recorded in muon_*/steps.tsv; k2a_recenter_aggregate.py writes results.json / results.md and returns
-# non-zero on any FAIL, INCONCLUSIVE E1, or changed reference file.
+# Every step is recorded in muon_*/steps.tsv; k2a_recenter_aggregate.py writes results.json / results.md: overall PASS
+# only if every required step and report of the mode is present and none FAILs or is INCONCLUSIVE (exit 0/1/3).
+# Memory: exports are streamed (k2a_group_export.py); disk: ~3 x T1_export per reference muon (checked before start).
 # Environment (from the validated setup, e.g. `source ~/t_ladder_deps.env`; verified, not assumed):
 #   MWPC_SPECTRAL_LUT  sha256 must equal RUN/green_TAG/axes.json lut_sha256 and RUN/provenance_prepare_<M>.txt
 #   MWPC_NUMW_DIR      p3_replay_full_spectral_muon.py sha256 must equal replay_sha256 in provenance_prepare_<M>.txt
@@ -155,7 +156,8 @@ e2(){ # R E HAVE_BASE_S0
   if [[ $HAVE == 1 ]]; then
     compare "$E" E2_S0local_vs_S0 "$R/S0" "$E/S0_local" "$([[ $single == 1 ]] && echo identity || echo window)"
     compare "$E" E2_K2Alocal_vs_S0 "$R/S0" "$E/K2A_local" k2a_vs_s0
-    if [[ -d "$R/K2Akern_$TAG" ]]; then
+    if [[ $MODE == far ]]; then :                                                         # no base-centred K2A for new muons
+    elif [[ -d "$R/K2Akern_$TAG" ]]; then
       compare "$E" E2_K2Abase_vs_S0 "$R/S0" "$R/K2Akern_$TAG" k2a_vs_s0                 # the validated baseline, for context
       compare "$E" E2_K2Alocal_vs_K2Abase "$R/K2Akern_$TAG" "$E/K2A_local" "$([[ $single == 1 ]] && echo identity || echo window)"
     else
@@ -181,6 +183,9 @@ case "$MODE" in
       M=$(printf %04d "$((10#$M))"); R="$RUN/muon_$M"; E="$X/muon_$M"; mkdir -p "$E"; : > "$E/steps.tsv"
       [[ -s "$R/T1_export/vertices.f64" && -s "$R/S0/replay/waveforms.csv" && -s "$R/S0/prompt/prompt_waveforms.csv" && -s "$R/cloud_moments.csv" ]] \
         || fail "$R is not a prepared reference (T1_export, S0 replay+prompt, cloud_moments.csv)"
+      need_b=$(( 3 * $(stat -c %s "$R/T1_export/vertices.f64") + (512 << 20) ))         # 2 relabelled copies + groups + outputs
+      avail=$(( $(df -Pk "$X" | awk 'NR==2{print $4}') * 1024 ))
+      [[ $avail -gt $need_b ]] || fail "muon $M needs ~$(( need_b >> 30 )) GiB free in $X, only $(( avail >> 30 )) GiB available"
       refhash "$R" "$E/reference_sha256_before.txt"
       echo "muon $M:"; e1 "$R" "$E"; e2 "$R" "$E" 1
       refhash "$R" "$E/reference_sha256_after.txt"
