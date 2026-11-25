@@ -196,4 +196,79 @@ assert far["worst_L2_rel"] <= 1.5 * ref["worst_L2_rel"] + 1e-3, (far["worst_L2_r
 print(f"PASS far toy: {nf} absolute U strips; K2A_local vs S0_local worst rel L2 {far['worst_L2_rel']:.3g} "
       f"(unshifted toy muon {ref['worst_L2_rel']:.3g}, coarse toy kernel)")
 PY
+# 5. FAR MODE THROUGH THE RUNNER (fake exporter that emits the far toy export; fake archive slot; fake preflight roles)
+FX="$W/fake_exporter.sh"
+cat > "$FX" <<FAKE
+#!/usr/bin/env bash
+[[ \$# -eq 3 ]] || { echo "usage: PROGRAM frozen.root MOBILITY NEW_DIR"; exit 2; }
+cp -r "$F/T1_export" "\$3" && echo "PASS archive census (fake exporter for the synthetic test)"
+FAKE
+chmod +x "$FX"; echo "toy mobility" > "$W/mobility.txt"
+{ echo "export_bin_sha256=$(sha256sum "$FX" | cut -d' ' -f1)"; echo "mobility_sha256=$(sha256sum "$W/mobility.txt" | cut -d' ' -f1)"; } >> "$RUN/provenance_prepare_0001.txt"
+mkdir -p "$W/archive/muon_0002" "$W/pf/inventory"
+echo "synthetic" > "$W/archive/muon_0002/ion_births.root"; (cd "$W/archive/muon_0002" && sha256sum ion_births.root > SHA256SUMS)
+printf 'slot,role,status\n0001,dev_reference,USABLE\n0002,pool,USABLE\n0003,sealed_validation,USABLE\n' > "$W/pf/inventory/slots.csv"
+FARENV=(MWPC_EXPORT_BIN="$FX" MWPC_ION_MOBILITY="$W/mobility.txt" MWPC_K2A_PF="$W/pf" MWPC_ARCHIVE_2100_K256="$W/archive" MWPC_K2A_FAR_MIN_FREE_GIB=0 MWPC_K2A_OUT="$W/outfar")
+# a sealed slot must be refused before anything runs
+if env "${FARENV[@]}" bash "$RC/k2a_recenter_experiment.sh" far "$RUN" "$TAG" 0003 > "$W/far_sealed.log" 2>&1; then echo "FAIL: sealed slot accepted"; exit 1; fi
+grep -q "is sealed or unknown" "$W/far_sealed.log" && echo "PASS far mode refuses a sealed slot"
+# a wrong mobility file must be refused
+echo "other" > "$W/mobility2.txt"
+if env "${FARENV[@]}" MWPC_ION_MOBILITY="$W/mobility2.txt" bash "$RC/k2a_recenter_experiment.sh" far "$RUN" "$TAG" 0002 > "$W/far_mob.log" 2>&1; then echo "FAIL: wrong mobility accepted"; exit 1; fi
+grep -q "MWPC_ION_MOBILITY sha256 differs" "$W/far_mob.log" && echo "PASS far mode refuses a mobility file that differs from the references' provenance"
+rm -rf "$W/outfar"
+rc=0; env "${FARENV[@]}" bash "$RC/k2a_recenter_experiment.sh" far "$RUN" "$TAG" 0002 > "$W/far.log" 2>&1 || rc=$?
+XF=$(ls -d "$W"/outfar/recenter_experiment_*)
+python3 - "$XF" "$rc" <<'PY'
+import json, sys
+X, rc = sys.argv[1], int(sys.argv[2])
+r = json.load(open(f"{X}/results.json")); m = r["muons"]["muon_0002"]
+st = {s["step"]: s["status"] for s in m["steps"]}
+assert st["base_centred_S0"] == "EXPECTED_REFUSAL", st
+assert r["overall"] == "PASS" and rc == 0, (r["overall"], rc, m["problems"])
+fa = json.load(open(f"{X}/muon_0002/far_analysis.json"))
+s2 = fa["2_signal_outside_entry_window"]
+out = s2["S0_landing"]["U"]["collected_outside_frac"] + s2["S0_landing"]["V"]["collected_outside_frac"]
+assert out > 0.2, out                                   # half of the toy primaries were moved 7 strips
+assert set(fa) >= {"1_K2A_approximation_vs_local_S0", "2_signal_outside_entry_window", "3_window_truncation", "4_assumptions"}
+assert len(fa["1_K2A_approximation_vs_local_S0"]["per_group"]) == 2
+t3 = fa["3_window_truncation"]
+print(f"PASS far mode end-to-end (toy): base-centred S0 EXPECTED_REFUSAL, overall {r['overall']}; collected charge outside "
+      f"the entry window U {s2['S0_landing']['U']['collected_outside_frac']:.3f} V {s2['S0_landing']['V']['collected_outside_frac']:.3f}; "
+      f"truncation U {t3['Q_outside_over_collected']['U']:+.3g} V {t3['Q_outside_over_collected']['V']:+.3g}; far analysis {fa['status']}")
+PY
+python3 - "$XF" "$RC/k2a_recenter_aggregate.py" "$W/aggfar" <<'PY'
+import json, shutil, subprocess, sys
+from pathlib import Path
+X, AGG, W = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3]); W.mkdir()
+def variant(name, edit):
+    d = W / name; shutil.copytree(X, d, symlinks=True)
+    for f in d.rglob("steps.tsv"):
+        f.write_text(f.read_text().replace(str(X), str(d)))
+    edit(d)
+    rc = subprocess.run([sys.executable, AGG, str(d)], capture_output=True, text=True).returncode
+    return rc, json.loads((d / "results.json").read_text())["overall"]
+def drop(prefix):
+    def e(d):
+        t = d / "muon_0002" / "steps.tsv"; t.write_text("".join(l + "\n" for l in t.read_text().splitlines() if not l.startswith(prefix)))
+    return e
+def refusal_to(st):
+    def e(d):
+        t = d / "muon_0002" / "steps.tsv"; t.write_text(t.read_text().replace("\tEXPECTED_REFUSAL\t", f"\t{st}\t"))
+    return e
+def refs_mode(d):
+    j = json.loads((d / "env_check.json").read_text()); j["mode"] = "refs"; (d / "env_check.json").write_text(json.dumps(j))
+cases = [("copy", lambda d: None, 0, "PASS"),
+         ("no_far_analysis", drop("E2_far_analysis"), 3, "INCONCLUSIVE"),
+         ("far_analysis_report_missing", lambda d: (d / "muon_0002" / "far_analysis.json").unlink(), 3, "INCONCLUSIVE"),
+         ("no_truncation", drop("E2_truncation"), 3, "INCONCLUSIVE"),
+         ("no_base_step", drop("base_centred_S0"), 3, "INCONCLUSIVE"),
+         ("base_fail", refusal_to("FAIL"), 1, "FAIL"),
+         ("archive_changed", lambda d: (d / "muon_0002" / "archive_sha256_after.txt").write_text("x\n"), 1, "FAIL"),
+         ("refusal_in_refs_mode", refs_mode, 1, "FAIL")]
+for name, edit, rc_w, st_w in cases:
+    got = variant(name, edit); assert got == (rc_w, st_w), (name, got)
+print(f"PASS far-mode aggregate: {len(cases)} variants (missing analysis/report/truncation/base step, base FAIL, changed "
+      "archive, EXPECTED_REFUSAL outside far mode) give the expected result")
+PY
 echo "PASS recentering synthetic test; work dir $W"

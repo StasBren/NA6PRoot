@@ -52,7 +52,7 @@ envcheck(){ # writes $1 (json) ; muons in remaining args; aborts on mismatch
     [[ -n "$V" && -s "$V/kernel_id.txt" ]] || fail "no validated engine_${TAG}_*/kernel_id.txt; set MWPC_K2A_KERNEL_ID"
     KID=$(sed -n 's/^kernel_id=//p' "$V/kernel_id.txt")
   fi
-  local rows=""
+  local rows=""; EXTRA=""
   for M in "$@"; do
     M=$(printf %04d "$((10#$M))"); local P="$RUN/provenance_prepare_$M.txt"
     if [[ -s "$P" ]]; then
@@ -70,9 +70,15 @@ envcheck(){ # writes $1 (json) ; muons in remaining args; aborts on mismatch
     fi
   done
   if [[ $MODE == far ]]; then
-    local REFP; REFP=$(ls "$RUN"/provenance_prepare_*.txt | sort | head -1)
-    [[ "$(prov "$REFP" export_bin_sha256)" == "$(sha "$MWPC_EXPORT_BIN")" ]] || fail "MWPC_EXPORT_BIN differs from the exporter of the references ($REFP)"
-    [[ "$(prov "$REFP" mobility_sha256)" == "$(sha "$MWPC_ION_MOBILITY")" ]] || fail "MWPC_ION_MOBILITY differs from the references ($REFP)"
+    local XB; XB=$(sha "$MWPC_EXPORT_BIN"); local MB; MB=$(sha "$MWPC_ION_MOBILITY"); local nref=0
+    for REFP in "$RUN"/provenance_prepare_*.txt; do                 # every reference must agree with the environment
+      [[ -s "$REFP" ]] || continue; nref=$((nref + 1))
+      [[ "$(prov "$REFP" export_bin_sha256)" == "$XB" ]] || fail "MWPC_EXPORT_BIN sha256 differs from the exporter recorded in $REFP"
+      [[ "$(prov "$REFP" mobility_sha256)" == "$MB" ]] || fail "MWPC_ION_MOBILITY sha256 differs from the mobility recorded in $REFP"
+      [[ "$(prov "$REFP" lut_sha256)" == "$L" ]] || fail "LUT differs from $REFP"
+    done
+    [[ $nref -ge 1 ]] || fail "no provenance_prepare_*.txt in $RUN to verify the exporter against"
+    EXTRA="\"far_provenance\": {\"export_bin_sha256\": \"$XB\", \"mobility_sha256\": \"$MB\", \"reference_files_checked\": $nref}, "
     local usage; usage=$("$MWPC_EXPORT_BIN" 2>&1 || true)
     [[ $usage == *"usage: PROGRAM frozen.root MOBILITY NEW_DIR"* ]] || fail "MWPC_EXPORT_BIN is not the full-spectral exporter or does not start (ROOT/Garfield runtime?): ${usage:0:200}"
   fi
@@ -91,8 +97,8 @@ PY
 )
   [[ "$K" == "$KID" ]] || fail "kernel $KD id $K != validated $KID"
   python3 -c "import numpy, sys; print('numpy', numpy.__version__, 'python', sys.version.split()[0])" > /dev/null || fail "python/numpy"
-  printf '{"mode": "%s", "run": "%s", "tag": "%s", "lut": "%s", "lut_sha256": "%s", "numw_dir": "%s", "replay_sha256": "%s", "kernel": "%s", "kernel_id": "%s", "half_strips": %s, "provenance": {%s}, "status": "PASS"}\n' \
-    "$MODE" "$RUN" "$TAG" "$MWPC_SPECTRAL_LUT" "$L" "$MWPC_NUMW_DIR" "$RP" "$KD" "$KID" "$HS" "${rows%,}" > "$OUTJ"
+  printf '{"mode": "%s", "run": "%s", "tag": "%s", "lut": "%s", "lut_sha256": "%s", "numw_dir": "%s", "replay_sha256": "%s", "kernel": "%s", "kernel_id": "%s", "half_strips": %s, %s"provenance": {%s}, "status": "PASS"}\n' \
+    "$MODE" "$RUN" "$TAG" "$MWPC_SPECTRAL_LUT" "$L" "$MWPC_NUMW_DIR" "$RP" "$KD" "$KID" "$HS" "$EXTRA" "${rows%,}" > "$OUTJ"
   echo "PASS environment: LUT $L, replay $RP, kernel $KID match the validated run"
   KERNEL_ID="$KID"
 }
@@ -103,14 +109,14 @@ replay(){ # EXPORT OUTDIR -> 0 ok, 3 refused (window/phase range), 1 other failu
   local rc=0
   (cd "$MWPC_NUMW_DIR" && python3 p3_replay_full_spectral_muon.py "$MWPC_SPECTRAL_LUT" "$1" "$2/replay" --half-strips "$HS") > "$2.replay.log" 2>&1 || rc=$?
   if [[ $rc -ne 0 ]]; then
-    grep -q -E "selected channels omit the landing strip|query outside declared strip phase range" "$2.replay.log" && return 3
+    grep -q -E "selected channels omit the landing strip|query outside declared strip phase range|query outside validated cross-section" "$2.replay.log" && return 3
     return 1
   fi
   python3 "$TA/t_prompt_electron_term.py" "$MWPC_SPECTRAL_LUT" "$1" "$2/prompt" --replay-dir "$MWPC_NUMW_DIR" --half-strips "$HS" > "$2.prompt.log" 2>&1 || {
-    grep -q -E "selected channels omit|query outside declared strip phase range" "$2.prompt.log" && return 3; return 1; }
+    grep -q -E "selected channels omit|query outside declared strip phase range|query outside validated cross-section" "$2.prompt.log" && return 3; return 1; }
   return 0
 }
-why(){ grep -m1 -o -E "selected channels omit the landing strip[^\"]*|query outside declared strip phase range|[A-Za-z]*Error: .*" "$1" | head -1; }
+why(){ grep -h -m1 -o -E "selected channels omit the landing strip[^\"]*|query outside declared strip phase range|query outside validated cross-section|[A-Za-z]*Error: .*" "$@" 2>/dev/null | head -1; }
 
 compare(){ # E NAME REF CAND KIND [extra]
   local E="$1" N="$2" R="$3" C="$4" K="$5"; shift 5
@@ -147,12 +153,19 @@ e2(){ # R E HAVE_BASE_S0
   rc=0; python3 "$HERE/k2a_local_sum.py" "$E/groups" "$E/S0groups" "$E/S0_local" > "$E/local_sum.log" 2>&1 || rc=$?
   step "$E" E2_S0_local_census "$([[ $rc -eq 0 ]] && echo OK || echo FAIL)" "$(tail -1 "$E/local_sum.log")" "$E/S0_local/local_sum.json"
   [[ $rc -eq 0 ]] || return
+  local PG=(); [[ $MODE == far ]] && PG=(--per-group-out "$E/K2A_groups")
   rc=0; python3 "$HERE/k2a_recentered_k2a.py" "$KD" "$R/cloud_moments.csv" "$E/K2A_local" --groups "$E/groups/groups.json" \
-        --half-strips "$HS" --kernel-id "$KERNEL_ID" > "$E/k2a_local.log" 2>&1 || rc=$?
+        --half-strips "$HS" --kernel-id "$KERNEL_ID" "${PG[@]}" > "$E/k2a_local.log" 2>&1 || rc=$?
   step "$E" E2_K2A_local "$([[ $rc -eq 0 ]] && echo OK || echo FAIL)" "$(tail -1 "$E/k2a_local.log")" "$E/K2A_local/recentered.json"
   [[ $rc -eq 0 ]] || return
   local single=0; [[ $(ls -d "$E"/groups/g_* | wc -l) -eq 1 && -d "$E/groups/g_0_0" ]] && single=1
   compare "$E" E2_K2Alocal_vs_S0local "$E/S0_local" "$E/K2A_local" k2a_vs_s0
+  if [[ $MODE == far ]]; then
+    rc=0; python3 "$HERE/k2a_truncation_check.py" "$E/groups" "$MWPC_SPECTRAL_LUT" "$MWPC_NUMW_DIR" "$E/truncation.json" --half-strips "$HS" > "$E/truncation.log" 2>&1 || rc=$?
+    step "$E" E2_truncation "$([[ $rc -eq 0 ]] && echo OK || echo FAIL)" "$(tr '\n' ' ' < "$E/truncation.log" | head -c 300)" "$E/truncation.json"
+    rc=0; python3 "$HERE/k2a_far_analysis.py" "$E" --kernel "$KD" --half-strips "$HS" > "$E/far_analysis.log" 2>&1 || rc=$?
+    step "$E" E2_far_analysis "$(case $rc in 0) echo OK;; 2) echo WARN;; *) echo FAIL;; esac)" "$(tail -1 "$E/far_analysis.log" | head -c 300)" "$E/far_analysis.json"
+  fi
   if [[ $HAVE == 1 ]]; then
     compare "$E" E2_S0local_vs_S0 "$R/S0" "$E/S0_local" "$([[ $single == 1 ]] && echo identity || echo window)"
     compare "$E" E2_K2Alocal_vs_S0 "$R/S0" "$E/K2A_local" k2a_vs_s0
@@ -196,6 +209,11 @@ case "$MODE" in
       role=$(awk -F, -v s="$M" 'NR==1{for(i=1;i<=NF;i++)h[$i]=i; next} $h["slot"]==s{print $h["role"]}' "$MWPC_K2A_PF/inventory/slots.csv")
       [[ -n "$role" && "$role" != sealed_validation ]] || fail "$M is sealed or unknown (role '$role')"
       E="$X/muon_$M"; R="$E/prepared"; mkdir -p "$R"; : > "$E/steps.tsv"; echo "muon $M ($role):"
+      avail=$(( $(df -Pk "$X" | awk 'NR==2{print $4}') >> 20 )); minf="${MWPC_K2A_FAR_MIN_FREE_GIB:-8}"
+      [[ $avail -ge $minf ]] || fail "muon $M: only $avail GiB free in $X (need >= $minf GiB; set MWPC_K2A_FAR_MIN_FREE_GIB)"
+      [[ -s "$ARCHIVE/muon_$M/ion_births.root" && -s "$ARCHIVE/muon_$M/SHA256SUMS" ]] || fail "archive muon_$M missing"
+      (cd "$ARCHIVE/muon_$M" && sha256sum -c --quiet SHA256SUMS) || fail "archive muon_$M fails its SHA256SUMS"
+      sha256sum "$ARCHIVE/muon_$M/ion_births.root" > "$E/archive_sha256_before.txt"
       "$MWPC_EXPORT_BIN" "$ARCHIVE/muon_$M/ion_births.root" "$MWPC_ION_MOBILITY" "$R/frozen_export" > "$R/export.log" 2>&1 \
         && grep -q '^PASS archive census' "$R/export.log" || { step "$E" export FAIL "exporter ($R/export.log)"; continue; }
       python3 "$TA/t_time_collapse_export.py" "$R/frozen_export" "$R/T1_export" --mode primary > "$R/T1.log" 2>&1 || { step "$E" T1 FAIL "$R/T1.log"; continue; }
@@ -204,10 +222,11 @@ case "$MODE" in
       rc=0; replay "$R/T1_export" "$R/S0" || rc=$?
       case $rc in
         0) HAVE=1; step "$E" base_centred_S0 OK "frozen base-centred S0 ran";;
-        3) HAVE=0; step "$E" base_centred_S0 INCONCLUSIVE "frozen base-centred S0 refused (expected for far D): $(why "$R/S0.replay.log")";;
+        3) HAVE=0; step "$E" base_centred_S0 EXPECTED_REFUSAL "frozen base-centred S0 refused, as expected for far D (not a failure): $(why "$R/S0.replay.log" "$R/S0.prompt.log")";;
         *) HAVE=0; step "$E" base_centred_S0 FAIL "frozen base-centred S0 failed: $(why "$R/S0.replay.log")";;
       esac
       e2 "$R" "$E" "$HAVE"
+      sha256sum "$ARCHIVE/muon_$M/ion_births.root" > "$E/archive_sha256_after.txt"
     done;;
   *) fail "mode $MODE";;
 esac

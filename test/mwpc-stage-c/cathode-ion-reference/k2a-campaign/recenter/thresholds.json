@@ -28,6 +28,13 @@
    "missing_strip_charge_frac_warn": 0.001
   },
   "min_common_strips": 3,
-  "census_rel_max": 1e-9
+  "census_rel_max": 1e-09
+ },
+ "e2b": {
+  "_doc": "E2b far-D analysis flags (WARN only; informational, added for the far-D analysis; e1/e2 values unchanged)",
+  "phase_margin_warn_mm": 0.5,
+  "u_patch_warn_mm": 12.0,
+  "outer_wire_charge_frac_warn": 0.0,
+  "truncation_frac_warn": 0.001
  }
 }

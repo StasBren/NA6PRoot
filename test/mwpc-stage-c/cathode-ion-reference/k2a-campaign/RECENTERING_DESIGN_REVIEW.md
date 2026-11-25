@@ -326,3 +326,49 @@ mode it held the whole export several times.
 - Disk: about 3 × T1_export per reference muon (two relabelled copies plus the groups). The runner checks free
   space before starting a muon.
 - The frozen replay still reads each export the way it did for the original S0 runs; it is unchanged.
+
+### 9.2 E2b (far-D) analysis, after the 0858 reference result
+
+Your reference results, for context:
+- 0858: E1 PASS (≈ 2e-16); two groups, g_0_0 and g_-1_0; census 3.6e-14;
+- S0_local vs S0 and K2A_local vs K2A base: both 1.94e-5;
+- K2A_local vs S0_local: unshaped ≤ 0.531 %, shaped 0.19–0.25 %. The 0.5 % unshaped warnings are also present in the
+  original K2A, so they do not come from recentering;
+- integrity PASS.
+
+**Far mode keeps the four effects separate.** Each muon gets `muon_*/far_analysis.{json,md}` and a separate
+`truncation.json`:
+
+| # | effect | how it is measured | reference |
+|---|---|---|---|
+| 1 | K2A approximation error | K2A_local vs S0_local: same local windows, same frozen weighting, same paths. Total, **and per recentering group** (`K2A_groups/<g>` vs `S0groups/<g>`), so a far group's error cannot hide behind a near one | the frozen S0 of the same sub-export |
+| 2 | recovered signal outside the original entry-centred ±5 strips | S0_local and K2A_local per plane: signed charge inside/outside base ±5; Σ\|q_strip\| outside as a fraction; collected-ion (landing) charge outside, from the frozen replay's channels.csv; lead strip and its distance from the entry strip | the frozen base-centred S0 cannot provide it (it refuses), so this is signal the old 11-strip definition lost |
+| 3 | finite local-window truncation | exact final-state sum rule at each ion's birth with the frozen LUT and the frozen whole-plane potential (`fit(0, 24, 0)`, the replay's own check): charge beyond each primary's ±5 = Σ q (Σ_win φ − Φ). The ±6 ring is reported where the LUT phase range allows, with out-of-range ions counted, never extrapolated. Also the frozen replay's subset strip-sum gap per group | integrated (final) charge only; transient signal beyond the window is bounded only by the ±6 ring and is stated as such |
+| 4 | unsupported geometry / weighting assumptions | shared by S0 and K2A: \|u\| vs the LUT cross-section 13.5 mm, local-window LUT phase margin vs 12 mm, charge on \|k\| = 4 patch wires, longitudinal extent over which infinite strips and a w-invariant field are assumed (strip ends, PCB edges, frames and gaps are not modelled). K2A-specific: per-cloud rms of D and of ln r around the cloud means the kernel uses | flags (WARN) per `thresholds.json` → `e2b`; the e1/e2 values are unchanged |
+
+**The base-centred S0 refusal is expected.** It is recorded as `EXPECTED_REFUSAL`, which is not a failure. That status
+is valid only for `base_centred_S0` in far mode; anywhere else it is FAIL. A replay error of any other kind is FAIL.
+Group replays, the census, local K2A, truncation and analysis failures are never suppressed.
+
+**Far-mode completeness** (aggregate):
+- `base_centred_S0` (OK or EXPECTED_REFUSAL);
+- E2 groups, census, K2A_local, K2Alocal_vs_S0local, E2_truncation, E2_far_analysis, with reports whose status
+  matches the step;
+- the two base comparisons, when the base S0 ran;
+- archive sha256 before == after.
+
+**Environment for far mode:**
+- LUT and replay as before;
+- the exporter and mobility sha256 must equal those recorded in **every** `provenance_prepare_*.txt` of the reference
+  run;
+- the exporter must start and print its usage;
+- the archive slot must pass its own `SHA256SUMS`;
+- the slot must not be sealed (checked from the preflight `slots.csv`);
+- a minimum free-disk check.
+
+A wrong mobility file and a sealed slot are refused in the synthetic test.
+
+**Afterwards (not started).**
+1. Compact-moment accumulation inside the avalanche generator, from all births before K256 sampling.
+2. Moving the per-primary recentering and absolute-strip accumulation into the compiled evaluator (`kernel_eval.cc`):
+   output as a sparse (first strip, n strips, samples) per plane.

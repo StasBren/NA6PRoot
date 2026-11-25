@@ -30,9 +30,10 @@ def main():
     ap.add_argument("--groups", type=Path); ap.add_argument("--model", default="K2A"); ap.add_argument("--impl", default="vector")
     ap.add_argument("--half-strips", type=int, default=5); ap.add_argument("--window-ns", type=float, default=7000.0)
     ap.add_argument("--kernel-id")
+    ap.add_argument("--per-group-out", type=Path, help="also write each group's response to DIR/<g_mU_mV>/ (same format)")
     a = ap.parse_args()
-    if a.out.exists():
-        raise SystemExit(f"refusing: {a.out} exists")
+    if a.out.exists() or (a.per_group_out and a.per_group_out.exists()):
+        raise SystemExit(f"refusing: {a.out} or the per-group directory exists")
     k = ce.KernelTable(a.kernel, expected_id=a.kernel_id)
     eng = ce.CathodeResponseEngine(k, model=a.model, half_strips=a.half_strips, window_ns=a.window_ns)
     m = ce.read_moments_csv(a.moments)
@@ -59,6 +60,13 @@ def main():
             si, o = (0 if l[0] == "U" else 1), j % len(eng.offsets)
             ion[l] = ion[l] + r.ion[:, si, o]; ele[l] = ele[l] + r.electron[:, si, o]
         groups[f"g_{mu}_{mv}"] = int(s.sum())
+        if a.per_group_out:
+            gd = a.per_group_out / f"g_{mu}_{mv}"
+            for sub, arr, fn in (("replay", r.ion, "waveforms.csv"), ("prompt", r.electron, "prompt_waveforms.csv")):
+                (gd / sub).mkdir(parents=True)
+                np.savetxt(gd / sub / fn, np.column_stack([tc] + [arr[:, 0 if l[0] == "U" else 1, j % len(eng.offsets)]
+                                                                  for j, l in enumerate(r.labels)]),
+                           delimiter=",", header="time_center_ns," + ",".join(r.labels), comments="")
     wall = time.perf_counter() - t0
     order = sorted(ion, key=lambda l: (l[0] != "U", int(l.split("_")[1])))
     for sub, acc, fn in (("replay", ion, "waveforms.csv"), ("prompt", ele, "prompt_waveforms.csv")):

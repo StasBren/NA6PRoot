@@ -10,9 +10,11 @@ comparison step names. Required content per mode (anything missing -> INCONCLUSI
              E2_K2Abase_vs_S0, E2_K2Alocal_vs_K2Abase
         reference integrity: sha256 lists before and after present, non-empty and identical (else FAIL / INCONCLUSIVE)
   far   E1:  not applicable (any E1 step present -> INCONCLUSIVE: wrong mode)
-        base_centred_S0 (OK, or INCONCLUSIVE = frozen replay refused, both acceptable; FAIL -> FAIL)
-        E2:  E2_groups, E2_S0_local_census, E2_K2A_local, E2_K2Alocal_vs_S0local, and, only if base_centred_S0 is OK,
-             E2_S0local_vs_S0 and E2_K2Alocal_vs_S0
+        base_centred_S0: OK, or EXPECTED_REFUSAL (the frozen base-centred replay refuses far-D events; NOT a failure);
+             FAIL -> FAIL; anything else -> INCONCLUSIVE
+        E2:  E2_groups, E2_S0_local_census, E2_K2A_local, E2_K2Alocal_vs_S0local, E2_truncation, E2_far_analysis
+             (with truncation.json / far_analysis.json whose status equals the step's), and, only if base_centred_S0
+             is OK, E2_S0local_vs_S0 and E2_K2Alocal_vs_S0; archive sha256 before == after
 Every comparison step must point to an existing cmp_*.json whose own status equals the step's status (missing report ->
 INCONCLUSIVE; disagreement -> FAIL). Every muon listed in env_check.json must have a muon_* directory with steps.tsv.
 Duplicate step names -> INCONCLUSIVE. Per muon: FAIL if anything FAILs, else INCONCLUSIVE if anything is missing or
@@ -23,10 +25,11 @@ import json
 import sys
 from pathlib import Path
 
-ORDER = {"PASS": 0, "OK": 0, "WARN": 1, "INCONCLUSIVE": 2, "FAIL": 3}
+ORDER = {"PASS": 0, "OK": 0, "WARN": 1, "EXPECTED_REFUSAL": 1, "INCONCLUSIVE": 2, "FAIL": 3}
 E2_REFS = ["E2_groups", "E2_S0_local_census", "E2_K2A_local", "E2_K2Alocal_vs_S0local", "E2_S0local_vs_S0",
            "E2_K2Alocal_vs_S0", "E2_K2Abase_vs_S0", "E2_K2Alocal_vs_K2Abase"]
-E2_FAR = ["E2_groups", "E2_S0_local_census", "E2_K2A_local", "E2_K2Alocal_vs_S0local"]
+E2_FAR = ["E2_groups", "E2_S0_local_census", "E2_K2A_local", "E2_K2Alocal_vs_S0local", "E2_truncation", "E2_far_analysis"]
+JSON_STEPS = {"E2_truncation": "truncation.json", "E2_far_analysis": "far_analysis.json"}
 E2_FAR_WITH_BASE = ["E2_S0local_vs_S0", "E2_K2Alocal_vs_S0"]
 E1_REQ = ["E1_shift_1", "E1_shift_-1"]
 
@@ -61,7 +64,9 @@ def evaluate_muon(E, mode):
     for s in steps:
         if s["status"] not in ORDER:
             problems.append(("FAIL", f"{s['step']}: unknown status {s['status']!r}"))
-        elif s["status"] in ("FAIL", "INCONCLUSIVE") and not (mode == "far" and s["step"] == "base_centred_S0" and s["status"] == "INCONCLUSIVE"):
+        elif s["status"] == "EXPECTED_REFUSAL" and not (mode == "far" and s["step"] == "base_centred_S0"):
+            problems.append(("FAIL", f"{s['step']}: EXPECTED_REFUSAL is only valid for base_centred_S0 in far mode"))
+        elif s["status"] in ("FAIL", "INCONCLUSIVE"):
             problems.append((s["status"], f"{s['step']}: {s['status']} - {s['detail'][:200]}"))
     # E1
     e1_steps = [n for n in names if n.startswith("E1_")]
@@ -90,6 +95,25 @@ def evaluate_muon(E, mode):
             problems.append(("INCONCLUSIVE", "base_centred_S0 step missing"))
         elif b["status"] == "OK":
             req += E2_FAR_WITH_BASE
+        elif b["status"] != "EXPECTED_REFUSAL":
+            problems.append((b["status"] if b["status"] == "FAIL" else "INCONCLUSIVE", f"base_centred_S0: {b['status']}"))
+        for n, f in JSON_STEPS.items():
+            if n in by:
+                jp = E / f
+                if not jp.exists():
+                    problems.append(("INCONCLUSIVE", f"{n}: report {f} missing"))
+                else:
+                    try:
+                        st = json.loads(jp.read_text()).get("status")
+                    except json.JSONDecodeError:
+                        st = None
+                    if st != by[n]["status"]:
+                        problems.append(("FAIL", f"{n}: step status {by[n]['status']} != {f} status {st}"))
+        ab, aa = E / "archive_sha256_before.txt", E / "archive_sha256_after.txt"
+        if not (ab.exists() and aa.exists() and ab.read_text().strip()):
+            problems.append(("INCONCLUSIVE", "archive sha256 before/after missing"))
+        elif ab.read_text() != aa.read_text():
+            problems.append(("FAIL", "archive file changed during the experiment"))
     for n in req:
         if n not in by:
             problems.append(("INCONCLUSIVE", f"required E2 step {n} missing"))
