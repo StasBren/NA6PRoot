@@ -77,6 +77,7 @@ def stage(out: Path, array_index: int):
     item=subset["shards"][array_index]
     sid=item["id"]
     target=stage_dir(out,sid)
+    target.parent.mkdir(parents=True,exist_ok=True)
     if target.is_dir():
         sha_manifest(target)
         seal=load(target/"sealed.json")
@@ -101,7 +102,8 @@ def stage(out: Path, array_index: int):
     src_manifest=FROZEN/"locked/shards"/f"shard_{sid:04d}.tsv"
     require(sha(src_manifest)==item["manifest_sha256"],"original TSV changed")
     rows=manifest_rows(src_manifest)
-    require(len(rows)==len(locked["indices"]),"chunk assignment changed")
+    require(len(rows)==len(locked["indices"])==
+            len(locked["receipt_sha256"]),"chunk/receipt assignment changed")
     with tempfile.TemporaryDirectory(prefix=f"heed_{sid:04d}_",dir=scratch) as td:
         tmp=Path(td)
         output=tmp/"output"
@@ -192,11 +194,11 @@ def inventory(out: Path, strict=False):
         try:
             sha_manifest(d)
             seal=load(d/"sealed.json")
+            meta=load(out/"locked/export.json")
             require(seal["schema"]==STAGE_SCHEMA and
                     seal["shard"]==sid and
                     seal["manifest_sha256"]==item["manifest_sha256"] and
-                    seal["source_subset_sha256"]==
-                        sha(Path(out)/"locked/export.json") if False else True,
+                    seal["source_subset_sha256"]==meta["source_subset_sha256"],
                     "invalid shard seal")
             # Check exact manifest correspondence and population; avoid
             # relying on array order when grouping per channel.
@@ -301,7 +303,7 @@ def combine(out: Path):
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument("mode",choices=("stage","status","combine"))
+    p.add_argument("mode",choices=("stage","status","gate","combine"))
     p.add_argument("--output",type=Path,required=True)
     p.add_argument("--array-index",type=int)
     a=p.parse_args()
@@ -313,6 +315,9 @@ def main():
         inventory(out)
         if (out/"enriched"/OUTPUT).exists():
             print("HEED_ENRICHED_READY="+str(out/"enriched"/OUTPUT))
+    elif a.mode=="gate":
+        inventory(out,strict=True)
+        print("HEED_SHARD_GATE_PASS all 48 sealed source inputs")
     else:combine(out)
 
 
