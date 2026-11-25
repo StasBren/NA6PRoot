@@ -8,6 +8,7 @@ fi
 set -u
 HERE="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 PY="$HERE/merge_1800v_verified_subset.py"
+REPO="$(cd "$HERE/../../.." && pwd)"
 OUT="${MWPC_1800_SUBSET:-}"
 QUEUE="${MWPC_1800_PBS_QUEUE:-N}"
 case "${1:-}" in
@@ -24,7 +25,7 @@ case "${1:-}" in
       { echo "Invalid PBS queue" >&2; exit 2; }
     job=$(/opt/pbs/bin/qsub -q "$QUEUE" -N w18dash \
       -l select=1:ncpus=1:mem=4gb -l walltime=08:00:00 -l io=0.1 \
-      -v "MWPC_1800_SUBSET=$OUT" \
+      -v "MWPC_1800_SUBSET=$OUT,MWPC_1800_DASH_WORKTREE=$REPO" \
       -o "$OUT/pbs-logs" -e "$OUT/pbs-logs" \
       "$HERE/pbs_1800v_verified_subset.sh")
     [[ -n "$job" ]] || { echo "Empty PBS job ID" >&2; exit 2; }
