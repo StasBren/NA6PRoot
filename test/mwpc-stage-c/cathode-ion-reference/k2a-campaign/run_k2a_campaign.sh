@@ -9,6 +9,12 @@
 #                                                              chunks of $CHUNK; sealed set in a separate directory)
 #   bash run_k2a_campaign.sh domain   PF                   1c  kernel-domain coverage, causes, extension cost -> $PF/domain
 #   bash run_k2a_campaign.sh preflight                     1a + 1b + 1c in one new $PF
+#   bash run_k2a_campaign.sh recover PF                    READ-ONLY, input metadata: D anatomy, recentering recovery,
+#                                                              radial check, K256 fraction, provenance -> $PF/recenter_<ts>
+#   bash run_k2a_campaign.sh supplementary PF RECOVER [N]  deterministic non-sealed phi/omega development selection
+#   bash run_k2a_campaign.sh recenter-refs [MUON ...]      E1 + E2a on the reference muons (recenter/ experiment; no
+#                                                              new transport; frozen replay re-run on relabelled exports)
+#   bash run_k2a_campaign.sh recenter-far PF INDEX ...     E2b on non-sealed far-D muons (frozen export + T1 + grouped S0)
 #   bash run_k2a_campaign.sh phase2|phase3|phase4          refused (see plan)
 #
 # READ-ONLY on: the archive, the selection, the validated S-ladder run (kernel, Green table, references), the repo.
@@ -108,7 +114,20 @@ case "${1:-}" in
   preflight)
     PF="$OUTROOT/preflight_$(date +%Y%m%d_%H%M%S)"; mkdir -p "$PF"; echo "PF=$PF"
     do_inventory "$PF"; do_moments "$PF"; do_domain "$PF";;
+  recover)
+    PF="${2:?PF dir}"; need_dir "$KD" "validated kernel"; O="$PF/recenter_$(date +%Y%m%d_%H%M%S)"
+    python3 "$HERE/k2a_recenter_recovery.py" --pf "$PF" --kernel "$KD" --out "$O" > "$O.log" || fail "recovery ($O.log)"
+    echo "return: $O/recovery.md $O/recovery.json (per event: $O/per_event_recenter.csv)";;
+  supplementary)
+    PF="${2:?PF dir}"; RECOVER="${3:?recover output dir}"; N="${4:-8}"; O="$PF/supplementary_$(date +%Y%m%d_%H%M%S)"
+    python3 "$HERE/k2a_supplementary_selection.py" --pf "$PF" --recenter "$RECOVER" --out "$O" --per-channel "$N" > "$O.log" || fail "selection"
+    echo "return: $O/supplementary_dev.md $O/supplementary_dev.csv $O/SHA256SUMS";;
+  recenter-refs)
+    shift; MWPC_K2A_OUT="$OUTROOT" bash "$HERE/recenter/k2a_recenter_experiment.sh" refs "$RUN" "$TAG" "$@";;
+  recenter-far)
+    PF="${2:?PF dir}"; shift 2
+    MWPC_K2A_PF="$PF" MWPC_K2A_OUT="$OUTROOT" bash "$HERE/recenter/k2a_recenter_experiment.sh" far "$RUN" "$TAG" "$@";;
   phase2|phase3|phase4)
     fail "$1 is not enabled: inspect the preflight, then approve the next step (K2A_CAMPAIGN_PLAN.md sections 5-7)";;
-  *) sed -n 2,21p "$0"; exit 1;;
+  *) sed -n 2,26p "$0"; exit 1;;
 esac

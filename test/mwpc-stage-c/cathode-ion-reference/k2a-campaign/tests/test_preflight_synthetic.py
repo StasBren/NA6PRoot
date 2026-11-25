@@ -95,7 +95,8 @@ def write(dirp, eid, slot, n=8, wire=None, D=None, r=None, t=None, meta_station=
           "n_primaries": 10, "ion_births_exact": 1000, "ion_rows_saved": 300, "rows_read": 100 * n, "theta_u_deg": 1.0, "theta_w_deg": 2.0,
           "momentum_GeV": 10.0, "n_primaries_zero_ions": 0}
     Path(str(p) + ".event.json").write_text(json.dumps(ev))
-    Path(str(p) + ".frame.json").write_text("{}")
+    Path(str(p) + ".frame.json").write_text(json.dumps({"patch_shift_cm": 0.15 * slot, "u_in_mm": 1.5 * slot + 0.4, "w_in_mm": -3.0,
+                                                       "base_U": 5, "base_V": 6, "stereo_tan": 0.1, "strip_pitch_mm": 1.7}))
 
 
 usable = [i for i in range(NS) if slots[f"{i:04d}"]["status"] == "USABLE"]

@@ -217,8 +217,18 @@ def extension(dom, recs, X_all, kd, reference_run, tag):
         tmax = float(allX["t_ns"].max())
     else:
         rlo = rhi = rion = dlo = dhi = tmax = float("nan")
-    add_lo = max(0, math.ceil(math.log(dom.rn[0] / rlo) / math.log(step))) if rlo < dom.rn[0] else 0
-    add_lo_g = max(0, math.ceil(math.log(dom.rn[0] / rion) / math.log(step))) if rion < dom.rn[0] else 0
+    # inward: NOT in log r (one log step from a node 0.0x um above the 15 um wire lands inside the anode) but geometric in
+    # clearance c = r - R_wire, from the existing innermost clearance down to half the smallest required clearance
+    c0 = dom.rn[0] - R_WIRE_UM
+
+    def inner_nodes(r_req):
+        if not r_req < dom.rn[0]:
+            return 0
+        c_req = 0.5 * (r_req - R_WIRE_UM)
+        if c_req <= 0:
+            return -1                                               # a cloud/ion on or inside the wire: not extendable
+        return max(1, math.ceil(math.log(c0 / c_req) / math.log(step)))
+    add_lo, add_lo_g = inner_nodes(rlo), inner_nodes(rion)
     add_hi = max(0, math.ceil(math.log(rhi / dom.rn[-1]) / math.log(step))) if rhi > dom.rn[-1] else 0
     nlo = math.ceil((dom.D_lo - dlo) / dom.dD) + 1 if dlo < dom.D_lo else 0      # +1: floor() at the node
     nhi = math.floor((dhi - dom.D_hi) / dom.dD) + 1 if dhi >= dom.D_hi else 0
@@ -227,11 +237,13 @@ def extension(dom, recs, X_all, kd, reference_run, tag):
                 supported={"wires": dom.wires, "r_um": [float(dom.rn[0]), float(dom.rn[-1])],
                            "D_mm_cloud": [float(dom.D_lo), float(dom.D_hi)], "window_ns": dom.window,
                            "tau_max_ns": float(dom.tau[-1])},
-                radial_nodes_to_add={"inner_K2A": add_lo, "inner_ion_level_G": add_lo_g, "outer": add_hi},
+                radial_nodes_to_add={"inner_K2A": add_lo, "inner_ion_level_G": add_lo_g, "outer": add_hi,
+                                     "inner_rule": "geometric in clearance r - 15 um down to half the required clearance "
+                                                   "(-1: a cloud/ion on or inside the wire)"},
                 D_nodes_to_add={"low": nlo, "high": nhi},
                 window_extension_needed=nt_new is None,
                 tau_axis_covers_t_max=bool(tmax < dom.tau[-1]))
-    W2 = nW + len(need["missing_wires"]); r2 = nr + max(add_lo, add_lo_g) + add_hi; D2 = nD + nlo + nhi
+    W2 = nW + len(need["missing_wires"]); r2 = nr + max(add_lo, add_lo_g, 0) + add_hi; D2 = nD + nlo + nhi
     f_table = (W2 / nW) * (r2 / nr) * (D2 / nD)
     f_paths_new = ((W2 * r2) - (nW * nr)) / (nW * nr)          # NEW grid paths relative to the existing grid paths
     gdir = Path(dom.meta.get("green", ""))

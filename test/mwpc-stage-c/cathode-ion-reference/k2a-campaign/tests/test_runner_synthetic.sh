@@ -33,4 +33,11 @@ grep -q "| all | 24 | 23 " "$P/domain/coverage.md"
 grep -q "muon_0013 | pool | phi | 1 | READ_FAILED | READ_FAILED: synthetic failure" "$P/domain/coverage.md"
 grep -q "rc=3" "$P/moments_nonsealed/chunks.txt"
 ! grep -q SEALED_DO_NOT_OPEN "$P/PREFLIGHT_SHA256SUMS"
+ENVS=(MWPC_K2A_SLOTS=30 MWPC_ARCHIVE_2100_K256="$T/archive" MWPC_SIGNAL40_OUTPUT="$T/selection" MWPC_K2A_REFERENCE_RUN="$T/run" MWPC_K2A_TAG=tt MWPC_K2A_OUT="$T/out")
+env "${ENVS[@]}" bash "$HERE/run_k2a_campaign.sh" recover "$P" > "$T/recover.log"
+RD=$(ls -d "$P"/recenter_*/ | head -1); grep -q "## 2. Coverage recovery" "$RD/recovery.md"
+env "${ENVS[@]}" bash "$HERE/run_k2a_campaign.sh" supplementary "$P" "$RD" 3 > "$T/supp.log"
+SD=$(ls -d "$P"/supplementary_*/ | head -1); (cd "$SD" && sha256sum -c --quiet SHA256SUMS)
+! grep -q -E "^(0003|0004|0011)," "$SD/supplementary_dev.csv"
+echo "PASS runner recover + supplementary (synthetic): recovery report, selection excludes the sealed slots"
 echo "PASS runner preflight (synthetic): chunked keep-going conversion, failure visible, sealed blinded, checksums written"
