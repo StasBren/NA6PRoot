@@ -7,11 +7,11 @@
 #PBS -l io=0.1
 # No Garfield++ rerun: enrich SHA-sealed ROOT COPY using original Heed CSV.
 set -Eeo pipefail
-: "\${PBS_JOBID:?PBS submission required}"
-: "\${TMPDIR:?PBS scratch required}"
-: "\${MWPC_1800_ENRICHED:?Prepared new output required}"
-: "\${MWPC_1800_DASH_WORKTREE:?Dashboard worktree required}"
-export GARFIELD_INSTALL="\${GARFIELD_INSTALL:-/cvmfs/sft-nightlies.cern.ch/lcg/nightlies/dev3/Mon/Garfield++/HEAD/x86_64-el9-gcc13-opt}"
+: "${PBS_JOBID:?PBS submission required}"
+: "${TMPDIR:?PBS scratch required}"
+: "${MWPC_1800_ENRICHED:?Prepared new output required}"
+: "${MWPC_1800_DASH_WORKTREE:?Dashboard worktree required}"
+export GARFIELD_INSTALL="${GARFIELD_INSTALL:-/cvmfs/sft-nightlies.cern.ch/lcg/nightlies/dev3/Mon/Garfield++/HEAD/x86_64-el9-gcc13-opt}"
 if [[ -f "$GARFIELD_INSTALL/Garfield++-env.sh" ]];then
   source "$GARFIELD_INSTALL/Garfield++-env.sh"
 fi
