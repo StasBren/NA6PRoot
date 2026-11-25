@@ -14,7 +14,8 @@
 //   station, det_id, pdg, heed_seed, angles, momentum, path, K, primaries, exact/saved ion counts, zero-ion primaries)
 //
 // Reading and validation use the FROZEN archive reader Plane2100Archive.hh unchanged (weights = exact/saved per
-// primary, complete census, primary association). The physical-frame metadata (muons: patch_shift_cm, u_in_mm,
+// primary, complete census, primary association). Storage modes: "weighted" (K256/512/1024 reservoir) and "full"
+// (every callback birth, weight 1; accepted since the K2A-inline T1 validation, results for weighted archives unchanged). The physical-frame metadata (muons: patch_shift_cm, u_in_mm,
 // w_in_mm) and the local/physical consistency check (ions: u_chamber_cm, w_chamber_cm) are read exactly as the frozen
 // exporter's ChamberFrame does. Moments: BirthMoments.hh. Writes OUT_MOMENTS.csv and OUT_MOMENTS.csv.json with the
 // timing split (open+read+validate, moment construction), rows, peak RSS and the archive size.
@@ -88,7 +89,9 @@ OneResult ProcessOne(const std::string& in) {
   OneResult o;
   const auto t0 = clk::now();
   NA60Plane::Archive archive(in);
-  BirthMoments::Require(archive.mode == "weighted" && archive.Entries() > 0, "need a complete weighted archive");
+  // weighted (reservoir, weights N/n) or full (every birth, weight 1); both validated by the frozen reader
+  BirthMoments::Require((archive.mode == "weighted" || archive.mode == "full") && archive.Entries() > 0,
+                        "need a complete weighted or full archive");
   std::unique_ptr<TFile> f(TFile::Open(in.c_str(), "READ"));
   BirthMoments::Require(f && !f->IsZombie(), "cannot reopen archive for frame metadata");
   auto* mu = dynamic_cast<TTree*>(f->Get("muons"));

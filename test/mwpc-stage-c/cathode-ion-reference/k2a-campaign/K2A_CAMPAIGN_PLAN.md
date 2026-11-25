@@ -49,6 +49,10 @@ Sections 2–7 below were written for the earlier "997-event processing campaign
 - The runner refuses `phase2/3/4`.
 - Unchanged: geometry, electronics stand-in, avalanche archives, sealed set, Geant4/Heed, the frozen references, the
   frozen baseline (f117e2a).
+- 2026-11-25: offline E2b development closed (E1/E2a/E2b PASS on development muons; see recenter/). Production
+  integration started: milestone 1 = full-birth in-memory moments in the generator path, `../k2a-inline/README.md`
+  (T0 synthetic PASS; T1 real-avalanche validation pending on WSL). Milestone 2 (compiled absolute-strip evaluator)
+  starts only after T1 passes.
 
 ## 0. Inputs (existing, read-only)
 
