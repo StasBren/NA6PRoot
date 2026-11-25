@@ -1,0 +1,33 @@
+{
+ "_doc": "Acceptance (E1) and WARNING (E2) thresholds for the recentering experiment. E1 is an identity test of the frozen replay under an integer strip relabelling: any deviation above floating-point level is a FAIL. E2 thresholds are WARNINGS, not acceptance criteria: they flag comparisons that deserve inspection. They are set from the validated five-muon K2A vs S0 results (0.15-0.20 % shaped rel L2, worst U/V charge ratio about 0.7 %) and are NOT the final K2A acceptance criteria, which are frozen later, before the sealed set is opened. Every metric is also reported numerically.",
+ "e1": {
+  "rel_L2_max": 1e-10,
+  "window_charge_rel_max": 1e-10,
+  "max_strip_charge_diff_over_lead_max": 1e-10,
+  "min_common_strips": "2*H+1-|m| per plane (exact expected overlap)",
+  "lead_must_match": true
+ },
+ "e2": {
+  "identity_rel_L2_max": 1e-12,
+  "K2A_vs_S0": {
+   "unshaped_L2_rel_warn": 0.005,
+   "shaped_L2_rel_warn": 0.005,
+   "window_charge_rel_warn": 0.005,
+   "UV_ratio_rel_warn": 0.01,
+   "max_strip_charge_diff_over_lead_warn": 0.01,
+   "lead_change_warn": true,
+   "missing_strip_charge_frac_warn": 0.001
+  },
+  "S0_window_choice": {
+   "unshaped_L2_rel_warn": 0.001,
+   "shaped_L2_rel_warn": 0.001,
+   "window_charge_rel_warn": 0.001,
+   "UV_ratio_rel_warn": 0.001,
+   "max_strip_charge_diff_over_lead_warn": 0.001,
+   "lead_change_warn": true,
+   "missing_strip_charge_frac_warn": 0.001
+  },
+  "min_common_strips": 3,
+  "census_rel_max": 1e-9
+ }
+}

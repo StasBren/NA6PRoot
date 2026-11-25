@@ -191,3 +191,86 @@ Return `$RD/recovery.md`, `$RD/recovery.json` and `$PF/supplementary_*/supplemen
 The experiment (E1/E2a, then E2b) starts only after you review those. It runs frozen replays, about one to three per
 reference muon. Its commands are `run_k2a_campaign.sh recenter-refs` and `recenter-far "$PF" <far-D indices>`, with
 `MWPC_SPECTRAL_LUT` and `MWPC_NUMW_DIR` (and `MWPC_EXPORT_BIN`, `MWPC_ION_MOBILITY` for far).
+
+## 9. Hardened comparison runner (2026-11-25, after the metadata review)
+
+Metadata review results (yours):
+- recentering recovers 149 of 197 out-of-domain non-sealed events, so coverage goes from 780/977 to 929/977;
+- no D violation remains;
+- 46 R_EFF_HIGH and 2 WIRE events are left;
+- the K256 reservoir stores about 0.6 % of the exact births (median);
+- the φ/ω supplementary set is approved.
+
+The runner `recenter/k2a_recenter_experiment.sh` was hardened before any real run.
+
+**Status per step, never implied by "the command finished".** Each step writes a line to `muon_*/steps.tsv`.
+- E1 (each of the two relabellings) is **PASS / FAIL / INCONCLUSIVE**:
+  - a frozen-replay refusal ("selected channels omit the landing strip" or "query outside declared strip phase
+    range") is INCONCLUSIVE, with the reason recorded;
+  - any other replay error is FAIL.
+- E1 acceptance (`thresholds.json` → `e1`), per plane and term:
+  - unshaped, cumulative and shaped (100/200 ns) rel L2 ≤ 1e-10;
+  - window charge and U/V ratio ≤ 1e-10;
+  - max per-strip charge difference / lead ≤ 1e-10;
+  - same lead strip;
+  - **exactly** 2H+1−|m| common strips; fewer is INCONCLUSIVE, more is FAIL.
+- E2 comparisons are **OK / WARN / FAIL / INCONCLUSIVE**:
+  - documented warning thresholds (`thresholds.json` → `e2`) produce WARN;
+  - numerical breakage produces FAIL: nonfinite values, inconsistent time grids, an identity that should hold
+    failing, or a census error;
+  - nothing to compare produces INCONCLUSIVE: missing files, fewer than 3 common strips, zero reference charge.
+
+**Cases that cannot pass silently.**
+- Zero common strips, NaN/inf and missing files are explicit non-OK statuses (tested).
+- `worst_L2_rel` is `null` unless every value is finite.
+- The exit code is 0 only for PASS/OK.
+
+**E2 comparisons, each with full diagnostics** (rel L2 unshaped/cumulative/shaped, ΔQ/Q, Δ(U/V), lead strip, max
+per-strip ΔQ/lead, charge on strips present on only one side = missing strip tails):
+
+| comparison | kind |
+|---|---|
+| K2A_local vs S0_local | k2a_vs_s0 |
+| S0_local vs frozen S0 | identity when every primary has m = 0, otherwise the window-choice diagnostic |
+| K2A_local vs frozen S0 | k2a_vs_s0 |
+| K2A base vs frozen S0 | k2a_vs_s0, the validated baseline for context |
+| K2A_local vs K2A base | identity or window-choice |
+
+The S0_local census and the K2A_local evaluation are steps of their own.
+
+**Aggregate.** `k2a_recenter_aggregate.py` writes `results.json` and `results.md`. The overall result is PASS only if,
+for every muon:
+- E1 PASSes;
+- E2 has no FAIL or INCONCLUSIVE (WARN is listed for inspection);
+- every reference file read is byte-identical afterwards (sha256 before/after of T1_export, S0, cloud_moments.csv and
+  K2Akern_TAG).
+
+All outputs go to a new `recenter_experiment_<timestamp>/`; the runner refuses an output path inside the reference run.
+
+**Environment.** Variables come from the validated setup (`source ~/t_ladder_deps.env`) and are **verified, not
+assumed**:
+- the LUT sha256 must equal both the Green table's `lut_sha256` and the `lut_sha256` in
+  `provenance_prepare_<M>.txt` of each reference muon;
+- the replay code sha256 must equal its `replay_sha256`;
+- the replay module must import from `MWPC_NUMW_DIR`;
+- the kernel id must equal the validated `engine_TAG_*/kernel_id.txt`;
+- far mode also requires the exporter and mobility sha256 to equal the references' provenance, and the exporter must
+  start and print its usage (ROOT/Garfield runtime present).
+
+ROOT is not needed for `refs`: replay, electron step and engine are Python/numpy.
+
+Synthetic test `tests/test_recenter_synthetic.sh` (toy run):
+- a wrong LUT aborts;
+- E1 PASSes at 6e-16;
+- the single-group identities PASS;
+- the four negative compare cases (disjoint strips, NaN, a 1e-6 perturbation under E1, missing files) all end
+  non-OK;
+- the far toy event behaves as before;
+- references are unchanged.
+
+**Order of the real runs:**
+1. `envcheck` and `refs` on development references 0000 and 0858, then inspect.
+2. Only then `far` on ω 0560 and φ 0997 (both far-D events recovered by recentering).
+3. φ 0133 is deferred: it still has R_EFF_HIGH and cannot be evaluated with the unchanged kernel.
+
+No Green table is enlarged and the 2100 V field is unchanged.
