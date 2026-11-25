@@ -9,5 +9,5 @@ set -u
 : "${PBS_JOBID:?PBS job required}"
 : "${TMPDIR:?PBS scratch required}"
 : "${MWPC_1800_SUBSET:?frozen subset required}"
-HERE="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
-python3 "$HERE/merge_1800v_verified_subset.py" run --output "$MWPC_1800_SUBSET"
+: "${MWPC_1800_DASH_WORKTREE:?dashboard worktree required}"
+python3 -u "$MWPC_1800_DASH_WORKTREE/test/mwpc-stage-c/wiretruth1800/merge_1800v_verified_subset.py" run --output "$MWPC_1800_SUBSET"
