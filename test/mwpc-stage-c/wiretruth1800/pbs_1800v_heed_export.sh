@@ -11,11 +11,19 @@ set -Eeo pipefail
 : "${TMPDIR:?PBS scratch required}"
 : "${MWPC_1800_ENRICHED:?Prepared new output required}"
 : "${MWPC_1800_DASH_WORKTREE:?Dashboard worktree required}"
+# Write unbuffered progress directly to an accessible shared-disk log.
+# PBS .o/.e files can be held in spool until job termination.
+LOG="$MWPC_1800_ENRICHED/progress.log"
+printf 'HEED_WORKER_ENTRY_UTC=%s PBS=%s HOST=%s\n' "$(date -u +%FT%TZ)" "$PBS_JOBID" "$(hostname)" >> "$LOG"
+exec >> "$LOG" 2>&1
+trap 'rc=$?; printf "HEED_WORKER_EXIT_UTC=%s EXIT=%s\\n" "$(date -u +%FT%TZ)" "$rc"' EXIT
+echo "HEED_WORKER_BEFORE_ENV_UTC=$(date -u +%FT%TZ)"
 export GARFIELD_INSTALL="${GARFIELD_INSTALL:-/cvmfs/sft-nightlies.cern.ch/lcg/nightlies/dev3/Mon/Garfield++/HEAD/x86_64-el9-gcc13-opt}"
 if [[ -f "$GARFIELD_INSTALL/Garfield++-env.sh" ]];then
   source "$GARFIELD_INSTALL/Garfield++-env.sh"
 fi
 set -u
+echo "HEED_WORKER_ENV_READY_UTC=$(date -u +%FT%TZ)"
 echo "HEED_EXPORT_BEGIN_UTC=$(date -u +%FT%TZ) PBS=$PBS_JOBID HOST=$(hostname)"
 python3 -u "$MWPC_1800_DASH_WORKTREE/test/mwpc-stage-c/wiretruth1800/export_1800v_heed_root.py" \
   run --output "$MWPC_1800_ENRICHED"
