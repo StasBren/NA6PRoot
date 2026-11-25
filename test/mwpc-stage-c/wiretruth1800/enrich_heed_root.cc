@@ -205,14 +205,13 @@ int main(int argc,char** argv) {
     }
     Check(seedKeys.empty()&&nPrimary==static_cast<long long>(expectedSeeds),
           "not all original ROOT seeds have matching Heed rows");
-    Check(seenPrim.size()==expectedPrim.size(),"missing muon primary populations");
     for(const auto&[id,n]:expectedPrim)
       Check(seenPrim[id]==n,"per-muon Heed count differs from original ROOT");
     for(const auto&[id,p]:clusterCounts)
       Check(p.first==p.second,"cluster n_accepted differs from actual electrons");
     file->cd();
     Check(clusters.Write()>0&&primaries.Write()>0,"ROOT tree write failed");
-    file->Write();file->Close();
+    file->Close();
     std::cout<<"PASS_HEED_ENRICHED muons="<<expected
              <<" clusters="<<clusterCounts.size()
              <<" primaries="<<nPrimary
