@@ -1,5 +1,8 @@
 # Controlled cathode strip-geometry study: design and feasibility (2100 V, five development muons)
 
+**PAUSED (2026-11-25):** kept in the repository, not to be run or developed further for now. Current priority: the
+large-sample K2A campaign at the existing geometry, `../k2a-campaign/K2A_CAMPAIGN_PLAN.md`.
+
 **Status (2026-11-24).** This commit contains tooling and SYNTHETIC/LUT-level checks only. No real muon has been run under
 the alternative geometry. No geometry scan has been run. The sealed 20-muon set, the archives, the frozen
 exporter/replay/LUT/Green tables, the electronics stand-in and avalanche generation are all untouched. No frozen file
