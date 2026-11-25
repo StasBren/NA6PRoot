@@ -24,6 +24,9 @@ if [[ -f "$GARFIELD_INSTALL/Garfield++-env.sh" ]];then
 fi
 set -u
 echo "HEED_WORKER_ENV_READY_UTC=$(date -u +%FT%TZ)"
+echo "HEED_IO_PREFLIGHT_START_UTC=$(date -u +%FT%TZ)"
+timeout 60s python3 -u -c 'from pathlib import Path; p=Path("/storage/cgrp/stanis/mwpc_penning057_wiretruth30k_v1/locked/selection.json"); print("HEED_IO_PREFLIGHT_PATH="+str(p),flush=True); print("HEED_IO_PREFLIGHT_READ_BYTES="+str(len(p.open("rb").read(8192))),flush=True)'
+echo "HEED_IO_PREFLIGHT_PASS_UTC=$(date -u +%FT%TZ)"
 echo "HEED_EXPORT_BEGIN_UTC=$(date -u +%FT%TZ) PBS=$PBS_JOBID HOST=$(hostname)"
 python3 -u "$MWPC_1800_DASH_WORKTREE/test/mwpc-stage-c/wiretruth1800/export_1800v_heed_root.py" \
   run --output "$MWPC_1800_ENRICHED"
