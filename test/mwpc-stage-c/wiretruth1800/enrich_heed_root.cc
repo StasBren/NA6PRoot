@@ -106,6 +106,7 @@ int main(int argc,char** argv) {
     int index=0,cluster_index=0,n_original=0,n_accepted=0;
     double u=0,v=0,w=0,t=0;
     TTree clusters("heed_clusters","Exact archived TrackHeed cluster starts");
+    clusters.SetDirectory(nullptr);
     clusters.Branch("crossing_id",&crossing);
     TypeBranch(clusters,"cluster_index",&cluster_index);
     TypeBranch(clusters,"u_rel_cm",&u);TypeBranch(clusters,"v_abs_cm",&v);
@@ -142,6 +143,7 @@ int main(int argc,char** argv) {
     Long64_t ions=0,collected=0,attached=0,other=0;
     TTree primaries("heed_primaries",
                     "Exact TrackHeed primary starts and Garfield avalanche counts");
+    primaries.SetDirectory(nullptr);
     primaries.Branch("crossing_id",&crossing);
     TypeBranch(primaries,"primary_index",&index);
     TypeBranch(primaries,"cluster_index",&cluster_index);
