@@ -141,9 +141,12 @@ def verify_source_files(path: Path, receipt, names=NEEDED):
     for key in names:
         data = receipt["files"][key]
         p = path/f"microscopic_{key}.csv"
+        print(f"HEED_FILE_SHA_START utc={timestamp()} name={p} "
+              f"expected_bytes={data['bytes']}", flush=True)
         require(p.is_file() and p.stat().st_size == int(data["bytes"])
                 and sha(p) == data["sha256"],
                 "original Garfield CSV mutated: " + str(p))
+        print(f"HEED_FILE_SHA_PASS utc={timestamp()} name={p}", flush=True)
         source[key] = p
     return source
 
@@ -219,26 +222,34 @@ def append_chunk(source: dict[str, Path], cf, pf):
 
 
 def run(out: Path):
+    print(f"HEED_RUN_ENTER utc={timestamp()}", flush=True)
     require(os.environ.get("PBS_JOBID"), "submit via PBS compute node")
     scratch=Path(os.environ.get("TMPDIR",""))
     require(str(scratch) not in ("",".") and scratch.is_dir()
             and os.access(scratch,os.W_OK), "PBS TMPDIR missing")
+    print(f"HEED_METADATA_START utc={timestamp()}", flush=True)
     meta=load(out/"locked/export.json")
     require(meta["schema"]==SCHEMA and meta["n_muons"]==5620,
             "wrong export metadata")
     subset_root=Path(meta["source_subset"])
+    print(f"HEED_SNAPSHOT_QA_START utc={timestamp()}", flush=True)
     original, subset, root_file, root_sha=plan_and_subset(subset_root)
+    print(f"HEED_SNAPSHOT_QA_PASS utc={timestamp()}", flush=True)
     require(meta["source_subset_sha256"]==sha(subset_root/"locked/subset.json")
             and meta["source_root_sha256"]==root_sha
             and meta["source_campaign_sha256"]==sha(FROZEN/"locked/campaign.json")
             and meta["new_converter_sha256"]==sha(BINARY),
             "ROOT conversion provenance drift")
     require(not (out/"enriched").exists(), "output already exists")
+    print(f"HEED_ORIGINAL_LOCKS_START utc={timestamp()}", flush=True)
     selection,binary,selsha,binsha=original_locks()
+    print(f"HEED_ORIGINAL_LOCKS_PASS utc={timestamp()}", flush=True)
     require(selsha==original["source_selection_sha256"]
             and binsha==original["source_binary_lock_sha256"],
             "original 1800 V physics locks changed")
+    print(f"HEED_SCRATCH_OPEN_START utc={timestamp()} scratch={scratch}", flush=True)
     with tempfile.TemporaryDirectory(prefix="w1800_heed_",dir=scratch) as td:
+        print(f"HEED_SCRATCH_OPEN_PASS utc={timestamp()}", flush=True)
         tmp=Path(td)
         stages=tmp/"import"
         stages.mkdir()
@@ -253,6 +264,8 @@ def run(out: Path):
             pw.writerow(PRIMARY_COLUMNS)
             for item in subset["shards"]:
                 idx=item["id"]
+                print(f"HEED_SHARD_START utc={timestamp()} shard={idx} "
+                      f"total_muons={tally['muons']}", flush=True)
                 locked=original["shards"][idx]
                 require(locked["id"]==idx and
                         locked["manifest_sha256"]==item["manifest_sha256"] and
@@ -266,18 +279,28 @@ def run(out: Path):
                         "original shard chunk count changed")
                 for row,chunkid in zip(rows,locked["indices"]):
                     channel=locked["channel"]
+                    print(f"HEED_CHUNK_START utc={timestamp()} channel={channel} "
+                          f"chunk={chunkid} shard={idx}", flush=True)
                     require(row["channel"]==channel.lower()
                             and int(row["chunk"])==chunkid
                             and row["original_input"]==str(source_path(selection,channel,chunkid)),
                             "chunk identity changed")
+                    print(f"HEED_RECEIPT_QA_START utc={timestamp()} channel={channel} "
+                          f"chunk={chunkid}", flush=True)
                     got=completed_receipt(selection,binary,channel,chunkid)
+                    print(f"HEED_RECEIPT_QA_PASS utc={timestamp()} channel={channel} "
+                          f"chunk={chunkid}", flush=True)
                     require(got is not None, "completed original Garfield receipt missing")
                     receipt,rpath,source_dir=got
                     position=locked["indices"].index(chunkid)
                     require(sha(rpath)==locked["receipt_sha256"][position],
                             "frozen receipt hash changed")
                     checked=verify_source_files(source_dir,receipt)
+                    print(f"HEED_CSV_IMPORT_START utc={timestamp()} channel={channel} "
+                          f"chunk={chunkid}", flush=True)
                     nm,nc,np=append_chunk(checked,cw,pw)
+                    print(f"HEED_CSV_IMPORT_PASS utc={timestamp()} channel={channel} "
+                          f"chunk={chunkid} primaries={np}", flush=True)
                     tally["muons"]+=nm
                     tally["clusters"]+=nc
                     tally["primaries"]+=np
@@ -288,9 +311,13 @@ def run(out: Path):
         require(tally["muons"]==5620 and tally["chunks"]==281,
                 "subset expansion does not reproduce original 5620 muons")
         rootcopy=tmp/OUTPUT
+        print(f"HEED_ROOT_COPY_START utc={timestamp()}", flush=True)
         copyhash(root_file,rootcopy,root_sha)
+        print(f"HEED_ROOT_COPY_PASS utc={timestamp()}", flush=True)
+        print(f"HEED_ROOT_ENRICH_START utc={timestamp()}", flush=True)
         subprocess.run([str(BINARY),str(rootcopy),str(clusters_tsv),
                         str(primaries_tsv),"5620"],check=True)
+        print(f"HEED_ROOT_ENRICH_PASS utc={timestamp()}", flush=True)
         output=tmp/"completed"
         output.mkdir()
         rootcopy.rename(output/OUTPUT)
@@ -318,7 +345,9 @@ def run(out: Path):
             "converter_sha256":meta["new_converter_sha256"],
             "pbs_job_id":os.environ["PBS_JOBID"],"sealed_utc":timestamp()
         })
+        print(f"HEED_OUTPUT_SHA_START utc={timestamp()}", flush=True)
         write_files(output)
+        print(f"HEED_OUTPUT_SHA_PASS utc={timestamp()}", flush=True)
         target=out/"attempts"/f"enriched_staging_{os.getpid()}"
         require(not target.exists(), "duplicate staging destination")
         shutil.copytree(output,target)
@@ -338,7 +367,15 @@ def status(out: Path):
         print(f"HEED_EXPORT_READY={target/OUTPUT}")
         print(f"ROOT_SIZE_BYTES={(target/OUTPUT).stat().st_size}")
     else:
-        print("HEED_EXPORT_PENDING; inspect dedicated PBS job logs")
+        print("HEED_EXPORT_PENDING; live worker progress follows:")
+        log=out/"progress.log"
+        if log.is_file():
+            from collections import deque
+            with log.open(encoding="utf-8",errors="replace") as stream:
+                for line in deque(stream, maxlen=12):
+                    print(line.rstrip())
+        else:
+            print("NO_LIVE_PROGRESS_LOG (PBS worker may not have entered its script)")
 
 
 def main():
