@@ -117,8 +117,11 @@ def check_event(eid, mdir, dom, inv_row):
     rec["clouds"] = n
     rec["rows"] = int(ev.get("rows_read", 0))
     for k in ("source_channel", "station", "det_id", "pdg", "theta_u_deg", "theta_w_deg", "momentum_GeV",
-              "n_primaries", "ion_births_exact", "n_primaries_zero_ions"):
+              "n_primaries", "ion_births_exact", "n_primaries_zero_ions", "ion_rows_saved", "reservoir_per_primary"):
         rec[k] = ev.get(k, "")
+    # K256 reservoir: fraction of the exact ion-birth population that is stored (1 = no reservoir sampling)
+    rec["saved_fraction"] = (float(ev["ion_rows_saved"]) / float(ev["ion_births_exact"])
+                             if ev.get("ion_rows_saved") not in (None, "") and float(ev.get("ion_births_exact") or 0) > 0 else "")
     rec["channel"] = channel(ev["source_channel"]) if "source_channel" in ev else (inv_row or {}).get("channel", "")
     mism = []
     if inv_row and ev:
@@ -381,6 +384,11 @@ def main():
           f"{summary['g_ion_level_inner_radius_events']} events",
           f"Clouds on the outermost wires (|k| = 4) of the 9-wire analytic patch (a FIELD-MODEL edge, shared by S0, G and "
           f"K2A; warning, not a kernel cause): {sum(1 for r in recs if r.get('patch_edge_wire_clouds', 0))} events", ""]
+    sf = {c: [float(r["saved_fraction"]) for r in recs if r.get("channel") == c and r.get("saved_fraction", "") != ""]
+          for c in ("jpsi", "phi", "omega")}
+    L += ["K256 reservoir (stored ion rows / exact ion births; 1 = all births stored), non-sealed, p5 / p50 / p95 / min: "
+          + "; ".join(f"{c} " + (" / ".join(f"{np.quantile(v, p):.3g}" for p in (.05, .5, .95)) + f" / {min(v):.3g}" if v else "n/a")
+                      for c, v in sf.items()), ""]
     # input-feature representativeness of the development set (no waveform result is involved)
     def q(rs, k, p):
         v = [float(r[k]) for r in rs if r.get(k, "") not in ("", None)]

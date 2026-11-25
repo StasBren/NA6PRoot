@@ -1,13 +1,54 @@
-# Large-sample K2A validation and processing campaign at the frozen 2100 V geometry: feasibility and execution plan
+# K2A fast cathode response: validation plan at the frozen 2100 V geometry
 
-**Status (2026-11-25).**
-- Only Phase 1 (read-only preflight) is implemented and enabled. Its tools were tested on SYNTHETIC inputs only; nothing
-  in this commit has run on the real archives.
-- Phases 2–4 are designed here. The runner refuses them until the preflight has been inspected and the next step is
-  approved.
-- The geometry study (`geometry-study/`, e7ae91c) stays in the repository, but it is not run or developed further.
-- Unchanged throughout: geometry, electronics stand-in, avalanche archives, sealed set, Geant4/Heed, the frozen
-  references and the frozen baseline (f117e2a).
+## Objective (clarified 2026-11-25)
+
+K2A is meant to become the **fast cathode-response component inside the complete NA60+ simulation chain**:
+avalanche generator → compact cloud moments → compiled K2A engine → electronics → digitization.
+- The 997-muon archive is a **validation and benchmarking dataset**, not the scientific deliverable.
+- A full offline 997-event response export is **not** a goal.
+- 997 detailed S0 references will **not** be built.
+- During K2A validation the 2100 V field, cathode geometry and provisional electronics stay unchanged. The geometry
+  study stays paused.
+
+**Current step:** the existing read-only preflight only (section 8). It establishes kernel coverage and characterizes
+the available events: domain causes, wire/D/time coverage, dev-vs-population features, and the K256 reservoir
+fraction (stored rows / exact births). The next implementation step is decided from its results.
+
+**Priorities after the preflight**, in order, each to be planned in detail once the preflight has been reviewed:
+
+1. **Representative development validation.**
+   - Extend K2A numerical (vs G) and physical (vs S0) validation on a development subset chosen from the preflight
+     coverage.
+   - Include non-sealed φ/ω events where the J/ψ-only development set does not span the population.
+   - The sealed 10 φ + 10 ω stay untouched until the criteria are frozen.
+2. **In-chain interface.**
+   - Design the interface between the existing avalanche generator and the compact-moment accumulator (the
+     `BirthMoments.hh` per-(primary, wire) sums).
+   - Moments are accumulated in memory as births occur, so the simulation writes no `ion_births.root`, no trajectory
+     export and no CSV intermediates.
+3. **Full-birth vs K256 moments.**
+   - Accumulate the moments from the complete ion-birth population inside the generator, before reservoir sampling.
+     The per-cloud sums are additive, so this needs no stored ions.
+   - Quantify full-birth vs K256-weighted moments on a few muons, on moments first and then on K2A waveforms and
+     observables.
+   - The preflight's reservoir-fraction column shows where sampling acts.
+4. **Electronics and digitization.** Connect the compiled engine to the electronics and digitization stages behind
+   the existing interchangeable `Electronics` interface. The provisional shaper stays until the VMM3a configuration is
+   fixed.
+5. **Full-chain validation.**
+
+Sections 2–7 below were written for the earlier "997-event processing campaign" framing.
+- They remain valid as a toolbox: reuse map, coverage limits, cost scaling, observables, draft criteria, sealed-set
+  protocol.
+- **Section 7 (offline 997 production) is superseded**: the 997 are processed only as a benchmark and characterization
+  pass, not as a deliverable.
+- **Section 5's development set is to be revised** under priority 1.
+
+**Status.**
+- Only the preflight is implemented and enabled; it has been tested on SYNTHETIC inputs only.
+- The runner refuses `phase2/3/4`.
+- Unchanged: geometry, electronics stand-in, avalanche archives, sealed set, Geant4/Heed, the frozen references, the
+  frozen baseline (f117e2a).
 
 ## 0. Inputs (existing, read-only)
 
@@ -150,7 +191,7 @@ Steps:
 - No retuning. If the model is revised afterwards, the sealed set is spent: it is reported as such and no longer
   called independent.
 
-## 7. Phase 4: 997 fast-response processing
+## 7. Phase 4: 997 fast-response processing (SUPERSEDED: benchmark/characterization only, see Objective)
 
 - Fresh conversion of all 997 with the frozen binary; moments hashed and compared with the preflight moments, which
   must be identical.

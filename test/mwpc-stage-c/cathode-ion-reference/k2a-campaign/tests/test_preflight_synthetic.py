@@ -92,7 +92,7 @@ def write(dirp, eid, slot, n=8, wire=None, D=None, r=None, t=None, meta_station=
     p.write_text("\n".join(rows) + "\n")
     ev = {"source_channel": {"jpsi": "Jpsi_mumu", "phi": "phi_mumu", "omega": "omega_mumu"}[chan[slot]],
           "station": meta_station if meta_station is not None else slot % 6, "det_id": 2 * (slot % 6), "pdg": 13,
-          "n_primaries": 10, "ion_births_exact": 1000, "rows_read": 100 * n, "theta_u_deg": 1.0, "theta_w_deg": 2.0,
+          "n_primaries": 10, "ion_births_exact": 1000, "ion_rows_saved": 300, "rows_read": 100 * n, "theta_u_deg": 1.0, "theta_w_deg": 2.0,
           "momentum_GeV": 10.0, "n_primaries_zero_ions": 0}
     Path(str(p) + ".event.json").write_text(json.dumps(ev))
     Path(str(p) + ".frame.json").write_text("{}")
