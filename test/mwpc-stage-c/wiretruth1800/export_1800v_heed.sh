@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 # 1800V 5620 muons: build/prepare/submit/check one-file Heed+Garfield ROOT.
 set -Eeo pipefail
-export GARFIELD_INSTALL="\${GARFIELD_INSTALL:-/cvmfs/sft-nightlies.cern.ch/lcg/nightlies/dev3/Mon/Garfield++/HEAD/x86_64-el9-gcc13-opt}"
+export GARFIELD_INSTALL="${GARFIELD_INSTALL:-/cvmfs/sft-nightlies.cern.ch/lcg/nightlies/dev3/Mon/Garfield++/HEAD/x86_64-el9-gcc13-opt}"
 if [[ -f "$GARFIELD_INSTALL/Garfield++-env.sh" ]];then
   source "$GARFIELD_INSTALL/Garfield++-env.sh"
 fi
 set -u
-HERE="$(dirname "$(readlink -f "\${BASH_SOURCE[0]}")")"
+HERE="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 REPO="$(cd "$HERE/../../.." && pwd)"
 PROG="$HERE/export_1800v_heed_root.py"
 BINARY="$REPO/test/mwpc-stage-c/build-wiretruth1800-heed-enrichment/enrich_heed_root"
-QUEUE="\${MWPC_1800_PBS_QUEUE:-N}"
-OUT="\${MWPC_1800_ENRICHED:-}"
-SUBSET="\${MWPC_1800_SUBSET:-}"
+QUEUE="${MWPC_1800_PBS_QUEUE:-N}"
+OUT="${MWPC_1800_ENRICHED:-}"
+SUBSET="${MWPC_1800_SUBSET:-}"
 check_out(){
   [[ -n "$OUT" ]] || { echo "Export MWPC_1800_ENRICHED to a NEW test_runs path" >&2;exit 2; }
 }
-case "\${1:-}" in
+case "${1:-}" in
   build)
     command -v root-config >/dev/null || { echo "ROOT environment is not loaded" >&2;exit 2; }
     mkdir -p "$(dirname "$BINARY")"
