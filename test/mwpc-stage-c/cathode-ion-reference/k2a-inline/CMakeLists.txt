@@ -1,15 +1,17 @@
 # K2A inline full-birth moments (milestone 1): separate CMake project; no existing CMake file is changed.
 #   cmake -S <this dir> -B build [-DCMAKE_BUILD_TYPE=<same as your frozen generator build>] && cmake --build build -j2
-#   -DK2A_INLINE_T0_ONLY=ON builds only the dependency-free T0 unit test (no Garfield++, no ROOT).
+#   -DK2A_INLINE_T0_ONLY=ON builds only the dependency-free targets (T0, k2a_strip_eval, strip_eval_inmemory_test).
 # Targets:
 #   mwpc_p3_noFW_penning057_k2a_inline_v1  copy of the frozen 2100 V generator + marked K2A-INLINE blocks
 #                                          (linked exactly like the frozen target: Garfield::Garfield ROOT::Core/RIO/Tree)
 #   k2a_archive_dump                       read-only TTree dump of an archive (independent T1 reference input)
 #   p3_birth_moments                       spatial-ablation batch moments (frozen reader + BirthMoments.hh), full or weighted
 #   moment_accumulator_t0                  T0 synthetic unit test
+#   k2a_strip_eval                         compiled absolute-strip K2A evaluator CLI (milestone 2; no Garfield/ROOT)
+#   strip_eval_inmemory_test               births -> moments -> strip response in memory (SYNTHETIC)
 cmake_minimum_required(VERSION 3.12 FATAL_ERROR)
 project(NA6PK2AInline LANGUAGES CXX)
-option(K2A_INLINE_T0_ONLY "build only the T0 unit test (no Garfield++/ROOT)" OFF)
+option(K2A_INLINE_T0_ONLY "build only the dependency-free targets (no Garfield++/ROOT)" OFF)
 set(AV "${CMAKE_CURRENT_SOURCE_DIR}/../../../mwpc-avalanche")
 set(CIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
 set(FROZEN_GEN "${AV}/phaseB_native_muon_p3_noFW_penning057_cathode_ion_reference_v1.cxx")
@@ -21,6 +23,21 @@ endif()
 
 add_executable(moment_accumulator_t0 tests/moment_accumulator_t0.cc)
 target_compile_features(moment_accumulator_t0 PRIVATE cxx_std_17)
+# milestone 2: compiled absolute-strip K2A evaluator (no Garfield, no ROOT); kernel_eval.cc compiled in UNCHANGED
+set(KERNEL_EVAL "${CIR}/spatial-ablation/engine/kernel_eval.cc")
+add_executable(k2a_strip_eval k2a_strip_eval.cc "${KERNEL_EVAL}")
+target_compile_features(k2a_strip_eval PRIVATE cxx_std_17)
+add_executable(strip_eval_inmemory_test tests/strip_eval_inmemory_test.cc "${KERNEL_EVAL}")
+target_compile_features(strip_eval_inmemory_test PRIVATE cxx_std_17)
+# the evaluator is timed: without a build type, build it like the validated libkernel_eval.so (g++ -O3, no -march);
+# the generator targets keep exactly the frozen build's flags
+if(NOT CMAKE_BUILD_TYPE)
+  target_compile_options(k2a_strip_eval PRIVATE -O3)
+  target_compile_options(strip_eval_inmemory_test PRIVATE -O3)
+  set(EVAL_FLAGS "-O3 (no build type)")
+else()
+  set(EVAL_FLAGS "build type ${CMAKE_BUILD_TYPE}")
+endif()
 
 if(NOT K2A_INLINE_T0_ONLY)
   find_package(Garfield REQUIRED)
@@ -40,7 +57,8 @@ if(NOT K2A_INLINE_T0_ONLY)
 endif()
 
 string(TOUPPER "${CMAKE_BUILD_TYPE}" BT)
-foreach(f IN ITEMS "${INLINE_GEN}" "${CMAKE_CURRENT_SOURCE_DIR}/MomentAccumulator.hh" "${CIR}/CathodeIonArchive.hh"
+foreach(f IN ITEMS "${INLINE_GEN}" "${CMAKE_CURRENT_SOURCE_DIR}/MomentAccumulator.hh" "${CMAKE_CURRENT_SOURCE_DIR}/K2AStripEvaluator.hh"
+                   "${CMAKE_CURRENT_SOURCE_DIR}/K2AKernelIO.hh" "${KERNEL_EVAL}" "${CIR}/CathodeIonArchive.hh"
                    "${CIR}/Plane2100Archive.hh" "${CIR}/spatial-ablation/BirthMoments.hh" "${CIR}/spatial-ablation/p3_birth_moments.cc")
   file(SHA256 "${f}" s)
   get_filename_component(n "${f}" NAME)
@@ -49,5 +67,5 @@ endforeach()
 file(WRITE "${CMAKE_BINARY_DIR}/k2a_inline_build_info.txt"
   "compiler ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION} ${CMAKE_CXX_COMPILER}\n"
   "build_type '${CMAKE_BUILD_TYPE}'\ncxx_flags '${CMAKE_CXX_FLAGS}'\ncxx_flags_build_type '${CMAKE_CXX_FLAGS_${BT}}'\n"
-  "t0_only ${K2A_INLINE_T0_ONLY}\nfrozen_generator_sha256 ${FROZEN_SHA}\n${SRC_SHAS}")
+  "t0_only ${K2A_INLINE_T0_ONLY}\nstrip_evaluator_flags ${EVAL_FLAGS}\nfrozen_generator_sha256 ${FROZEN_SHA}\n${SRC_SHAS}")
 message(STATUS "K2A inline build info: ${CMAKE_BINARY_DIR}/k2a_inline_build_info.txt (build type '${CMAKE_BUILD_TYPE}')")

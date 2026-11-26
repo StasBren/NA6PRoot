@@ -134,3 +134,74 @@ Bitwise agreement with (a) is reported separately per field.
 With `-O3 -march=native`, the spatial moments differ from the batch code by rounding: FMA contraction is applied
 differently to the two inlined copies. With the default x86-64 flags, or `-ffp-contract=off`, they are bitwise equal.
 The T1 PASS criterion is the tolerance bound; bitwise agreement is reported, not required.
+
+# Milestone 2: compiled absolute-strip K2A evaluator
+
+Goal: from the in-memory full-birth moments (`K2AInline::Event`), produce sparse U/V strip waveforms on absolute
+strip labels in compiled code. Nothing in the production path uses K256, ROOT or Python.
+
+Unchanged: the kernel (`s_kernel.py` directory, identity checked), `spatial-ablation/engine/kernel_eval.cc` (compiled
+in, not modified), the 2100 V field, the weighting LUT, and the validated recentering convention.
+
+## API (`K2AStripEvaluator.hh`, `K2AKernelIO.hh`; header-only apart from `kernel_eval.cc`)
+
+```cpp
+auto k = K2AStrip::KernelTable::Open(KERNEL_DIR, KERNEL_ID);       // once per process; K.npy mapped read-only
+K2AStrip::Evaluator eval(*k, {"K2A", 5, 7000.0, 10.0});            // model, half strips, window ns, dt ns
+K2AStrip::Result r = eval.Evaluate(event);                         // event: K2AInline::Event (milestone 1)
+// r.usable, r.status; r.U / r.V: strips (ascending absolute), ion and electron (strip-major, fC/ns, 700 bins)
+// provenance: r.clouds (primary, wire, m_U, m_V, local D, status), r.shifts (Dbar, m, tie margin), r.groups
+```
+
+**Kernel identity.**
+- `kernel_id` is the sha256 of the three file hashes (K.npy, KPHI0.npy, kernel.json), the same value as
+  `cathode_engine.KernelTable`. A mismatch refuses.
+- `transport_id` and `weighting_id` are read from the axes.
+
+**Per-cloud arithmetic.** This is `CathodeResponseEngine._prepare` operation for operation:
+- the coefficients, including the hemisphere term `(A - a0)/(s_perp·sm)`;
+- log-r interpolation using `searchsorted − 1`, clipped;
+- the D index and fraction.
+
+`kernel_eval.cc` is then called once per group, exactly as the Python `compiled` implementation calls it.
+
+**Recentering (E2a/E2b convention of `k2a_recentered_k2a.py`).**
+- Each primary gets m = floor(Dbar/P + 1/2), where Dbar is the N-weighted mean D of its clouds. The sum uses numpy's
+  pairwise order, so integer shifts reproduce the Python rule exactly.
+- Groups are formed by (m_U, m_V) and evaluated in ascending order, with D' = D − mP and base + m.
+- Each group's result is added on its absolute labels.
+- An explicit shift table, such as an E2b `groups.json`, can be imposed. Any difference from the production rule is
+  counted.
+
+**Statuses.**
+- Blocking:
+  - `INPUT_BLOCKED`: the moment event itself is blocked;
+  - `WIRE_NOT_IN_KERNEL`;
+  - `R_EFF_BELOW_GRID` and `R_EFF_ABOVE_GRID`;
+  - `D_U_OUTSIDE_TABLE` and `D_V_OUTSIDE_TABLE`: the local D' over all ±5 strips;
+  - `NONFINITE_MOMENT`;
+  - `NONPOSITIVE_CHARGE`;
+  - `T_NEGATIVE`;
+  - `SHIFT_UNDEFINED`;
+  - `ENGINE_INDEX_ERROR`.
+
+  If any is set, there is no waveform at all. The per-cloud statuses and the blocked charge are still returned.
+- Informational: `T_AFTER_WINDOW` and `SHIFT_NEAR_TIE`.
+
+Nothing is clamped or dropped.
+
+## Tools
+
+| file | purpose |
+|---|---|
+| `k2a_strip_eval.cc` | CLI: evaluates a moments CSV, writes replay format + clouds/shifts/groups CSV + `result.json` (kernel verify/load time, cold/warm evaluate, peak RSS, mapped vs `--preload`); `--shifts groups.json`; `--displace-event` (test only) |
+| `k2a_strip_compare.py` | waveform-only comparator: labels, time grid, L2, per-strip L2, per-strip and total window charge, U/V ratio; `--label-shift` |
+| `run_m2_adapter.sh` | WSL validation on the real kernel: 0560/0997 E2b reproduction, displacement symmetry, full-birth inline moments vs Python, benchmarks |
+| `k2a_select_regression.py` | picks a non-sealed (slot, N) for a real multiwire / displaced-primary full-birth run, from the preflight K256 moments |
+| `tests/test_strip_eval_synthetic.sh` | toy-kernel tests A–H (SYNTHETIC, not physics) |
+| `tests/strip_eval_inmemory_test.cc` | births → accumulator → Event → evaluator in memory, == CSV path bitwise |
+
+**Agreement with the Python engine.** On the toy kernel the adapter matches the Python engine to rel L2 ≤ 7e-15 for
+the loop, vector and compiled implementations. It is not bitwise: the hemisphere constants cos(nθ)·sign(sin θ) are
+exactly zero analytically, but their computed value is rounding noise of about 1e-15 that depends on the BLAS
+summation order. The required tolerance is therefore 1e-12, not bitwise equality.
