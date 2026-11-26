@@ -332,7 +332,7 @@ def combine(out: Path):
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument("mode",choices=("selftest","stage","status","gate","combine"))
+    p.add_argument("mode",choices=("selftest","stage","gate-one","status","gate","combine"))
     p.add_argument("--output",type=Path,required=True)
     p.add_argument("--array-index",type=int)
     a=p.parse_args()
@@ -342,6 +342,20 @@ def main():
     elif a.mode=="stage":
         require(a.array_index is not None,"--array-index required")
         stage(out,a.array_index)
+    elif a.mode=="gate-one":
+        require(a.array_index is not None, "pilot index is required")
+        _,_,subset,_,_=source_state(out)
+        item=subset["shards"][a.array_index]
+        folder=stage_dir(out,item["id"])
+        require(folder.is_dir(),"pilot output does not exist")
+        sha_manifest(folder)
+        seal=load(folder/"sealed.json")
+        require(seal["schema"]==STAGE_SCHEMA and
+                seal["manifest_sha256"]==item["manifest_sha256"] and
+                seal["n_muons"]==item["n_muons"],
+                "pilot output source identity/count mismatch")
+        print(f"HEED_PILOT_GATE_PASS array={a.array_index} "
+              f"shard={item['id']} muons={seal['n_muons']}")
     elif a.mode=="status":
         inventory(out)
         if (out/"enriched"/OUTPUT).exists():
