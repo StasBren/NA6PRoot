@@ -20,10 +20,29 @@ case "${1:-}" in
     [[ -n "$SUBSET" ]] || { echo "Set MWPC_1800_SUBSET to verified 5620 ROOT folder" >&2;exit 2; }
     python3 "$P" prepare --output "$OUT" --subset "$SUBSET"
     ;;
+  pilot-submit)
+    check_out
+    [[ -s "$OUT/locked/export.json" && ! -e "$OUT/enriched" ]] ||
+      { echo "prepare first; no overwrite" >&2;exit 2; }
+    [[ ! -e "$OUT/pbs-logs/pilot_submission.tsv" ]] ||
+      { echo "pilot already submitted" >&2;exit 2; }
+    job=$(/opt/pbs/bin/qsub -q "$QUEUE" -N w18hp \
+      -l select=1:ncpus=1:mem=2gb -l walltime=04:00:00 -l io=0.1 \
+      -v "MWPC_1800_ENRICHED=$OUT,MWPC_1800_DASH_WORKTREE=$REPO,MWPC_HEED_SHARD_INDEX=0" \
+      -o "$OUT/pbs-logs" -e "$OUT/pbs-logs" \
+      "$HERE/pbs_1800v_heed_shard.sh")
+    [[ -n "$job" ]] || { echo "empty PBS pilot ID" >&2;exit 2; }
+    printf '%s\t%s\n' "$(date -u +%FT%TZ)" "$job" \
+      > "$OUT/pbs-logs/pilot_submission.tsv"
+    echo "HEED_PILOT_PBS_JOB=$job"
+    ;;
   stage-submit)
     check_out
     [[ -s "$OUT/locked/export.json" && ! -e "$OUT/enriched" ]] ||
       { echo "prepare first; no overwrites" >&2;exit 2; }
+    [[ -d "$OUT/shard_exports/shard_0001" ]] ||
+      { echo "pilot shard_0001 must finish before array submit" >&2;exit 2; }
+    python3 "$S" gate-one --output "$OUT" --array-index 0
     [[ ! -e "$OUT/pbs-logs/shard_submission.tsv" ]] ||
       { echo "shard array already submitted; do not duplicate" >&2;exit 2; }
     job=$(/opt/pbs/bin/qsub -q "$QUEUE" -N w18hs \
@@ -59,7 +78,7 @@ case "${1:-}" in
     echo "HEED_FINAL_PBS_SUBMITTED=$job"
     ;;
   *)
-    echo "Usage: bash export_1800v_heed_sharded.sh {prepare|stage-submit|status|final-submit}" >&2
+    echo "Usage: bash export_1800v_heed_sharded.sh {prepare|pilot-submit|stage-submit|status|final-submit}" >&2
     exit 2
     ;;
 esac
