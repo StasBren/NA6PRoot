@@ -50,6 +50,42 @@ def sha_manifest(d: Path) -> dict[str,str]:
     return hashes
 
 
+def write_shard_checksums(directory: Path):
+    """Checksum exactly three immutable payloads (never SHA256SUMS itself)."""
+    expected=("clusters.tsv","primaries.tsv","sealed.json")
+    require({p.name for p in directory.iterdir()}==set(expected),
+            "unexpected file in sealed shard staging area")
+    path=directory/"SHA256SUMS"
+    require(not path.exists(),"refusing existing SHA256SUMS")
+    with path.open("x",encoding="utf-8") as f:
+        for name in sorted(expected):
+            f.write(f"{sha(directory/name)}  {name}\n")
+    return sha_manifest(directory)
+
+
+def selftest():
+    """Fast local sealing QA without touching original physics outputs."""
+    with tempfile.TemporaryDirectory(prefix="heed_shard_selftest_") as td:
+        d=Path(td)
+        for name,data in (
+            ("clusters.tsv","crossing_id\tcluster_index\n"),
+            ("primaries.tsv","crossing_id\tprimary_index\n"),
+            ("sealed.json",'{"schema":"selftest"}\n')):
+            (d/name).write_text(data,encoding="utf-8")
+        hashes=write_shard_checksums(d)
+        require(set(hashes)=={"clusters.tsv","primaries.tsv","sealed.json"},
+                "selftest returned wrong checksum set")
+        with (d/"primaries.tsv").open("a",encoding="utf-8") as f:
+            f.write("tampered\n")
+        tamper_rejected=False
+        try:
+            sha_manifest(d)
+        except Exception:
+            tamper_rejected=True
+        require(tamper_rejected,"tampered shard was accepted")
+    print("HEED_SHARD_SELFTEST_PASS checksum manifest and tamper rejection")
+
+
 def source_state(out: Path):
     meta=load(out/"locked/export.json")
     require(meta["schema"]==SCHEMA and meta["n_shards"]==N_EXPECTED and
@@ -163,14 +199,7 @@ def stage(out: Path, array_index: int):
             "pbs_job_id":os.environ["PBS_JOBID"],
             "sealed_utc":timestamp(),
         })
-        hashes={}
-        with (output/"SHA256SUMS").open("x",encoding="utf-8") as f:
-            for p in sorted(output.iterdir()):
-                if p.is_file():
-                    digest=sha(p)
-                    f.write(f"{digest}  {p.name}\n")
-                    hashes[p.name]=digest
-        sha_manifest(output)
+        write_shard_checksums(output)
         tmpdest=out/"attempts"/f"staging_shard_{sid:04d}_{os.getpid()}"
         require(not tmpdest.exists() and not target.exists(),
                 "another shard export is already present")
@@ -303,12 +332,14 @@ def combine(out: Path):
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument("mode",choices=("stage","status","gate","combine"))
+    p.add_argument("mode",choices=("selftest","stage","status","gate","combine"))
     p.add_argument("--output",type=Path,required=True)
     p.add_argument("--array-index",type=int)
     a=p.parse_args()
     out=a.output.resolve()
-    if a.mode=="stage":
+    if a.mode=="selftest":
+        selftest()
+    elif a.mode=="stage":
         require(a.array_index is not None,"--array-index required")
         stage(out,a.array_index)
     elif a.mode=="status":
