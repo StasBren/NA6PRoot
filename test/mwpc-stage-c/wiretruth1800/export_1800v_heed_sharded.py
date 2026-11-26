@@ -314,10 +314,12 @@ def combine(out: Path):
             "n_source_shards":N_EXPECTED,"pbs_job_id":os.environ["PBS_JOBID"],
             "sealed_utc":timestamp()
         })
+        final_names=(OUTPUT,"README_DATA.txt","sealed.json")
+        require({p.name for p in result.iterdir()}==set(final_names),
+                "unexpected file in final ROOT result before sealing")
         with (result/"SHA256SUMS").open("x",encoding="utf-8") as f:
-            for p in sorted(result.iterdir()):
-                if p.is_file():
-                    f.write(f"{sha(p)}  {p.name}\n")
+            for name in sorted(final_names):
+                f.write(f"{sha(result/name)}  {name}\n")
         finalstage=out/"attempts"/f"final_staging_{os.getpid()}"
         require(not finalstage.exists(),"duplicate result staging")
         shutil.copytree(result,finalstage)
