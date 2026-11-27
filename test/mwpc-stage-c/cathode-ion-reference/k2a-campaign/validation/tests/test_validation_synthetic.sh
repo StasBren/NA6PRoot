@@ -9,14 +9,25 @@
 #   B refusals before anything runs: sealed slot, kernel-reference slot, existing OUTDIR
 #   C full chain on one far toy muon (half of the primaries 7 strips away; per-ion birth-time jitter with zero weighted
 #     mean per primary, so T1 collapse recovers the toy export and S0_T0 differs from S0_T1 by a real time spread):
-#     outcome VALID; S0_T0 grouping == S0_T1 grouping; compiled == Python K2A (1e-12); moment path (1e-7); three
-#     physics comparisons; three shaped comparisons on identical labels; runtime split and measured speedup present;
-#     criteria v1 dry run with the complete check count; report COMPLETE, exit 0; archive unchanged; with
-#     MWPC_K2A_VAL_PRUNE_VERTICES=1 only the 5 derived path copies inside OUTDIR are removed (sha256 recorded)
-#   D outcome negatives on copies (never the original): identity FAIL, domain changed by the moment path, consistent
-#     refusal -> OUT_OF_DOMAIN, frozen replay refusal -> S0_FAILED, archive changed, archive-vs-export moments FAIL,
-#     T0 failure -> VALID_T1_ONLY, missing shaped comparison -> INCONCLUSIVE; report with a missing outcome -> exit 3;
-#     combined report (--from) refuses a slot present in two runs
+#     execution VALID; the PRIMARY K2A runs on its own production grouping (no S0 shifts), the assignment AGREEs with
+#     the S0 grouping and the primary and S0-imposed responses are bit-identical; S0_T0 grouping == S0_T1 grouping;
+#     compiled == Python K2A (1e-12); moment path (1e-7); six comparisons; four shaped comparisons; accuracy (v1 dry
+#     run) reported separately from execution; runtime split with cathode-response evaluation separated from archive
+#     I/O and moments; report COMPLETE, exit 0; archive unchanged; with MWPC_K2A_VAL_PRUNE_VERTICES=1 only the 5
+#     derived path copies inside OUTDIR are removed (sha256 recorded)
+#   D outcome negatives on copies (tests/validation_negatives.py): identity FAIL, domain changed by the moment path,
+#     consistent refusal -> OUT_OF_DOMAIN, production rule blocked with S0 grouping usable -> OUT_OF_DOMAIN (primary
+#     decides), agreeing assignments with different responses -> FAIL, assignment not compared / malformed, frozen
+#     replay refusal -> S0_FAILED, archive changed, archive-vs-export moments FAIL, T0 failure -> VALID_T1_ONLY, missing
+#     shaped / grouping-effect comparison -> INCONCLUSIVE, label-union failure -> FAIL; report: an intended-OOD slot is
+#     listed separately and never counted in the accuracy set; missing outcome -> exit 3; combined report refuses
+#     duplicates
+#   F unit regression (tests/assignment_units.py) of k2a_shift_assignment.py (agree, disagree, K2A-only primary, imposed
+#     run, missing) and k2a_label_union.py (identical -> symlinks, different -> bit-exact zero padding, inconsistent
+#     variant refused)
+#   G disagreement end-to-end (tests/disagreement_case.py) on a copy whose S0 grouping of one primary differs from the
+#     production rule: reported with primary and charge, grouping effect measured, zero-padded labels, primary K2A on
+#     its own grouping, equivalence tests PASS
 #   E criteria dry run unit cases: identical responses PASS; lead change with S0 top-2 within 1 % -> AMBIGUOUS (not a
 #     failure); a real lead change and a 20 um w shift -> FAIL
 set -Eeuo pipefail
@@ -116,7 +127,7 @@ for s in 0001 0002 0003; do mkdir -p "$W/archive/muon_$s"; echo "synthetic $s" >
 printf 'slot,role,status\n0001,dev_reference,USABLE\n0002,pool,USABLE\n0003,sealed_validation,USABLE\n' > "$W/pf/inventory/slots.csv"
 mkdir -p "$W/build"; g++ -O3 -std=c++17 -o "$W/build/k2a_strip_eval" "$INL/k2a_strip_eval.cc" "$SA/engine/kernel_eval.cc"
 KID=$(python3 -c "import sys; sys.path.insert(0, '$SA/engine'); import cathode_engine as ce; print(ce.KernelTable('$RUN/kernel_$TAG').kernel_id)")
-printf 'slot,station,channel,abs_theta_u,abs_theta_w,log_gain,mean_abs_A,n_wires_5pct,max_abs_m,clouds\n0002,3,phi,4.1,2.2,9.3,0.2,1,7,40\n' > "$W/selection.csv"
+printf 'slot,reason,station,channel,abs_theta_u,abs_theta_w,log_gain,mean_abs_A,n_wires_5pct,max_abs_m,clouds\n0002,displaced,3,phi,4.1,2.2,9.3,0.2,1,7,40\n' > "$W/selection.csv"
 ENVV=(MWPC_SPECTRAL_LUT="$LUT" MWPC_NUMW_DIR="$NUMW" MWPC_EXPORT_BIN="$FX" MWPC_ION_MOBILITY="$W/mobility.txt" MWPC_K2A_PF="$W/pf"
       MWPC_ARCHIVE_2100_K256="$W/archive" MWPC_K2A_KERNEL_ID="$KID" MWPC_BIRTHS_BIN="$FB" MWPC_K2A_INLINE_BUILD="$W/build"
       MWPC_K2A_FAR_MIN_FREE_GIB=0 MWPC_K2A_VAL_MIN_FREE_GIB=0 MWPC_K2A_VAL_SYNTHETIC=1 MWPC_K2A_VAL_REPEAT=5 MWPC_K2A_VAL_SELECTION="$W/selection.csv")
@@ -142,101 +153,70 @@ O = Path(sys.argv[1]); o = json.load(open(O / "muons/muon_0002/outcome.json")); 
 assert o["label"] == "SYNTHETIC" and r["label"] == "SYNTHETIC"
 assert o["outcome"] == "VALID", (o["outcome"], o["failures"], o["inconclusive"])
 v = o["steps"]["validation"]
-for k in ("T0_groups", "T0_S0_local_census", "births_moments", "K2A_prod", "K2A_cc_export"):
+for k in ("T0_groups", "T0_S0_local_census", "births_moments", "K2A_prod", "K2A_imposed", "K2A_cc_export", "label_union"):
     assert v[k]["status"] == "OK", (k, v[k])
-for k in ("identity_cc_vs_python", "moment_path_archive_vs_export", "moments_archive_vs_export"):
+for k in ("identity_cc_vs_python", "moment_path_archive_vs_export", "moments_archive_vs_export", "grouping_identity"):
     assert v[k]["status"] == "PASS", (k, v[k])
-assert v["K2A_rule"]["status"] == "INFO"
+# the PRIMARY K2A ran WITHOUT the S0 grouping; agreement of assignments is checked, and then responses are bit-identical
+rp = json.load(open(O / "muons/muon_0002/K2A_prod/result.json")); ri = json.load(open(O / "muons/muon_0002/K2A_imposed/result.json"))
+assert rp["shifts_from"].startswith("production rule") and ri["shifts_from"].endswith("groups.json"), (rp["shifts_from"], ri["shifts_from"])
+assert v["shift_assignment"]["status"] == "AGREE" and o["shift_assignment"]["n_disagree"] == 0
+assert o["k2a_domain"]["grouping"].startswith("production rule")
 c = o["comparisons"]
-for n in ("S0T1_vs_K2A", "S0T0_vs_K2A", "S0T0_vs_S0T1"):
+for n in ("S0T1_vs_K2A", "S0T0_vs_K2A", "S0T1_vs_K2Aimp", "S0T0_vs_K2Aimp", "S0T0_vs_S0T1", "K2Aimp_vs_K2A"):
     assert c[n] and c[n]["status"] in ("OK", "WARN"), (n, c[n] and c[n]["status"])
+assert c["K2Aimp_vs_K2A"]["worst_L2_rel"] == 0.0
 t = c["S0T0_vs_S0T1"]["ion_only.U.unshaped_L2_rel"]
 assert 1e-6 < t < 0.5, f"time jitter must change the waveform measurably: {t}"
-for n in ("refS0T1_ionelec", "refS0T0_ionelec", "refS0T1_ion"):
-    assert set(o["shaped"][n]["metrics"]) == {"K2A", "S0T0" if n.startswith("refS0T1") else "S0T1"}, n
-d = o["criteria_v1_dry_run"]["refS0T1_ionelec"]
-assert d["status"] in ("PASS", "FAIL") and d["n_checks"] == 2 * (2 * 7 + 3), d["n_checks"]
+exp = {"refS0T1_ionelec": {"K2A", "K2Aimp", "S0T0"}, "refS0T0_ionelec": {"K2A", "K2Aimp", "S0T1"},
+       "refS0T1_ion": {"K2A", "K2Aimp", "S0T0"}, "refK2Aimp_ionelec": {"K2A"}}
+for n, e in exp.items():
+    assert set(o["shaped"][n]["metrics"]) == e, (n, set(o["shaped"][n]["metrics"]))
+d = o["criteria_v1_dry_run"]["primary_vs_S0T1"]
+assert d["decisive"] and d["candidate"] == "K2A" and d["n_checks"] == 2 * (2 * 7 + 3), d["n_checks"]
+assert set(o["criteria_v1_dry_run"]) == {"primary_vs_S0T1", "primary_vs_S0T0", "imposed_vs_S0T1"}
+assert o["accuracy"]["status"] == d["status"] and d["status"] in ("PASS", "FAIL")
+assert "APPROXIMATE" in o["references"]["S0_T0"] and "DIAGNOSTIC" in o["references"]["K2Aimp"]
 rt = o["runtime"]
-for k in ("total_T0_single_pass", "total_T1_single_pass", "rkf_export_archive_read_plus_ion_drift", "weighting_replay_T0_chosen_attempt_sum"):
+assert "excluded" in rt["scope"]
+for k in ("total_T0_single_pass", "response_T0_excl_archive_read_approx", "rkf_export_archive_read_plus_ion_drift"):
     assert rt["S0"][k] and rt["S0"][k] > 0, k
-for k in ("per_event_warm", "evaluate_warm_median", "single_event_cold_incl_kernel_open"):
+for k in ("response_eval_only", "moments_plus_response_eval", "archive_io_plus_moments_plus_eval", "single_event_cold_incl_kernel_open"):
     assert rt["K2A"][k] and rt["K2A"][k] > 0, k
-sp = rt["speedup_measured"]["total_T0_single_pass/per_event_warm"]; assert sp > 1, sp
-assert r["status"] == "COMPLETE" and r["outcome_counts"] == {"VALID": 1}, r["outcome_counts"]
+sp = rt["speedup_measured"]
+assert sp["S0_T0/cathode_response_eval"] > sp["S0_T0/response_from_births_incl_moments"] > sp["S0_T0/end_to_end_from_archive_incl_io"] > 1
+assert r["status"] == "COMPLETE" and r["execution_counts"] == {"VALID": 1}, r["execution_counts"]
+assert r["accuracy_set"] == ["0002"] and r["accuracy_v1_primary_counts"] == {d["status"]: 1}
 assert (O / "per_muon.csv").read_text().count("\n") == 2
-md = (O / "validation_report.md").read_text(); assert "SYNTHETIC test data" in md and "DIAGNOSTIC dry run" in md
+md = (O / "validation_report.md").read_text()
+for x in ("SYNTHETIC test data", "execution is not accuracy", "DIAGNOSTIC dry run", "Avalanche generation is excluded", "Shift assignment"):
+    assert x in md, x
 b, a = (O / "muons/muon_0002/archive_sha256_before.txt").read_text(), (O / "muons/muon_0002/archive_sha256_after.txt").read_text()
 assert a == b
 pr = (O / "muons/muon_0002/pruned_vertices.sha256").read_text().splitlines()
 assert len(pr) == 5 and all(l.split()[1].startswith(str(O)) for l in pr), pr      # frozen export + 2 T1 groups + 2 T0 groups
 assert not list(O.rglob("frozen_export/vertices.f64")) and (Path(o["far_dir"]) / "prepared/T1_export/vertices.f64").is_file()
-print(f"PASS full chain (SYNTHETIC toy): outcome VALID; compiled == Python K2A, moment path, S0_T0 grouping == S0_T1; "
-      f"model worst L2 {c['S0T1_vs_K2A']['worst_L2_rel']:.3g}, time-collapse U L2 {t:.3g} (coarse toy kernel); "
-      f"dry-run v1 {d['status']} ({d['n_checks']} checks); measured toy speedup {sp:.3g} (toy sizes: not a physics number)")
+print(f"PASS full chain (SYNTHETIC toy): execution VALID, accuracy (v1 dry run, primary K2A vs S0_T1) {d['status']} ({d['n_checks']} checks); "
+      f"primary K2A ran on its own grouping, assignments AGREE and K2A == K2Aimp bit-identically; compiled == Python, moment path; "
+      f"model worst L2 {c['S0T1_vs_K2A']['worst_L2_rel']:.3g}, time collapse U L2 {t:.3g} (coarse toy kernel); "
+      f"measured toy cathode-response-eval speedup {sp['S0_T0/cathode_response_eval']:.3g} (toy sizes: not a physics number)")
 PY
 
 # ---- D. outcome negatives on copies
-python3 - "$W/val" "$HERE/k2a_validation_muon.py" "$HERE/k2a_validation_report.py" "$W/neg" "$CAMP/sealed/sealed_acceptance_criteria_v1.json" <<'PY'
-import json, shutil, subprocess, sys
-from pathlib import Path
-O, MU, REP, N, CRIT = Path(sys.argv[1]), sys.argv[2], sys.argv[3], Path(sys.argv[4]), sys.argv[5]
-V0 = O / "muons/muon_0002"; E0 = Path((V0 / "far_dir.txt").read_text().strip()); N.mkdir()
-def setstep(f, name, status, header):
-    lines = f.read_text().splitlines(); out = []
-    for l in lines:
-        p = l.split("\t")
-        if p[0] == name:
-            p[1] = status
-        out.append("\t".join(p))
-    f.write_text("\n".join(out) + "\n")
-def case(name, edit, expect):
-    d = N / name; V = d / "V"; E = d / "E"
-    shutil.copytree(V0, V, symlinks=True); shutil.copytree(E0, E, symlinks=True)
-    (V / "far_dir.txt").write_text(str(E) + "\n")
-    (V / "outcome.json").unlink()
-    edit(V, E)
-    p = subprocess.run([sys.executable, MU, str(V), "--muon", "0002", "--label", "SYNTHETIC", "--independent", "yes",
-                        "--t0", "1", "--criteria", CRIT], capture_output=True, text=True)
-    o = json.load(open(V / "outcome.json"))
-    assert o["outcome"] == expect, (name, o["outcome"], o["failures"], o["inconclusive"], p.stderr[-300:])
-    return o
-def blocked(V, E, cc):
-    setstep(V / "steps.tsv", "K2A_prod", "BLOCKED", True)
-    j = json.load(open(V / "K2A_prod/result.json")); j.update(usable=False, status_names="R_EFF_ABOVE_GRID", blocked_charge_fC=1.0)
-    (V / "K2A_prod/result.json").write_text(json.dumps(j))
-    if cc:
-        setstep(V / "steps.tsv", "K2A_cc_export", "BLOCKED", True); setstep(E / "steps.tsv", "E2_K2A_local", "FAIL", False)
-cases = [
-    ("identity_fail", lambda V, E: setstep(V / "steps.tsv", "identity_cc_vs_python", "FAIL", True), "FAIL"),
-    ("domain_changed_by_moment_path", lambda V, E: blocked(V, E, False), "FAIL"),
-    ("consistent_refusal", lambda V, E: blocked(V, E, True), "OUT_OF_DOMAIN"),
-    ("s0_replay_refused", lambda V, E: setstep(E / "steps.tsv", "E2_replay_g_0_0", "INCONCLUSIVE", False), "S0_FAILED"),
-    ("archive_changed", lambda V, E: (V / "archive_sha256_after.txt").write_text("0" * 64 + "  x\n"), "FAIL"),
-    ("moments_differ", lambda V, E: setstep(V / "steps.tsv", "moments_archive_vs_export", "FAIL", True), "FAIL"),
-    ("t0_failed", lambda V, E: setstep(V / "steps.tsv", "T0_replay_g_0_0", "FAIL", True), "VALID_T1_ONLY"),
-    ("shaped_missing", lambda V, E: shutil.rmtree(V / "shaped_refS0T1_ion"), "INCONCLUSIVE"),
-    ("shaped_label_mismatch", lambda V, E: setstep(V / "steps.tsv", "shaped_refS0T1_ionelec", "FAIL", True), "FAIL"),
-    ("cmp_numerical", lambda V, E: setstep(V / "steps.tsv", "cmp_S0T1_vs_K2A", "FAIL", True), "FAIL"),
-]
-for c in cases:
-    o = case(*c)
-assert "R_EFF_ABOVE_GRID" in json.dumps(case("ood_named", lambda V, E: blocked(V, E, True), "OUT_OF_DOMAIN")["k2a_domain"])
-# report: a slot without outcome is INCONCLUSIVE (exit 3); a FAIL outcome gives exit 1
-R = N / "rep"; R.mkdir(); (R / "muons").mkdir()
-shutil.copy(O / "provenance.txt", R); (R / "slots.txt").write_text("0002\n0004\n")
-shutil.copytree(V0, R / "muons/muon_0002", symlinks=True)
-assert subprocess.run([sys.executable, REP, str(R)], capture_output=True).returncode == 3
-j = json.load(open(R / "validation_report.json")); assert j["outcome_counts"] == {"VALID": 1, "INCONCLUSIVE": 1}, j["outcome_counts"]
-shutil.copy(N / "identity_fail/V/outcome.json", R / "muons/muon_0002/outcome.json"); (R / "slots.txt").write_text("0002\n")
-assert subprocess.run([sys.executable, REP, str(R)], capture_output=True).returncode == 1
-# combined report (pilot + remainder style): a slot in two runs is refused; one run alone reproduces its counts
-assert subprocess.run([sys.executable, REP, str(N / "comb_dup"), "--from", str(O), str(O)], capture_output=True).returncode != 0
-assert not (N / "comb_dup").exists()
-assert subprocess.run([sys.executable, REP, str(N / "comb"), "--from", str(O)], capture_output=True).returncode == 0
-assert json.load(open(N / "comb/validation_report.json"))["outcome_counts"] == {"VALID": 1}
-print(f"PASS outcome negatives: {len(cases) + 1} edited copies give FAIL / OUT_OF_DOMAIN (status named) / S0_FAILED / "
-      "VALID_T1_ONLY / INCONCLUSIVE as specified; report: missing outcome -> INCONCLUSIVE (exit 3), FAIL -> exit 1; combined report refuses a duplicated slot")
-PY
+python3 "$HERE/tests/validation_negatives.py" "$W/val" "$HERE" "$W/neg" "$CAMP/sealed/sealed_acceptance_criteria_v1.json"
+
+# ---- F. shift assignment and label union: unit regression (agreement, disagreement, malformed, missing)
+python3 "$HERE/tests/assignment_units.py" "$HERE" "$W/unit"
+
+# ---- G. disagreement end-to-end: the S0 grouping of one primary differs from the production rule (copies; the S0
+#      grouping file is edited and the Python K2A_local regenerated with it, so the equivalence tests still compare like
+#      with like; the S0 waveforms are those of the original grouping: plumbing test of the disagreement path only)
+python3 "$HERE/tests/disagreement_case.py" prepare "$W/val" "$W/disagree" "$RC/k2a_recentered_k2a.py" "$INL/tests/make_toy_kernel.py" "$SA/engine"
+env "${ENVV[@]}" K2AV_EV="$W/build/k2a_strip_eval" K2AV_REPEAT=3 bash "$HERE/k2a_validation_k2a.sh" "$W/disagree/muon_0002" "$W/disagree/E" \
+    "$(cat "$W/disagree/kernel_dir.txt")" "$(cat "$W/disagree/kernel_id.txt")" "$W/archive/muon_0002/ion_births.root" > "$W/disagree.log" 2>&1 || { tail -20 "$W/disagree.log"; die "K2A stage (disagreement)"; }
+python3 "$HERE/k2a_validation_muon.py" "$W/disagree/muon_0002" --muon 0002 --label SYNTHETIC --independent yes --t0 1 \
+    --criteria "$CAMP/sealed/sealed_acceptance_criteria_v1.json" > "$W/disagree_outcome.log" 2>&1
+python3 "$HERE/tests/disagreement_case.py" check "$W/disagree"
 
 # ---- E. criteria dry-run unit cases
 python3 - "$HERE" "$CAMP/sealed/sealed_acceptance_criteria_v1.json" <<'PY'

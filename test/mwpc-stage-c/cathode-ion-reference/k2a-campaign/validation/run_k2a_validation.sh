@@ -17,18 +17,24 @@
 #           reference; also the Python K2A_local, truncation check and far analysis. Run per muon in OUTDIR/far/.
 #   S0_T0   the same groups built from the UNCOLLAPSED frozen export (true per-ion birth times; group membership must
 #           equal S0_T1's), same ladder replays, electron step and census sum. Disable with MWPC_K2A_VAL_T0=0.
-#   K2A     production path: p3_birth_moments (archive -> compact moments, the frozen archive reader) -> compiled
-#           k2a_strip_eval (validated kernel, id verified) with the S0 grouping imposed (--shifts groups.json); the
-#           production rule is also run and any differing primary shift reported.
-#   checks  K2A(C++, export moments) == Python K2A_local (1e-12: implementation identity);
-#           K2A(C++, archive moments) == K2A(C++, export moments) (1e-7: moment path; s_compare_moments at 1e-9 first)
-#   compare k2a_recenter_compare (k2a_vs_s0): S0_T1 vs K2A, S0_T0 vs K2A, S0_T0 vs S0_T1 (time-collapse part);
-#           t_shaped_compare (provisional CR-RC^3, Tp 100/200 ns): ion+electron with reference S0_T1 and S0_T0, and
-#           ion-only with reference S0_T1.
-#   outcome k2a_validation_muon.py: VALID / OUT_OF_DOMAIN (K2A blocking statuses named, S0 still computed) /
-#           S0_FAILED (reference unavailable, cause named) / FAIL (numerical or integrity failure) / INCONCLUSIVE
-#           (something missing); runtime split; DIAGNOSTIC dry run of the frozen sealed criteria v1. Nothing is
-#           clamped, excluded or re-run selectively.
+#   K2A     PRIMARY prediction, nothing taken from S0: p3_birth_moments (archive -> compact moments, the frozen
+#           archive reader) -> compiled k2a_strip_eval (validated kernel, id verified) with its OWN production grouping /
+#           recentering rule. K2Aimp: the same moments with the S0 grouping imposed (--shifts groups.json), DIAGNOSTIC
+#           only (kernel / interpolation error at identical windows). The per-primary assignments of the two are
+#           compared (k2a_shift_assignment.py); a disagreement is reported with its charge and its effect on the
+#           waveforms and observables (cmp_K2Aimp_vs_K2A, shaped_refK2Aimp_ionelec). See k2a_validation_k2a.sh.
+#   checks  K2A(C++, export moments, S0 grouping) == Python K2A_local (1e-12: implementation identity);
+#           K2Aimp (archive moments) == the same on export moments (1e-7: moment path; s_compare_moments at 1e-9 first);
+#           agreeing assignments -> K2A and K2Aimp bit-identical
+#   compare k2a_recenter_compare (k2a_vs_s0): S0_T1 vs K2A and S0_T0 vs K2A (primary), the same vs K2Aimp
+#           (diagnostic), S0_T0 vs S0_T1 (time collapse), K2Aimp vs K2A (grouping effect); t_shaped_compare
+#           (provisional CR-RC^3, Tp 100/200 ns) on one absolute-strip label set (k2a_label_union.py).
+#           S0_T0 and S0_T1 both use the APPROXIMATE instantaneous electron-step term (t_prompt_electron_term.py),
+#           not a microscopic electron-current simulation; their ion terms are the frozen RKF + weighting replay.
+#   outcome k2a_validation_muon.py: execution outcome VALID / VALID_T1_ONLY / OUT_OF_DOMAIN (K2A blocking statuses
+#           named, S0 still computed) / S0_FAILED (cause named) / FAIL (numerical or integrity failure) /
+#           INCONCLUSIVE (something missing), kept SEPARATE from the accuracy verdict (DIAGNOSTIC dry run of the frozen
+#           sealed criteria v1 on the primary K2A vs S0_T1); runtime split. Nothing is clamped, excluded or re-run.
 # Then k2a_validation_report.py OUTDIR -> validation_report.{json,md}, per_muon.csv.
 #
 # env: as k2a_recenter_experiment.sh far (MWPC_SPECTRAL_LUT, MWPC_NUMW_DIR, MWPC_EXPORT_BIN, MWPC_ION_MOBILITY,
@@ -115,36 +121,8 @@ python3 "$CAMP/sealed/check_criteria_freeze.py" > "$OUT/criteria_freeze_check.tx
 printf '%s\n' "${SLOTS[@]}" > "$OUT/slots.txt"
 
 # ---- helpers (each muon: V = OUT/muons/muon_M)
-V=/dev/null
-vstep(){ printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "${4:-}" >> "$V/steps.tsv"; echo "  [$2] $1: $3"; }
-TF=/dev/null
-tm(){ # tm LABEL CMD...: CMD unchanged; appends label, wall_s, peak_rss_kib (GNU time only), exit to $TF
-  local label="$1"; shift
-  local rc=0 t0 t1 rss=""
-  if [[ $(type -t "$1") != function && -x /usr/bin/time ]]; then
-    local tf; tf=$(mktemp)
-    /usr/bin/time -f '%e %M' -o "$tf" "$@" || rc=$?
-    read -r t1 rss < <(tail -1 "$tf"); rm -f "$tf"
-  else
-    t0=$(date +%s.%N); "$@" || rc=$?; t1=$(date +%s.%N)
-    t1=$(python3 -c "print(f'{$t1 - $t0:.3f}')")
-  fi
-  printf '%s\t%s\t%s\t%s\n' "$label" "$t1" "$rss" "$rc" >> "$TF"
-  return $rc
-}
-stripcmp(){ # NAME REF TEST TOL
-  local rc=0
-  python3 "$INL/k2a_strip_compare.py" "$2" "$3" "$V/$1.json" --tol "$4" --name "$1" > "$V/$1.log" 2>&1 || rc=$?
-  case $rc in 0) vstep "$1" PASS "$(tail -1 "$V/$1.log")" "$V/$1.json";; 3) vstep "$1" INCONCLUSIVE "$(tail -1 "$V/$1.log")" "$V/$1.json";;
-              *) vstep "$1" FAIL "$(tail -1 "$V/$1.log")" "$V/$1.json";; esac
-}
-physcmp(){ # NAME REF CAND
-  local rc=0
-  python3 "$RC/k2a_recenter_compare.py" "$2" "$3" --out "$V/cmp_$1.json" --kind k2a_vs_s0 --half-strips "$HS" --label "$1" > "$V/cmp_$1.txt" 2>&1 || rc=$?
-  local st; st=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['status'])" "$V/cmp_$1.json" 2>/dev/null || echo FAIL)
-  [[ $rc -le 3 ]] || st=FAIL
-  vstep "cmp_$1" "$st" "$(head -c 300 "$V/cmp_$1.txt" | tr '\t\n' '  ')" "$V/cmp_$1.json"
-}
+V=/dev/null; TF=/dev/null
+source "$HERE/k2a_validation_lib.sh"
 ladder_groups(){ # GROUPS_DIR S0GROUPS_DIR PREFIX -> 0 all OK
   local GD="$1" SG="$2" P="$3" bad=0 rc g G
   mkdir -p "$SG"
@@ -165,14 +143,6 @@ ladder_groups(){ # GROUPS_DIR S0GROUPS_DIR PREFIX -> 0 all OK
   done
   return $bad
 }
-shaped(){ # NAME VARIANTS [--no-prompt]  (layout OUT/muons/muon_M/shaped_layout/muon_M/<variant>)
-  local n="$1" vars="$2"; shift 2
-  local rc=0
-  python3 "$TA/t_shaped_compare.py" "$V/shaped_layout" --variants "$vars" --out "$V/shaped_$n" --bootstrap 0 "$@" > "$V/shaped_$n.log" 2>&1 || rc=$?
-  if [[ $rc -eq 0 ]]; then vstep "shaped_$n" OK "variants $vars ${*:-ion+electron}" "$V/shaped_$n/per_muon_Tp100.jsonl"
-  else vstep "shaped_$n" FAIL "t_shaped_compare exit $rc: $(tail -1 "$V/shaped_$n.log" | head -c 250)" "$V/shaped_$n.log"; fi
-}
-
 # ---- muons
 for M in "${SLOTS[@]}"; do
   V="$OUT/muons/muon_$M"; mkdir -p "$V"; printf 'step\tstatus\tdetail\tfile\n' > "$V/steps.tsv"
@@ -219,67 +189,10 @@ sys.exit(0 if a['primary_shift'] == b['primary_shift'] and sorted(a['groups']) =
           vstep T0_groups FAIL "no uncollapsed frozen export or no S0_T1 groups (far experiment incomplete)"
         fi
       fi
-      # 3. production K2A: archive -> compact moments -> compiled kernel evaluation
-      mkdir -p "$V/prod"; rc=0
-      tm births_moments "$MWPC_BIRTHS_BIN" "$ARCHIVE/muon_$M/ion_births.root" "$V/prod/birth_moments.csv" --repeat "$BREP" > "$V/prod/births.log" 2>&1 || rc=$?
-      if [[ $rc -eq 0 ]] && grep -q '^PASS birth moments' "$V/prod/births.log"; then
-        vstep births_moments OK "$(grep -m1 '^PASS birth moments' "$V/prod/births.log")" "$V/prod/birth_moments.csv.json"
-        if [[ -s "$R/cloud_moments.csv" ]]; then
-          rc=0; python3 "$SA/s_compare_moments.py" "$R/cloud_moments.csv" "$V/prod/birth_moments.csv" --report "$V/prod/compare_moments.md" > "$V/prod/compare_moments.log" 2>&1 || rc=$?
-          vstep moments_archive_vs_export "$([[ $rc -eq 0 ]] && echo PASS || echo FAIL)" "$(tail -1 "$V/prod/compare_moments.log" | head -c 250)" "$V/prod/compare_moments.md"
-        else
-          vstep moments_archive_vs_export INCONCLUSIVE "no export-path moments (far experiment incomplete)"
-        fi
-        if [[ -s "$E/groups/groups.json" ]]; then
-          rc=0; tm k2a_eval "$EV" --kernel "$KD" --kernel-id "$KID" --moments "$V/prod/birth_moments.csv" --shifts "$E/groups/groups.json" \
-                  --half-strips "$HS" --out "$V/K2A_prod" --repeat "$REP" > "$V/K2A_prod.log" 2>&1 || rc=$?
-          case $rc in
-            0) vstep K2A_prod OK "$(tail -1 "$V/K2A_prod.log" | head -c 300)" "$V/K2A_prod/result.json";;
-            4) vstep K2A_prod BLOCKED "$(tail -1 "$V/K2A_prod.log" | head -c 300)" "$V/K2A_prod/result.json";;
-            *) vstep K2A_prod FAIL "k2a_strip_eval exit $rc: $(tail -1 "$V/K2A_prod.log" | head -c 250)" "$V/K2A_prod.log";;
-          esac
-          rc=0; "$EV" --kernel "$KD" --kernel-id "$KID" --moments "$V/prod/birth_moments.csv" --half-strips "$HS" --out "$V/K2A_rule" > "$V/K2A_rule.log" 2>&1 || rc=$?
-          # production rule (no imposed grouping): status, groups; how many primaries the S0 grouping assigns differently
-          if [[ -s "$V/K2A_rule/result.json" ]]; then
-            vstep K2A_rule INFO "$(python3 -c "
-import json, sys
-r = json.load(open(sys.argv[1])); p = sys.argv[2]
-d = json.load(open(p))['shifts_differing_from_computed'] if p and __import__('os').path.isfile(p) else 'n/a'
-print(f\"production rule: status {r['status_names']}, {r['groups']} groups, usable {r['usable']}; S0 grouping differs from the rule for {d} primaries\")" \
-              "$V/K2A_rule/result.json" "$V/K2A_prod/result.json")" "$V/K2A_rule/result.json"
-          else vstep K2A_rule INFO "production rule run exit $rc, no result ($V/K2A_rule.log)"; fi
-          rc=0; "$EV" --kernel "$KD" --kernel-id "$KID" --moments "$R/cloud_moments.csv" --shifts "$E/groups/groups.json" --half-strips "$HS" \
-                  --out "$V/K2A_cc_export" > "$V/K2A_cc_export.log" 2>&1 || rc=$?
-          vstep K2A_cc_export "$(case $rc in 0) echo OK;; 4) echo BLOCKED;; *) echo FAIL;; esac)" "$(tail -1 "$V/K2A_cc_export.log" | head -c 300)" "$V/K2A_cc_export/result.json"
-          if [[ -s "$E/K2A_local/replay/waveforms.csv" && -s "$V/K2A_cc_export/replay/waveforms.csv" ]]; then
-            stripcmp identity_cc_vs_python "$E/K2A_local" "$V/K2A_cc_export" 1e-12
-          fi
-          if [[ -s "$V/K2A_cc_export/replay/waveforms.csv" && -s "$V/K2A_prod/replay/waveforms.csv" ]]; then
-            stripcmp moment_path_archive_vs_export "$V/K2A_cc_export" "$V/K2A_prod" 1e-7
-          fi
-        else
-          vstep K2A_prod FAIL "no S0 grouping (groups.json) to evaluate with: far experiment incomplete"
-        fi
-      else
-        vstep births_moments FAIL "p3_birth_moments exit $rc: $(tail -1 "$V/prod/births.log" | head -c 250)" "$V/prod/births.log"
-      fi
-      # 4. physics comparisons (K2A production response vs the detailed references)
-      HAVE_K=0; [[ -s "$V/K2A_prod/replay/waveforms.csv" ]] && HAVE_K=1
-      [[ $HAVE_T1 == 1 && $HAVE_K == 1 ]] && physcmp S0T1_vs_K2A "$E/S0_local" "$V/K2A_prod"
-      [[ $HAVE_T0 == 1 && $HAVE_K == 1 ]] && physcmp S0T0_vs_K2A "$V/T0/S0_local" "$V/K2A_prod"
-      [[ $HAVE_T0 == 1 && $HAVE_T1 == 1 ]] && physcmp S0T0_vs_S0T1 "$V/T0/S0_local" "$E/S0_local"
-      # 5. shaped observables (layout of symlinks; nothing copied)
-      L="$V/shaped_layout/muon_$M"; mkdir -p "$L"
-      [[ $HAVE_T1 == 1 ]] && ln -s "$E/S0_local" "$L/S0T1"
-      [[ $HAVE_T0 == 1 ]] && ln -s "$V/T0/S0_local" "$L/S0T0"
-      [[ $HAVE_K == 1 ]] && ln -s "$V/K2A_prod" "$L/K2A"
-      if [[ $HAVE_T1 == 1 && $HAVE_K == 1 ]]; then
-        if [[ $HAVE_T0 == 1 ]]; then
-          shaped refS0T1_ionelec S0T1,K2A,S0T0; shaped refS0T0_ionelec S0T0,K2A,S0T1; shaped refS0T1_ion S0T1,K2A,S0T0 --no-prompt
-        else
-          shaped refS0T1_ionelec S0T1,K2A; shaped refS0T1_ion S0T1,K2A --no-prompt
-        fi
-      fi
+      # 3-5. production K2A (own grouping rule), diagnostic S0-imposed variant, equivalence tests, comparisons, shaped
+      rc=0; env K2AV_EV="$EV" K2AV_REPEAT="$REP" K2AV_BIRTHS_REPEAT="$BREP" MWPC_HALF_STRIPS="$HS" \
+          bash "$HERE/k2a_validation_k2a.sh" "$V" "$E" "$KD" "$KID" "$ARCHIVE/muon_$M/ion_births.root" || rc=$?
+      [[ $rc -eq 0 ]] || vstep k2a_stage FAIL "k2a_validation_k2a.sh exit $rc"
     fi
     sha256sum "$ARCHIVE/muon_$M/ion_births.root" > "$V/archive_sha256_after.txt"
   fi

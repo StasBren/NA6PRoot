@@ -6,20 +6,26 @@
 MUON_DIR = OUT/muons/muon_M (steps.tsv, timing.tsv, far_dir.txt -> the far-mode experiment muon directory E).
 Writes MUON_DIR/outcome.json; prints one line. Never raises on missing pieces: they make the outcome INCONCLUSIVE.
 
-Outcome (first that applies):
+Two separate statements per muon:
+EXECUTION outcome (first that applies) - says that references and prediction were computed and are consistent, NOT
+that the prediction is accurate:
   FAIL           numerical / integrity failure: archive changed; moment path differs (archive moments vs export
                  moments, s_compare_moments 1e-9; responses 1e-7); compiled K2A differs from the Python K2A_local
-                 (1e-12) or only one of them refuses; a comparison reports numerical breakage (FAIL); the shaped
-                 comparison could not be made on identical strip labels / clock; production evaluator error
+                 (1e-12) or only one of them refuses; agreeing shift assignments but non-identical responses; a
+                 comparison reports numerical breakage (FAIL); variants not placeable on one strip label set; evaluator
+                 error
   S0_FAILED      the established S0_T1 reference is not available (exporter, T1 collapse, grouping, a frozen replay
                  refusal or failure, census): cause named. K2A domain status is still reported
-  OUT_OF_DOMAIN  K2A blocking statuses (named, with the blocked charge fraction); the S0 reference is still computed
-                 and its availability reported; no accuracy metric is claimed
+  OUT_OF_DOMAIN  the PRIMARY K2A (production grouping rule) has blocking statuses (named, with the blocked charge
+                 fraction); the S0 references are still computed; no accuracy is claimed
   INCONCLUSIVE   anything required missing or inconclusive
-  VALID          S0_T1, S0_T0 (if enabled) and K2A all available, every consistency check passed; the accuracy is
-                 REPORTED (metrics), not thresholded here. VALID_T1_ONLY: as VALID but S0_T0 disabled or failed (named)
-Criteria dry run: the frozen sealed criteria v1 applied to this NON-SEALED event (reference S0_T1, ion + electron,
-Tp 100 and 200 ns, both planes), labelled DIAGNOSTIC; also against S0_T0 (diagnostic only). Not a sealed verdict.
+  VALID          S0_T1, S0_T0 (if enabled), the primary K2A and the diagnostic K2Aimp all computed, every consistency
+                 check passed. VALID_T1_ONLY: as VALID but S0_T0 disabled or failed (named)
+ACCURACY (only for VALID executions): the frozen sealed criteria v1, unchanged, applied to the PRIMARY K2A against S0_T1
+(ion + electron, Tp 100 and 200 ns, both planes): PASS / FAIL, labelled DIAGNOSTIC (non-sealed event). Shown alongside,
+never decisive: primary K2A vs S0_T0, and the S0-imposed K2Aimp vs S0_T1.
+The primary K2A never receives S0 information; the S0-imposed variant is a diagnostic, and the per-primary assignment
+comparison (AGREE / DISAGREE with charge) states whether the two coincide.
 """
 import argparse
 import csv
@@ -28,7 +34,15 @@ import math
 import re
 from pathlib import Path
 
-CMP_NAMES = ("S0T1_vs_K2A", "S0T0_vs_K2A", "S0T0_vs_S0T1")
+CMP_NAMES = ("S0T1_vs_K2A", "S0T0_vs_K2A", "S0T1_vs_K2Aimp", "S0T0_vs_K2Aimp", "S0T0_vs_S0T1", "K2Aimp_vs_K2A")
+SHAPED_RUNS = {"refS0T1_ionelec": "S0T1", "refS0T0_ionelec": "S0T0", "refS0T1_ion": "S0T1", "refK2Aimp_ionelec": "K2Aimp"}
+REFERENCE_LABELS = {
+    "S0_T1": "detailed reference, established E2b workflow: frozen RKF ion paths of the archived births, per-primary T1 "
+             "birth time (ion-weighted mean), frozen weighting replay; electron term = APPROXIMATE instantaneous step",
+    "S0_T0": "detailed reference with true per-ion birth times (uncollapsed frozen export), same groups, frozen weighting "
+             "replay; electron term = the same APPROXIMATE instantaneous step (not a microscopic electron-current simulation)",
+    "K2A": "PRIMARY prediction: compact moments from the archive, compiled K2A with its own production grouping rule",
+    "K2Aimp": "DIAGNOSTIC: the same moments with the S0 grouping imposed (isolates kernel / interpolation error)"}
 SHAPED_KEYS = ["L2_rel", "L2_unshaped_current", "L2_unshaped_charge", "lead_index_changed", "lead_peak_rel",
                "lead_peak_time_ns", "charge_rel", "amplitude_rel", "second_over_lead", "centroid_strip",
                "strip_peak_maxabs_over_T0lead", "t_f0.05_ns", "t_f0.1_ns", "t_f0.5_ns", "mult_f0.05", "mult_f0.1",
@@ -231,14 +245,14 @@ def main():
             t0.update(status="FAILED" if have_t1 else "NOT_RUN", cause="T0 local sum missing")
     have_t0 = t0["status"] == "OK"
 
-    # production K2A, domain, consistency
+    # PRIMARY K2A: production grouping rule (no S0 information); its domain decides OUT_OF_DOMAIN
     kp = vs.get("K2A_prod", {}); kres = jload(V / "K2A_prod" / "result.json")
-    domain = {"status": None, "status_names": None, "blocked_charge_frac": None}
+    ki = vs.get("K2A_imposed", {}); kires = jload(V / "K2A_imposed" / "result.json")
+    domain = {"status": None, "status_names": None, "blocked_charge_frac": None, "grouping": "production rule (no S0 input)"}
     if kres:
         q = kres.get("cloud_charge_fC") or 0.0
         domain.update(status_names=kres.get("status_names"), usable=kres.get("usable"),
                       blocked_charge_frac=(kres.get("blocked_charge_fC") or 0.0) / q if q else None,
-                      shifts_differing_from_production_rule=kres.get("shifts_differing_from_computed"),
                       groups=kres.get("groups"), clouds=kres.get("clouds"))
     if vs.get("births_moments", {}).get("status") == "FAIL":
         fails.append("p3_birth_moments failed: " + vs["births_moments"]["detail"][:200])
@@ -248,10 +262,22 @@ def main():
         domain["status"] = "OUT_OF_DOMAIN"
     elif kp.get("status") == "FAIL":
         fails.append("production K2A: " + kp["detail"][:200])
-    elif E and not s0_cause:
+    elif E and not s0_cause and "births_moments" in vs:
         incon.append("production K2A not run")
+    if vs.get("k2a_stage", {}).get("status") == "FAIL":
+        fails.append(vs["k2a_stage"]["detail"])
     if vs.get("moments_archive_vs_export", {}).get("status") == "FAIL":
         fails.append("archive moments differ from the export-path moments (s_compare_moments 1e-9)")
+    elif vs.get("moments_archive_vs_export", {}).get("status") == "INCONCLUSIVE":
+        incon.append("archive-vs-export moments not compared")
+
+    # DIAGNOSTIC K2Aimp (S0 grouping imposed) and the equivalence tests (Python and export moments use the S0 grouping)
+    imposed = {"status": ki.get("status"), "status_names": (kires or {}).get("status_names"),
+               "role": "DIAGNOSTIC: S0 grouping imposed; isolates kernel / interpolation error; not evidence for the prediction"}
+    if ki.get("status") == "FAIL":
+        fails.append("K2A with the S0 grouping imposed: " + ki["detail"][:200])
+    elif ki.get("status") == "INCONCLUSIVE" and not s0_cause:
+        incon.append(ki["detail"][:200])
     py = es.get("E2_K2A_local", {}).get("status"); cc = vs.get("K2A_cc_export", {}).get("status")
     if py and cc:
         if py == "OK" and cc == "OK":
@@ -266,14 +292,34 @@ def main():
             fails.append("compiled K2A on the export moments failed")
         else:
             fails.append(f"inconsistent domain: Python K2A_local {py}, compiled {cc}")
-    if domain["status"] == "IN_DOMAIN" and cc == "BLOCKED" or domain["status"] == "OUT_OF_DOMAIN" and cc == "OK":
-        fails.append(f"moment path changes the K2A domain (archive moments {kp.get('status')}, export moments {cc})")
-    if domain["status"] == "IN_DOMAIN" and cc == "OK":
+    if ki.get("status") in ("OK", "BLOCKED") and cc in ("OK", "BLOCKED") and ki["status"] != cc:
+        fails.append(f"moment path changes the K2A domain (archive moments {ki['status']}, export moments {cc})")
+    if ki.get("status") == "OK" and cc == "OK":
         st = vs.get("moment_path_archive_vs_export", {}).get("status")
         if st == "FAIL":
             fails.append("K2A on archive moments differs from K2A on export moments (1e-7)")
         elif st != "PASS":
             incon.append(f"moment-path response check {st or 'missing'}")
+    if kp.get("status") in ("OK", "BLOCKED") and ki.get("status") in ("OK", "BLOCKED") and kp["status"] != ki["status"]:
+        notes.append(f"the grouping changes the K2A domain: production rule {kp['status']}, S0-imposed {ki['status']}")
+
+    # per-primary shift assignment: production rule vs S0 grouping
+    sa = jload(V / "shift_assignment.json") or {}
+    sst = vs.get("shift_assignment", {}).get("status")
+    assignment = {"status": sst or "NOT_RUN", "n_disagree": sa.get("n_disagree"), "disagree_charge_frac": sa.get("disagree_charge_frac"),
+                  "only_s0": sa.get("only_s0"), "only_k2a": sa.get("only_k2a"), "near_tie_primaries": sa.get("near_tie_primaries"),
+                  "disagreements": sa.get("disagreements"), "grouping_identity": vs.get("grouping_identity", {}).get("status")}
+    if sst == "FAIL":
+        fails.append("shift assignment comparison failed: " + vs["shift_assignment"]["detail"][:200])
+    elif sst == "INCONCLUSIVE":
+        incon.append("shift assignment not compared: " + vs["shift_assignment"]["detail"][:200])
+    elif sst == "AGREE" and kp.get("status") == "OK" and ki.get("status") == "OK":
+        if assignment["grouping_identity"] == "FAIL":
+            fails.append("assignments agree but the production-rule and S0-imposed responses differ")
+        elif assignment["grouping_identity"] != "PASS":
+            incon.append("grouping identity check missing")
+    elif sst is None and kp.get("status") == "OK" and E and (E / "groups" / "groups.json").is_file():
+        incon.append("shift assignment not compared")
 
     # comparisons
     cmps = {n: cmp_metrics(jload(V / f"cmp_{n}.json")) for n in CMP_NAMES}
@@ -283,18 +329,23 @@ def main():
             fails.append(f"comparison {n}: numerical breakage (FAIL)")
         elif st == "INCONCLUSIVE":
             incon.append(f"comparison {n} INCONCLUSIVE")
-    need_cmp = ["S0T1_vs_K2A"] + (["S0T0_vs_K2A", "S0T0_vs_S0T1"] if have_t0 else [])
-    shaped_runs = {"refS0T1_ionelec": "S0T1", "refS0T0_ionelec": "S0T0", "refS0T1_ion": "S0T1"}
+    if vs.get("label_union", {}).get("status") == "FAIL":
+        fails.append("variants could not be put on one absolute-strip label set: " + vs["label_union"]["detail"][:150])
+    lu = jload(V / "shaped_layout" / f"muon_{M}" / "label_union.json") or {}
+    have_imp = ki.get("status") == "OK"
+    need_cmp = ["S0T1_vs_K2A"] + (["S0T0_vs_K2A", "S0T0_vs_S0T1"] if have_t0 else []) + \
+               (["S0T1_vs_K2Aimp", "K2Aimp_vs_K2A"] + (["S0T0_vs_K2Aimp"] if have_t0 else []) if have_imp else [])
     shp = {}
-    for n, ref in shaped_runs.items():
+    for n, ref in SHAPED_RUNS.items():
         st = vs.get(f"shaped_{n}", {}).get("status")
         if st == "FAIL":
-            fails.append(f"shaped comparison {n} failed (strip labels / clock not identical?): {vs[f'shaped_{n}']['detail'][:150]}")
+            fails.append(f"shaped comparison {n} failed: {vs[f'shaped_{n}']['detail'][:150]}")
         lines = shaped_lines(V / f"shaped_{n}")
         if lines:
             shp[n] = {"reference": ref, "lines": lines, "metrics": shaped_metrics(lines, ref)}
+    need_shp = ["refS0T1_ionelec", "refS0T1_ion"] + (["refS0T0_ionelec"] if have_t0 else []) + (["refK2Aimp_ionelec"] if have_imp else [])
 
-    # outcome
+    # EXECUTION outcome (not an accuracy statement)
     if fails:
         outcome = "FAIL"
     elif s0_cause:
@@ -304,23 +355,29 @@ def main():
     elif incon or domain["status"] != "IN_DOMAIN":
         outcome = "INCONCLUSIVE"
     else:
-        missing = [n for n in need_cmp if not cmps.get(n)] + [f"shaped_{n}" for n in (["refS0T1_ionelec", "refS0T1_ion"] + (["refS0T0_ionelec"] if have_t0 else [])) if n not in shp]
+        missing = [n for n in need_cmp if not cmps.get(n)] + [f"shaped_{n}" for n in need_shp if n not in shp]
         if missing:
             outcome = "INCONCLUSIVE"; incon.append("missing: " + ", ".join(missing))
         else:
             outcome = "VALID" if have_t0 else "VALID_T1_ONLY"
 
-    # criteria dry run (development data, DIAGNOSTIC)
+    # ACCURACY: frozen criteria v1 applied to the PRIMARY K2A vs S0_T1 (decisive in v1); diagnostics alongside
     crit = jload(a.criteria)
     dry = {}
     if crit and outcome in ("VALID", "VALID_T1_ONLY"):
-        for n, ref in (("refS0T1_ionelec", "S0T1"), ("refS0T0_ionelec", "S0T0")):
-            if n in shp:
-                dry[n] = criteria_dry_run(crit, shp[n]["lines"], ref, "K2A")
-                dry[n]["label"] = "DIAGNOSTIC dry run of the frozen sealed criteria v1 on a NON-SEALED event (not a sealed verdict)"
-                dry[n]["decisive_reference"] = n == "refS0T1_ionelec"
+        for n, ref, cand, decisive in (("primary_vs_S0T1", "S0T1", "K2A", True), ("primary_vs_S0T0", "S0T0", "K2A", False),
+                                       ("imposed_vs_S0T1", "S0T1", "K2Aimp", False)):
+            src = {"S0T1": "refS0T1_ionelec", "S0T0": "refS0T0_ionelec"}[ref]
+            if src in shp and cand in next(iter(shp[src]["lines"].values()), {}):
+                dry[n] = criteria_dry_run(crit, shp[src]["lines"], ref, cand)
+                dry[n].update(label="DIAGNOSTIC dry run of the frozen sealed criteria v1 on a NON-SEALED event (not a sealed verdict)",
+                              decisive=decisive, reference=ref, candidate=cand)
+    accuracy = {"status": dry["primary_vs_S0T1"]["status"] if "primary_vs_S0T1" in dry else "NOT_EVALUATED",
+                "definition": "frozen sealed criteria v1 (unchanged) on the PRIMARY K2A (production grouping) vs S0_T1, "
+                              "ion + electron step, Tp 100 and 200 ns, both planes; evaluated only for VALID executions",
+                "label": "DIAGNOSTIC (non-sealed event)"}
 
-    # runtime split (measured; seconds)
+    # runtime split (measured; seconds). Avalanche generation (Garfield++) is NOT part of either side.
     et, vt = timing_of(E / "timing.tsv") if E else {}, timing_of(V / "timing.tsv")
     w = lambda T, k: (T.get(k) or {}).get("wall_s")
     s = lambda T, pre: sum(x["wall_s"] for k, x in T.items() if k.startswith(pre))
@@ -329,6 +386,8 @@ def main():
     c1, l1, n1, st1 = chosen_wall(E / "S0groups") if E else (0, 0, 0, {})
     c0, l0, n0, st0 = chosen_wall(V / "T0" / "S0groups")
     rt = {"unit": "s (wall, this machine, single process each)",
+          "scope": "cathode-response calculation from an EXISTING Garfield++ avalanche archive; avalanche generation is "
+                   "excluded on both sides and is not accelerated by K2A",
           "S0": {"rkf_export_archive_read_plus_ion_drift": w(et, "export_rkf"), "T1_collapse": w(et, "T1_collapse"),
                  "group_export_T1": w(et, "group_export"), "weighting_replay_T1_chosen_attempt_sum": c1,
                  "weighting_replay_T1_ladder_total_tm": s(et, "replay_g_"), "weighting_replay_T1_attempts_sum": l1,
@@ -340,11 +399,11 @@ def main():
                  "group_export_T0": w(vt, "T0_group_export"), "weighting_replay_T0_chosen_attempt_sum": c0 if n0 else None,
                  "weighting_replay_T0_attempts_sum": l0 if n0 else None, "electron_step_T0": s(vt, "T0_electron_step_") if n0 else None,
                  "local_sum_T0": w(vt, "T0_local_sum"), "late_step_chosen_T0": st0},
-          "K2A": {"archive_read_validate_min": bj.get("read_validate_s_min"), "moments_min": bj.get("moments_s_min"),
+          "K2A": {"archive_io_read_validate_min": bj.get("read_validate_s_min"), "moments_construction_min": bj.get("moments_s_min"),
                   "births_process_wall_all_repeats": w(vt, "births_moments"), "births_repeat": bj.get("repeat"),
                   "births_peak_rss_kib": bj.get("peak_rss_kib"), "archive_bytes": bj.get("archive_bytes"), "rows": bj.get("rows"),
-                  "kernel_verify": kt.get("kernel_verify_s"), "kernel_load": kt.get("kernel_load_s"),
-                  "evaluate_cold": kt.get("evaluate_cold_s"), "evaluate_warm_median": kt.get("evaluate_warm_median_s"),
+                  "kernel_open_verify_once": kt.get("kernel_verify_s"), "kernel_open_load_once": kt.get("kernel_load_s"),
+                  "response_eval_cold": kt.get("evaluate_cold_s"), "response_eval_warm_median": kt.get("evaluate_warm_median_s"),
                   "evaluate_repeat": kt.get("repeat"), "repeats_bit_identical": kt.get("repeats_bit_identical"),
                   "eval_process_wall_all_repeats": w(vt, "k2a_eval"), "eval_peak_rss_kib": km.get("peak_rss_kib_end"),
                   "kernel_K_bytes": km.get("kernel_K_bytes"), "kernel_K_mapped": km.get("kernel_K_mapped")}}
@@ -357,26 +416,43 @@ def main():
                                     S["weighting_replay_T1_ladder_total_tm"], S["electron_step_T1"], S["local_sum_T1"])
     S["total_T0_single_pass"] = tot(S["rkf_export_archive_read_plus_ion_drift"], S["group_export_T0"],
                                     S["weighting_replay_T0_chosen_attempt_sum"], S["electron_step_T0"], S["local_sum_T0"]) if n0 else None
-    K["per_event_warm"] = tot(K["moments_min"], K["evaluate_warm_median"])
-    K["per_event_warm_incl_archive_read"] = tot(K["archive_read_validate_min"], K["moments_min"], K["evaluate_warm_median"])
-    K["single_event_cold_incl_kernel_open"] = tot(K["archive_read_validate_min"], K["moments_min"], K["kernel_verify"],
-                                                  K["kernel_load"], K["evaluate_cold"])
+    rd = K["archive_io_read_validate_min"]
+    for k in ("T0", "T1"):
+        t = S[f"total_{k}_single_pass"]
+        S[f"response_{k}_excl_archive_read_approx"] = t - rd if finite(t) and finite(rd) else None
+    K["response_eval_only"] = K["response_eval_warm_median"]
+    K["moments_plus_response_eval"] = tot(K["moments_construction_min"], K["response_eval_warm_median"])
+    K["archive_io_plus_moments_plus_eval"] = tot(rd, K["moments_construction_min"], K["response_eval_warm_median"])
+    K["single_event_cold_incl_kernel_open"] = tot(rd, K["moments_construction_min"], K["kernel_open_verify_once"],
+                                                  K["kernel_open_load_once"], K["response_eval_cold"])
     sp = {}
-    for ref in ("total_T0_single_pass", "total_T1_single_pass"):
-        for den in ("per_event_warm", "per_event_warm_incl_archive_read", "single_event_cold_incl_kernel_open"):
-            if finite(S.get(ref)) and finite(K.get(den)) and K[den] > 0:
-                sp[f"{ref}/{den}"] = S[ref] / K[den]
+    for k in ("T0", "T1"):
+        pairs = {"cathode_response_eval": (f"response_{k}_excl_archive_read_approx", "response_eval_only"),
+                 "response_from_births_incl_moments": (f"response_{k}_excl_archive_read_approx", "moments_plus_response_eval"),
+                 "end_to_end_from_archive_incl_io": (f"total_{k}_single_pass", "archive_io_plus_moments_plus_eval"),
+                 "single_event_cold_incl_kernel_open": (f"total_{k}_single_pass", "single_event_cold_incl_kernel_open")}
+        for name, (num, den) in pairs.items():
+            if finite(S.get(num)) and finite(K.get(den)) and K[den] > 0:
+                sp[f"S0_{k}/{name}"] = S[num] / K[den]
     rt["speedup_measured"] = sp
-    rt["notes"] = ["RKF export = frozen exporter (archive read + Garfield RKF ion drift in one process; not separable without "
-                   "modifying it); the archive read alone is measured by p3_birth_moments (archive_read_validate_min)",
+    rt["notes"] = ["scope: both sides start from the same archived Garfield++ avalanche; avalanche generation is excluded "
+                   "and no acceleration of it is claimed",
+                   "cathode_response_eval = S0 response (RKF ion drift + weighting replay + electron step + grouping/sum, "
+                   "archive read subtracted APPROXIMATELY using the p3_birth_moments read time, since the frozen exporter "
+                   "reads the archive and drifts the ions in one process) / K2A warm kernel evaluation only",
+                   "response_from_births_incl_moments adds the K2A moment construction; end_to_end_from_archive_incl_io "
+                   "compares both including their archive I/O; single_event_cold adds the one-time kernel open",
                    "single_pass = chosen late-step attempt only (ladder retries excluded); with_ladder = every attempt",
-                   "K2A per_event_warm = moments + warm kernel evaluation with the kernel already open (production: kernel "
-                   "opened once per job; Fast4 supplies moments in memory, so no archive read)",
                    "p3_birth_moments and k2a_strip_eval times are minima / medians over repeats; S0 steps ran once"]
 
-    rec = {"tool": "k2a_validation_muon.py", "label": a.label, "muon": M, "independent": a.independent, "outcome": outcome,
-           "failures": fails, "inconclusive": incon, "notes": notes, "s0_t1": {"available": have_t1, "cause": s0_cause},
-           "s0_t0": t0, "k2a_domain": domain, "far_dir": str(E) if E else None,
+    rec = {"tool": "k2a_validation_muon.py", "label": a.label, "muon": M, "independent": a.independent,
+           "outcome": outcome, "outcome_meaning": "EXECUTION outcome (references and prediction computed and consistent); "
+                                                  "accuracy is reported separately in 'accuracy'",
+           "accuracy": accuracy, "failures": fails, "inconclusive": incon, "notes": notes,
+           "references": REFERENCE_LABELS,
+           "s0_t1": {"available": have_t1, "cause": s0_cause}, "s0_t0": t0, "k2a_domain": domain, "k2a_imposed": imposed,
+           "shift_assignment": assignment, "label_union": {k: lu.get(k) for k in ("identical", "variants")} if lu else None,
+           "far_dir": str(E) if E else None,
            "base_centred_S0": es.get("base_centred_S0", {}).get("status"), "far_analysis": es.get("E2_far_analysis", {}).get("status"),
            "truncation": jload(E / "truncation.json") if E else None,
            "comparisons": cmps, "shaped": {n: {"reference": x["reference"], "metrics": x["metrics"]} for n, x in shp.items()},
@@ -385,11 +461,10 @@ def main():
     (V / "outcome.json").write_text(json.dumps(rec, indent=1, default=str) + "\n")
     m = cmps.get("S0T1_vs_K2A") or {}
     extra = f"; S0T1 vs K2A worst rel L2 {m.get('worst_L2_rel')}" if m else ""
-    dr = dry.get("refS0T1_ionelec", {}).get("status")
-    print(f"{a.label} muon {M}: {outcome}" + (f" (dry-run v1 {dr})" if dr else "") + extra +
+    print(f"{a.label} muon {M}: execution {outcome}; accuracy (v1 dry run, primary K2A vs S0_T1) {accuracy['status']}; "
+          f"shift assignment {assignment['status']}" + extra +
           (f"; FAIL: {fails[0]}" if fails else "") + (f"; S0: {s0_cause}" if s0_cause else "") +
           (f"; K2A {domain['status_names']}" if domain["status"] == "OUT_OF_DOMAIN" else ""))
-
 
 if __name__ == "__main__":
     main()
