@@ -24,6 +24,8 @@
 #   MWPC_K2A_LATE_STEPS (far mode group replays: frozen --late-step-ns ladder, default 100,50,20,10; only the frozen
 #   time-compression rejection is retried, see k2a_timing_ladder.py)
 #   MWPC_K2A_OUT (output root), MWPC_HALF_STRIPS (5), MWPC_K2A_KERNEL_ID (default: latest RUN/engine_TAG_*/kernel_id.txt)
+#   MWPC_K2A_KEEP_FROZEN_VERTICES=1 (far mode): keep prepared/frozen_export/vertices.f64 (uncollapsed birth times)
+# Far mode also writes muon_*/timing.tsv (label, wall_s, peak_rss_kib, exit per step); outputs are otherwise unchanged.
 set -Eeo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; TA="$HERE/../../timing-ablation"; SA="$HERE/../../spatial-ablation"
 REPO="$(cd "$HERE/../../../../.." && pwd)"
@@ -107,6 +109,25 @@ PY
 
 step(){ printf '%s\t%s\t%s\t%s\n' "$2" "$3" "$4" "${5:-}" >> "$1/steps.tsv"; echo "  [$3] $2: $4"; }
 
+# Runtime instrumentation (no effect on any output): tm LABEL CMD... runs CMD unchanged (its redirections apply as
+# before) and appends "label <TAB> wall_s <TAB> peak_rss_kib <TAB> exit" to $TF (the current muon's timing.tsv).
+# External commands are timed with GNU time when present (wall + peak RSS); shell functions by wall clock only.
+TF=/dev/null
+tm(){
+  local label="$1"; shift
+  local rc=0 t0 t1 rss=""
+  if [[ $(type -t "$1") != function && -x /usr/bin/time ]]; then
+    local tf; tf=$(mktemp)
+    /usr/bin/time -f '%e %M' -o "$tf" "$@" || rc=$?
+    read -r t1 rss < <(tail -1 "$tf"); rm -f "$tf"
+    printf '%s\t%s\t%s\t%s\n' "$label" "$t1" "$rss" "$rc" >> "$TF"
+  else
+    t0=$(date +%s.%N); "$@" || rc=$?; t1=$(date +%s.%N)
+    printf '%s\t%s\t%s\t%s\n' "$label" "$(python3 -c "print(f'{$t1 - $t0:.3f}')")" "" "$rc" >> "$TF"
+  fi
+  return $rc
+}
+
 replay(){ # EXPORT OUTDIR -> 0 ok, 3 refused (window/phase range), 1 other failure
   local rc=0
   (cd "$MWPC_NUMW_DIR" && python3 p3_replay_full_spectral_muon.py "$MWPC_SPECTRAL_LUT" "$1" "$2/replay" --half-strips "$HS") > "$2.replay.log" 2>&1 || rc=$?
@@ -143,7 +164,7 @@ e1(){ # R E
 
 e2(){ # R E HAVE_BASE_S0
   local R="$1" E="$2" HAVE="$3" rc
-  python3 "$HERE/k2a_group_export.py" "$R/T1_export" "$E/groups" --mode primary > "$E/groups.log" 2>&1 \
+  tm group_export python3 "$HERE/k2a_group_export.py" "$R/T1_export" "$E/groups" --mode primary > "$E/groups.log" 2>&1 \
     || { step "$E" E2_groups FAIL "group export failed ($E/groups.log)"; return; }
   step "$E" E2_groups OK "$(tail -1 "$E/groups.log")" "$E/groups/groups.json"
   mkdir -p "$E/S0groups"; local bad=0
@@ -152,10 +173,10 @@ e2(){ # R E HAVE_BASE_S0
       # far mode: frozen replay with the late-step convergence ladder (retries ONLY the frozen time-compression
       # rejection, each attempt in a new directory; replay -> chosen attempt is a symlink), then the electron step
       local G="$E/S0groups/${g##*/}"; mkdir -p "$G"; rc=0
-      python3 "$HERE/k2a_timing_ladder.py" "$g" "$G" --lut "$MWPC_SPECTRAL_LUT" --numw "$MWPC_NUMW_DIR" \
+      tm "replay_${g##*/}" python3 "$HERE/k2a_timing_ladder.py" "$g" "$G" --lut "$MWPC_SPECTRAL_LUT" --numw "$MWPC_NUMW_DIR" \
           --steps "$LATE_STEPS" --half-strips "$HS" --link-replay > "$G.ladder.log" 2>&1 || rc=$?
       if [[ $rc -eq 0 ]]; then
-        python3 "$TA/t_prompt_electron_term.py" "$MWPC_SPECTRAL_LUT" "$g" "$G/prompt" --replay-dir "$MWPC_NUMW_DIR" --half-strips "$HS" > "$G.prompt.log" 2>&1 || rc=4
+        tm "electron_step_${g##*/}" python3 "$TA/t_prompt_electron_term.py" "$MWPC_SPECTRAL_LUT" "$g" "$G/prompt" --replay-dir "$MWPC_NUMW_DIR" --half-strips "$HS" > "$G.prompt.log" 2>&1 || rc=4
       fi
       case $rc in
         0) step "$E" "E2_replay_${g##*/}" OK "$(tail -1 "$G.ladder.log" | head -c 300)" "$G/timing_attempts.json";;
@@ -169,11 +190,11 @@ e2(){ # R E HAVE_BASE_S0
     if [[ $rc -ne 0 ]]; then bad=1; step "$E" "E2_replay_${g##*/}" "$([[ $rc -eq 3 ]] && echo INCONCLUSIVE || echo FAIL)" "$(why "$E/S0groups/${g##*/}.replay.log")"; fi
   done
   [[ $bad -eq 0 ]] || return
-  rc=0; python3 "$HERE/k2a_local_sum.py" "$E/groups" "$E/S0groups" "$E/S0_local" > "$E/local_sum.log" 2>&1 || rc=$?
+  rc=0; tm local_sum python3 "$HERE/k2a_local_sum.py" "$E/groups" "$E/S0groups" "$E/S0_local" > "$E/local_sum.log" 2>&1 || rc=$?
   step "$E" E2_S0_local_census "$([[ $rc -eq 0 ]] && echo OK || echo FAIL)" "$(tail -1 "$E/local_sum.log")" "$E/S0_local/local_sum.json"
   [[ $rc -eq 0 ]] || return
   local PG=(); [[ $MODE == far ]] && PG=(--per-group-out "$E/K2A_groups")
-  rc=0; python3 "$HERE/k2a_recentered_k2a.py" "$KD" "$R/cloud_moments.csv" "$E/K2A_local" --groups "$E/groups/groups.json" \
+  rc=0; tm k2a_local_python python3 "$HERE/k2a_recentered_k2a.py" "$KD" "$R/cloud_moments.csv" "$E/K2A_local" --groups "$E/groups/groups.json" \
         --half-strips "$HS" --kernel-id "$KERNEL_ID" "${PG[@]}" > "$E/k2a_local.log" 2>&1 || rc=$?
   step "$E" E2_K2A_local "$([[ $rc -eq 0 ]] && echo OK || echo FAIL)" "$(tail -1 "$E/k2a_local.log")" "$E/K2A_local/recentered.json"
   [[ $rc -eq 0 ]] || return
@@ -228,17 +249,20 @@ case "$MODE" in
       role=$(awk -F, -v s="$M" 'NR==1{for(i=1;i<=NF;i++)h[$i]=i; next} $h["slot"]==s{print $h["role"]}' "$MWPC_K2A_PF/inventory/slots.csv")
       [[ -n "$role" && "$role" != sealed_validation ]] || fail "$M is sealed or unknown (role '$role')"
       E="$X/muon_$M"; R="$E/prepared"; mkdir -p "$R"; : > "$E/steps.tsv"; echo "muon $M ($role):"
+      TF="$E/timing.tsv"; printf 'label\twall_s\tpeak_rss_kib\texit\n' > "$TF"
       avail=$(( $(df -Pk "$X" | awk 'NR==2{print $4}') >> 20 )); minf="${MWPC_K2A_FAR_MIN_FREE_GIB:-8}"
       [[ $avail -ge $minf ]] || fail "muon $M: only $avail GiB free in $X (need >= $minf GiB; set MWPC_K2A_FAR_MIN_FREE_GIB)"
       [[ -s "$ARCHIVE/muon_$M/ion_births.root" && -s "$ARCHIVE/muon_$M/SHA256SUMS" ]] || fail "archive muon_$M missing"
       (cd "$ARCHIVE/muon_$M" && sha256sum -c --quiet SHA256SUMS) || fail "archive muon_$M fails its SHA256SUMS"
       sha256sum "$ARCHIVE/muon_$M/ion_births.root" > "$E/archive_sha256_before.txt"
-      "$MWPC_EXPORT_BIN" "$ARCHIVE/muon_$M/ion_births.root" "$MWPC_ION_MOBILITY" "$R/frozen_export" > "$R/export.log" 2>&1 \
+      tm export_rkf "$MWPC_EXPORT_BIN" "$ARCHIVE/muon_$M/ion_births.root" "$MWPC_ION_MOBILITY" "$R/frozen_export" > "$R/export.log" 2>&1 \
         && grep -q '^PASS archive census' "$R/export.log" || { step "$E" export FAIL "exporter ($R/export.log)"; continue; }
-      python3 "$TA/t_time_collapse_export.py" "$R/frozen_export" "$R/T1_export" --mode primary > "$R/T1.log" 2>&1 || { step "$E" T1 FAIL "$R/T1.log"; continue; }
-      rm -f "$R/frozen_export/vertices.f64"          # our own new copy; the T1 export keeps the paths
-      python3 "$SA/s_kernel.py" moments "$R/T1_export" "$R/cloud_moments.csv" > "$R/moments.log" 2>&1 || { step "$E" moments FAIL "$R/moments.log"; continue; }
-      rc=0; replay "$R/T1_export" "$R/S0" || rc=$?
+      tm T1_collapse python3 "$TA/t_time_collapse_export.py" "$R/frozen_export" "$R/T1_export" --mode primary > "$R/T1.log" 2>&1 || { step "$E" T1 FAIL "$R/T1.log"; continue; }
+      # our own new copy; the T1 export keeps the paths. MWPC_K2A_KEEP_FROZEN_VERTICES=1 keeps the uncollapsed
+      # (true birth time) export for a T0 reference built afterwards by run_k2a_validation.sh
+      [[ "${MWPC_K2A_KEEP_FROZEN_VERTICES:-0}" == 1 ]] || rm -f "$R/frozen_export/vertices.f64"
+      tm moments_export python3 "$SA/s_kernel.py" moments "$R/T1_export" "$R/cloud_moments.csv" > "$R/moments.log" 2>&1 || { step "$E" moments FAIL "$R/moments.log"; continue; }
+      rc=0; tm base_centred_S0 replay "$R/T1_export" "$R/S0" || rc=$?
       case $rc in
         0) HAVE=1; step "$E" base_centred_S0 OK "frozen base-centred S0 ran";;
         3) HAVE=0; step "$E" base_centred_S0 EXPECTED_REFUSAL "frozen base-centred S0 refused, as expected for far D (not a failure): $(why "$R/S0.replay.log" "$R/S0.prompt.log")";;
