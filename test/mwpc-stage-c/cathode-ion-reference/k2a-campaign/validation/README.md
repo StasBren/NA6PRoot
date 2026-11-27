@@ -60,6 +60,9 @@ Both sides start from the same archived Garfield++ avalanche. Avalanche generati
 | `k2a_validation_k2a.sh` | K2A stage: moments, primary K2A, diagnostic K2Aimp, assignment comparison, equivalence tests, comparisons, shaped observables. |
 | `k2a_validation_muon.py`, `k2a_validation_report.py` | Per-muon outcome, accuracy and runtime; aggregate report (`--from` combines runs). |
 | `k2a_shift_assignment.py`, `k2a_label_union.py`, `k2a_validation_lib.sh` | Helpers. |
+| `k2a_residual_diagnostics.py` | Read-only analysis of finished runs, in four parts. **Residual anatomy** per component: time windows, strip rank, scale, shift and shaping removed, plus the S0 late-step pilot floor. **S0 beyond the K2A window**: charge and shaped tail effect. **Blocked clouds**: r_eff against the kernel grid. **Runtime scaling**. |
+| `k2a_s0_native_step.sh` | Optional, expensive: one muon's S0 rebuilt at the frozen replay's native 10 ns step. It separates S0 time-compression error from K2A error. |
+| `k2a_domain_scan.py` | Fast-only operational domain scan of the frozen compiled K2A, using the production grouping, over every permitted non-sealed muon's preflight moments. No S0 is run. |
 | `tests/test_validation_synthetic.sh` (+ `validation_negatives.py`, `assignment_units.py`, `disagreement_case.py`) | SYNTHETIC tests, including agreement and disagreement of the production and imposed shifts. |
 
 ## Disk

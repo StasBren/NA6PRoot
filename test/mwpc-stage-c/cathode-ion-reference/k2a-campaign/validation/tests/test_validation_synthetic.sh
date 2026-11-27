@@ -33,6 +33,8 @@
 #     comparison; longer S0 clock + K2A window -> one grid (S0 truncated bit-exactly); real run passes, shifted copy fails
 #   E2 criteria with missing / None / NaN / non-integer lead or hit-flip metrics, missing peaks / threshold or an
 #     inconsistent flip count -> FAIL, never AMBIGUOUS / MARGINAL / PASS (tests/criteria_invalid.py)
+#   I fast-only domain scan (tests/domain_scan_test.py); J residual diagnostics (tests/diagnostics_test.py) and the
+#     native-step S0 refusal on pruned exports
 #   E criteria dry run unit cases: identical responses PASS; lead change with S0 top-2 within 1 % -> AMBIGUOUS (not a
 #     failure); a real lead change and a 20 um w shift -> FAIL
 set -Eeuo pipefail
@@ -260,4 +262,12 @@ python3 "$HERE/tests/criteria_invalid.py" "$HERE" "$CAMP/sealed/sealed_acceptanc
 
 # ---- H. time grid: explicit FAIL on any cross-variant mismatch; the real synthetic variants share one grid
 python3 "$HERE/tests/grid_units.py" "$HERE" "$W/grid" "$W/val"
+# ---- I. fast-only domain scan (toy kernel + toy moments in a fake preflight)
+python3 "$HERE/tests/domain_scan_test.py" "$HERE" "$W/scan" "$W/build/k2a_strip_eval" "$W/val"
+
+# ---- J. residual / truncation / blocked-cloud / runtime diagnostics; native-step S0 refuses pruned group exports
+python3 "$HERE/tests/diagnostics_test.py" "$HERE" "$W/val" "$W/diag"
+if env "${ENVV[@]}" bash "$HERE/k2a_s0_native_step.sh" "$W/val/muons/muon_0002" "$W/native_pruned" > "$W/native_pruned.log" 2>&1; then die "native-step S0 ran on pruned exports"; fi
+grep -q "vertices.f64 missing (pruned?)" "$W/native_pruned.log" || die "native-step refusal: $(tail -1 "$W/native_pruned.log")"
+echo "PASS native-step S0 refuses group exports whose ion paths were pruned"
 echo "PASS K2A validation synthetic test; work dir $W"
