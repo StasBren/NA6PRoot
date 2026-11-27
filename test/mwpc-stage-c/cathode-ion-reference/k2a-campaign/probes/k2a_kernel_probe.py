@@ -19,10 +19,20 @@
    sign and the opposite sign (a convention check), next to the D-interpolation control of probe 2. A small error
    between interior wires supports a translated kernel ONLY for wires whose field is periodic; it says nothing about
    wires that are not in the table (edge wires of the nine-wire patch), which need their own Green entries to check.
-4. TIME HORIZON (issue 2): tau_max of the table; with --green-paths, the drift (collection) time of every Green grid
-   start point (grid.csv end_ns - birth): quantiles per wire and radius, i.e. the tau range an extended table must
-   cover; whether the existing paths already reach the cathode (end_v = +-gap), in which case extending tau needs no
-   new RKF paths, only re-tabulation.
+4. TIME HORIZON and CATHODE ARRIVAL (issue 2): tau_max of the table; with --green-paths, every Green grid path is
+   checked against the PHYSICAL cathode boundary and its own trajectory termination, not against the largest recorded
+   coordinate. Background (frozen exporter, compiled into p3_green_grid_paths): the RKF transport endpoint (GetEndPoint)
+   must satisfy | |v_end| - gap | < 0.001 cm with the birth's sign, else the export aborts; the exporter then OVERWRITES
+   the last vertex's v with +-gap exactly, so vertices.f64 alone cannot show arrival. grid.csv keeps the transport
+   endpoint (end_u_mm, end_v_mm, end_ns) from before that overwrite. Per path this probe records:
+     dv = |end_v| - cathode_v (cathode_v = --cathode-v-mm, default 3.0 = NA60Plane::gap 0.3 cm, Plane2100Response.hh)
+     sign(end_v) == sign(birth v); |end_u| against the sensor area half-width --area-u-mm (13.5 = SetArea 1.35 cm)
+     last vertex: t == end_ns, u == end_u, |v| == cathode_v (the overwrite); second-to-last vertex (a genuine RKF
+     point): its distance to the cathode and its time before the end; strictly increasing vertex times
+   Classes: CATHODE (|dv| <= --tol-mm, default 0.01 = the exporter tolerance, sign right, inside the area, last vertex
+   consistent), LATERAL (|end_u| within --tol-mm of the area edge), INCONSISTENT (vertex record disagrees with the
+   endpoint), OTHER. Extending tau by re-tabulation is valid only if every path is CATHODE. Drift-time quantiles
+   (end_ns - birth) per wire and per radius give the tau range an extended table must cover.
 Writes NEW_DIR/kernel_probe.json and kernel_probe.md.
 """
 import argparse
@@ -52,6 +62,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("out", type=Path); ap.add_argument("--kernel", type=Path, required=True)
     ap.add_argument("--green-paths", type=Path); ap.add_argument("--wire-pitch-mm", type=float, default=3.0)
+    ap.add_argument("--cathode-v-mm", type=float, default=3.0); ap.add_argument("--area-u-mm", type=float, default=13.5)
+    ap.add_argument("--tol-mm", type=float, default=0.01)
     a = ap.parse_args()
     if a.out.exists():
         raise SystemExit(f"refusing: {a.out} exists")
@@ -132,18 +144,48 @@ def main():
                         rec[f"{lab}_shift_mm"] = shift
                     trans.append(rec)
     res["wire_translation"] = trans
-    # 4. time horizon
+    # 4. time horizon and cathode arrival against the physical boundary
     th = {"tau_max_ns": float(tau[-1])}
     if a.green_paths and (a.green_paths / "grid.csv").is_file():
-        g = list(csv.DictReader(open(a.green_paths / "grid.csv")))
         num = lambda v: float(str(v).replace("np.float64(", "").rstrip(")"))
+        g = list(csv.DictReader(open(a.green_paths / "grid.csv")))
         ions = {int(r["row"]): r for r in csv.DictReader(open(a.green_paths / "ions.csv"))}
-        dtv = np.array([num(r["end_ns"]) - float(ions[int(r["row"])]["birth_ns"]) for r in g])
-        ev = np.array([num(r["end_v_mm"]) for r in g])
-        th.update(start_points=len(g), drift_time_ns_quantiles={q: float(np.quantile(dtv, q)) for q in (0, 0.5, 0.9, 0.99, 1.0)},
-                  frac_beyond_tau_max=float(np.mean(dtv > tau[-1])),
-                  frac_landing_on_cathode=float(np.mean(np.abs(np.abs(ev) - np.max(np.abs(ev))) < 1e-6)),
-                  cathode_v_mm=float(np.max(np.abs(ev))))
+        seal = dict(l.split("=", 1) for l in (a.green_paths / "complete.txt").read_text().split() if "=" in l)
+        Vx = np.memmap(a.green_paths / "vertices.f64", dtype="<f8", mode="r", shape=(int(seal["vertices"]), 5))
+        cls, dvs, near, gapb, dts, perw, perr = [], [], [], [], [], {}, {}
+        for r in g:
+            row = int(r["row"]); io = ions[row]
+            v0, ue, ve, te = num(r["v_mm"]), num(r["end_u_mm"]), num(r["end_v_mm"]), num(r["end_ns"])
+            fv, nv = int(io["first_vertex"]), int(io["vertices"])
+            last, prev = np.asarray(Vx[fv + nv - 1]), np.asarray(Vx[fv + nv - 2])
+            tt = np.asarray(Vx[fv:fv + nv, 0])
+            dv = abs(ve) - a.cathode_v_mm
+            sign_ok = (ve > 0) == (v0 > 0)
+            consistent = (abs(last[0] - te) <= 1e-6 * max(1.0, te) and abs(last[1] - ue) <= 1e-9 and
+                          abs(abs(last[2]) - a.cathode_v_mm) <= 1e-12 and bool(np.all(np.diff(tt) > 0)))
+            if abs(abs(ue) - a.area_u_mm) <= a.tol_mm:
+                c = "LATERAL"
+            elif not consistent:
+                c = "INCONSISTENT"
+            elif abs(dv) <= a.tol_mm and sign_ok and abs(ue) < a.area_u_mm:
+                c = "CATHODE"
+            else:
+                c = "OTHER"
+            cls.append(c); dvs.append(dv); near.append(a.cathode_v_mm - abs(prev[2])); gapb.append(te - prev[0])
+            dt = te - float(io["birth_ns"]); dts.append(dt)
+            perw.setdefault(int(r["wire"]), []).append(dt); perr.setdefault(float(r["r_um"]), []).append(dt)
+        dts, dvs, near, gapb = map(np.asarray, (dts, dvs, near, gapb))
+        cc = {k: cls.count(k) for k in ("CATHODE", "LATERAL", "INCONSISTENT", "OTHER")}
+        q = lambda x: {f"q{p_:g}": float(np.quantile(x, p_)) for p_ in (0, 0.5, 0.9, 0.99, 1.0)}
+        th.update(start_points=len(g), classes=cc, all_cathode=cc["CATHODE"] == len(g),
+                  cathode_v_mm=a.cathode_v_mm, tol_mm=a.tol_mm, area_u_mm=a.area_u_mm,
+                  endpoint_dv_mm={"max_abs": float(np.max(np.abs(dvs))), **q(dvs)},
+                  last_rkf_point_distance_to_cathode_mm=q(near), last_rkf_point_time_before_end_ns=q(gapb),
+                  drift_time_ns_quantiles=q(dts), frac_beyond_tau_max=float(np.mean(dts > tau[-1])),
+                  drift_time_ns_max_by_wire={str(k): float(max(v)) for k, v in sorted(perw.items())},
+                  drift_time_ns_max_by_r_um={f"{k:.6g}": float(max(v)) for k, v in sorted(perr.items())},
+                  examples_not_cathode=[{"row": int(r["row"]), "class": c, "wire": r["wire"], "r_um": r["r_um"], "theta_deg": r["theta_deg"],
+                                         "end_u_mm": r["end_u_mm"], "end_v_mm": r["end_v_mm"]} for r, c in zip(g, cls) if c != "CATHODE"][:10])
     res["time_horizon"] = th
     a.out.mkdir(parents=True)
     (a.out / "kernel_probe.json").write_text(json.dumps(res, indent=1) + "\n")
@@ -166,11 +208,18 @@ def main():
                  f"{p(r['predicted_sign_all_rel_L2'])} | {p(r['opposite_sign_early_0_50ns_rel_L2'])} | {p(r['opposite_sign_all_rel_L2'])} |")
     L += ["", "## 4. time horizon", "", f"tau_max {th['tau_max_ns']:g} ns."]
     if "start_points" in th:
-        L.append(f"Green grid paths: {th['start_points']} start points; drift time to the end of the path (ns) quantiles "
-                 + ", ".join(f"q{k:g} {v:.4g}" for k, v in th["drift_time_ns_quantiles"].items())
-                 + f"; {100 * th['frac_beyond_tau_max']:.3g} % of paths end after tau_max; {100 * th['frac_landing_on_cathode']:.3g} % end on the "
-                 f"cathode (|v| = {th['cathode_v_mm']:g} mm): extending tau to the full drift needs " +
-                 ("no new RKF paths (re-tabulation only)" if th["frac_landing_on_cathode"] > 0.999 else "checking: not every path reaches the cathode"))
+        c = th["classes"]
+        L += [f"Green grid paths: {th['start_points']} start points. Termination against the physical cathode v = +-{th['cathode_v_mm']:g} mm "
+              f"(tolerance {th['tol_mm']:g} mm) and the sensor area |u| < {th['area_u_mm']:g} mm: " + ", ".join(f"{k} {v}" for k, v in c.items()) + ".",
+              f"Transport endpoint |v| - cathode: max |.| {th['endpoint_dv_mm']['max_abs']:.3g} mm. Last genuine RKF point before the end: distance to "
+              f"the cathode q50 {th['last_rkf_point_distance_to_cathode_mm']['q0.5']:.3g} mm, max {th['last_rkf_point_distance_to_cathode_mm']['q1']:.3g} mm; "
+              f"time before the end max {th['last_rkf_point_time_before_end_ns']['q1']:.4g} ns.",
+              "Drift time to the cathode (ns): " + ", ".join(f"{k} {v:.4g}" for k, v in th["drift_time_ns_quantiles"].items())
+              + f"; {100 * th['frac_beyond_tau_max']:.3g} % of paths arrive after tau_max. Max by wire: "
+              + ", ".join(f"{k}: {v:.4g}" for k, v in th["drift_time_ns_max_by_wire"].items()) + ".",
+              "Verdict: " + ("every path terminates on the physical cathode, consistently with its vertex record: a longer tau needs only "
+                             "re-tabulation of the existing paths (no new RKF)" if th["all_cathode"] else
+                             "NOT every path terminates on the cathode (see examples_not_cathode in the json): re-tabulation alone is not justified")]
     (a.out / "kernel_probe.md").write_text("\n".join(L) + "\n")
     print(f"kernel probe -> {a.out / 'kernel_probe.md'}")
 

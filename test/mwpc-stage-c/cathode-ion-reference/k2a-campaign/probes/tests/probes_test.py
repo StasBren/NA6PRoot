@@ -33,7 +33,29 @@ k = json.load(open(W / "kp/kernel_probe.json"))
 assert k["tau_interp_first10bins_rel_to_max_bin"]["U"]["max"] < 0.05
 k0 = [r for r in k["wire_translation"] if r["basis"] == "K0"]
 assert k0 and all(r["predicted_sign_early_0_50ns_rel_L2"] < r["opposite_sign_early_0_50ns_rel_L2"] for r in k0), k0[:2]
-assert k["time_horizon"]["start_points"] > 0 and k["time_horizon"]["drift_time_ns_quantiles"][str(1.0)] > 0
+th = k["time_horizon"]
+assert th["start_points"] > 0 and th["drift_time_ns_quantiles"]["q1"] > 0
+assert th["all_cathode"] and th["classes"]["CATHODE"] == th["start_points"] and th["endpoint_dv_mm"]["max_abs"] <= 0.01, th["classes"]
+# fault injection on a COPY of the grid: one path stops short of the cathode, one ends at the lateral area edge, one
+# has a vertex record inconsistent with its endpoint; the probe must classify each, not pass them as CATHODE
+import csv, shutil
+bad = W / "bad_grid"; bad.mkdir()
+for f in ("ions.csv", "complete.txt"):
+    shutil.copy(grid / f, bad / f)
+(bad / "vertices.f64").symlink_to((grid / "vertices.f64").resolve())
+rows = list(csv.DictReader(open(grid / "grid.csv"))); cols = list(rows[0])
+rows[0]["end_v_mm"] = str(float(rows[0]["end_v_mm"].replace("np.float64(", "").rstrip(")")) * 0.9)
+rows[1]["end_u_mm"] = "13.5"
+rows[2]["end_ns"] = str(float(rows[2]["end_ns"].replace("np.float64(", "").rstrip(")")) + 50.0)
+with open(bad / "grid.csv", "w", newline="") as fh:
+    wr = csv.DictWriter(fh, fieldnames=cols); wr.writeheader(); wr.writerows(rows)
+p = py(P / "k2a_kernel_probe.py", W / "kp_bad", "--kernel", RUN / f"kernel_{TAG}", "--green-paths", bad)
+assert p.returncode == 0, p.stderr[-600:]
+tb = json.load(open(W / "kp_bad/kernel_probe.json"))["time_horizon"]
+cl = {e["row"]: e["class"] for e in tb["examples_not_cathode"]}
+assert not tb["all_cathode"] and tb["classes"]["CATHODE"] == th["start_points"] - 3, tb["classes"]
+assert cl[int(rows[1]["row"])] == "LATERAL" and cl[int(rows[2]["row"])] == "INCONSISTENT" and cl[int(rows[0]["row"])] in ("INCONSISTENT", "OTHER"), cl
+assert "NOT every path" in (W / "kp_bad/kernel_probe.md").read_text()
 
 # wire probe on the toy preflight (slot 0015: a cloud on a wire outside the toy kernel)
 p = py(P / "k2a_wire_probe.py", W / "wp", "--pf", SW / "pf", "--kernel", SW / "toy/kern", "--slots", "15,10", "--scan", SW / "scan")
@@ -41,6 +63,11 @@ assert p.returncode == 0, p.stderr[-600:]
 w = json.load(open(W / "wp/wire_probe.json"))["events"]
 assert w["0015"]["charge_frac_outside_kernel_wires"] > 0 and not w["0015"]["wires"]["3"]["in_kernel"], w["0015"]
 assert w["0010"]["charge_frac_outside_kernel_wires"] == 0 and w["0015"]["scan"]["execution"] == "BLOCKED"
+# a --scan directory without scan.csv is reported and skipped, never required
+p = py(P / "k2a_wire_probe.py", W / "wp_noscan", "--pf", SW / "pf", "--kernel", SW / "toy/kern", "--slots", "15", "--scan", W / "no_such_scan")
+assert p.returncode == 0 and "absent" in p.stdout, p.stderr[-600:]
+wn = json.load(open(W / "wp_noscan/wire_probe.json"))
+assert "absent" in wn["scan"] and wn["events"]["0015"]["scan"] is None
 p = py(P / "k2a_wire_probe.py", W / "wp_sealed", "--pf", SW / "pf", "--kernel", SW / "toy/kern", "--slots", "18")
 assert p.returncode != 0 and "sealed" in p.stdout + p.stderr
 
@@ -48,5 +75,6 @@ assert p.returncode != 0 and "sealed" in p.stdout + p.stderr
 p = subprocess.run(["bash", str(P / "k2a_group_synth.sh"), str(VAL / "muons/muon_0002"), str(RUN), TAG, str(W / "gs")], capture_output=True, text=True)
 assert p.returncode != 0 and "pruned" in p.stderr, p.stderr[-300:]
 print("PASS probes (SYNTHETIC): closure anatomy on existing S-ladder variants (harmonic kernel == synthesis, early windows); "
-      "kernel probe (tau and spatial interpolation estimates, wire-translation sign convention, drift-time horizon); wire probe "
-      "(charge on wires outside the kernel, sealed refused); group synthesis refuses pruned exports")
+      "kernel probe (tau and spatial interpolation estimates, wire-translation sign convention, drift-time horizon, Green-path "
+      "termination on the physical cathode with injected short / lateral / inconsistent paths classified); wire probe "
+      "(charge on wires outside the kernel, missing scan.csv tolerated, sealed refused); group synthesis refuses pruned exports")

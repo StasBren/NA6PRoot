@@ -12,7 +12,8 @@ For each slot (never sealed; preflight moments PF/moments_nonsealed/**/muon_<slo
            quantiles), D_U / D_V range, time range, primaries; in kernel? (kernel wires from kernel.json); |k| = 4 is
            the outermost wire of the nine-wire analytic patch (field-model edge)
   primaries spanning several wires; the charge on wires outside the kernel, and its split by |k|
-  scan     (optional) the domain-scan record of the slot (status, blocked fraction) for cross-checking
+  scan     (optional) the domain-scan record of the slot (status, blocked fraction) for cross-checking; a missing
+           DIR/scan.csv is reported and skipped, never required
 Writes NEW_DIR/wire_probe.json and wire_probe.md. Coordinate conventions (MomentAccumulator.hh / BirthMoments.hh):
 u_mm = 10 u_patch_cm, k = rint(u_mm / 3) (round half to even), r and theta about wire k, D_U / D_V strip coordinates
 WITHOUT the -/+ tan(alpha) u stereo term (the kernel adds it per wire), base_U / base_V from the muon entry.
@@ -41,8 +42,14 @@ def main():
         raise SystemExit(f"refusing: {a.out} exists")
     slots = {r["slot"]: r for r in csv.DictReader(open(a.pf / "inventory" / "slots.csv"))}
     kw = json.loads((a.kernel / "kernel.json").read_text())["green_axes"]["wires"]
-    scan = {r["slot"]: r for r in csv.DictReader(open(a.scan / "scan.csv"))} if a.scan else {}
-    res = {"tool": "k2a_wire_probe.py", "kernel_wires": kw, "events": {}}
+    scan, scan_note = {}, "no --scan given"
+    if a.scan:
+        if (a.scan / "scan.csv").is_file():
+            scan = {r["slot"]: r for r in csv.DictReader(open(a.scan / "scan.csv"))}; scan_note = str(a.scan / "scan.csv")
+        else:
+            scan_note = f"{a.scan / 'scan.csv'} absent: scan cross-check skipped"
+            print(f"note: {scan_note}")
+    res = {"tool": "k2a_wire_probe.py", "kernel_wires": kw, "scan": scan_note, "events": {}}
     for s in [f"{int(x):04d}" for x in a.slots.split(",") if x.strip()]:
         if "sealed" in slots.get(s, {}).get("role", "sealed"):
             raise SystemExit(f"refusing: slot {s} is sealed or unknown")
@@ -85,7 +92,7 @@ def main():
         res["events"][s] = rec
     a.out.mkdir(parents=True)
     (a.out / "wire_probe.json").write_text(json.dumps(res, indent=1) + "\n")
-    L = ["# Wire-domain probe (read-only)", "", f"kernel wires {kw}; patch wires -4..4 (nine-wire analytic patch; |k| = 4 is its edge)", ""]
+    L = ["# Wire-domain probe (read-only)", "", f"kernel wires {kw}; patch wires -4..4 (nine-wire analytic patch; |k| = 4 is its edge); scan: {scan_note}", ""]
     for s, r in res["events"].items():
         if "error" in r:
             L.append(f"## {s}: {r['error']}"); continue
