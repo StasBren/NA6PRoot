@@ -2,6 +2,9 @@
 """Aggregate a run_k2a_validation.sh directory: K2A vs detailed S0 on independent muons, with explicit outcomes.
 
   k2a_validation_report.py OUTDIR [--selection selection.csv]
+  k2a_validation_report.py NEW_DIR --from OUTDIR1 OUTDIR2 ... [--selection selection.csv]   combined report of several
+        runs (e.g. pilot + remainder); NEW_DIR must not exist; a slot in two runs, or runs with different labels, kernels
+        or git commits, are refused; nothing in the source runs is modified
 
 Reads OUTDIR/slots.txt, provenance.txt and OUTDIR/muons/muon_*/outcome.json (k2a_validation_muon.py). Every listed
 slot appears in the tables; a slot without outcome.json is INCONCLUSIVE. Writes OUTDIR/validation_report.json,
@@ -102,17 +105,38 @@ def fmt(v, k=""):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("out", type=Path); ap.add_argument("--selection", type=Path)
+    ap.add_argument("--from", dest="src", type=Path, nargs="+", help="combine these run directories into NEW_DIR")
     a = ap.parse_args()
     O = a.out
-    prov = (O / "provenance.txt").read_text() if (O / "provenance.txt").is_file() else ""
-    label = next((l.split("=", 1)[1] for l in prov.splitlines() if l.startswith("label=")), "UNKNOWN")
-    slots = [l.strip() for l in (O / "slots.txt").read_text().splitlines() if l.strip()] if (O / "slots.txt").is_file() else []
+    srcs = a.src or [O]
+    if a.src:
+        if O.exists():
+            raise SystemExit(f"refusing: {O} exists")
+    def pv(d):
+        t = (d / "provenance.txt").read_text() if (d / "provenance.txt").is_file() else ""
+        return {k: v for k, v in (l.split("=", 1) for l in t.splitlines() if "=" in l and not l.startswith("tool_sha256"))}
+    provs = [pv(d) for d in srcs]
+    for k in ("label", "kernel", "git_commit", "run", "tag", "half_strips", "late_steps", "criteria_v1_sha256"):
+        vals = {p.get(k) for p in provs}
+        if len(vals) > 1:
+            raise SystemExit(f"refusing to combine runs with different {k}: {sorted(map(str, vals))}")
+    label = provs[0].get("label", "UNKNOWN")
+    slots, home = [], {}
+    for d in srcs:
+        for l in ((d / "slots.txt").read_text().splitlines() if (d / "slots.txt").is_file() else []):
+            if l.strip():
+                if l.strip() in home:
+                    raise SystemExit(f"slot {l.strip()} appears in {home[l.strip()]} and {d}")
+                home[l.strip()] = d; slots.append(l.strip())
+    if a.src:
+        O.mkdir(parents=True)
+        (O / "combined_from.txt").write_text("".join(f"{d.resolve()}\n" for d in srcs))
     sel = {}
     if a.selection and a.selection.is_file():
         sel = {r["slot"]: r for r in csv.DictReader(open(a.selection)) if r.get("slot")}
     outs = {}
     for m in slots:
-        p = O / "muons" / f"muon_{m}" / "outcome.json"
+        p = home[m] / "muons" / f"muon_{m}" / "outcome.json"
         outs[m] = json.loads(p.read_text()) if p.is_file() else {"muon": m, "outcome": "INCONCLUSIVE", "inconclusive": ["no outcome.json"]}
     counts = {}
     for o in outs.values():
@@ -223,7 +247,8 @@ def main():
 
     bad = counts.get("FAIL", 0); inc = counts.get("INCONCLUSIVE", 0)
     status = "FAIL" if bad else ("INCONCLUSIVE" if inc or not slots else "COMPLETE")
-    rep = {"tool": "k2a_validation_report.py", "label": label, "dir": str(O), "status": status, "slots": slots,
+    rep = {"tool": "k2a_validation_report.py", "label": label, "dir": str(O), "sources": [str(d) for d in srcs],
+           "provenance": provs[0], "status": status, "slots": slots,
            "outcome_counts": counts, "valid": valid, "outcomes": {m: {k: outs[m].get(k) for k in ("outcome", "independent", "failures",
            "inconclusive", "notes", "s0_t1", "s0_t0", "k2a_domain")} for m in slots},
            "accuracy": acc, "feature_dependence_spearman": dep, "coverage": cov, "runtime": runtime, "criteria_v1_dry_run": dry,

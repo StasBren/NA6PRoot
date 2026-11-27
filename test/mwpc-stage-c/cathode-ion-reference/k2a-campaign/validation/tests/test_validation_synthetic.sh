@@ -15,7 +15,8 @@
 #     MWPC_K2A_VAL_PRUNE_VERTICES=1 only the 5 derived path copies inside OUTDIR are removed (sha256 recorded)
 #   D outcome negatives on copies (never the original): identity FAIL, domain changed by the moment path, consistent
 #     refusal -> OUT_OF_DOMAIN, frozen replay refusal -> S0_FAILED, archive changed, archive-vs-export moments FAIL,
-#     T0 failure -> VALID_T1_ONLY, missing shaped comparison -> INCONCLUSIVE; report with a missing outcome -> exit 3
+#     T0 failure -> VALID_T1_ONLY, missing shaped comparison -> INCONCLUSIVE; report with a missing outcome -> exit 3;
+#     combined report (--from) refuses a slot present in two runs
 #   E criteria dry run unit cases: identical responses PASS; lead change with S0 top-2 within 1 % -> AMBIGUOUS (not a
 #     failure); a real lead change and a 20 um w shift -> FAIL
 set -Eeuo pipefail
@@ -228,8 +229,13 @@ assert subprocess.run([sys.executable, REP, str(R)], capture_output=True).return
 j = json.load(open(R / "validation_report.json")); assert j["outcome_counts"] == {"VALID": 1, "INCONCLUSIVE": 1}, j["outcome_counts"]
 shutil.copy(N / "identity_fail/V/outcome.json", R / "muons/muon_0002/outcome.json"); (R / "slots.txt").write_text("0002\n")
 assert subprocess.run([sys.executable, REP, str(R)], capture_output=True).returncode == 1
+# combined report (pilot + remainder style): a slot in two runs is refused; one run alone reproduces its counts
+assert subprocess.run([sys.executable, REP, str(N / "comb_dup"), "--from", str(O), str(O)], capture_output=True).returncode != 0
+assert not (N / "comb_dup").exists()
+assert subprocess.run([sys.executable, REP, str(N / "comb"), "--from", str(O)], capture_output=True).returncode == 0
+assert json.load(open(N / "comb/validation_report.json"))["outcome_counts"] == {"VALID": 1}
 print(f"PASS outcome negatives: {len(cases) + 1} edited copies give FAIL / OUT_OF_DOMAIN (status named) / S0_FAILED / "
-      "VALID_T1_ONLY / INCONCLUSIVE as specified; report: missing outcome -> INCONCLUSIVE (exit 3), FAIL -> exit 1")
+      "VALID_T1_ONLY / INCONCLUSIVE as specified; report: missing outcome -> INCONCLUSIVE (exit 3), FAIL -> exit 1; combined report refuses a duplicated slot")
 PY
 
 # ---- E. criteria dry-run unit cases
