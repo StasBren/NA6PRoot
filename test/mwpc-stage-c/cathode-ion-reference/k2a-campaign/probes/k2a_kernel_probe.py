@@ -146,7 +146,11 @@ def main():
     res["wire_translation"] = trans
     # 4. time horizon and cathode arrival against the physical boundary
     th = {"tau_max_ns": float(tau[-1])}
-    if a.green_paths and (a.green_paths / "grid.csv").is_file():
+    need = ("grid.csv", "ions.csv", "vertices.f64", "complete.txt")
+    if a.green_paths and not all((a.green_paths / f).is_file() for f in need):
+        th["cathode_check"] = "NOT DONE: missing " + ", ".join(f for f in need if not (a.green_paths / f).is_file()) + f" in {a.green_paths}"
+        print("note: " + th["cathode_check"])
+    elif a.green_paths:
         num = lambda v: float(str(v).replace("np.float64(", "").rstrip(")"))
         g = list(csv.DictReader(open(a.green_paths / "grid.csv")))
         ions = {int(r["row"]): r for r in csv.DictReader(open(a.green_paths / "ions.csv"))}
@@ -206,7 +210,7 @@ def main():
     for r in trans:
         L.append(f"| {r['side']} | {r['wire']} <- {r['from_wire']} | {r['basis']} | {r['predicted_sign_shift_mm']:+.3g} | {p(r['predicted_sign_early_0_50ns_rel_L2'])} | "
                  f"{p(r['predicted_sign_all_rel_L2'])} | {p(r['opposite_sign_early_0_50ns_rel_L2'])} | {p(r['opposite_sign_all_rel_L2'])} |")
-    L += ["", "## 4. time horizon", "", f"tau_max {th['tau_max_ns']:g} ns."]
+    L += ["", "## 4. time horizon", "", f"tau_max {th['tau_max_ns']:g} ns."] + ([th["cathode_check"]] if "cathode_check" in th else [])
     if "start_points" in th:
         c = th["classes"]
         L += [f"Green grid paths: {th['start_points']} start points. Termination against the physical cathode v = +-{th['cathode_v_mm']:g} mm "

@@ -56,6 +56,9 @@ cl = {e["row"]: e["class"] for e in tb["examples_not_cathode"]}
 assert not tb["all_cathode"] and tb["classes"]["CATHODE"] == th["start_points"] - 3, tb["classes"]
 assert cl[int(rows[1]["row"])] == "LATERAL" and cl[int(rows[2]["row"])] == "INCONSISTENT" and cl[int(rows[0]["row"])] in ("INCONSISTENT", "OTHER"), cl
 assert "NOT every path" in (W / "kp_bad/kernel_probe.md").read_text()
+(bad / "vertices.f64").unlink()
+p = py(P / "k2a_kernel_probe.py", W / "kp_novert", "--kernel", RUN / f"kernel_{TAG}", "--green-paths", bad)
+assert p.returncode == 0 and "NOT DONE: missing vertices.f64" in json.load(open(W / "kp_novert/kernel_probe.json"))["time_horizon"]["cathode_check"]
 
 # wire probe on the toy preflight (slot 0015: a cloud on a wire outside the toy kernel)
 p = py(P / "k2a_wire_probe.py", W / "wp", "--pf", SW / "pf", "--kernel", SW / "toy/kern", "--slots", "15,10", "--scan", SW / "scan")
