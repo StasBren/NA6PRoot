@@ -196,8 +196,8 @@ Nothing is clamped or dropped.
 |---|---|
 | `k2a_strip_eval.cc` | CLI: evaluates a moments CSV, writes replay format + clouds/shifts/groups CSV + `result.json` (kernel verify/load time, cold/warm evaluate, peak RSS, mapped vs `--preload`); `--shifts groups.json`; `--displace-event` (test only) |
 | `k2a_strip_compare.py` | waveform-only comparator: labels, time grid, L2, per-strip L2, per-strip and total window charge, U/V ratio; `--label-shift` |
-| `run_m2_adapter.sh` | WSL validation on the real kernel: 0560/0997 E2b reproduction, displacement symmetry, full-birth inline moments vs Python, benchmarks |
-| `k2a_select_regression.py` | picks a non-sealed (slot, N) for a real multiwire / displaced-primary full-birth run, from the preflight K256 moments |
+| `run_m2_adapter.sh` | WSL validation on the real kernel with **explicit required coverage**: E2b 0560 and 0997 (offline reproduction, displacement symmetry), the accepted T1 run of 0000, and ≥ 1 further T1-validated multiwire/displaced run; all three benchmark modes checked; anything missing is INCONCLUSIVE |
+| `k2a_select_regression.py` | picks a non-sealed (slot, N) for a real multiwire / displaced-primary full-birth run, from the preflight K256 moments; N = last included original primary index + 1 (zero-ion primaries are absent from the moments), census checked against `event.json` |
 | `tests/test_strip_eval_synthetic.sh` | toy-kernel tests A–H (SYNTHETIC, not physics) |
 | `tests/strip_eval_inmemory_test.cc` | births → accumulator → Event → evaluator in memory, == CSV path bitwise |
 

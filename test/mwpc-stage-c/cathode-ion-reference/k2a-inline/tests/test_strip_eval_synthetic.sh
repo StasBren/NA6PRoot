@@ -14,10 +14,13 @@
 # E  in-memory chain: births -> MomentAccumulator -> Event -> Evaluator == the same on the moments CSV (bitwise) and
 #    == Python on that CSV (<= 1e-12); blocked moment event -> INPUT_BLOCKED
 # F  refusals: wrong kernel id, existing output, unknown model; comparator negatives; repeats bit-identical
-# G  run_m2_adapter.sh on synthetic E2b-like directories (one grouping equal to the rule, one not) and on full-birth
-#    prefixes (one usable, one outside the kernel domain: both implementations refuse) -> PASS; a corrupted offline
-#    response -> FAIL
-# H  k2a_select_regression.py: sealed slot skipped, sealed directory refused, multiwire + displaced prefix found
+# G  run_m2_adapter.sh explicit coverage: E2b 0560 + 0997 (one grouping equal to the rule, one not), accepted T1 0000,
+#    one validated multiwire + displaced regression -> PASS. Missing 0997, no T1 run, no regression run, a regression
+#    that is neither multiwire nor displaced, or a both-refuse regression -> INCONCLUSIVE. A regression whose T1 verdict
+#    is not PASS, a T1 item that is not slot 0000, a failing preload benchmark, a corrupted offline response -> FAIL
+# H  k2a_select_regression.py: N = last included ORIGINAL primary index + 1 when primaries have zero ions (absent from
+#    the CSV); budget over the same prefix; census checked against event.json (inconsistent -> skipped); sealed slot
+#    skipped, sealed directory refused
 set -Eeuo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; CIR="$(cd "$HERE/.." && pwd)"
 ENG="$CIR/spatial-ablation/engine"; REC="$CIR/k2a-campaign/recenter/k2a_recentered_k2a.py"
@@ -130,47 +133,73 @@ set -e
 ok "F refusals: wrong kernel id, existing output, unknown model, missing id; comparator: 1e-9 perturbation FAIL, other labels FAIL, missing INCONCLUSIVE"
 
 # G
-mk_e2b(){ # name shifts.json
+mk_e2b(){ # slot shifts.json
   local d="$W/E2B/recenter_experiment_x/muon_$1"; mkdir -p "$d/prepared" "$d/groups"
   cp "$W/toy/moments_multi.csv" "$d/prepared/cloud_moments.csv"; cp "$2" "$d/groups/groups.json"
   python3 "$REC" "$KD" "$d/prepared/cloud_moments.csv" "$d/K2A_local" --groups "$d/groups/groups.json" --kernel-id "$KID" > /dev/null
 }
-mk_e2b 9001 same.json; mk_e2b 9002 changed.json
-mkdir -p "$W/inl/runA/R1" "$W/inl/runB/R1"
-cp im/inmem.moments.csv "$W/inl/runA/R1/inline.moments.csv"; cp "$W/toy/moments_bad_wire.csv" "$W/inl/runB/R1/inline.moments.csv"
-set +e
-MWPC_K2A_INLINE_BUILD="$W" MWPC_K2A_KERNEL_DIR="$KD" MWPC_K2A_KERNEL_ID="$KID" MWPC_M2_REPEAT=3 \
-  MWPC_M2_E2B_DIRS="$W/E2B/recenter_experiment_x/muon_9001 $W/E2B/recenter_experiment_x/muon_9002" \
-  MWPC_M2_INLINE_PREFIXES="$W/inl/runA/R1/inline $W/inl/runB/R1/inline" bash "$HERE/run_m2_adapter.sh" "$W/m2" > m2.log 2>&1; g1=$?
-cp -r "$W/E2B/recenter_experiment_x/muon_9001" "$W/E2B/muon_9003"
-python3 - "$W/E2B/muon_9003/K2A_local/replay/waveforms.csv" <<'PY'
-import numpy as np, sys
-p = sys.argv[1]; h = open(p).readline().strip(); a = np.loadtxt(p, delimiter=",", skiprows=1); a[50, 2] *= 1.001
-np.savetxt(p, a, delimiter=",", header=h, comments="")
-PY
-MWPC_K2A_INLINE_BUILD="$W" MWPC_K2A_KERNEL_DIR="$KD" MWPC_K2A_KERNEL_ID="$KID" MWPC_M2_REPEAT=2 MWPC_M2_E2B_DIRS="$W/E2B/muon_9003" \
-  bash "$HERE/run_m2_adapter.sh" "$W/m2bad" > m2bad.log 2>&1; g2=$?
-set -e
-[[ $g1 -eq 0 ]] || { cat m2.log; die "G runner verdict ($g1)"; }
-grep -q "1 of 12 primaries: rule shift" "$W/m2/steps.tsv" && grep -q "0 of 12 primaries.*files identical" "$W/m2/steps.tsv" || die "G production-rule reporting"
-grep -q "both refuse" "$W/m2/steps.tsv" || die "G domain refusal"
-[[ $g2 -eq 1 ]] && grep -q "reproduce_offline.FAIL" <(tr '\t' '.' < "$W/m2bad/steps.tsv") || die "G corrupted offline response not detected ($g2)"
-ok "G run_m2_adapter.sh: synthetic E2b + full-birth items PASS (rule-vs-grouping reported, both-refuse case), corrupted offline response FAIL"
+mk_t1(){ # name slot moments verdict
+  local d="$W/T1/$1"; mkdir -p "$d/R1"; cp "$3" "$d/R1/inline.moments.csv"
+  printf 'label SYNTHETIC\nslot %s\nmax_heed_primaries 3\n' "$2" > "$d/provenance.txt"
+  printf '{"label": "SYNTHETIC", "verdict": "%s"}\n' "$4" > "$d/T1_verdict.json"
+}
+mk_e2b 0560 same.json; mk_e2b 0997 changed.json
+python3 "$HERE/tests/make_toy_kernel.py" --single-cloud "$W/toy/moments_near.csv" "$W/single.csv"
+mk_t1 t1_0000 0000 "$W/toy/moments_near.csv" PASS
+mk_t1 reg_0042 0042 im/inmem.moments.csv PASS
+mk_t1 reg_0043 0043 "$W/single.csv" PASS
+mk_t1 reg_0044 0044 "$W/toy/moments_bad_wire.csv" PASS
+mk_t1 reg_0045 0045 im/inmem.moments.csv FAIL
+mk_t1 t1_0007 0007 "$W/toy/moments_near.csv" PASS
+mkdir -p "$W/failpre"
+printf '#!/usr/bin/env bash\nfor a in "$@"; do [[ "$a" == --preload ]] && exit 2; done\nexec "%s/k2a_strip_eval" "$@"\n' "$W" > "$W/failpre/k2a_strip_eval"
+chmod +x "$W/failpre/k2a_strip_eval"
+E5="$W/E2B/recenter_experiment_x/muon_0560"; E9="$W/E2B/recenter_experiment_x/muon_0997"
+m2(){ # outdir build e2b t1 regressions -> prints the exit code
+  set +e
+  MWPC_M2_SYNTHETIC=1 MWPC_K2A_INLINE_BUILD="$2" MWPC_K2A_KERNEL_DIR="$KD" MWPC_K2A_KERNEL_ID="$KID" MWPC_M2_REPEAT=2 \
+    MWPC_M2_E2B_DIRS="$3" MWPC_M2_T1_RUN="$4" MWPC_M2_REGRESSION_RUNS="$5" bash "$HERE/run_m2_adapter.sh" "$W/$1" > "$W/$1.log" 2>&1
+  local rc=$?; set -e; echo "$rc"
+}
+g=$(m2 m2_full "$W" "$E5 $E9" "$W/T1/t1_0000" "$W/T1/reg_0042")
+[[ $g -eq 0 ]] || { cat "$W/m2_full.log"; die "G full coverage verdict ($g)"; }
+grep -q "1 of 12 primaries: rule shift" "$W/m2_full/steps.tsv" && grep -q "0 of 12 primaries.*files identical" "$W/m2_full/steps.tsv" || die "G production-rule reporting"
+python3 "$HERE/tests/check_m2_verdict.py" "$W/m2_full/m2_verdict.json" || die "G coverage record"
+for k in "m2_no0997|$E5|$W/T1/t1_0000|$W/T1/reg_0042" "m2_noreg|$E5 $E9|$W/T1/t1_0000|" \
+         "m2_nocov|$E5 $E9|$W/T1/t1_0000|$W/T1/reg_0043" "m2_refuse|$E5 $E9|$W/T1/t1_0000|$W/T1/reg_0044" \
+         "m2_not1|$E5 $E9||$W/T1/reg_0042"; do
+  IFS='|' read -r n e t r <<< "$k"
+  g=$(m2 "$n" "$W" "$e" "$t" "$r"); [[ $g -eq 3 ]] || { tail -5 "$W/$n.log"; die "G $n: expected INCONCLUSIVE, exit $g"; }
+done
+for k in "m2_t1fail|$E5 $E9|$W/T1/t1_0000|$W/T1/reg_0045|$W" "m2_t1slot|$E5 $E9|$W/T1/t1_0007|$W/T1/reg_0042|$W" \
+         "m2_prefail|$E5 $E9|$W/T1/t1_0000|$W/T1/reg_0042|$W/failpre"; do
+  IFS='|' read -r n e t r bld <<< "$k"
+  g=$(m2 "$n" "$bld" "$e" "$t" "$r"); [[ $g -eq 1 ]] || { tail -5 "$W/$n.log"; die "G $n: expected FAIL, exit $g"; }
+done
+grep -q "bench_preload.FAIL" <(tr '\t' '.' < "$W/m2_prefail/steps.tsv") || die "G preload failure not attributed"
+cp -r "$W/E2B/recenter_experiment_x" "$W/E2B/bad"
+python3 "$HERE/tests/make_toy_kernel.py" --corrupt "$W/E2B/bad/muon_0560/K2A_local/replay/waveforms.csv"
+g=$(m2 m2_badoff "$W" "$W/E2B/bad/muon_0560 $W/E2B/bad/muon_0997" "$W/T1/t1_0000" "$W/T1/reg_0042")
+[[ $g -eq 1 ]] && grep -q "reproduce_offline.FAIL" <(tr '\t' '.' < "$W/m2_badoff/steps.tsv") || die "G corrupted offline response ($g)"
+ok "G run_m2_adapter.sh coverage: complete -> PASS; missing 0997 / no regression / no T1 / regression without coverage / both-refuse -> INCONCLUSIVE; T1 verdict FAIL / T1 not slot 0000 / preload benchmark failure / corrupted offline response -> FAIL"
 
 # H
-mkdir -p sel/moments_nonsealed/chunk_000 sel/moments_sealed sel/inventory
-cp "$W/toy/moments_multi.csv" sel/moments_nonsealed/chunk_000/muon_0001.moments.csv
-cp "$W/toy/moments_near.csv" sel/moments_nonsealed/chunk_000/muon_0002.moments.csv
-cp "$W/toy/moments_multi.csv" sel/moments_nonsealed/chunk_000/muon_0003.moments.csv
-printf 'slot,role\n0001,development\n0002,development\n0003,sealed_validation\n' > sel/inventory/slots.csv
-python3 "$HERE/k2a_select_regression.py" --moments-dir sel/moments_nonsealed --slots sel/inventory/slots.csv --kernel "$KD" \
-  --out sel/cand.csv --max-births 1e9 > sel.log || { cat sel.log; die "H selector"; }
-grep -q "1 files skipped" sel.log && ! grep -q "^0003" sel/cand.csv && python3 - <<'PY' || die "H candidates"
-import csv
-c = list(csv.DictReader(open("sel/cand.csv"))); top = c[0]
-assert top["slot"] == "0001" and top["multiwire"] == "1" and top["displaced_primaries"], top
-PY
-set +e; python3 "$HERE/k2a_select_regression.py" --moments-dir sel/moments_sealed --slots sel/inventory/slots.csv --kernel "$KD" --out sel/x.csv > sel2.log 2>&1; h2=$?; set -e
-[[ $h2 -ne 0 ]] && grep -q "sealed moments directory" sel2.log || die "H sealed directory accepted"
-ok "H selector: sealed slot skipped, sealed directory refused, multiwire + displaced candidate ranked first ($(sed -n 2p sel.log | cut -c1-90))"
+SD="$W/sel"; SN="$SD/moments_nonsealed/chunk_000"
+mkdir -p "$SN" "$SD/moments_sealed" "$SD/inventory"
+cp "$W/toy/moments_multi.csv" "$SN/muon_0001.moments.csv"
+cp "$W/toy/moments_near.csv" "$SN/muon_0002.moments.csv"
+cp "$W/toy/moments_multi.csv" "$SN/muon_0003.moments.csv"
+# muon_0004: only ORIGINAL primaries 2 and 5 have ions (0, 1, 3, 4 and 6 are zero-ion, absent from the CSV)
+python3 "$HERE/tests/make_toy_kernel.py" --gappy "$W/toy/moments_multi.csv" "$SN/muon_0004.moments.csv"
+printf '{"n_primaries": 7, "n_primaries_zero_ions": 5}\n' > "$SN/muon_0004.moments.csv.event.json"
+cp "$SN/muon_0004.moments.csv" "$SN/muon_0005.moments.csv"
+printf '{"n_primaries": 7, "n_primaries_zero_ions": 3}\n' > "$SN/muon_0005.moments.csv.event.json"     # inconsistent census
+printf 'slot,role\n0001,development\n0002,development\n0003,sealed_validation\n0004,development\n0005,development\n' > "$SD/inventory/slots.csv"
+python3 "$HERE/k2a_select_regression.py" --moments-dir "$SD/moments_nonsealed" --slots "$SD/inventory/slots.csv" --kernel "$KD" \
+  --out "$SD/cand.csv" --max-births 1e9 --top 50 > "$W/sel.log" || { cat "$W/sel.log"; die "H selector"; }
+grep -q "1 files skipped: sealed" "$W/sel.log" && grep -q "1 skipped: census" "$W/sel.log" && ! grep -q "^0003," "$SD/cand.csv" || die "H skip counts ($(head -1 "$W/sel.log"))"
+python3 "$HERE/tests/check_selector.py" "$SD/cand.csv" "$W/toy/moments_multi.csv" || die "H prefix N"
+set +e; python3 "$HERE/k2a_select_regression.py" --moments-dir "$SD/moments_sealed" --slots "$SD/inventory/slots.csv" --kernel "$KD" --out "$SD/x.csv" > "$W/sel2.log" 2>&1; h2=$?; set -e
+[[ $h2 -ne 0 ]] && grep -q "sealed moments directory" "$W/sel2.log" || die "H sealed directory accepted"
+ok "H selector: zero-ion leading/intermediate primaries -> N = last index + 1 (3 and 6, not 1 and 2), budget over the same prefix; inconsistent census skipped; sealed slot skipped; sealed directory refused"
 echo "PASS strip-evaluator synthetic tests (toy kernel, NOT physics); work dir $W"

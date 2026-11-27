@@ -6,8 +6,12 @@
 
 Input: the preflight's K256 batch moments of the NON-sealed archives (p3_birth_moments --batch; one CSV per event).
 The sealed moments directory is refused, and so is any event whose slot is sealed or unknown in slots.csv.
-For every event and every prefix N of Heed primaries (the run_t1_inline.sh --max-heed-primaries option), using the
-K256 estimates of the clouds of primaries 0..N-1:
+For every event and every prefix N of Heed primaries (the run_t1_inline.sh --max-heed-primaries option, which runs the
+ORIGINAL indices 0..N-1), using the K256 estimates of the clouds of primaries 0..N-1. Zero-ion primaries have no row in
+the moments CSV, so a prefix ending at primary p is N = p + 1 (never the count of non-empty primaries); budget and domain
+are evaluated over exactly that prefix. The CSV primaries are checked against the archive metadata <moments>.event.json
+(n_primaries, n_primaries_zero_ions): an inconsistent event is skipped, a missing one ranks the candidate last
+("census unverified"); run_t1_inline.sh MWPC_T1_PREVIEW=1 then reads the frozen census of the same prefix.
   births      sum of N_fC / e (the reservoir weights restore each primary's exact census)      <= --max-births
   multiwire   >= 2 distinct wires, each carrying >= 5 % of the selected charge
   displaced   >= 1 primary with m_U != 0 or m_V != 0 under the production rule floor(Dbar/P + 1/2), with its Dbar/P + 1/2
@@ -45,7 +49,7 @@ def main():
     P, D0, dD, nD, dsub = ax["pitch_mm"], ax["D_mm"][0], ax["dD_mm"], len(ax["D_mm"]), ax["d_sub"]
     wires, lr0, lr1 = set(int(w) for w in ax["wires"]), math.log(ax["r_um"][0]), math.log(ax["r_um"][-1])
     hs = a.half_strips
-    cands, scanned, skipped = [], 0, 0
+    cands, scanned, skipped, inconsistent = [], 0, 0, 0
     for f in sorted(a.moments_dir.rglob("*.moments.csv")):
         m = re.findall(r"(\d{4})", f.name)
         slot = m[-1] if m else None
@@ -59,8 +63,24 @@ def main():
         for r in rows:
             byp[int(r["primary"])].append(r)
         prims = sorted(byp)
+        # the moments CSV holds only primaries WITH ions: an absent index is a zero-ion primary. --max-heed-primaries N
+        # runs ORIGINAL indices 0..N-1, so a prefix ending at primary p is N = p + 1 and includes every absent index < p
+        # (zero births, no cloud). Cross-check against the archive metadata (<moments>.event.json) when present.
+        meta_p = Path(str(f) + ".event.json")
+        census = "unverified (no event.json)"
+        if meta_p.is_file():
+            meta = json.loads(meta_p.read_text())
+            n_all, n_zero = int(meta["n_primaries"]), int(meta["n_primaries_zero_ions"])
+            if prims[0] < 0 or prims[-1] >= n_all or n_all - len(prims) != n_zero:
+                inconsistent += 1
+                print(f"  skip {f.name}: primaries in CSV {len(prims)} (max index {prims[-1]}) inconsistent with archive "
+                      f"n_primaries {n_all}, zero-ion {n_zero}")
+                continue
+            census = "verified"
+        elif prims[0] < 0:
+            inconsistent += 1; continue
         births = 0.0; clouds = []; shifts = {}; ok_domain = True
-        for n_idx, p in enumerate(prims):
+        for p in prims:
             cl = byp[p]
             N = [float(r["N_fC"]) for r in cl]; Ns = sum(N)
             births += Ns / EFC
@@ -89,18 +109,23 @@ def main():
             disp = [pp for pp, s in shifts.items() if (s[0] or s[1]) and s[2] >= 0.05]
             mwp = any(s[3] >= 2 for s in shifts.values())
             if multi or disp:
-                cands.append({"slot": slot, "role": roles[slot], "N": n_idx + 1, "expected_births": int(round(births)),
+                cands.append({"slot": slot, "role": roles[slot], "N": p + 1, "last_primary_index": p,
+                              "zero_ion_primaries_in_prefix": p + 1 - sum(1 for q in prims if q <= p), "census": census,
+                              "expected_births": int(round(births)),
                               "multiwire": int(multi), "displaced_primaries": " ".join(map(str, disp)), "multiwire_primary": int(mwp),
                               "wires": " ".join(f"{w}:{q / Q:.2f}" for w, q in sorted(wq.items())),
                               "shifts": " ".join(f"{pp}:{s[0]},{s[1]}" for pp, s in sorted(shifts.items())),
                               "min_shift_margin": min(s[2] for s in shifts.values()), "source": str(f)})
-    cands.sort(key=lambda c: (-(c["multiwire"] and bool(c["displaced_primaries"])), -c["multiwire_primary"], c["expected_births"]))
+    cands.sort(key=lambda c: (c["census"] != "verified", -(c["multiwire"] and bool(c["displaced_primaries"])), -c["multiwire_primary"],
+                              c["expected_births"]))
     with open(a.out, "w", newline="") as fh:
         if cands:
             w = csv.DictWriter(fh, fieldnames=list(cands[0])); w.writeheader(); w.writerows(cands[:max(a.top, 1) * 20])
-    print(f"scanned {scanned} non-sealed events ({skipped} files skipped: sealed/unknown slot); {len(cands)} candidate prefixes")
+    print(f"scanned {scanned} non-sealed events ({skipped} files skipped: sealed/unknown slot; {inconsistent} skipped: census "
+          f"inconsistent); {len(cands)} candidate prefixes")
     for c in cands[:a.top]:
-        print(f"  slot {c['slot']} N={c['N']}: ~{c['expected_births']} births, multiwire={c['multiwire']}, displaced primaries "
+        print(f"  slot {c['slot']} N={c['N']} (primaries 0..{c['last_primary_index']}, {c['zero_ion_primaries_in_prefix']} zero-ion, "
+              f"census {c['census']}): ~{c['expected_births']} births, multiwire={c['multiwire']}, displaced primaries "
               f"[{c['displaced_primaries']}], wires {c['wires']}, shifts {c['shifts']}")
     return 0 if cands else 1
 

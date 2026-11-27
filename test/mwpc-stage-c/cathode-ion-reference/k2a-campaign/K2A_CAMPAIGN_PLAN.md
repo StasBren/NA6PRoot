@@ -53,6 +53,9 @@ Sections 2–7 below were written for the earlier "997-event processing campaign
   integration started: milestone 1 = full-birth in-memory moments in the generator path, `../k2a-inline/README.md`
   (T0 synthetic PASS; T1 real-avalanche validation pending on WSL). Milestone 2 (compiled absolute-strip evaluator)
   starts only after T1 passes.
+- 2026-11-27: T1 accepted (18/18). Milestone 2 adapter committed. Sealed-set acceptance criteria FROZEN as version 1
+  (`sealed/SEALED_ACCEPTANCE_CRITERIA.md`, `sealed/sealed_acceptance_criteria_v1.json`, `sealed/FREEZE_v1.sha256`)
+  before any sealed event was opened; they supersede the draft table of section 5 (same values, now binding).
 
 ## 0. Inputs (existing, read-only)
 

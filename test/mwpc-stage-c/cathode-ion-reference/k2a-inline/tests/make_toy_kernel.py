@@ -2,6 +2,7 @@
 """SYNTHETIC toy kernel directory + toy cloud moments for the compiled strip-evaluator tests (NOT physics).
 
   make_toy_kernel.py OUTDIR [--seed 5]
+  make_toy_kernel.py --single-cloud SRC DST | --gappy SRC DST | --corrupt WAVEFORMS.csv   (test-file helpers)
 
 OUTDIR/kern/{K.npy, KPHI0.npy, kernel.json}   s_kernel.py layout: basis K0 Kc1 Ks1 Kc2 Ks2 KA1 KA2, K (basis, side,
                                               wire, r, D, tau) float32, KPHI0 (basis, side, wire, r, D) float64; smooth
@@ -71,7 +72,28 @@ def write(path, rows):
             f.write(",".join(str(int(r[c])) if c in ("primary", "wire", "base_U", "base_V", "rows") else repr(float(r[c])) for c in COLS) + "\n")
 
 
+def helpers(argv):
+    """Small file transformations for the shell tests (no heredocs needed there)."""
+    import csv
+    if argv[0] == "--single-cloud":       # SRC DST: first wire-0 cloud only (one wire, m = 0)
+        r = list(csv.DictReader(open(argv[1])))
+        w = csv.DictWriter(open(argv[2], "w", newline=""), fieldnames=list(r[0])); w.writeheader()
+        w.writerows([x for x in r if x["wire"] == "0"][:1])
+    elif argv[0] == "--gappy":            # SRC DST: source primaries 0, 1 renumbered to ORIGINAL indices 2, 5
+        r = list(csv.DictReader(open(argv[1])))
+        out = [dict(x, primary={"0": "2", "1": "5"}[x["primary"]]) for x in r if x["primary"] in ("0", "1")]
+        w = csv.DictWriter(open(argv[2], "w", newline=""), fieldnames=list(r[0])); w.writeheader(); w.writerows(out)
+    elif argv[0] == "--corrupt":          # WAVEFORMS.csv: scale one sample by 1.001
+        p = argv[1]; h = open(p).readline().strip(); a = np.loadtxt(p, delimiter=",", skiprows=1); a[50, 2] *= 1.001
+        np.savetxt(p, a, delimiter=",", header=h, comments="")
+    else:
+        raise SystemExit(f"unknown helper {argv[0]}")
+
+
 def main():
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] in ("--single-cloud", "--gappy", "--corrupt"):
+        return helpers(sys.argv[1:])
     ap = argparse.ArgumentParser(); ap.add_argument("out", type=Path); ap.add_argument("--seed", type=int, default=5)
     a = ap.parse_args()
     rng = np.random.default_rng(a.seed)

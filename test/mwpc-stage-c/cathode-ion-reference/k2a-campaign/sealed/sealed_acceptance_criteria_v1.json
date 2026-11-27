@@ -1,0 +1,83 @@
+{
+ "name": "NA60+ MWPC 2100 V K2A fast cathode response: sealed-set acceptance criteria",
+ "version": 1,
+ "frozen_utc": "2026-11-27",
+ "status": "FROZEN before any sealed event was opened; changing anything below requires a new version, and a version created after the sealed set has been opened makes that set no longer independent",
+ "sealed_set": {
+  "definition": "the 10 phi + 10 omega events of sealed_validation20.csv in the audited frozen selection (phase_space_2100_signal40_v1); role sealed_validation in the preflight slots.csv",
+  "n_events": 20,
+  "channels": ["phi", "omega"],
+  "exclusions": "none: every sealed event appears in the result table"
+ },
+ "comparison": {
+  "test": "K2A (compiled absolute-strip adapter K2AStripEvaluator, frozen kernel, per-primary recentering) vs S0 (frozen ion-only replay p3_replay_full_spectral_muon.py on the frozen RKF export, local per-group S0 summed on absolute strips exactly as in E2b, plus the approximate prompt electron term t_prompt_electron_term.py)",
+  "inputs": "both sides from the SAME frozen K256 archive of each sealed event (same birth sample); no new avalanche is generated for the validation. The full-birth (in-memory) moment path is validated separately on development events (T1); the K256-vs-full sampling difference is a separate diagnostic (T2), not part of this test",
+  "signal": "ion term + electron step (the signed sum used downstream); ion-only is reported as a diagnostic",
+  "unchanged": ["2100 V field", "cathode geometry, strip pitch 1.7 mm, stereo tan 0.1", "weighting LUT", "Green table and kernel", "frozen generator", "provisional electronics below"]
+ },
+ "electronics_provisional": {
+  "tool": "timing-ablation/t_shaped_compare.py",
+  "tool_sha256": "d4b1a73ebd4900e1225d8ee785be8ffc4b05dc490bb1302e3f0c51d4ca0e221f",
+  "shaper": "unit-peak CR-RC^n stand-in, n = 3, tau = Tp / n (NOT the VMM3a transfer function)",
+  "Tp_ns": [100, 200],
+  "threshold_fractions_of_S0_lead_peak": [0.02, 0.05, 0.1, 0.2, 0.5],
+  "thresholds": "absolute, fixed per plane from the S0 lead-strip peak and applied unchanged to K2A",
+  "window_ns": 6000,
+  "dt_ns": 1,
+  "centroid": "default peak-weighted centroid over strips above the lowest threshold ('thr'); w = P (c_U + c_V) / 2, u = P (c_V - c_U) / (2 A)"
+ },
+ "criteria": {
+  "_scope": "each criterion must hold for EVERY in-domain sealed event, in BOTH planes (U, V) where per plane, and at BOTH Tp (100, 200 ns); K2A minus S0",
+  "lead_strip": {"key": "{U,V}_lead_index_changed", "limit": 0,
+                 "exemption": "AMBIGUOUS if the two largest S0 strip peaks of that plane differ by <= 1 % of the S0 lead peak: listed, not a failure"},
+  "hit_flips": {"keys": ["{U,V}_hitflips_f0.05", "{U,V}_hitflips_f0.1"], "limit": 0,
+                "exemption": "MARGINAL if every flipping strip has its S0 peak within +-2 % of that threshold: listed, not a failure"},
+  "threshold_time_f0.1": {"key": "{U,V}_t_f0.1_ns", "limit_abs_ns": 1.0},
+  "window_charge": {"key": "{U,V}_charge_rel", "limit_abs_rel": 0.005},
+  "UV_charge_ratio": {"key": "UV_charge_ratio_rel", "limit_abs_rel": 0.01},
+  "second_over_lead": {"key": "{U,V}_second_over_lead", "limit_abs": 0.005},
+  "w_centroid": {"key": "w_mm", "limit_abs_um": 10.0},
+  "u_centroid": {"key": "u_mm", "limit_abs_um": 50.0},
+  "shaped_L2_ceiling": {"key": "{U,V}_L2_rel", "limit": 0.01}
+ },
+ "rationale": {
+  "lead_strip": "a lead change moves the cluster by a strip",
+  "hit_flips": "discrete readout: K2A must not create or remove hits away from threshold",
+  "threshold_time_f0.1": "<< 10 ns bins and the shaper rise",
+  "window_charge": "gain-calibration scale",
+  "UV_charge_ratio": "development worst case about 0.7 %",
+  "second_over_lead": "charge-sharing lever arm of the centroid",
+  "w_centroid": "<= 10 % of an expected ~100 um strip-centroid resolution",
+  "u_centroid": "u lever arm 1/(2A) = 5; <= 10 % of an expected ~0.5 mm stereo resolution",
+  "shaped_L2_ceiling": "waveform-level sanity ceiling; development shaped L2 0.11-0.30 %"
+ },
+ "domain": {
+  "in_domain": "every cloud of the event evaluated by K2AStripEvaluator with no blocking status (after per-primary recentering, frozen kernel, no table enlargement, no clamping)",
+  "out_of_domain": "OUT_OF_DOMAIN with the per-cloud cause; listed with its charge; not evaluated against the criteria",
+  "coverage_requirement": {"min_in_domain": 17, "of": 20,
+                           "basis": "development coverage after recentering 929/977 = 95.1 %; P(X <= 16 | n = 20, p = 0.951) = 1.5 %"}
+ },
+ "integrity": {
+  "_meaning": "not model criteria; a failure makes the run INVALID (no model verdict) and is repaired on non-sealed data only, without touching criteria, model, kernel or thresholds; every attempt and its outputs are kept",
+  "checks": ["frozen archive SHA256SUMS pass", "census exact: collected S0 ion charge = exact ions x e (rel <= 1e-9), group census integer",
+             "frozen replay time-compression pilot passes for every group (late-step ladder 100 -> 50 -> 20 -> 10 ns of the frozen interface allowed)",
+             "kernel_id, transport_id, weighting_id equal to the run-configuration freeze record",
+             "identical absolute strip label sets and output clock for K2A and S0 before comparison",
+             "no output written inside any frozen reference tree; frozen inputs unchanged before / after"]
+ },
+ "outcome_per_event": ["PASS (all criteria, both planes, both Tp; exemptions listed)", "FAIL (any criterion miss, listed with its value)",
+                       "OUT_OF_DOMAIN (cause)", "INVALID (integrity failure)"],
+ "verdict": {
+  "ACCEPTED": "no INVALID event, >= 17 of 20 events in domain, and every in-domain event PASS",
+  "NOT_ACCEPTED": "any in-domain event FAIL, or fewer than 17 of 20 in domain",
+  "INVALID_RUN": "any INVALID event: repair infrastructure on non-sealed data and rerun the whole set; the earlier attempt is kept and reported",
+  "reporting": "per channel (phi, omega) and all 20; every event in the table with all metric values, exemptions and causes; diagnostics (ion-only, unshaped L2, multiplicity, all threshold fractions, alternative centroids) reported, never decisive"
+ },
+ "procedure": [
+  "Before opening: write the run-configuration freeze record (this file's sha256, kernel_id, transport_id, weighting_id, adapter/engine config model K2A, half strips 5, window 7000 ns, dt 10 ns, electronics above, git commit and sha256 of every tool used, sealed_validation20.csv sha256). It must reference this criteria file unchanged.",
+  "The evaluator of these criteria is validated on development (non-sealed) events before the freeze record is written.",
+  "The sealed runner refuses to start without a freeze record whose criteria sha256 matches this file and whose tool hashes match the checked-out code.",
+  "All 20 events are run; nothing is excluded, re-selected or re-run selectively.",
+  "No retuning after opening. If the model, kernel, recentering or electronics are changed afterwards, the sealed set is spent: reported as such and no longer called an independent validation."
+ ]
+}
