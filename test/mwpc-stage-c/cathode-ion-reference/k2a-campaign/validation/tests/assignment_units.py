@@ -59,11 +59,11 @@ def wave(d, labels, base):
 a, b = U / "A", U / "B"
 wave(a, ["U_-1", "U_0", "V_0"], 1.0); wave(b, ["U_-1", "U_0", "V_0"], 2.0)
 o = U / "lu_same"
-assert subprocess.run([sys.executable, LU, str(o), f"A={a}", f"B={b}"], capture_output=True).returncode == 0
+assert subprocess.run([sys.executable, LU, str(o), "--window-ns", "30", f"A={a}", f"B={b}"], capture_output=True).returncode == 0
 assert os.path.islink(o / "A") and os.path.islink(o / "B") and json.load(open(o / "label_union.json"))["identical"]
 c = U / "C"; wave(c, ["U_0", "U_1", "V_-1", "V_0"], 3.0)
 o = U / "lu_diff"
-assert subprocess.run([sys.executable, LU, str(o), f"A={a}", f"C={c}"], capture_output=True).returncode == 0
+assert subprocess.run([sys.executable, LU, str(o), "--window-ns", "30", f"A={a}", f"C={c}"], capture_output=True).returncode == 0
 j = json.load(open(o / "label_union.json"))
 assert j["union"] == ["U_-1", "U_0", "U_1", "V_-1", "V_0"] and j["variants"]["A"]["padded_labels"] == ["U_1", "V_-1"] \
     and j["variants"]["C"]["padded_labels"] == ["U_-1"], j
@@ -73,7 +73,7 @@ for k in range(1, 4):
     assert rp[k][1] == ra[k][1] and rp[k][2] == ra[k][2] and rp[k][3] == "0" and rp[k][4] == "0" and rp[k][5] == ra[k][3], (rp[k], ra[k])
 bad = U / "BAD"; wave(bad, ["U_0"], 0.0)
 (bad / "prompt/prompt_waveforms.csv").write_text("time_center_ns,U_1\n5,0\n")
-assert subprocess.run([sys.executable, LU, str(U / "lu_bad"), f"A={a}", f"BAD={bad}"], capture_output=True).returncode == 1
+assert subprocess.run([sys.executable, LU, str(U / "lu_bad"), "--window-ns", "30", f"A={a}", f"BAD={bad}"], capture_output=True).returncode == 1
 print("PASS shift assignment / label union units: AGREE (near tie listed); DISAGREE with primary, both (m_U, m_V) and charge "
       "fraction; K2A-only primary -> DISAGREE; imposed run refused (FAIL); missing -> INCONCLUSIVE; identical labels symlinked; "
       "different labels zero-padded on the U-then-V union with values copied bit-exactly; inconsistent variant refused")

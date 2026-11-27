@@ -72,6 +72,8 @@ cases = [
     ("shaped_failed", lambda V, E: setstep(V / "steps.tsv", "shaped_refS0T1_ionelec", "FAIL"), "FAIL"),
     ("label_union_failed", lambda V, E: setstep(V / "steps.tsv", "label_union", "FAIL"), "FAIL"),
     ("cmp_numerical", lambda V, E: setstep(V / "steps.tsv", "cmp_S0T1_vs_K2A", "FAIL"), "FAIL"),
+    ("time_grid_mismatch", lambda V, E: setstep(V / "steps.tsv", "time_grid", "FAIL"), "FAIL"),
+    ("time_grid_not_checked", lambda V, E: (V / "steps.tsv").write_text("".join(l + "\n" for l in (V / "steps.tsv").read_text().splitlines() if not l.startswith("time_grid\t"))), "INCONCLUSIVE"),
 ]
 for c in cases:
     case(*c)

@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Put several replay-format variants on ONE absolute-strip label set for t_shaped_compare (which requires it).
+"""Put several replay-format variants on ONE time grid and ONE absolute-strip label set for t_shaped_compare.
 
-  k2a_label_union.py OUT_MUON_DIR NAME=DIR [NAME=DIR ...]
+  k2a_label_union.py OUT_MUON_DIR --window-ns W NAME=DIR [NAME=DIR ...]
 
 Each DIR has replay/waveforms.csv and prompt/prompt_waveforms.csv (first column time, then strip labels U_i / V_j).
-If every variant has the same labels in the same order, OUT_MUON_DIR/NAME is a symlink to DIR (nothing copied).
-Otherwise the union label set (U ascending, then V ascending) is used: a variant lacking a strip gets a column of
-exact zeros there (the strip was not computed by that variant: its window did not include it), other values are
-copied as TEXT (bit-exact). OUT_MUON_DIR/label_union.json records the union and, per variant, the padded labels.
-The charge the other variants carry on padded strips is reported by k2a_recenter_compare (missing strip tails).
-Exit 0 written; 1 a variant's replay and prompt label sets differ, or an input is missing.
+Time grid: k2a_time_grid.check() first (same dt and first bin centre, uniform, the W ns comparison window covered, the
+first nb = W/dt time values identical, replay == prompt axis); any mismatch -> exit 1 and nothing is written. Every
+variant is then written on exactly the first nb bins (rows copied as TEXT, bit-exact; nothing resampled), so all
+variants handed to t_shaped_compare have an identical time column and bin count. A variant already on nb bins whose
+labels equal the union is a symlink.
+Labels: the union (U ascending, then V ascending); a variant lacking a strip gets exact zeros there (it did not compute
+that strip); the charge the other variants carry on padded strips is reported by k2a_recenter_compare.
+OUT_MUON_DIR/label_union.json records the grid check, the union and, per variant, the padded labels.
+Exit 0 written; 1 time grids differ, a variant's replay and prompt label sets differ, or an input is missing.
 """
 import argparse
 import json
@@ -17,12 +20,20 @@ import os
 import sys
 from pathlib import Path
 
-FILES = ("replay/waveforms.csv", "prompt/prompt_waveforms.csv")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import k2a_time_grid as tg  # noqa: E402
+
+FILES = tg.FILES
 
 
 def header(p):
     with open(p) as f:
         return f.readline().rstrip("\n").split(",")
+
+
+def nrows(p):
+    with open(p) as f:
+        return sum(1 for _ in f) - 1
 
 
 def key(l):
@@ -32,7 +43,7 @@ def key(l):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("out", type=Path); ap.add_argument("variants", nargs="+")
+    ap.add_argument("out", type=Path); ap.add_argument("--window-ns", type=float, required=True); ap.add_argument("variants", nargs="+")
     a = ap.parse_args()
     vs = []
     for x in a.variants:
@@ -45,31 +56,39 @@ def main():
         if hs[0][1:] != hs[1][1:]:
             print(f"FAIL label union: {n} replay and prompt label sets differ"); return 1
         vs.append((n, d, hs[0][1:]))
+    ok, grid, nb = tg.check([(n, d) for n, d, _ in vs], a.window_ns)
+    if not ok:
+        print("FAIL label union: time grids differ: " + "; ".join(grid["failures"][:4])); return 1
     a.out.mkdir(parents=True, exist_ok=True)
     union = sorted({l for _, _, ls in vs for l in ls}, key=key)
     same = all(ls == vs[0][2] for _, _, ls in vs)
-    rec = {"tool": "k2a_label_union.py", "identical": same, "union": union, "variants": {}}
+    rec = {"tool": "k2a_label_union.py", "time_grid": grid, "bins_written": nb, "identical_labels": same, "union": union, "variants": {}}
     for n, d, ls in vs:
         tgt = a.out / n
-        if same or ls == union:
+        miss = [l for l in union if l not in ls]
+        if ls == union and all(nrows(d / f) == nb for f in FILES):
             os.symlink(os.path.abspath(d), tgt)
             rec["variants"][n] = {"source": str(d), "padded_labels": [], "copied": False}
             continue
-        miss = [l for l in union if l not in ls]
         for f in FILES:
             (tgt / f).parent.mkdir(parents=True, exist_ok=True)
             with open(d / f) as fi, open(tgt / f, "w") as fo:
                 h = fi.readline().rstrip("\n").split(",")
                 col = {l: i for i, l in enumerate(h)}
                 fo.write(",".join([h[0]] + union) + "\n")
-                for line in fi:
+                for k, line in enumerate(fi):
+                    if k >= nb:
+                        break
                     p = line.rstrip("\n").split(",")
                     fo.write(",".join([p[0]] + [p[col[l]] if l in col else "0" for l in union]) + "\n")
-        rec["variants"][n] = {"source": str(d), "padded_labels": miss, "copied": True}
+        rec["variants"][n] = {"source": str(d), "padded_labels": miss, "copied": True, "bins_source": nrows(d / FILES[0])}
+    # kept for the outcome / report readers
+    rec["identical"] = same
     (a.out / "label_union.json").write_text(json.dumps(rec, indent=1) + "\n")
     pad = {n: v["padded_labels"] for n, v in rec["variants"].items() if v["padded_labels"]}
-    print("OK label union: " + ("identical label sets (symlinks)" if same else
-          f"{len(union)} union strips; zero-padded: " + "; ".join(f"{n} {len(p)} ({','.join(p[:6])}{'...' if len(p) > 6 else ''})" for n, p in pad.items())))
+    print(f"OK label union: one time grid (dt {grid['dt_ns']:g} ns, {nb} bins = {a.window_ns:g} ns window); "
+          + ("identical label sets" if same else
+             f"{len(union)} union strips; zero-padded: " + "; ".join(f"{n} {len(p)} ({','.join(p[:6])}{'...' if len(p) > 6 else ''})" for n, p in pad.items())))
     return 0
 
 

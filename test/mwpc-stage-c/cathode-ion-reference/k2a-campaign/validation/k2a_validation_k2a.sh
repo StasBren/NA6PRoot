@@ -20,6 +20,10 @@
 # Comparisons (k2a_recenter_compare k2a_vs_s0): S0T1_vs_K2A, S0T0_vs_K2A (primary); S0T1_vs_K2Aimp, S0T0_vs_K2Aimp
 #   (diagnostic); S0T0_vs_S0T1 (time collapse); K2Aimp_vs_K2A (grouping effect). Shaped (t_shaped_compare) on a
 #   common absolute-strip label set (k2a_label_union.py pads strips a variant did not compute with zeros, recorded).
+# Time grid: before any comparison, k2a_time_grid.py requires every compared waveform (S0_T1, S0_T0, K2A, K2Aimp,
+#   K2A_cc_export, Python K2A_local) to share dt, first bin centre and the bins of the K2A window (window_ns of
+#   k2a_strip_eval): any mismatch -> step time_grid FAIL, nothing compared; the shaped inputs are written on exactly
+#   those bins, so every variant handed to t_shaped_compare has an identical time column.
 set -Eeo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; CAMP="$(cd "$HERE/.." && pwd)"; CIR="$(cd "$CAMP/.." && pwd)"
 RC="$CAMP/recenter"; TA="$CIR/timing-ablation"; SA="$CIR/spatial-ablation"; INL="$CIR/k2a-inline"
@@ -74,9 +78,32 @@ else
   vstep K2A_imposed INCONCLUSIVE "no S0 grouping (groups.json): far experiment incomplete; diagnostic variant and equivalence tests not run"
 fi
 
-# 4. comparisons
+# 4. one time grid for every compared waveform (explicit; nothing is compared on a mismatch)
 HK=0; [[ -s "$V/K2A_prod/replay/waveforms.csv" ]] && HK=1
 HI=0; [[ -s "$V/K2A_imposed/replay/waveforms.csv" ]] && HI=1
+CMPW=$(python3 -c "
+import json, sys
+for p in sys.argv[1:]:
+    try:
+        print(json.load(open(p))['window_ns']); break
+    except (OSError, ValueError, KeyError):
+        pass
+else:
+    print(7000)" "$V/K2A_prod/result.json" "$V/K2A_imposed/result.json")
+GV=(); [[ $HAVE_T1 == 1 ]] && GV+=("S0T1=$E/S0_local"); [[ $HAVE_T0 == 1 ]] && GV+=("S0T0=$V/T0/S0_local")
+[[ $HK == 1 ]] && GV+=("K2A=$V/K2A_prod"); [[ $HI == 1 ]] && GV+=("K2Aimp=$V/K2A_imposed")
+[[ -s "$V/K2A_cc_export/replay/waveforms.csv" ]] && GV+=("K2A_cc_export=$V/K2A_cc_export")
+[[ -s "$E/K2A_local/replay/waveforms.csv" ]] && GV+=("K2A_local_python=$E/K2A_local")
+if [[ ${#GV[@]} -ge 2 ]]; then
+  rc=0; python3 "$HERE/k2a_time_grid.py" "$V/time_grid.json" --window-ns "$CMPW" "${GV[@]}" > "$V/time_grid.log" 2>&1 || rc=$?
+  if [[ $rc -ne 0 ]]; then
+    vstep time_grid FAIL "$(tail -1 "$V/time_grid.log" | head -c 300)" "$V/time_grid.json"
+    exit 0                                                     # no waveform comparison on different time grids
+  fi
+  vstep time_grid PASS "$(tail -1 "$V/time_grid.log" | head -c 300)" "$V/time_grid.json"
+fi
+
+# 5. comparisons
 [[ $HAVE_T1 == 1 && $HK == 1 ]] && physcmp S0T1_vs_K2A "$E/S0_local" "$V/K2A_prod"
 [[ $HAVE_T0 == 1 && $HK == 1 ]] && physcmp S0T0_vs_K2A "$V/T0/S0_local" "$V/K2A_prod"
 [[ $HAVE_T1 == 1 && $HI == 1 ]] && physcmp S0T1_vs_K2Aimp "$E/S0_local" "$V/K2A_imposed"
@@ -84,12 +111,12 @@ HI=0; [[ -s "$V/K2A_imposed/replay/waveforms.csv" ]] && HI=1
 [[ $HAVE_T0 == 1 && $HAVE_T1 == 1 ]] && physcmp S0T0_vs_S0T1 "$V/T0/S0_local" "$E/S0_local"
 [[ $HI == 1 && $HK == 1 ]] && physcmp K2Aimp_vs_K2A "$V/K2A_imposed" "$V/K2A_prod"
 
-# 5. shaped observables on one absolute-strip label set
+# 6. shaped observables on one time grid and one absolute-strip label set
 VARS=(); [[ $HAVE_T1 == 1 ]] && VARS+=("S0T1=$E/S0_local"); [[ $HAVE_T0 == 1 ]] && VARS+=("S0T0=$V/T0/S0_local")
 [[ $HK == 1 ]] && VARS+=("K2A=$V/K2A_prod"); [[ $HI == 1 ]] && VARS+=("K2Aimp=$V/K2A_imposed")
 LU=1
 if [[ ${#VARS[@]} -ge 2 ]]; then
-  rc=0; python3 "$HERE/k2a_label_union.py" "$V/shaped_layout/muon_$M" "${VARS[@]}" > "$V/label_union.log" 2>&1 || rc=$?
+  rc=0; python3 "$HERE/k2a_label_union.py" "$V/shaped_layout/muon_$M" --window-ns "$CMPW" "${VARS[@]}" > "$V/label_union.log" 2>&1 || rc=$?
   LU=$rc
   if [[ $rc -eq 0 ]]; then vstep label_union OK "$(tail -1 "$V/label_union.log" | head -c 300)" "$V/shaped_layout/muon_$M/label_union.json"
   else vstep label_union FAIL "$(tail -1 "$V/label_union.log" | head -c 300)" "$V/label_union.log"; fi

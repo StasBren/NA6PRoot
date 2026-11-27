@@ -9,7 +9,8 @@ Writes MUON_DIR/outcome.json; prints one line. Never raises on missing pieces: t
 Two separate statements per muon:
 EXECUTION outcome (first that applies) - says that references and prediction were computed and are consistent, NOT
 that the prediction is accurate:
-  FAIL           numerical / integrity failure: archive changed; moment path differs (archive moments vs export
+  FAIL           numerical / integrity failure: compared waveforms on different time grids (dt, first bin, bins of the
+                 comparison window); archive changed; moment path differs (archive moments vs export
                  moments, s_compare_moments 1e-9; responses 1e-7); compiled K2A differs from the Python K2A_local
                  (1e-12) or only one of them refuses; agreeing shift assignments but non-identical responses; a
                  comparison reports numerical breakage (FAIL); variants not placeable on one strip label set; evaluator
@@ -139,6 +140,13 @@ def finite(x):
     return isinstance(x, (int, float)) and math.isfinite(x)
 
 
+def count_ok(v, vmax):
+    """A discrete metric: a finite non-negative integer (bool excluded), at most vmax if given."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 or v != int(v):
+        return False
+    return vmax is None or v <= vmax
+
+
 def criteria_dry_run(crit, lines, ref, cand):
     """Frozen v1 criteria (unchanged) applied to one event; returns per-check results and PASS / FAIL / MISSING."""
     C = crit["criteria"]
@@ -152,22 +160,38 @@ def criteria_dry_run(crit, lines, ref, cand):
         def add(name, key, val, limit, status, note=""):
             checks.append({"criterion": name, "key": key, "Tp_ns": float(tp), "value": val, "limit": limit, "status": status, "note": note})
         for s in ("U", "V"):
-            pk0 = sorted(r0[f"{s}_peaks"], reverse=True)
+            # discrete metrics must be present, finite, non-negative integers; the exemptions need finite peak lists of the
+            # same strips for both sides and a finite positive threshold. Anything missing or invalid is a FAIL: it is
+            # never read as an ambiguous lead, a marginal flip or a passed criterion.
+            pk0r, pk1r = r0.get(f"{s}_peaks"), r.get(f"{s}_peaks")
+            peaks_ok = (isinstance(pk0r, list) and isinstance(pk1r, list) and len(pk0r) == len(pk1r) and len(pk0r) >= 1
+                        and all(finite(x) for x in pk0r + pk1r))
             k = f"{s}_lead_index_changed"; v = r.get(k)
-            if v == 0:
+            if not count_ok(v, 1):
+                add("lead_strip", k, v, 0, "FAIL", "missing or invalid metric (not acceptable)")
+            elif v == 0:
                 add("lead_strip", k, v, 0, "PASS")
+            elif not peaks_ok or not max(pk0r) > 0:
+                add("lead_strip", k, v, 0, "FAIL", "lead changed and S0 peaks missing or invalid: exemption not evaluable")
             else:
+                pk0 = sorted(pk0r, reverse=True)
                 amb = len(pk0) > 1 and (pk0[0] - pk0[1]) <= 0.01 * pk0[0]
                 add("lead_strip", k, v, 0, "AMBIGUOUS" if amb else "FAIL", "S0 top-2 within 1 % of the lead" if amb else "")
-            thr = r0["thresholds_fCeq"][s]
+            thr = (r0.get("thresholds_fCeq") or {}).get(s) or {}
             for key in C["hit_flips"]["keys"]:
                 k = key.replace("{U,V}", s); f = k.split("_")[-1]; v = r.get(k)
+                if not count_ok(v, None):
+                    add("hit_flips", k, v, 0, "FAIL", "missing or invalid metric (not acceptable)"); continue
                 if v == 0:
                     add("hit_flips", k, v, 0, "PASS"); continue
-                t = thr[f]; a0 = [p >= t for p in r0[f"{s}_peaks"]]; a1 = [p >= t for p in r[f"{s}_peaks"]]
-                flips = [i for i, (x, y) in enumerate(zip(a0, a1)) if x != y]
-                marg = bool(flips) and all(abs(r0[f"{s}_peaks"][i] - t) <= 0.02 * t for i in flips)
-                add("hit_flips", k, v, 0, "MARGINAL" if marg else "FAIL", f"flipping strips at S0 peak/thr {[round(r0[f'{s}_peaks'][i] / t, 4) for i in flips]}")
+                t = thr.get(f)
+                if not peaks_ok or not finite(t) or not t > 0:
+                    add("hit_flips", k, v, 0, "FAIL", "flips and peaks / threshold missing or invalid: exemption not evaluable"); continue
+                flips = [i for i, (x, y) in enumerate(zip(pk0r, pk1r)) if (x >= t) != (y >= t)]
+                if len(flips) != v:
+                    add("hit_flips", k, v, 0, "FAIL", f"flip count {v} inconsistent with the peak lists ({len(flips)} flips)"); continue
+                marg = all(abs(pk0r[i] - t) <= 0.02 * t for i in flips)
+                add("hit_flips", k, v, 0, "MARGINAL" if marg else "FAIL", f"flipping strips at S0 peak/thr {[round(pk0r[i] / t, 4) for i in flips]}")
             for name, lim_key, scale in (("threshold_time_f0.1", "limit_abs_ns", 1.0), ("window_charge", "limit_abs_rel", 1.0),
                                          ("second_over_lead", "limit_abs", 1.0), ("shaped_L2_ceiling", "limit", 1.0)):
                 k = C[name]["key"].replace("{U,V}", s); v = r.get(k); lim = C[name][lim_key] * scale
@@ -329,6 +353,11 @@ def main():
             fails.append(f"comparison {n}: numerical breakage (FAIL)")
         elif st == "INCONCLUSIVE":
             incon.append(f"comparison {n} INCONCLUSIVE")
+    gst = vs.get("time_grid", {}).get("status")
+    if gst == "FAIL":
+        fails.append("time grids of the compared waveforms differ: " + vs["time_grid"]["detail"][:200])
+    elif gst != "PASS" and (V / "K2A_prod" / "replay" / "waveforms.csv").is_file() and have_t1:
+        incon.append("time-grid check of the compared waveforms missing")
     if vs.get("label_union", {}).get("status") == "FAIL":
         fails.append("variants could not be put on one absolute-strip label set: " + vs["label_union"]["detail"][:150])
     lu = jload(V / "shaped_layout" / f"muon_{M}" / "label_union.json") or {}

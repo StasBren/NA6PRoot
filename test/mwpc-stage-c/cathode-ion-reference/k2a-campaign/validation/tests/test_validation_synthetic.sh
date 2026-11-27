@@ -28,6 +28,11 @@
 #   G disagreement end-to-end (tests/disagreement_case.py) on a copy whose S0 grouping of one primary differs from the
 #     production rule: reported with primary and charge, grouping effect measured, zero-padded labels, primary K2A on
 #     its own grouping, equivalence tests PASS
+#   H time grid (tests/grid_units.py): different dt, first-bin offset, too-short variant, one moved bin, non-uniform
+#     spacing, replay != prompt axis, non-integer window, missing file -> explicit FAIL, nothing written for the shaped
+#     comparison; longer S0 clock + K2A window -> one grid (S0 truncated bit-exactly); real run passes, shifted copy fails
+#   E2 criteria with missing / None / NaN / non-integer lead or hit-flip metrics, missing peaks / threshold or an
+#     inconsistent flip count -> FAIL, never AMBIGUOUS / MARGINAL / PASS (tests/criteria_invalid.py)
 #   E criteria dry run unit cases: identical responses PASS; lead change with S0 top-2 within 1 % -> AMBIGUOUS (not a
 #     failure); a real lead change and a 20 um w shift -> FAIL
 set -Eeuo pipefail
@@ -161,6 +166,7 @@ for k in ("identity_cc_vs_python", "moment_path_archive_vs_export", "moments_arc
 rp = json.load(open(O / "muons/muon_0002/K2A_prod/result.json")); ri = json.load(open(O / "muons/muon_0002/K2A_imposed/result.json"))
 assert rp["shifts_from"].startswith("production rule") and ri["shifts_from"].endswith("groups.json"), (rp["shifts_from"], ri["shifts_from"])
 assert v["shift_assignment"]["status"] == "AGREE" and o["shift_assignment"]["n_disagree"] == 0
+assert v["time_grid"]["status"] == "PASS", v["time_grid"]
 assert o["k2a_domain"]["grouping"].startswith("production rule")
 c = o["comparisons"]
 for n in ("S0T1_vs_K2A", "S0T0_vs_K2A", "S0T1_vs_K2Aimp", "S0T0_vs_K2Aimp", "S0T0_vs_S0T1", "K2Aimp_vs_K2A"):
@@ -249,4 +255,9 @@ r = vm.criteria_dry_run(crit, {"100": lines(lambda r, v: None)["100"]}, "S0T1", 
 print("PASS criteria v1 dry run: identical -> PASS (34 checks); ambiguous lead and marginal hit flip are exemptions; real lead "
       "change and 20 um w shift -> FAIL; a missing Tp -> MISSING")
 PY
+# ---- E2. criteria dry run: missing / invalid lead and hit-flip metrics are failures, never exemptions or passes
+python3 "$HERE/tests/criteria_invalid.py" "$HERE" "$CAMP/sealed/sealed_acceptance_criteria_v1.json"
+
+# ---- H. time grid: explicit FAIL on any cross-variant mismatch; the real synthetic variants share one grid
+python3 "$HERE/tests/grid_units.py" "$HERE" "$W/grid" "$W/val"
 echo "PASS K2A validation synthetic test; work dir $W"

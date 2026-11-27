@@ -23,7 +23,7 @@ stripcmp(){ # NAME REF TEST TOL
 }
 physcmp(){ # NAME REF CAND
   local rc=0
-  python3 "$RC/k2a_recenter_compare.py" "$2" "$3" --out "$V/cmp_$1.json" --kind k2a_vs_s0 --half-strips "$HS" --label "$1" > "$V/cmp_$1.txt" 2>&1 || rc=$?
+  python3 "$RC/k2a_recenter_compare.py" "$2" "$3" --out "$V/cmp_$1.json" --kind k2a_vs_s0 --half-strips "$HS" --window-ns "${CMPW:-7000}" --label "$1" > "$V/cmp_$1.txt" 2>&1 || rc=$?
   local st; st=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['status'])" "$V/cmp_$1.json" 2>/dev/null || echo FAIL)
   [[ $rc -le 3 ]] || st=FAIL
   vstep "cmp_$1" "$st" "$(head -c 300 "$V/cmp_$1.txt" | tr '\t\n' '  ')" "$V/cmp_$1.json"
