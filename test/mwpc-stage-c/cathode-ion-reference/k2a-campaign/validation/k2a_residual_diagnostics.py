@@ -78,7 +78,7 @@ def shaped(cur, dt_in, h):
     return tsc.shape(cur, dt_in, h, 1.0)
 
 
-def anatomy(ref, cand, t, dt, h100):
+def anatomy(ref, cand, t, dt, h100, win=None):
     """ref, cand: (nb, ns) on common strips of one plane."""
     R = cand - ref
     nr = float(np.sum(ref ** 2))
@@ -87,7 +87,8 @@ def anatomy(ref, cand, t, dt, h100):
     e = float(np.sum(R ** 2)); L2 = math.sqrt(e / nr)
     o = {"L2_rel": L2, "strips": int(ref.shape[1])}
     o["window_share"], o["window_L2_rel"] = {}, {}
-    for a, b in zip(WIN[:-1], WIN[1:]):
+    win = win or WIN
+    for a, b in zip(win[:-1], win[1:]):
         m = (t >= a) & (t < b)
         ew = float(np.sum(R[m] ** 2)); nw = float(np.sum(ref[m] ** 2))
         o["window_share"][f"{a}-{b}"] = ew / e if e > 0 else 0.0
