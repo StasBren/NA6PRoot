@@ -170,7 +170,7 @@ pres.addSection({ title: "Main" });
   const s = content("THE FULL CALCULATION", "How far we can trust it: numerics checked, physics inputs not yet", "Main");
   img(s, "crosscheck", X0, 1.84, 5.3, 4.1);
   bullets(s, 6.55, 1.86, 5.9, 2.35, "Checked: the numerics", INK, [
-    "Field and ion drift re-implemented independently (Python, no Garfield++ code; same weighting table): single-ion response agrees to 0.3 % (< 0.1 % after 100 ns); drift times 43–98 µs agree",
+    "Field and ion drift re-implemented independently in Python (same weighting table): single-ion response agrees to 0.3 % (< 0.1 % after 100 ns); drift times 43–98 µs agree",
     "Weighting table: interpolation 1.5 × 10⁻⁵, series truncation 4 × 10⁻⁸; zero on the wires; strips add up to the whole-plane potential",
     "All 3,024 table ion paths end on the cathode (within 3 nm)",
   ], 12);
