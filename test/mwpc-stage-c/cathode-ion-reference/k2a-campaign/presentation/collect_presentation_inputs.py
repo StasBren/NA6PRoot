@@ -9,7 +9,8 @@ Reads only; writes only inside NEW_UPLOAD_DIR (which must not exist). Never copi
 tables (*.npy), ROOT files, group exports or anything of a sealed slot.
 
   report     ANALYSIS_DIR/{validation_report.md,.json, per_muon.csv, combined_from.txt, provenance.txt, slots.txt}
-  per slot   for every slot of the report (its run from combined_from.txt, else ANALYSIS_DIR): outcome.json, steps.tsv,
+  per slot   for every slot of the report (its run from combined_from.txt / slots.txt, else --runs-glob under
+             --val-root, default overnight_800/muon_*): outcome.json, steps.tsv,
              timing.tsv, cmp_*.json/.txt, shift_assignment.json, label_union.json, shaped_*/per_muon_Tp*.jsonl and
              *.log, prod/compare_moments.md/.log, prod/births.log, prod/birth_moments.csv.json, K2A_prod/result.json,
              K2A_imposed/result.json, far_dir.txt; from the S0 far dir: groups/groups.json and
@@ -97,11 +98,19 @@ def sealed_slots(pf):
     return {r["slot"] for r in csv.DictReader(open(p, newline="")) if "sealed" in r.get("role", "")}
 
 
-def collect_run(C, analysis, tag, sealed):
+def collect_run(C, analysis, tag, sealed, fallback=()):
     for f in REPORT:
         C.copy(analysis / f, Path(tag) / "report" / f)
     runs = runs_of(analysis)
     home = slot_home(runs)
+    for r in csv.DictReader(open(analysis / "per_muon.csv", newline="")):
+        s = r.get("slot", "")
+        if s and s not in home:                     # report built elsewhere: look for the per-slot run directory
+            hit = [d.parents[1] for g in fallback for d in sorted(Path(g).parent.glob(Path(g).name + f"/muons/muon_{s}"))]
+            if hit:
+                home[s] = hit[0]; runs.append(hit[0]) if hit[0] not in runs else None
+            else:
+                C.skip.append((s, f"{tag}: per-slot directory not found"))
     bad = sorted(set(home) & sealed)
     if bad:
         raise SystemExit(f"refusing: sealed slots {bad} appear in {analysis}")
@@ -199,6 +208,9 @@ def main():
     ap.add_argument("--val-root", type=Path, default=Path.home() / "na6p" / "k2a_validation")
     ap.add_argument("--kernel", type=Path); ap.add_argument("--green", type=Path)
     ap.add_argument("--examples", default="auto"); ap.add_argument("--extra-examples", default="")
+    ap.add_argument("--runs-glob", default="overnight_800/muon_*",
+                    help="fallback run directories (relative to --val-root, comma-separated globs) for report slots "
+                         "whose run is not listed in combined_from.txt")
     ap.add_argument("--max-file-mb", type=float, default=25); ap.add_argument("--max-example-mb", type=float, default=60)
     a = ap.parse_args()
     if a.out.exists():
@@ -208,8 +220,9 @@ def main():
     a.out.mkdir(parents=True)
     C = Collector(a.out, a.max_file_mb * 1e6)
     sealed = sealed_slots(a.pf)
-    home = collect_run(C, a.analysis, "main", sealed)
-    shome = collect_run(C, a.stress, "stress", sealed) if a.stress and (a.stress / "per_muon.csv").is_file() else {}
+    fb = [str(a.val_root / g) for g in a.runs_glob.split(",") if g.strip()]
+    home = collect_run(C, a.analysis, "main", sealed, fb)
+    shome = collect_run(C, a.stress, "stress", sealed, fb) if a.stress and (a.stress / "per_muon.csv").is_file() else {}
     if a.stress and not shome:
         C.skip.append((str(a.stress), "no per_muon.csv: stress run not collected"))
     if a.queue:
