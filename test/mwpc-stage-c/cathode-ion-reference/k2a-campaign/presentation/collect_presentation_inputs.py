@@ -3,7 +3,7 @@
 
   collect_presentation_inputs.py NEW_UPLOAD_DIR --analysis ANALYSIS_DIR [--stress DIR] [--queue QUEUE.tsv]
         [--pf PREFLIGHT_DIR] [--val-root DIR] [--kernel KERNEL_DIR] [--green GREEN_DIR]
-        [--examples auto|SLOT,SLOT,...] [--extra-examples SLOT,...] [--max-file-mb 25] [--max-example-mb 60]
+        [--examples auto|none|SLOT,SLOT,...] [--extra-examples SLOT,...] [--max-file-mb 25] [--max-example-mb 60]
 
 Reads only; writes only inside NEW_UPLOAD_DIR (which must not exist). Never copies ion paths (vertices.f64), numpy
 tables (*.npy), ROOT files, group exports or anything of a sealed slot.
@@ -248,7 +248,8 @@ def main():
         C.tree(a.val_root / d, Path("probes") / d, ["*.md", "*.json", "*.csv", "*.txt", "*/*.md", "*/*.json"])
     if a.kernel:
         kernel_slice(C, a.kernel, a.green)
-    ex = pick_examples(a.analysis, home) if a.examples == "auto" else [f"{int(x):04d}" for x in a.examples.split(",") if x.strip()]
+    ex = (pick_examples(a.analysis, home) if a.examples == "auto" else [] if a.examples == "none"
+          else [f"{int(x):04d}" for x in a.examples.split(",") if x.strip()])
     ex += [f"{int(x):04d}" for x in a.extra_examples.split(",") if x.strip() and f"{int(x):04d}" not in ex]
     allhome = {**shome, **home}
     if set(ex) & sealed:
