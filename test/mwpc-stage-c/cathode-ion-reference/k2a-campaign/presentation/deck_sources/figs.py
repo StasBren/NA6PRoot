@@ -38,7 +38,7 @@ def fig_headline():
         ax.hist(x, bins=b, histtype="step", color=c, ls=ls, lw=1.8, label=f"{p} plane: {S.ms(x, ' %')}")
     ax.axvline(1.0, color=S.K2C, lw=1.4, ls=":")
     ax.text(0.975, ax.get_ylim()[1] * 0.30, "frozen\ncriterion v1:\nL2 ≤ 1 %", ha="right", va="center", fontsize=9.5, color=S.K2C)
-    ax.set_xlabel("Shaped relative L2, K2A vs S0_T1  [%]")
+    ax.set_xlabel("Shaped relative L2, K2A vs full Garfield++  [%]")
     ax.set_ylabel("Events / 0.01 %")
     ax.set_xlim(0, 1.1)
     S.label(ax, x=0.36, y=0.95, extra=["192 independent muons, 2100 V, B = 0", "CR-RC³ stand-in, Tp = 100 ns, 0–6 µs"])
@@ -100,11 +100,11 @@ def fig_signal():
     a2.axvspan(0.005, 7.0, color="#F3E1E4", lw=0)
     a2.axhline(0, color=S.GRID, lw=0.8)
     frac7 = np.cumsum(ion[:, lead])[699] / ion[:, lead].sum()
-    a2.text(0.0065, 150, f"0–7 µs window\n(compared with S0):\n{100 * frac7:.0f} % of the final\ncollecting-strip charge", fontsize=8.5, color=S.K2C, va="top")
+    a2.text(0.0065, 150, f"0–7 µs window\n(K2A comparison):\n{100 * frac7:.0f} % of the final\ncollecting-strip charge", fontsize=8.5, color=S.K2C, va="top")
     a2.text(9, 45, "neighbour: bipolar,\nnet ≈ 0 at 100 µs", fontsize=8.5, color=S.UC, ha="right")
     a2.set_xscale("log"); a2.set_xlim(0.005, 100); a2.set_ylim(-10, 160)
     a2.set_xlabel("Time  [µs]"); a2.set_ylabel("Cumulative induced charge  [fC]")
-    S.label(a1, x=0.04, y=0.96, size=9.5, extra=[f"S0_T1, muon {m}", "ion term"])
+    S.label(a1, x=0.04, y=0.96, size=9.5, extra=[f"Full Garfield++, muon {m}", "ion term"])
     S.save(fig, "signal_anatomy")
     return {"slot": m, "lead": lab[lead], "neighbour": lab[nb_], "frac_at_7us": float(frac7), "lead_charge_fC": float(q[lead]),
             "neighbour_charge_fC": float(q[nb_]), "neighbour_prompt_fC": float(pr[:, nb_].sum() * 10)}
@@ -115,7 +115,7 @@ def fig_s0cost():
     comp = [("RKF ion drift\n(+ archive read)", "rtS0:rkf_export_archive_read_plus_ion_drift"),
             ("weighting-field replay", "rtS0:weighting_replay_T0_chosen_attempt_sum"),
             ("electron step", "rtS0:electron_step_T0"),
-            ("S0_T0 total", "rtS0:total_T0_single_pass")]
+            ("full calculation total", "rtS0:total_T0_single_pass")]
     fig, ax = plt.subplots(figsize=(6.1, 4.5))
     data = [A[c].clip(lower=1e-2).values for _, c in comp]
     bp = ax.boxplot(data, vert=False, whis=(5, 95), showfliers=True, widths=0.5, patch_artist=True,
@@ -198,9 +198,9 @@ def closure_table(path):
 
 def fig_closure():
     C = closure_table(f"{UP}/probes/closure_sladder/closure_anatomy.md")
-    order = [("G_vs_S0", "Green-table nodes +\ninterpolation (G vs S0)"), ("SW_vs_G", "one D per cloud\n(SW vs G)"),
+    order = [("G_vs_S0", "Green-table nodes +\ninterpolation (G vs full)"), ("SW_vs_G", "one D per cloud\n(SW vs G)"),
              ("S3A_vs_G", "harmonics n ≤ 2 + hemisphere\n(S3A vs G)"), ("S3_vs_G", "harmonics n ≤ 2 only\n(S3 vs G)"),
-             ("SR_vs_G", "one radius r_eff\n(SR vs G)"), ("K2A_vs_S0", "all combined\n(K2A vs S0)")]
+             ("SR_vs_G", "one radius r_eff\n(SR vs G)"), ("K2A_vs_S0", "all combined\n(K2A vs full)")]
     fig, ax = plt.subplots(figsize=(6.1, 4.5))
     y = np.arange(len(order))
     res = {}
@@ -252,7 +252,7 @@ def fig_waveforms(m, name, tp=100.0, tmax=1500):
         r.set_ylim(-lim, lim)
     S.label(axs[0, 1], x=0.97, y=0.80, ha="right", extra=[f"muon {m}, CR-RC³ Tp = {tp:g} ns", "three largest strips per plane"])
     axs[0, 0].legend([Line2D([], [], color=S.S0C, lw=1.8), Line2D([], [], color=S.K2C, lw=1.8, ls="--")],
-                     ["S0_T1 (ion + electron step)", "K2A"], loc="center right", fontsize=9.5)
+                     ["Full Garfield++ (ion + electron step)", "K2A"], loc="center right", fontsize=9.5)
     S.save(fig, name)
     return out
 
@@ -272,7 +272,7 @@ def fig_dists():
         ax.legend(loc="upper left", fontsize=7.6, handlelength=1.4, borderaxespad=0.2)
         ax.set_ylim(0, ax.get_ylim()[1] * 1.6)
         ax.tick_params(labelsize=9)
-    fig.text(0.98, 0.955, "192 events, K2A vs S0_T1, ion + electron step", ha="right", va="bottom", fontsize=9, color=S.INK2)
+    fig.text(0.98, 0.955, "192 events, K2A vs full Garfield++, ion + electron step", ha="right", va="bottom", fontsize=9, color=S.INK2)
     fig.text(0.02, 0.955, "NA60+", ha="left", va="bottom", fontsize=10, fontweight="bold", fontstyle="italic", family="DejaVu Sans")
     fig.text(0.115, 0.955, "Simulation", ha="left", va="bottom", fontsize=10)
     fig.subplots_adjust(top=0.93)
@@ -340,13 +340,13 @@ def fig_observables():
     for p, c, ls in (("U", S.UC, "-"), ("V", S.VC, "--")):
         x = 100 * A[f"sh100:{p}_lead_peak_rel"].values
         a.hist(x, bins=np.linspace(-0.24, -0.08, 33), histtype="step", color=c, ls=ls, lw=1.5, label=f"{p}: {S.ms(x, ' %', '{:.3f}')}")
-    a.set_xlabel("Lead-strip peak, (K2A−S0)/S0  [%]", fontsize=10); a.set_ylabel("Events", fontsize=10)
+    a.set_xlabel("Lead-strip peak, (K2A − full)/full  [%]", fontsize=10); a.set_ylabel("Events", fontsize=10)
     a.legend(loc="upper left", fontsize=7.6, handlelength=1.3); a.set_ylim(0, a.get_ylim()[1] * 1.65)
     for ax in axs.flat:
         ax.tick_params(labelsize=9)
     fig.text(0.02, 0.955, "NA60+", ha="left", va="bottom", fontsize=10, fontweight="bold", fontstyle="italic", family="DejaVu Sans")
     fig.text(0.115, 0.955, "Simulation", ha="left", va="bottom", fontsize=10)
-    fig.text(0.98, 0.955, "192 events, K2A − S0_T1, Tp = 100 ns", ha="right", va="bottom", fontsize=9, color=S.INK2)
+    fig.text(0.98, 0.955, "192 events, K2A − full Garfield++, Tp = 100 ns", ha="right", va="bottom", fontsize=9, color=S.INK2)
     fig.subplots_adjust(top=0.93)
     S.save(fig, "observables")
 
@@ -354,7 +354,7 @@ def fig_observables():
 # ---------------------------------------------------------------- slide 12: runtime
 def fig_runtime():
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(11.6, 4.4), gridspec_kw=dict(wspace=0.28, width_ratios=[1, 1.05]))
-    comp = [("S0_T0\ntotal", "rtS0:total_T0_single_pass", S.S0C), ("K2A\narchive read", "rtK2A:archive_io_read_validate_min", S.K2C),
+    comp = [("Full\nGarfield++", "rtS0:total_T0_single_pass", S.S0C), ("K2A\narchive read", "rtK2A:archive_io_read_validate_min", S.K2C),
             ("K2A\nmoments", "rtK2A:moments_construction_min", S.K2C), ("K2A\nevaluation", "rtK2A:response_eval_warm_median", S.K2C),
             ("kernel open\n(once/job)", "rtK2A:kernel_open_verify_once", S.MUTED)]
     data = [A[c].values for _, c, _ in comp]
@@ -379,7 +379,7 @@ def fig_runtime():
         v = A[key].values
         a2.plot(x, v, mk, ms=3.4, mfc="none", mec=c, alpha=0.8, label=f"{lab}: median {np.median(v):,.0f}×")
     a2.set_yscale("log"); a2.set_ylim(1e3, 3e6)
-    a2.set_xlabel("Clouds per event"); a2.set_ylabel("Speedup  S0_T0 / K2A")
+    a2.set_xlabel("Clouds per event"); a2.set_ylabel("Speedup  full / K2A")
     a2.legend(loc="upper left", fontsize=9)
     a2.text(0.97, 0.04, "avalanche generation excluded on both sides\nisolated high points: event 0262 (12,000 s RKF wall time)",
             transform=a2.transAxes, ha="right", fontsize=8.5, color=S.INK2)
@@ -459,7 +459,7 @@ def fig_horizon():
     ax.set_xscale("log"); ax.set_xlim(0.01, 100); ax.set_ylim(0, 1.05)
     ax.set_xlabel("Time  [µs]"); ax.set_ylabel("Collecting-strip charge / final charge")
     ax.legend(loc="upper left", fontsize=9, bbox_to_anchor=(0, 0.88)); S.label(ax, x=0.03, y=0.97, extra=None)
-    ax.text(0.97, 0.03, "S0_T1, ion term, 100 µs replay", transform=ax.transAxes, ha="right", fontsize=9, color=S.INK2)
+    ax.text(0.97, 0.03, "Full Garfield++, ion term, 100 µs", transform=ax.transAxes, ha="right", fontsize=9, color=S.INK2)
     S.save(fig, "horizon")
     return res
 
@@ -467,7 +467,7 @@ def fig_horizon():
 def fig_early():
     C = closure_table(f"{UP}/probes/closure_0637/closure_anatomy.md")
     fig, ax = plt.subplots(figsize=(6.1, 4.2))
-    pairs = [("G_vs_S0", "G vs S0"), ("SR_vs_G", "SR vs G"), ("S3A_vs_G", "S3A vs G"), ("K2A_vs_S0", "K2A vs S0")]
+    pairs = [("G_vs_S0", "G vs full"), ("SR_vs_G", "SR vs G"), ("S3A_vs_G", "S3A vs G"), ("K2A_vs_S0", "K2A vs full")]
     w = ["s0_10", "s10_20", "s20_50", "s50_100", "s100"]; wl = ["0–10", "10–20", "20–50", "50–100", ">100 ns"]
     cols = ["#5A6470", S.K2C, "#E8A0AB", "#C9CED4", "#EEF0EC"]
     y = np.arange(len(pairs))
