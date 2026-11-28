@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>K2A Cloud Explorer</title>
+<style>
+:root {
+  --bg: #FBFBF8; --panel: #FFFFFF; --ink: #15191F; --ink2: #4A525C; --muted: #8A9099; --rule: #C9CED4; --tint: #F1F2EF;
+  --red: #C8102E; --u: #1F4E9E; --v: #D9822B; --green: #2E7D38;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { padding: 18px 24px 8px; }
+h1 { margin: 0 0 4px; font-size: 22px; }
+h2 { font-size: 17px; margin: 22px 0 8px; }
+h3 { font-size: 14.5px; margin: 16px 0 6px; }
+.sub { color: var(--ink2); max-width: 1100px; }
+.kicker { color: var(--red); font-weight: 700; letter-spacing: .06em; font-size: 12px; }
+main { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; padding: 8px 24px 24px; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; padding: 8px 16px; } header { padding: 14px 16px 6px; } }
+.card { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 14px; }
+.ctrl label { display: block; font-size: 12.5px; color: var(--ink2); margin-top: 10px; }
+.ctrl .row { display: flex; align-items: center; gap: 8px; }
+.ctrl input[type=range] { flex: 1; }
+.ctrl .val { width: 64px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); font-size: 12.5px; }
+select, button { font: inherit; padding: 4px 8px; border: 1px solid var(--rule); border-radius: 4px; background: #fff; color: var(--ink); }
+button { cursor: pointer; }
+button:hover { border-color: var(--ink2); }
+.checks label { display: flex; gap: 6px; align-items: center; margin-top: 6px; color: var(--ink); }
+.grid2 { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 16px; }
+@media (max-width: 1200px) { .grid2 { grid-template-columns: 1fr; } }
+canvas { width: 100%; display: block; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 12.5px; }
+th, td { border-bottom: 1px solid var(--rule); padding: 3px 6px; text-align: right; }
+th:first-child, td:first-child { text-align: left; }
+#moms td:last-child, #moms th:last-child, #lost td:last-child, #lost th:last-child { text-align: left; color: var(--ink2); }
+main > *, .grid2 > * { min-width: 0; }
+.card { overflow-x: auto; }
+th { background: var(--tint); font-weight: 600; }
+td.bad { color: var(--red); font-weight: 700; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--ink2); margin: 4px 0 2px; }
+.legend span::before { content: ""; display: inline-block; width: 22px; height: 0; border-top: 2.5px solid var(--c); margin-right: 6px; vertical-align: middle; }
+.legend span.dash::before { border-top-style: dashed; }
+.legend span.dot::before { border-top-style: dotted; }
+.note { color: var(--ink2); font-size: 12.5px; }
+.explain { max-width: 1100px; padding: 0 24px 40px; }
+.explain p, .explain li { color: var(--ink); }
+.explain .box { border-left: 3px solid var(--red); padding: 4px 12px; background: var(--panel); margin: 10px 0; }
+code { background: var(--tint); padding: 0 4px; border-radius: 3px; }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.tabs button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+</style>
+</head>
+<body>
+<header>
+  <div class="kicker">NA60+ MWPC · K2A FAST CATHODE RESPONSE · 2100 V, B = 0</div>
+  <h1>K2A cloud explorer: what ten numbers keep, and what they lose</h1>
+  <div class="sub">Build an ion cloud around an anode wire and compare its strip signals computed <b>ion by ion</b> with the signals K2A computes from the cloud's <b>ten numbers</b>. Scroll down for what is computed, how to use it, and what is lost.</div>
+</header>
+<main>
+  <div class="card ctrl" id="controls">
+    <label>Preset</label>
+    <div class="row"><select id="preset" style="flex:1"></select></div>
+    <label>Number of ions in the cloud</label><div class="row"><input type="range" id="nion" min="20" max="500" step="10"><span class="val" id="nion_v"></span></div>
+    <label>Main direction θ₀ (90° = towards U)</label><div class="row"><input type="range" id="th0" min="0" max="355" step="5"><span class="val" id="th0_v"></span></div>
+    <label>Angular width σ of each lobe</label><div class="row"><input type="range" id="sig" min="2" max="120" step="1"><span class="val" id="sig_v"></span></div>
+    <label>Number of lobes (equally spaced from θ₀)</label><div class="row"><input type="range" id="lobes" min="1" max="3" step="1"><span class="val" id="lobes_v"></span></div>
+    <label>Share of ions in the first lobe</label><div class="row"><input type="range" id="share" min="0.2" max="1" step="0.05"><span class="val" id="share_v"></span></div>
+    <label>Median birth height above the wire surface</label><div class="row"><input type="range" id="h" min="0.3" max="30" step="0.1"><span class="val" id="h_v"></span></div>
+    <label>Radial spread (σ of ln height)</label><div class="row"><input type="range" id="sr" min="0" max="1.4" step="0.05"><span class="val" id="sr_v"></span></div>
+    <label>Cloud position along the wire, D (strip U0 centre = 0)</label><div class="row"><input type="range" id="D" min="-0.85" max="0.85" step="0.17"><span class="val" id="D_v"></span></div>
+    <div class="row" style="margin-top:12px"><button id="reseed">New random sample</button><span class="note" id="seedtxt"></span></div>
+    <div class="checks">
+      <label><input type="checkbox" id="elec" checked><span>include the prompt electron step</span></label>
+      <label><input type="checkbox" id="oner" checked><span>show "one radius only" (all ions moved to r_eff)</span></label>
+      <label><input type="checkbox" id="k2"><span>show K2 (ten numbers <i>without</i> the A term)</span></label>
+    </div>
+    <label>Shaping time Tp (CR-RC³ stand-in)</label>
+    <div class="row"><select id="tp" style="flex:1"><option value="100">100 ns</option><option value="200">200 ns</option><option value="50">50 ns</option></select></div>
+  </div>
+  <div>
+    <div class="grid2">
+      <div class="card">
+        <h3 style="margin-top:0">The cloud around the wire</h3>
+        <canvas id="cloud" height="380"></canvas>
+        <div class="legend"><span style="--c:#C8102E">ions</span><span class="dash" style="--c:#15191F">r_eff</span><span style="--c:#4A525C">angular shape kept (n ≤ 2)</span><span style="--c:#C9CED4">actual angular distribution</span></div>
+        <h3>The ten numbers (per ion: charge N normalised to 1)</h3>
+        <table id="moms"></table>
+        <h3>What the ten numbers do not contain</h3>
+        <table id="lost"></table>
+      </div>
+      <div class="card">
+        <div class="tabs" id="striptabs"></div>
+        <h3 style="margin-top:4px">Induced charge on the selected strip (0–7 µs, log time)</h3>
+        <div class="legend" id="leg1"></div>
+        <canvas id="qplot" height="250"></canvas>
+        <h3>Difference to ion by ion, in % of the strip's charge at 7 µs</h3>
+        <canvas id="dplot" height="170"></canvas>
+        <h3>After shaping (what electronics would see), first 1.5 µs</h3>
+        <canvas id="splot" height="210"></canvas>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <h3 style="margin-top:0">Summary over strips U−2…U+2 and V−2…V+2 (difference to ion by ion)</h3>
+      <table id="summary"></table>
+      <div class="note" style="margin-top:6px">Red: above the corresponding frozen-criterion limit used for whole events (shaped L2 1 %, plane charge 0.5 %, U/V ratio 1 %). These limits apply to muons, not to single clouds; they are shown only for orientation.</div>
+    </div>
+  </div>
+</main>
+<section class="explain">
+  <h2>What this page computes</h2>
+  <p>An avalanche leaves a cloud of positive ions a few micrometres from the anode wire. Each ion drifts to a cathode and, while it moves, induces charge on the cathode strips (Shockley–Ramo: induced charge = ion charge × change of the strip's weighting potential along the path). The strip signal of a cloud is the sum over its ions.</p>
+  <p>The page contains a precomputed <b>single-ion response table</b>: the induced charge on a strip, versus time, for one ion born at radius r and angle θ around the central anode and at strip offset D. It was computed for this page with an independent re-implementation of the electric field and the ion drift (same 9-wire 2100 V cell, same provisional Ar⁺ mobility table) and the frozen weighting-potential table of the full calculation; this re-implementation reproduces the Garfield++-based response to 0.3 %. Grid: 10 radii 15.2–70 µm, 72 angles (5°), D in 0.17 mm steps, 48 times 0–7 µs.</p>
+  <p>Three (or four) signals are built from the same ions:</p>
+  <ul>
+    <li><b>Ion by ion</b> (black): every ion looked up in the table at its own r and θ and summed. This plays the role of the full calculation.</li>
+    <li><b>One radius only</b> (grey dotted): every ion moved to the cloud's r_eff, keeping its own angle. Its difference to ion by ion is the cost of describing the radii by one number.</li>
+    <li><b>Ten numbers, K2A</b> (red dashed): only the cloud's ten numbers are used, exactly as in the K2A formula<br>
+      &nbsp;&nbsp;Q(τ) = N [K₀ + C₁Kc₁ + S₁Ks₁ + C₂Kc₂ + S₂Ks₂ + β K_A] at r_eff and D,<br>
+      i.e. 72 angle nodes at r_eff weighted with a<sub>m</sub> = (1/72)[1 + 2Σ<sub>n≤2</sub>(C<sub>n</sub> cos nθ<sub>m</sub> + S<sub>n</sub> sin nθ<sub>m</sub>)] + β s⊥<sub>m</sub>, where s⊥ is the part of sign(sin θ) orthogonal to the kept harmonics and β = (A − Σa⁰<sub>m</sub> sign sin θ<sub>m</sub>)/(s⊥·sign sin θ) restores the exact up/down split.</li>
+    <li><b>K2</b> (orange, optional): the same without the A term (β = 0), to show what the hemisphere term does.</li>
+  </ul>
+  <p>The difference between "one radius only" and "ten numbers" is the angular compression (harmonics up to n = 2 plus the hemisphere term).</p>
+
+  <h2>How to use it</h2>
+  <ol>
+    <li>Start with the preset <b>Typical avalanche</b>: a compact cloud on the upper side, 2–3 µm above the wire. On the charge plot all curves lie on top of each other and the shaped differences are about 0.2 %. The plane charges at 7 µs, however, differ by 0.6–0.9 % in opposite directions on U and V: a single compact cloud is the hardest case for the angular truncation (box 2 below).</li>
+    <li>Pick a strip with the buttons above the plots: U0 is the strip directly above the cloud, U±1/U±2 its neighbours, V0… the strips on the opposite cathode, "U plane"/"V plane" the sums.</li>
+    <li>Change one slider at a time and watch the difference plot. <b>New random sample</b> draws a new set of ions with the same settings, which shows how much is just sampling noise.</li>
+    <li>Compare the log-time charge plot (early times magnified) with the shaped plot (what an amplifier with peaking time Tp would see).</li>
+  </ol>
+
+  <h2>What is lost, and how to see it</h2>
+  <div class="box"><b>1. The spread of radii inside a cloud.</b> K2A keeps only r_eff = exp⟨ln r⟩. Preset <b>Large radial spread</b>: the grey dotted and red dashed curves leave the black one in the first 10–100 ns, by several percent on the log-time plot. Reason: early on, an ion's signal depends on its own birth radius in a non-linear way; only once it has moved far from its birth point does the signal depend on ln r linearly, and then the log average is exact. After shaping, the difference shrinks, because the shaper averages over ~Tp.</div>
+  <div class="box"><b>2. Angular detail beyond the second harmonic.</b> K2A keeps C₁, S₁ (direction) and C₂, S₂ (elongation), plus the exact up/down split A. A compact cloud has large higher harmonics: a 15°-wide lobe has |C₃, S₃| ≈ 0.75, listed under "not contained". K2A cannot place such a cloud exactly in angle, and at 7 µs this moves charge between the U and V planes by up to about 1 % for a single compact cloud (compare "one radius only" with "ten numbers" in the summary). Preset <b>Three lobes</b> shows the same effect for a strongly structured cloud.<br><br><i>Open question:</i> is this the origin of the near-limit window-charge and U/V-ratio differences seen in real muons? In five reference muons the angular truncation changed the overall signal scale by only ±0.03 %, while the one-radius approximation changed it by −0.1 to −0.2 %; but that scale is dominated by the early current, not by the window charge. A window-charge breakdown of muon 0740 (approximation by approximation) is the test.</div>
+  <div class="box"><b>3. The up/down split without A.</b> Preset <b>At the side</b> (cloud near θ = 0°, half of it drifts up, half down) or <b>Two opposite lobes</b>: switch on K2. Without the A term the charge that ends on U vs V is wrong, because the truncated harmonics do not reproduce the sharp "above/below the wire" step; with A (K2A) the split is restored.</div>
+  <div class="box"><b>4. Far from the wire.</b> Preset <b>Far from the wire</b> (median height 20 µm): early signals are much smaller; the radial approximation behaves differently. Real clouds have r_eff ≈ 17.5 µm (≈ 2.5 µm above the surface) with a spread between clouds of only 0.17 µm; real K2A refuses clouds outside its radial grid (15–135 µm).</div>
+  <div class="box"><b>Also lost, but not shown here:</b> the spread of birth times within one primary (one time per cloud; ≤ 0.1 % after shaping in real events) and the spread along the wire (≈ 12 µm, negligible against 1.7 mm strips).</div>
+
+  <h2>Limits of this page</h2>
+  <ul>
+    <li>"Ion by ion" uses the table, interpolated linearly in angle (5° nodes) and in ln r; the real full calculation drifts every ion on its own path. In real events the table itself agrees with the full calculation to about 0.24 %.</li>
+    <li>Only the central anode, ions sampled from simple lobe shapes; real avalanches come from the archived Garfield++ simulation. Ion positions here are illustrative.</li>
+    <li>The real K2A table has 14 radii (15–135 µm), 3 anodes and 200 time nodes up to 8 µs; this page uses a coarser table built for it (10 radii, 48 times). The comparison isolates the compression, not the production table's interpolation.</li>
+    <li>Same provisional physics as the full calculation: Ar⁺ in pure Ar mobility (time scale provisional), electron term as a prompt step, idealised cell, B = 0. Shaping is a CR-RC³ stand-in, not the VMM3a response.</li>
+  </ul>
+  <p class="note" id="prov"></p>
+</section>
+<script>
+const DATA = __DATA__;
+// ------------------------------------------------------------------ table decode
+const R = DATA.R_um, TH = DATA.TH_deg, DD = DATA.D_mm, TAU = DATA.TAU_ns;
+const [NR, NT, ND, NTAU] = DATA.shape;
+const raw = Uint8Array.from(atob(DATA.G_i16_b64), c => c.charCodeAt(0));
+const i16 = new Int16Array(raw.buffer);
+const G = new Float32Array(i16.length);
+for (let a = 0, row = 0; a < i16.length; a += NTAU, row++) { const s = DATA.G_scale[row] / 32767; for (let k = 0; k < NTAU; k++) G[a + k] = i16[a + k] * s; }
+const PHI0 = Float32Array.from(DATA.PHI0);
+const LNR = R.map(Math.log), P = 1.7, DSTEP = 0.17, D0 = DD[0];
+document.getElementById("prov").textContent = "Table provenance: " + DATA.provenance + ". Symmetry checks: " + JSON.stringify(DATA.symmetry_checks) + ".";
+
+// node (ir, theta in degrees, any; D) -> offset into G (theta node must be a 5-degree node (m+0.5)*5), using the stored symmetry
+function nodeRow(ir, thDeg, Dval, side) {
+  let th = thDeg + (side === 1 ? 180 : 0);
+  th = ((th % 360) + 360) % 360;
+  let Dm = Dval;
+  if (th > 90 && th < 270) { th = 180 - th; Dm = -Dval; }
+  if (th >= 270) th -= 360;
+  const it = Math.round((th + 87.5) / 5);
+  return [it, Dm];
+}
+function addNode(out, w, ir, thDeg, Dval, side, withE) {
+  if (w === 0) return;
+  const [it, Dm] = nodeRow(ir, thDeg, Dval, side);
+  let f = (Dm - D0) / DSTEP; let id = Math.floor(f); if (id < 0) id = 0; if (id > ND - 2) id = ND - 2; f -= id;
+  const b0 = ((ir * NT + it) * ND + id) * NTAU, b1 = b0 + NTAU;
+  for (let k = 0; k < NTAU; k++) out[k] += w * ((1 - f) * G[b0 + k] + f * G[b1 + k]);
+  if (withE) { const p0 = (ir * NT + it) * ND + id; out[NTAU] += w * ((1 - f) * PHI0[p0] + f * PHI0[p0 + 1]); }
+}
+// one ion at (r, theta) on strip offset Dval: bilinear in (ln r, theta)
+function addIon(out, w, r, thDeg, Dval, side, withE) {
+  let fr = (Math.log(r) - LNR[0]) / (LNR[1] - LNR[0]);
+  let ir = 0; while (ir < NR - 2 && Math.log(r) > LNR[ir + 1]) ir++;
+  fr = (Math.log(r) - LNR[ir]) / (LNR[ir + 1] - LNR[ir]); fr = Math.min(Math.max(fr, 0), 1);
+  const t = ((thDeg % 360) + 360) % 360;
+  const ta = Math.floor((t - 2.5) / 5) * 5 + 2.5, ft = (t - ta) / 5;
+  addNode(out, w * (1 - fr) * (1 - ft), ir, ta, Dval, side, withE);
+  addNode(out, w * (1 - fr) * ft, ir, ta + 5, Dval, side, withE);
+  addNode(out, w * fr * (1 - ft), ir + 1, ta, Dval, side, withE);
+  addNode(out, w * fr * ft, ir + 1, ta + 5, Dval, side, withE);
+}
+// ------------------------------------------------------------------ cloud sampling
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function gauss(rnd) { let u = 0, v = 0; while (u === 0) u = rnd(); v = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+let seed = 12345;
+function sampleCloud(p) {
+  const rnd = mulberry32(seed), ions = [];
+  for (let i = 0; i < p.nion; i++) {
+    let lobe = 0;
+    if (p.lobes > 1) { const u = rnd(); if (u >= p.share) lobe = 1 + Math.min(p.lobes - 2, Math.floor((u - p.share) / ((1 - p.share) / (p.lobes - 1)))); }
+    const c = p.th0 + lobe * 360 / p.lobes;
+    const th = c + p.sig * gauss(rnd);
+    const h = Math.max(0.15, p.h * Math.exp(p.sr * gauss(rnd)));
+    ions.push({ r: Math.min(15 + h, 69.5), th: ((th % 360) + 360) % 360 });
+  }
+  return ions;
+}
+function moments(ions) {
+  const n = ions.length; let lr = 0, c = [0, 0, 0, 0, 0, 0, 0], A = 0, l2 = 0;
+  for (const o of ions) { const t = o.th * Math.PI / 180; lr += Math.log(o.r); l2 += Math.log(o.r) ** 2;
+    for (let k = 1; k <= 3; k++) { c[2 * k - 2] += Math.cos(k * t); c[2 * k - 1] += Math.sin(k * t); }
+    A += Math.sign(Math.sin(t)); }
+  const m = { reff: Math.exp(lr / n), C1: c[0] / n, S1: c[1] / n, C2: c[2] / n, S2: c[3] / n, C3: c[4] / n, S3: c[5] / n, A: A / n };
+  m.sigln = Math.sqrt(Math.max(l2 / n - (lr / n) ** 2, 0));
+  return m;
+}
+// K2A angular weights a_m on the 72 nodes, with or without the hemisphere term
+const M = 72, THM = Array.from({ length: M }, (_, m) => (m + 0.5) * 5);
+const SM = THM.map(t => Math.sign(Math.sin(t * Math.PI / 180)));
+const SP = (() => { let sp = SM.map(x => x - SM.reduce((a, b) => a + b) / M);
+  for (let n = 1; n <= 2; n++) for (const f of [Math.cos, Math.sin]) { const b = THM.map(t => f(n * t * Math.PI / 180));
+    const pb = sp.reduce((a, x, i) => a + x * b[i], 0) / b.reduce((a, x) => a + x * x, 0); sp = sp.map((x, i) => x - pb * b[i]); }
+  return sp; })();
+function weights(m, hemi) {
+  const a = THM.map(t => { const r = t * Math.PI / 180; return (1 + 2 * (m.C1 * Math.cos(r) + m.S1 * Math.sin(r) + m.C2 * Math.cos(2 * r) + m.S2 * Math.sin(2 * r))) / M; });
+  let beta = 0;
+  if (hemi) { const a0s = a.reduce((s, x, i) => s + x * SM[i], 0); beta = (m.A - a0s) / SP.reduce((s, x, i) => s + x * SM[i], 0); }
+  return { a: a.map((x, i) => x + beta * SP[i]), beta };
+}
+// ------------------------------------------------------------------ signals
+const STRIPS = [];
+for (const s of ["U", "V"]) for (let n = -2; n <= 2; n++) STRIPS.push({ side: s === "U" ? 0 : 1, n, name: s + (n === 0 ? "0" : (n > 0 ? "+" + n : "" + n)) });
+function signals(ions, m, D, withE) {
+  const out = { full: [], oner: [], k2a: [], k2: [] };
+  const W = 1 / ions.length, wk = weights(m, true), w2 = weights(m, false);
+  for (const s of STRIPS) {
+    const Dn = D - s.n * P;
+    const f = new Float64Array(NTAU + 1), o = new Float64Array(NTAU + 1), k = new Float64Array(NTAU + 1), k2 = new Float64Array(NTAU + 1);
+    for (const ion of ions) { addIon(f, W, ion.r, ion.th, Dn, s.side, withE); addIon(o, W, m.reff, ion.th, Dn, s.side, withE); }
+    for (let i = 0; i < M; i++) { addIon(k, wk.a[i], m.reff, THM[i], Dn, s.side, withE); addIon(k2, w2.a[i], m.reff, THM[i], Dn, s.side, withE); }
+    for (const [arr, key] of [[f, "full"], [o, "oner"], [k, "k2a"], [k2, "k2"]]) {
+      const e = withE ? arr[NTAU] : 0; out[key].push(Array.from(arr.slice(0, NTAU), x => x + e));
+    }
+  }
+  out.beta = wk.beta;
+  return out;
+}
+// shaping: Q(t) on a 2 ns grid -> current -> CR-RC^3 (unit peak for a unit charge), 0-6 us
+const DT = 2, NS = 3000;
+function shaped(q, tp) {
+  const tq = new Float64Array(NS + 1);
+  for (let j = 0; j <= NS; j++) { const t = j * DT;
+    if (t <= TAU[1]) tq[j] = q[0] + (q[1] - q[0]) * t / TAU[1];
+    else { let k = 1; while (k < NTAU - 2 && TAU[k + 1] < t) k++; const f = (Math.log(t) - Math.log(TAU[k])) / (Math.log(TAU[k + 1]) - Math.log(TAU[k])); tq[j] = q[k] + (q[k + 1] - q[k]) * Math.min(f, 1); } }
+  const cur = new Float64Array(NS); cur[0] = tq[1]; for (let j = 1; j < NS; j++) cur[j] = tq[j + 1] - tq[j];
+  if (q[0] !== 0) cur[0] += q[0];   // prompt electron step (charge present at t = 0)
+  const tau = tp / 3, nh = Math.min(NS, Math.round(12 * tp / DT)), h = new Float64Array(nh); let hm = 0;
+  for (let j = 0; j < nh; j++) { const x = j * DT / tau; h[j] = x ** 3 * Math.exp(-x); hm = Math.max(hm, h[j]); }
+  for (let j = 0; j < nh; j++) h[j] /= hm;
+  const y = new Float64Array(NS);
+  for (let j = 0; j < NS; j++) { if (cur[j] === 0) continue; const c = cur[j], lim = Math.min(nh, NS - j); for (let k = 0; k < lim; k++) y[j + k] += c * h[k]; }
+  return y;
+}
+// ------------------------------------------------------------------ plotting
+function setupCanvas(cv) { const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.height_css || (cv.height_css = cv.height);
+  cv.width = w * dpr; cv.height = h * dpr; cv.style.height = h + "px"; const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); return [g, w, h]; }
+function niceTicks(lo, hi, n) { const span = hi - lo || 1, step0 = span / n, mag = 10 ** Math.floor(Math.log10(step0)), st = [1, 2, 2.5, 5, 10].map(x => x * mag).find(x => x >= step0);
+  const out = []; for (let v = Math.ceil(lo / st) * st; v <= hi + 1e-9; v += st) out.push(+v.toFixed(10)); return out; }
+function plot(cv, series, opt) {
+  const [g, W, H] = setupCanvas(cv), L = 58, Rm = 12, T = 8, B = 30, pw = W - L - Rm, ph = H - T - B;
+  g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, W, H);
+  const xs = opt.logx ? (x => L + pw * (Math.log10(x) - Math.log10(opt.x0)) / (Math.log10(opt.x1) - Math.log10(opt.x0))) : (x => L + pw * (x - opt.x0) / (opt.x1 - opt.x0));
+  let y0 = opt.y0, y1 = opt.y1;
+  if (y0 === undefined) { y0 = Infinity; y1 = -Infinity; for (const s of series) s.x.forEach((x, i) => { if (x >= opt.x0 && x <= opt.x1 && isFinite(s.y[i])) { y0 = Math.min(y0, s.y[i]); y1 = Math.max(y1, s.y[i]); } });
+    const pad = 0.06 * (y1 - y0 || Math.abs(y1) || 1); y0 -= pad; y1 += pad; if (opt.sym) { const a = Math.max(Math.abs(y0), Math.abs(y1)); y0 = -a; y1 = a; } }
+  const ys = y => T + ph * (1 - (y - y0) / (y1 - y0));
+  g.strokeStyle = "#E3E6EA"; g.lineWidth = 1; g.font = "11px system-ui, sans-serif"; g.fillStyle = "#4A525C";
+  const yt = niceTicks(y0, y1, 5); for (const v of yt) { const y = ys(v); g.beginPath(); g.moveTo(L, y); g.lineTo(L + pw, y); g.stroke(); g.textAlign = "right"; g.fillText(opt.yfmt ? opt.yfmt(v) : v, L - 5, y + 4); }
+  const xt = opt.logx ? opt.xticks : niceTicks(opt.x0, opt.x1, 6);
+  for (const v of xt) { const x = xs(v); g.beginPath(); g.moveTo(x, T); g.lineTo(x, T + ph); g.stroke(); g.textAlign = "center"; g.fillText(opt.xlab ? opt.xlab(v) : v, x, T + ph + 15); }
+  if (opt.band) { g.fillStyle = "rgba(241,242,239,0.8)"; }
+  if (y0 < 0 && y1 > 0) { g.strokeStyle = "#8A9099"; g.beginPath(); g.moveTo(L, ys(0)); g.lineTo(L + pw, ys(0)); g.stroke(); }
+  g.save(); g.beginPath(); g.rect(L, T, pw, ph); g.clip();
+  for (const s of series) { g.strokeStyle = s.c; g.lineWidth = s.w || 2; g.setLineDash(s.dash || []); g.beginPath(); let first = true;
+    s.x.forEach((x, i) => { if (x < opt.x0 * 0.999 || !isFinite(s.y[i])) return; const px = xs(x), py = ys(s.y[i]); first ? g.moveTo(px, py) : g.lineTo(px, py); first = false; }); g.stroke(); }
+  g.restore(); g.setLineDash([]); g.strokeStyle = "#15191F"; g.lineWidth = 1; g.strokeRect(L, T, pw, ph);
+  g.fillStyle = "#15191F"; g.textAlign = "center"; g.fillText(opt.xtitle || "", L + pw / 2, H - 3);
+  g.save(); g.translate(12, T + ph / 2); g.rotate(-Math.PI / 2); g.fillText(opt.ytitle || "", 0, 0); g.restore();
+}
+function drawCloud(cv, ions, m) {
+  const [g, W, H] = setupCanvas(cv), cx = W / 2, cy = H / 2;
+  const rmax = Math.max(30, ...ions.map(o => o.r)) * 1.15, sc = Math.min(W, H) / 2 / rmax;
+  g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, W, H);
+  g.fillStyle = "rgba(31,78,158,0.06)"; g.fillRect(0, 0, W, cy); g.fillStyle = "rgba(217,130,43,0.08)"; g.fillRect(0, cy, W, H - cy);
+  g.font = "11px system-ui, sans-serif"; g.fillStyle = "#1F4E9E"; g.fillText("upper half → drifts to U (+v)", 8, 16); g.fillStyle = "#D9822B"; g.fillText("lower half → drifts to V (−v)", 8, H - 8);
+  // angular histogram (actual) and harmonic shape (kept), drawn as rings
+  const nb = 36, hist = new Array(nb).fill(0); for (const o of ions) hist[Math.floor(o.th / 10) % nb] += 1;
+  const hmax = Math.max(...hist), R0 = rmax * 0.62, Ramp = rmax * 0.3;
+  g.strokeStyle = "#C9CED4"; g.lineWidth = 6;
+  for (let b = 0; b < nb; b++) { if (!hist[b]) continue; const a = (b + 0.5) * 10 * Math.PI / 180, rr = R0 + Ramp * hist[b] / hmax;
+    g.beginPath(); g.moveTo(cx + R0 * sc * Math.cos(a), cy - R0 * sc * Math.sin(a)); g.lineTo(cx + rr * sc * Math.cos(a), cy - rr * sc * Math.sin(a)); g.stroke(); }
+  let dmax = 0; const dens = []; for (let k = 0; k <= 360; k++) { const a = k * Math.PI / 180; const d = 1 + 2 * (m.C1 * Math.cos(a) + m.S1 * Math.sin(a) + m.C2 * Math.cos(2 * a) + m.S2 * Math.sin(2 * a)); dens.push(d); dmax = Math.max(dmax, d); }
+  g.strokeStyle = "#4A525C"; g.lineWidth = 1.6; g.beginPath();
+  dens.forEach((d, k) => { const a = k * Math.PI / 180, rr = R0 + Ramp * Math.max(d, 0) / dmax; const x = cx + rr * sc * Math.cos(a), y = cy - rr * sc * Math.sin(a); k ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke();
+  g.strokeStyle = "#E3E6EA"; g.lineWidth = 1; g.beginPath(); g.arc(cx, cy, R0 * sc, 0, 2 * Math.PI); g.stroke();
+  g.fillStyle = "#9AA0A6"; g.beginPath(); g.arc(cx, cy, 15 * sc, 0, 2 * Math.PI); g.fill();
+  g.fillStyle = "rgba(200,16,46,0.75)"; for (const o of ions) { const a = o.th * Math.PI / 180; g.beginPath(); g.arc(cx + o.r * sc * Math.cos(a), cy - o.r * sc * Math.sin(a), 2.2, 0, 2 * Math.PI); g.fill(); }
+  g.setLineDash([5, 4]); g.strokeStyle = "#15191F"; g.lineWidth = 1.3; g.beginPath(); g.arc(cx, cy, m.reff * sc, 0, 2 * Math.PI); g.stroke(); g.setLineDash([]);
+  g.strokeStyle = "#15191F"; g.lineWidth = 2; g.beginPath(); g.moveTo(cx, cy); const ex = cx + R0 * sc * m.C1, ey = cy - R0 * sc * m.S1; g.lineTo(ex, ey); g.stroke();
+  g.fillStyle = "#4A525C"; g.textAlign = "right"; g.fillText(`scale: wire radius 15 µm; outer ring at ${R0.toFixed(0)} µm`, W - 8, H - 8); g.textAlign = "left";
+}
+// ------------------------------------------------------------------ UI
+const PRESETS = {
+  "Typical avalanche": { nion: 200, th0: 80, sig: 15, lobes: 1, share: 1, h: 2.5, sr: 0.35, D: 0 },
+  "Wide, wrapped (mostly below)": { nion: 200, th0: 245, sig: 30, lobes: 2, share: 0.65, h: 5, sr: 0.55, D: 0 },
+  "Large radial spread": { nion: 300, th0: 80, sig: 15, lobes: 1, share: 1, h: 4, sr: 1.1, D: 0 },
+  "At the side (half up, half down)": { nion: 200, th0: 0, sig: 15, lobes: 1, share: 1, h: 2.5, sr: 0.35, D: 0 },
+  "Two opposite lobes (sideways)": { nion: 200, th0: 0, sig: 12, lobes: 2, share: 0.5, h: 2.5, sr: 0.35, D: 0 },
+  "Three lobes": { nion: 300, th0: 90, sig: 12, lobes: 3, share: 0.34, h: 2.5, sr: 0.35, D: 0 },
+  "Far from the wire": { nion: 200, th0: 80, sig: 15, lobes: 1, share: 1, h: 20, sr: 0.3, D: 0 },
+  "Between two strips (D = 0.85 mm)": { nion: 200, th0: 80, sig: 15, lobes: 1, share: 1, h: 2.5, sr: 0.35, D: 0.85 },
+};
+const ids = ["nion", "th0", "sig", "lobes", "share", "h", "sr", "D"];
+const fmts = { nion: v => v, th0: v => v + "°", sig: v => v + "°", lobes: v => v, share: v => (+v).toFixed(2), h: v => (+v).toFixed(1) + " µm", sr: v => (+v).toFixed(2), D: v => (+v).toFixed(2) + " mm" };
+const sel = document.getElementById("preset");
+for (const k of Object.keys(PRESETS)) { const o = document.createElement("option"); o.textContent = k; sel.appendChild(o); }
+function applyPreset(k) { const p = PRESETS[k]; for (const id of ids) document.getElementById(id).value = p[id]; update(); }
+sel.onchange = () => applyPreset(sel.value);
+for (const id of ids) document.getElementById(id).oninput = () => { sel.value = ""; update(); };
+for (const id of ["elec", "oner", "k2", "tp"]) document.getElementById(id).onchange = update;
+document.getElementById("reseed").onclick = () => { seed = (seed * 1103515245 + 12345) >>> 0; update(); };
+let cur = "U0";
+const tabs = document.getElementById("striptabs");
+for (const nm of ["U0", "U+1", "U+2", "V0", "V+1", "U plane", "V plane"]) { const b = document.createElement("button"); b.textContent = nm; b.onclick = () => { cur = nm; update(); }; tabs.appendChild(b); }
+function pick(arr, nm) { if (nm === "U plane" || nm === "V plane") { const side = nm[0] === "U" ? 0 : 1; const out = new Array(NTAU).fill(0);
+    STRIPS.forEach((s, i) => { if (s.side === side) arr[i].forEach((x, k) => out[k] += x); }); return out; }
+  return arr[STRIPS.findIndex(s => s.name === nm)]; }
+const fmtT = v => v >= 1000 ? (v / 1000) + " µs" : v + " ns";
+function update() {
+  const p = {}; for (const id of ids) { p[id] = +document.getElementById(id).value; document.getElementById(id + "_v").textContent = fmts[id](p[id]); }
+  document.getElementById("share").disabled = p.lobes === 1;
+  const withE = document.getElementById("elec").checked, showO = document.getElementById("oner").checked, showK2 = document.getElementById("k2").checked;
+  const tp = +document.getElementById("tp").value;
+  document.getElementById("seedtxt").textContent = "sample #" + (seed % 1000);
+  [...tabs.children].forEach(b => b.classList.toggle("on", b.textContent === cur));
+  const ions = sampleCloud(p), m = moments(ions), S = signals(ions, m, p.D, withE);
+  drawCloud(document.getElementById("cloud"), ions, m);
+  const fx = v => (+v).toFixed(3);
+  document.getElementById("moms").innerHTML = `<tr><th>number</th><th>value</th><th>meaning</th></tr>
+   <tr><td>N</td><td>${p.nion} ions</td><td>charge; signals here are per ion</td></tr>
+   <tr><td>t</td><td>0</td><td>one birth time for the cloud</td></tr>
+   <tr><td>r_eff</td><td>${m.reff.toFixed(2)} µm</td><td>exp⟨ln r⟩ (wire radius 15 µm)</td></tr>
+   <tr><td>D_U, D_V</td><td>${p.D.toFixed(2)} mm</td><td>position along the wire, U and V frames (equal at the wire centre)</td></tr>
+   <tr><td>C₁, S₁</td><td>${fx(m.C1)}, ${fx(m.S1)}</td><td>mean direction (arrow)</td></tr>
+   <tr><td>C₂, S₂</td><td>${fx(m.C2)}, ${fx(m.S2)}</td><td>elongation / two-sidedness</td></tr>
+   <tr><td>A</td><td>${fx(m.A)}</td><td>(above − below)/N; hemisphere coefficient β = ${fx(S.beta)}</td></tr>`;
+  const pw3 = Math.hypot(m.C3, m.S3);
+  document.getElementById("lost").innerHTML = `<tr><th>information</th><th>value</th><th>effect</th></tr>
+   <tr><td>radial spread σ(ln r)</td><td class="${m.sigln > 0.25 ? "bad" : ""}">${m.sigln.toFixed(3)}</td><td>early signal (first 10–100 ns)</td></tr>
+   <tr><td>third harmonic |C₃, S₃|</td><td class="${pw3 > 0.3 ? "bad" : ""}">${pw3.toFixed(3)}</td><td>finer angular shape, neighbour strips</td></tr>
+   <tr><td>each ion's own position</td><td>${p.nion} × (r, θ)</td><td>replaced by the ten numbers</td></tr>`;
+  // plots
+  const x = TAU.slice(1), sub = a => a.slice(1);
+  const full = pick(S.full, cur), k2a = pick(S.k2a, cur), oner = pick(S.oner, cur), k2 = pick(S.k2, cur);
+  const ser = [{ x, y: sub(full), c: "#15191F", w: 2.4, lab: "ion by ion" }];
+  if (showO) ser.push({ x, y: sub(oner), c: "#8A9099", w: 2, dash: [2, 3], lab: "one radius only" });
+  if (showK2) ser.push({ x, y: sub(k2), c: "#D9822B", w: 2, dash: [8, 4], lab: "K2 (no A)" });
+  ser.push({ x, y: sub(k2a), c: "#C8102E", w: 2, dash: [6, 4], lab: "ten numbers (K2A)" });
+  document.getElementById("leg1").innerHTML = ser.map(s => `<span class="${s.dash ? (s.dash[0] < 4 ? "dot" : "dash") : ""}" style="--c:${s.c}">${s.lab}</span>`).join("");
+  const xticks = [1, 10, 100, 1000, 7000];
+  plot(document.getElementById("qplot"), ser, { logx: true, x0: 1, x1: 7000, xticks, xlab: fmtT, ytitle: "charge [e per ion]", xtitle: "time after birth (log)", yfmt: v => v.toFixed(3) });
+  const ref = Math.max(Math.abs(full[NTAU - 1]), 1e-6);
+  const dser = ser.slice(1).map(s => ({ ...s, y: s.y.map((v, i) => 100 * (v - full[i + 1]) / ref) }));
+  plot(document.getElementById("dplot"), dser, { logx: true, x0: 1, x1: 7000, xticks, xlab: fmtT, ytitle: "difference [%]", xtitle: "time after birth (log)", sym: true, yfmt: v => v.toFixed(2) });
+  const ts = Array.from({ length: NS }, (_, j) => j * DT);
+  const sh = arr => Array.from(shaped(arr, tp));
+  const sser = ser.map(s => ({ ...s, x: ts, y: sh(s === ser[0] ? full : s.lab === "ten numbers (K2A)" ? k2a : s.lab === "one radius only" ? oner : k2) }));
+  plot(document.getElementById("splot"), sser, { logx: false, x0: 0, x1: 1500, ytitle: "shaped [e per ion]", xtitle: "time [ns]", yfmt: v => v.toFixed(3) });
+  // summary
+  const models = [["one radius only", S.oner], ["ten numbers (K2A)", S.k2a], ["K2 (no A)", S.k2]];
+  const shapedAll = arr => arr.map(sh);
+  const sFull = shapedAll(S.full);
+  const plane = (arr, side, k) => STRIPS.reduce((a, s, i) => a + (s.side === side ? arr[i][k] : 0), 0);
+  let rows = `<tr><th>model</th><th>shaped L2 U</th><th>shaped L2 V</th><th>U plane charge 7 µs</th><th>V plane charge 7 µs</th><th>U/V ratio</th><th>U0 charge at 20 ns</th></tr>`;
+  const i20 = TAU.findIndex(t => t >= 20);
+  for (const [nm, arr] of models) {
+    const sM = shapedAll(arr);
+    const l2 = side => { let num = 0, den = 0; STRIPS.forEach((s, i) => { if (s.side !== side) return; for (let j = 0; j < NS; j++) { num += (sM[i][j] - sFull[i][j]) ** 2; den += sFull[i][j] ** 2; } }); return 100 * Math.sqrt(num / den); };
+    const qU = plane(arr, 0, NTAU - 1), qV = plane(arr, 1, NTAU - 1), fU = plane(S.full, 0, NTAU - 1), fV = plane(S.full, 1, NTAU - 1);
+    const dU = 100 * (qU / fU - 1), dV = 100 * (qV / fV - 1), dR = 100 * ((qU / qV) / (fU / fV) - 1);
+    const u0 = STRIPS.findIndex(s => s.name === "U0"), e20 = 100 * (arr[u0][i20] / S.full[u0][i20] - 1);
+    const L2U = l2(0), L2V = l2(1);
+    const c = (v, lim) => `<td class="${Math.abs(v) > lim ? "bad" : ""}">${v >= 0 ? "+" : ""}${v.toFixed(3)} %</td>`;
+    rows += `<tr><td>${nm}</td>${c(L2U, 1)}${c(L2V, 1)}${c(dU, 0.5)}${c(dV, 0.5)}${c(dR, 1)}${c(e20, 1e9)}</tr>`;
+  }
+  document.getElementById("summary").innerHTML = rows;
+}
+window.addEventListener("resize", update);
+applyPreset("Typical avalanche"); sel.value = "Typical avalanche";
+</script>
+</body>
+</html>

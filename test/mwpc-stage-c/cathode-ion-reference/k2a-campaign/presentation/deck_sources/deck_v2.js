@@ -134,6 +134,10 @@ function bullets(s, x, y, w, h, head, color, L, fs) {
   s.addText(runs, { x, y: y + 0.52, w, h: h - 0.52, margin: 0, isTextBox: true, valign: "top", paraSpaceAfter: 5 });
 }
 
+function gif(s, name, x, y, maxW, maxH) {
+  const [w0, h0] = SZ[name]; const k = Math.min(maxW / w0, maxH / h0); const w = w0 * k, h = h0 * k;
+  s.addImage({ path: FIG + name + ".gif", x: x + (maxW - w) / 2, y, w, h, altText: name.replace(/_/g, " "), objectName: name });
+}
 // 1 title
 pres.addSection({ title: "Main" });
 {
@@ -150,7 +154,14 @@ pres.addSection({ title: "Main" });
   const s = content("THE SIGNAL", "One ion: the strip signal is induced while the ion drifts", "Main");
   img(s, "one_ion", X0, 1.8, 11.556, 4.3, "center");
   note(s, X0, 6.18, 11.5, 0.58, ["Induced charge on a strip = ion charge × change of that strip's **weighting potential** along the ion path (Shockley–Ramo). Both planes see the ion at first; only the plane it reaches keeps the charge. The electrons go ≈ 3 µm to the wire: a prompt step of ≈ 1.4 % of e per plane."], 12);
-  N(s, "This is the basic mechanism, for a single positive ion born 2.8 µm above the anode surface, at the top of the wire, which is where the avalanche ends.\n\nLeft: the ion follows the field line straight up to the U cathode and arrives after 43 µs. Most of the time is spent far from the wire: after 100 ns it is only 85 µm from the wire axis, after 7 µs at 0.9 mm.\n\nThe induced charge on a strip is given by the Shockley–Ramo theorem: the ion charge times the change of the strip's weighting potential along the path. The weighting potential is the potential you get with that strip at 1 V and every other conductor, including the anode wires, at 0 V.\n\nMiddle: the strip directly above the ion collects the full elementary charge when the ion lands. Its neighbour first rises and then returns to zero as the ion approaches the centre strip, so its current is bipolar. The strip on the opposite plane rises too, because at first the ion is still close to the wire and both cathodes see it equally, and then goes back to zero as the ion moves away from it.\n\nRight: summed over each plane. Within the first 7 µs both planes have a similar signal; only later does the U plane take all of it. Only about 17 % of the final charge on the collecting strip is induced in the first 7 µs.\n\nThe electrons: each electron is created next to its ion and moves only about 3 µm to the wire, in well under a nanosecond. Their contribution is a prompt step equal to the weighting potential at the birth point, about 1.4 % of e per plane. Ion plus electrons give exactly one elementary charge on the landing strip and zero elsewhere, as charge conservation requires. In real events the electron step is 3 to 6 % of the strip signal in the first 7 µs. The primary electrons drifting from the track to the wire are not multiplied, so their induced signal is smaller by the gas gain and is neglected.\n\nThis figure is computed with the same field, ion mobility and weighting field as the full calculation, by the independent Python code of slide 4.");
+  N(s, "This is the basic mechanism, for a single positive ion born 2.8 µm above the anode surface, at the top of the wire, which is where the avalanche ends.\n\nLeft: the ion follows the field line straight up to the U cathode and arrives after 43 µs. Most of the time is spent far from the wire: after 100 ns it is only 85 µm from the wire axis, after 7 µs at 0.9 mm.\n\nThe induced charge on a strip is given by the Shockley–Ramo theorem: the ion charge times the change of the strip's weighting potential along the path. The weighting potential is the potential you get with that strip at 1 V and every other conductor, including the anode wires, at 0 V.\n\nMiddle: the strip directly above the ion collects the full elementary charge when the ion lands. Its neighbour first rises and then returns to zero as the ion approaches the centre strip, so its current is bipolar. The strip on the opposite plane rises too, because at first the ion is still close to the wire and both cathodes see it equally, and then goes back to zero as the ion moves away from it.\n\nRight: summed over each plane. Within the first 7 µs both planes have a similar signal; only later does the U plane take all of it. Only about 17 % of the final charge on the collecting strip is induced in the first 7 µs.\n\nThe electrons: each electron is created next to its ion and moves only about 3 µm to the wire, in well under a nanosecond. Their contribution is a prompt step equal to the weighting potential at the birth point, about 1.4 % of e per plane. Ion plus electrons give exactly one elementary charge on the landing strip and zero elsewhere, as charge conservation requires. In real events the electron step is 3 to 6 % of the strip signal in the first 7 µs. The primary electrons drifting from the track to the wire are not multiplied, so their induced signal is smaller by the gas gain and is neglected.\n\nThis figure is computed with the same field, ion mobility and weighting field as the full calculation, by the independent Python code of backup B1, which reproduces the Garfield++ result.");
+}
+// 2b animation one ion
+{
+  const s = content("THE SIGNAL · ANIMATION", "One ion on its way to the cathode", "Main");
+  gif(s, "anim_one", X0, 1.75, 11.556, 4.75);
+  note(s, X0, 6.55, 11.5, 0.3, ["Plays in slideshow mode. Time runs on a log scale; same calculation as the previous slide."], 11);
+  N(s, "The same ion as on the previous slide, now in motion. On the left, we look along the wire, so the U strips above and the V strips below are seen side by side; the strips darken as they collect induced charge. In the middle, a zoom that follows the ion, and the clock. On the right, the induced charge and the current on the strip above (U0), its neighbour, and the strips below.\n\nThings to watch: at the very beginning the green dot, the electron, reaches the wire surface within a tenth of a nanosecond; that is the small prompt step. Then the ion moves out: very fast at first, it covers its first 100 µm in about 100 ns, then slower and slower; it needs 43 µs to cross the 3 mm gap. The charge on U0 grows by roughly the same amount per decade of time, which is why the time axis is logarithmic. The neighbour and the V strip rise and then fall back; their current changes sign, shown dashed.");
 }
 // 3 full calculation
 {
@@ -163,24 +174,15 @@ pres.addSection({ title: "Main" });
   bigStat(s, X0, 4.55, 3.6, "≈ 85 s", "per muon on one CPU for the shaded steps");
   bigStat(s, 4.85, 4.55, 3.6, "40–100 µs", "for the ions to reach the cathode: long, slow signals");
   bigStat(s, 8.85, 4.55, 3.6, "3–6 %", "of the 0–7 µs strip signal comes from the electrons");
+  note(s, X0, 6.2, 11.5, 0.5, ["Numerics cross-checked: an independent re-implementation of the field and ion drift reproduces it to 0.3 % (backup B1). Physics inputs, above all the Ar⁺ mobility, are not yet checked against data."], 11.5);
   N(s, "This is the full calculation, the reference for everything that follows; in the code it is called S0.\n\nA Geant4 muon crosses the chamber; Heed gives the primary electrons. Each primary electron drifts to a wire and makes an avalanche, simulated microscopically with Garfield++; this was the subject of the avalanche talk, and the ion birth points were archived. To keep the files manageable, at most 256 ions per primary electron are stored, each with a weight.\n\nThen, for the signal, every stored ion is drifted by Garfield++ to the cathode in the electric field of the cell, and along each path the weighting potential of every U and V strip is evaluated. Summing over all ions, plus the prompt electron step, gives the strip currents in 10 ns bins.\n\nThe two shaded steps are the expensive part: about 85 seconds per muon. The ions need 40 to 100 µs to reach the cathode, depending on where they start. The electron step is small but not negligible: 3 to 6 % of the strip signal in the first 7 µs, measured in three example events.");
 }
-// 4 trust
+// 3b animation avalanche
 {
-  const s = content("THE FULL CALCULATION", "How far we can trust it: numerics checked, physics inputs not yet", "Main");
-  img(s, "crosscheck", X0, 1.84, 5.3, 4.1);
-  bullets(s, 6.55, 1.86, 5.9, 2.35, "Checked: the numerics", INK, [
-    "Field and ion drift re-implemented independently in Python (same weighting table): single-ion response agrees to 0.3 % (< 0.1 % after 100 ns); drift times 43–98 µs agree",
-    "Weighting table: interpolation 1.5 × 10⁻⁵, series truncation 4 × 10⁻⁸; zero on the wires; strips add up to the whole-plane potential",
-    "All 3,024 table ion paths end on the cathode (within 3 nm)",
-  ], 12);
-  bullets(s, 6.55, 4.25, 5.9, 2.1, "Assumed: not validated", RED, [
-    "Ion mobility: Ar⁺ in pure Ar, used for Ar/CO₂ 70:30 → the time scale is provisional",
-    "Electrons: a prompt step, no electron current",
-    "Ideal cell: infinite planes, contiguous strips, B = 0, no space charge; no comparison with measured signals yet",
-  ], 12);
-  note(s, X0, 6.1, 5.3, 0.65, ["ALICE TPC: measured MWPC signal shapes agree with Garfield once the measured ion mobility is used; with an assumed ion species the timing was off by ≈ 15 % (JINST 19 (2024) P02038)."], 10.5);
-  N(s, "Since everything later is a comparison with the full calculation, the obvious question is whether the full calculation itself is right. I separate two questions.\n\nFirst, numerics: does the code compute what we think it computes? I re-implemented the electric field of the nine wires between the two cathodes, and the ion drift with the same Ar+ mobility table, in Python, without any Garfield++ code; the weighting-potential table is the same one, so this checks the Garfield++ part. The plot compares the single-ion response, averaged over the birth angle, on the strip above the wire, with the table built from the Garfield++ ion paths, for two birth radii. They agree to 0.3 % overall and to better than 0.1 % after 100 ns; the small difference in the first tens of nanoseconds is not from the mobility interpolation, which I tested, and is not yet explained. The drift times to the cathode, 43 to 98 µs, are the same. The weighting-potential table has its own checks: its interpolation and series truncation errors are 10^-5 and below, it is zero on the anode wires, and the strips add up to the potential of the whole plane, which I also checked against an independent solution, to about 10^-3, the accuracy of that simpler check.\n\nSecond, physics inputs, and these are not validated. The ion mobility is the one for Ar+ in pure argon; in Ar/CO2 the drifting ion species is different, so the absolute time scale of the ion signal is provisional. The electron term is a prompt step. The cell is idealized. And there is no comparison with a measured signal yet.\n\nFor orientation from the literature: ALICE measured the MWPC signal shapes of their TPC readout chambers and compared them with Garfield simulations. With an assumed ion species, a feature of the ion tail came at about 22 µs in simulation instead of 26 µs in data; with the measured ion mobility and the wire-position spread included, the agreement became excellent. The ion mobility is exactly our weak input. So the comparison in this talk tests K2A against Garfield++, not Garfield++ against the detector.");
+  const s = content("THE FULL CALCULATION · ANIMATION", "An avalanche: many ions, each on its own path", "Main");
+  gif(s, "anim_cloud", X0, 1.75, 11.556, 4.75);
+  note(s, X0, 6.55, 11.5, 0.3, ["Plays in slideshow mode. 60 ions, 80 % born above the wire and 20 % below; positions schematic."], 11);
+  N(s, "An avalanche is many such ions at once. Here 60 ions, most of them born on the upper side of the wire and some on the lower side. Each follows its own field line: the upper ones go to the U cathode, the lower ones curve around to V. The full calculation does exactly this for every stored ion of every avalanche of a muon, and evaluates the weighting potential of every strip along every path; that is where the 85 seconds go.\n\nOn the right, the charge on the strips summed over the ions. Because a fifth of the ions go down, the V strip ends up with real charge too. Early on, both planes see the cloud almost equally; the split between U and V develops only as the ions move away from the wire. This split is exactly what K2A's angular numbers must get right.");
 }
 // 5 idea
 {
@@ -190,7 +192,7 @@ pres.addSection({ title: "Main" });
            ["Response table", "single-ion signals computed once with the same ion paths and weighting field as the full calculation", true],
            ["Strip signals", "U and V currents on absolute strips"]], 2.05, 1.95);
   note(s, X0, 4.45, 11.5, 1.6, ["Why these ten numbers: the avalanche study showed that clouds are short in time and small along the wire, that ions are born ≈ 17.5 µm from the anode axis, and that most clouds sit on one side of it.",
-    "Whether they are enough is measured, not assumed: the largest approximation is using one radius per cloud (backup B3); the next two slides show what the ten numbers are."], 15);
+    "Whether they are enough is measured, not assumed: the largest approximation is using one radius per cloud (backup B4); the next two slides show what the ten numbers are."], 15);
   N(s, "The idea of K2A: instead of following every ion, describe each ion cloud, all ions from one primary electron on one wire, by ten numbers: its charge, its time, an effective radius, its position in strip coordinates, two angular harmonics and the up/down asymmetry.\n\nThe response table is exactly the one-ion signal of slide 2, computed once for a grid of start points around the wire: radius, angle and strip offset, up to 8 µs, with the same ion paths and the same weighting field as the full calculation. For each cloud K2A combines the table entries according to its ten numbers; summing all clouds gives the U and V strip currents.\n\nThe choice of the ten numbers comes from the avalanche study. Whether they are enough is a measured question; the largest single approximation turns out to be using one radius per cloud.");
 }
 // 5b ten numbers: anatomy
@@ -258,7 +260,7 @@ pres.addSection({ title: "Main" });
     ["Reference", "K2A is checked against Garfield++, not against data; ion mobility provisional"],
     ["Readout", "stand-in shaper, not the real VMM3a"],
   ], { rh: 0.7, fs: 12.5, lfs: 13.5 });
-  N(s, "Where the result does not yet apply.\n\nThe plot compares the tested events, red, with all events, grey. The test queue runs small events first, so we have only shown it for events with up to 26 clouds, about 38 % of the sample. Two much larger events also pass, but two is not a statistic.\n\nThe response table stops at 8 µs, and in the first 7 µs only about 15 % of the final charge has arrived; the slow tail is not modelled yet. Everything is at one setup, 2100 V without magnetic field. The charge criterion is at its limit.\n\nAnd as discussed on slide 4: K2A reproduces the full Garfield++ calculation; whether that calculation reproduces the detector, in particular the ion time scale, needs the right ion mobility and eventually a measured signal. The shaping is a placeholder for the real electronics.");
+  N(s, "Where the result does not yet apply.\n\nThe plot compares the tested events, red, with all events, grey. The test queue runs small events first, so we have only shown it for events with up to 26 clouds, about 38 % of the sample. Two much larger events also pass, but two is not a statistic.\n\nThe response table stops at 8 µs, and in the first 7 µs only about 15 % of the final charge has arrived; the slow tail is not modelled yet. Everything is at one setup, 2100 V without magnetic field. The charge criterion is at its limit.\n\nAnd as discussed in backup B1: K2A reproduces the full Garfield++ calculation; whether that calculation reproduces the detector, in particular the ion time scale, needs the right ion mobility and eventually a measured signal. The shaping is a placeholder for the real electronics.");
 }
 // 11 summary + next
 {
@@ -284,12 +286,29 @@ APPX = true;
   const s = pres.addSlide({ masterName: "DARK", sectionTitle: "Backup" });
   kicker(s, "BACKUP", true);
   s.addText("Technical detail for questions", { x: X0, y: 1.172, w: 11.6, h: 0.6, fontSize: 26, bold: true, color: DTXT, margin: 0, isTextBox: true });
-  const items = ["B1  A real strip signal over the full 100 µs", "B2  The ten cloud quantities and their motivation", "B3  K2A construction and the measured approximation budget",
-                 "B4  Workflow and what depends on detector conditions", "B5  Validation design and execution gates", "B6  Error distributions and complexity", "B7  Detector observables", "B8  Validity domain in detail",
+  const items = ["B1  How far the full calculation can be trusted (independent cross-check)", "B2  A real strip signal over the full 100 µs", "B3  The ten cloud quantities and their motivation", "B4  K2A construction and the measured approximation budget",
+                 "B5  Workflow and what depends on detector conditions", "B6  Validation design and execution gates", "B7  Error distributions and complexity", "B8  Detector observables", "B9  Validity domain in detail",
                  "A1–A11  Criteria table, definitions, response table, reproducibility, thresholds, time collapse, worst event, residual and horizon, runtime, provenance, domain",
                  "Naming: \"full calc.\" = the full Garfield++ calculation (S0 in the code); T1 = one birth time per primary electron, T0 = each ion at its own birth time"];
   s.addText(items.map((t, i) => ({ text: t, options: { breakLine: i < items.length - 1 } })), { x: X0, y: 2.2, w: 11.3, h: 4.3, fontSize: 16, color: DSUB, margin: 0, isTextBox: true, paraSpaceAfter: 8, valign: "top" });
   N(s, "Backup slides: the full technical version of the talk.");
+}
+// ===================================================================================================== B1 trust
+{
+  const s = content("THE FULL CALCULATION", "How far we can trust it: numerics checked, physics inputs not yet", "Main");
+  img(s, "crosscheck", X0, 1.84, 5.3, 4.1);
+  bullets(s, 6.55, 1.86, 5.9, 2.35, "Checked: the numerics", INK, [
+    "Field and ion drift re-implemented independently in Python (same weighting table): single-ion response agrees to 0.3 % (< 0.1 % after 100 ns); drift times 43–98 µs agree",
+    "Weighting table: interpolation 1.5 × 10⁻⁵, series truncation 4 × 10⁻⁸; zero on the wires; strips add up to the whole-plane potential",
+    "All 3,024 table ion paths end on the cathode (within 3 nm)",
+  ], 12);
+  bullets(s, 6.55, 4.25, 5.9, 2.1, "Assumed: not validated", RED, [
+    "Ion mobility: Ar⁺ in pure Ar, used for Ar/CO₂ 70:30 → the time scale is provisional",
+    "Electrons: a prompt step, no electron current",
+    "Ideal cell: infinite planes, contiguous strips, B = 0, no space charge; no comparison with measured signals yet",
+  ], 12);
+  note(s, X0, 6.1, 5.3, 0.65, ["ALICE TPC: measured MWPC signal shapes agree with Garfield once the measured ion mobility is used; with an assumed ion species the timing was off by ≈ 15 % (JINST 19 (2024) P02038)."], 10.5);
+  N(s, "Since everything later is a comparison with the full calculation, the obvious question is whether the full calculation itself is right. I separate two questions.\n\nFirst, numerics: does the code compute what we think it computes? I re-implemented the electric field of the nine wires between the two cathodes, and the ion drift with the same Ar+ mobility table, in Python, without any Garfield++ code; the weighting-potential table is the same one, so this checks the Garfield++ part. The plot compares the single-ion response, averaged over the birth angle, on the strip above the wire, with the table built from the Garfield++ ion paths, for two birth radii. They agree to 0.3 % overall and to better than 0.1 % after 100 ns; the small difference in the first tens of nanoseconds is not from the mobility interpolation, which I tested, and is not yet explained. The drift times to the cathode, 43 to 98 µs, are the same. The weighting-potential table has its own checks: its interpolation and series truncation errors are 10^-5 and below, it is zero on the anode wires, and the strips add up to the potential of the whole plane, which I also checked against an independent solution, to about 10^-3, the accuracy of that simpler check.\n\nSecond, physics inputs, and these are not validated. The ion mobility is the one for Ar+ in pure argon; in Ar/CO2 the drifting ion species is different, so the absolute time scale of the ion signal is provisional. The electron term is a prompt step. The cell is idealized. And there is no comparison with a measured signal yet.\n\nFor orientation from the literature: ALICE measured the MWPC signal shapes of their TPC readout chambers and compared them with Garfield simulations. With an assumed ion species, a feature of the ion tail came at about 22 µs in simulation instead of 26 µs in data; with the measured ion mobility and the wire-position spread included, the agreement became excellent. The ion mobility is exactly our weak input. So the comparison in this talk tests K2A against Garfield++, not Garfield++ against the detector.");
 }
 // ===================================================================================================== B1 real signal
 {
